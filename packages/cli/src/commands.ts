@@ -7,7 +7,6 @@ import {
 import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "./args.js";
 import { resolveCliRuntime } from "./backend.js";
 import {
-  buildCmsArtifacts,
   getCmsStatus,
   scaffoldCmsEntry,
   scaffoldCmsModel,
@@ -15,7 +14,6 @@ import {
   validateCmsWorkspace,
 } from "./cms.js";
 import {
-  formatCmsBuildArtifactsReport,
   formatCmsScaffoldReport,
   formatCmsStatusReport,
   formatCmsValidateReport,
@@ -33,6 +31,7 @@ import {
   formatPublishChecklistReport,
   formatPublishChecklistRunReport,
   formatPublishChecklistUpdateReport,
+  formatSupportRequestReport,
   formatWhoamiReport,
 } from "./format.js";
 import {
@@ -174,6 +173,19 @@ type PreviewStatusResponse = {
   };
 };
 
+type SupportRequestDraft = {
+  recipient: string;
+  subject: string;
+  summary: string;
+  note?: string | null;
+  projectSlug: string | null;
+  projectVersion: number | null;
+  enabledPluginIds: string[];
+  body: string;
+  mailtoUrl: string;
+  permissionRequired: true;
+};
+
 type PluginCatalogResponse = {
   project: { organizationId: string; slug: string };
   available: Array<{
@@ -233,8 +245,8 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd cms scaffold init",
     "vivd cms scaffold model <key>",
     "vivd cms scaffold entry <model-key> <entry-key>",
-    "vivd cms build-artifacts",
-    "Vivd CMS is local and file-based under src/content/ for Astro-backed projects.",
+    "For Astro-backed projects, Vivd CMS reads Astro Content Collections from src/content.config.ts and entry files under src/content/**.",
+    "The scaffold commands are legacy YAML helpers and do not apply to Astro-native collections.",
     "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
   ].join("\n"),
   publish: [
@@ -246,7 +258,16 @@ const GENERAL_HELP: Record<string, string> = {
     "Allowed statuses: pass, fail, warning, skip, fixed",
     "Use --slug and --version (or VIVD_PROJECT_SLUG / VIVD_PROJECT_VERSION).",
   ].join("\n"),
+  support: [
+    "vivd support request <summary...>",
+    "Draft a support email using the configured support address and current project context.",
+    "Always ask the user for explicit permission before contacting support on their behalf.",
+    "Optional flags: --note",
+    'Example: vivd support request enable analytics for this project --note "Customer approved contacting support"',
+  ].join("\n"),
 };
+
+const DEFAULT_SUPPORT_EMAIL = "support@vivd.studio";
 
 function jsonResult(data: unknown, human: string, exitCode?: number): CommandResult {
   return { data, human, exitCode };
@@ -405,6 +426,10 @@ function getPreviewHelpText(env: NodeJS.ProcessEnv = process.env): string {
   return lines.join("\n");
 }
 
+function getSupportHelpText(): string {
+  return GENERAL_HELP.support;
+}
+
 async function ensureUniqueFilePath(filePath: string): Promise<string> {
   try {
     await fs.access(filePath);
@@ -508,7 +533,50 @@ function helpTextFor(topic: string[]): string {
   if (normalized.startsWith("publish")) {
     return GENERAL_HELP.publish;
   }
+  if (normalized.startsWith("support")) {
+    return getSupportHelpText();
+  }
   return getRootHelpText();
+}
+
+function resolveSupportEmail(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+  return configured || DEFAULT_SUPPORT_EMAIL;
+}
+
+function buildSupportRequestSubject(projectSlug: string | null): string {
+  return projectSlug ? `Vivd support request for ${projectSlug}` : "Vivd support request";
+}
+
+function buildSupportRequestBody(input: {
+  summary: string;
+  note?: string | null;
+  projectSlug: string | null;
+  projectVersion: number | null;
+  enabledPluginIds: string[];
+}): string {
+  const lines = [
+    "Hello Vivd support,",
+    "",
+    input.summary,
+    "",
+    `Project: ${input.projectSlug ?? "n/a"}`,
+    `Version: ${input.projectVersion ?? "n/a"}`,
+    `Enabled plugins: ${
+      input.enabledPluginIds.length > 0 ? input.enabledPluginIds.join(", ") : "none"
+    }`,
+  ];
+
+  if (input.note?.trim()) {
+    lines.push("", `Additional note: ${input.note.trim()}`);
+  }
+
+  lines.push("", "Prepared from the Vivd CLI after explicit user approval to contact support.");
+  return lines.join("\n");
+}
+
+function buildMailtoUrl(recipient: string, subject: string, body: string): string {
+  return `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 async function runCmsStatus(cwd: string): Promise<CommandResult> {
@@ -516,6 +584,7 @@ async function runCmsStatus(cwd: string): Promise<CommandResult> {
   return jsonResult(
     report,
     formatCmsStatusReport({
+      sourceKind: report.sourceKind,
       initialized: report.initialized,
       valid: report.valid,
       contentRoot: report.paths.contentRoot,
@@ -535,6 +604,7 @@ async function runCmsValidate(cwd: string): Promise<CommandResult> {
   return jsonResult(
     report,
     formatCmsValidateReport({
+      sourceKind: report.sourceKind,
       valid: report.valid,
       modelCount: report.modelCount,
       entryCount: report.entryCount,
@@ -581,21 +651,6 @@ async function runCmsScaffoldEntry(
       title: `CMS entry scaffolded: ${modelKey}/${entryKey}`,
       created: result.created,
       skipped: result.skipped,
-    }),
-  );
-}
-
-async function runCmsBuildArtifacts(cwd: string): Promise<CommandResult> {
-  const result = await buildCmsArtifacts(cwd);
-  return jsonResult(
-    result,
-    formatCmsBuildArtifactsReport({
-      outputDir: result.outputDir,
-      manifestPath: result.manifestPath,
-      modelCount: result.modelCount,
-      entryCount: result.entryCount,
-      assetCount: result.assetCount,
-      mediaFileCount: result.mediaFileCount,
     }),
   );
 }
@@ -1055,6 +1110,65 @@ async function runPublishChecklistUpdate(
   });
 }
 
+async function runSupportRequest(
+  summaryTokens: string[],
+  flags: CliFlags,
+): Promise<CommandResult> {
+  const summary = summaryTokens.join(" ").trim();
+  if (!summary) {
+    throw new Error(
+      "support request requires a summary. Try `vivd support request enable analytics for this project`.",
+    );
+  }
+
+  const note = flags.note?.trim() || null;
+  const fallbackProject = resolveProjectContext(flags);
+  let projectSlug = fallbackProject.projectSlug;
+  let projectVersion = fallbackProject.projectVersion;
+  let enabledPluginIds: string[] = [];
+
+  const runtime = ensureConnectedRuntime(flags);
+  if (runtime?.projectSlug) {
+    try {
+      const info = (await runtime.client.query("studioApi.getProjectInfo", {
+        studioId: runtime.config.studioId,
+        slug: runtime.projectSlug,
+        version: runtime.projectVersion ?? undefined,
+      })) as ProjectInfoResponse;
+      projectSlug = info.project.slug;
+      projectVersion = info.project.requestedVersion;
+      enabledPluginIds = info.enabledPluginIds;
+    } catch {
+      projectSlug = runtime.projectSlug ?? projectSlug;
+      projectVersion = runtime.projectVersion ?? projectVersion;
+    }
+  }
+
+  const recipient = resolveSupportEmail();
+  const subject = buildSupportRequestSubject(projectSlug);
+  const body = buildSupportRequestBody({
+    summary,
+    note,
+    projectSlug,
+    projectVersion,
+    enabledPluginIds,
+  });
+  const draft: SupportRequestDraft = {
+    recipient,
+    subject,
+    summary,
+    note,
+    projectSlug,
+    projectVersion,
+    enabledPluginIds,
+    body,
+    mailtoUrl: buildMailtoUrl(recipient, subject, body),
+    permissionRequired: true,
+  };
+
+  return jsonResult(draft, formatSupportRequestReport(draft));
+}
+
 async function runHelp(flags: CliFlags, tokens: string[]): Promise<CommandResult> {
   const topic = resolveHelpTopic(tokens);
   const normalized = topic.join(" ").trim() || "root";
@@ -1097,9 +1211,6 @@ export async function dispatchCli(
       }
       if (second === "validate") {
         return runCmsValidate(cwd);
-      }
-      if (second === "build-artifacts") {
-        return runCmsBuildArtifacts(cwd);
       }
       if (second === "scaffold" && third === "init") {
         return runCmsScaffoldInit(cwd);
@@ -1162,6 +1273,11 @@ export async function dispatchCli(
         return runPublishChecklistUpdate(parsed.flags, rest[0]);
       }
       throw new Error("Unknown publish command. Try `vivd publish help`.");
+    case "support":
+      if (second === "request") {
+        return runSupportRequest([third, ...rest].filter(Boolean) as string[], parsed.flags);
+      }
+      throw new Error("Unknown support command. Try `vivd support help`.");
     default:
       throw new Error(`Unknown command: ${head}. Try \`vivd help\`.`);
   }

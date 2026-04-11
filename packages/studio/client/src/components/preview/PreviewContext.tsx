@@ -75,6 +75,13 @@ interface SelectedElement {
   astroSourceLoc?: string | null;
 }
 
+type WorkspaceSurface =
+  | { kind: "none" }
+  | { kind: "cms" }
+  | { kind: "text"; path: string }
+  | { kind: "image"; path: string }
+  | { kind: "pdf"; path: string };
+
 interface PreviewContextValue {
   // Props
   url: string | null;
@@ -236,7 +243,7 @@ export function PreviewProvider({
   const [assetsOpenState, setAssetsOpenState] = useState(
     initialPanelState.assetsOpen,
   );
-  const [cmsOpen, setCmsOpen] = useState(false);
+  const [cmsOpenState, setCmsOpenState] = useState(false);
   const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
@@ -263,9 +270,220 @@ export function PreviewProvider({
     }
   }, []);
 
+  type SavePatch =
+    | VivdPatch
+    | { type: "setAttr"; selector: string; name: "src"; value: string };
+
+  type ImagePatch =
+    | Extract<SavePatch, { type: "setAttr" }>
+    | Extract<SavePatch, { type: "setAstroText" }>;
+
+  const pendingImagePatchesRef = useRef<
+    Map<string, ImagePatch>
+  >(new Map());
+  const baselineSrcRef = useRef<Map<string, string | null>>(new Map());
+  const editModeCleanupRef = useRef<(() => void) | null>(null);
+
+  const [selectorMode, setSelectorModeState] = useState(false);
+  const [selectedElement, setSelectedElement] =
+    useState<SelectedElement | null>(null);
+  const [pendingChatMessage, setPendingChatMessage] = useState<{
+    kind?: "task";
+    message: string;
+    startNewSession?: boolean;
+  } | null>(null);
+  const [pendingNewSessionRequestId, setPendingNewSessionRequestId] = useState<
+    number | null
+  >(null);
+  const [editingTextFileState, setEditingTextFileState] = useState<string | null>(
+    null,
+  );
+  const [viewingImagePathState, setViewingImagePathState] = useState<string | null>(
+    null,
+  );
+  const [viewingPdfPathState, setViewingPdfPathState] = useState<string | null>(null);
+  const [workspaceHistory, setWorkspaceHistory] = useState<WorkspaceSurface[]>([]);
+  const [editingAsset, setEditingAsset] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
+  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
+  const mobileContainerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const initialGenerationRequested =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("initialGeneration") === "1";
+  const requestedInitialSessionId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("sessionId")?.trim() || null
+      : null;
+
+  const utils = trpc.useUtils();
+
   const setAssetsOpen = useCallback((open: boolean) => {
     setAssetsOpenState(open);
   }, []);
+
+  const currentWorkspace = useMemo<WorkspaceSurface>(() => {
+    if (editingTextFileState) {
+      return { kind: "text", path: editingTextFileState };
+    }
+    if (viewingImagePathState) {
+      return { kind: "image", path: viewingImagePathState };
+    }
+    if (viewingPdfPathState) {
+      return { kind: "pdf", path: viewingPdfPathState };
+    }
+    if (cmsOpenState) {
+      return { kind: "cms" };
+    }
+    return { kind: "none" };
+  }, [
+    cmsOpenState,
+    editingTextFileState,
+    viewingImagePathState,
+    viewingPdfPathState,
+  ]);
+
+  const applyWorkspaceSurface = useCallback((surface: WorkspaceSurface) => {
+    setCmsOpenState(surface.kind === "cms");
+    setEditingTextFileState(surface.kind === "text" ? surface.path : null);
+    setViewingImagePathState(surface.kind === "image" ? surface.path : null);
+    setViewingPdfPathState(surface.kind === "pdf" ? surface.path : null);
+  }, []);
+
+  const isSameWorkspaceSurface = useCallback(
+    (left: WorkspaceSurface, right: WorkspaceSurface) => {
+      if (left.kind !== right.kind) return false;
+      if (
+        left.kind === "text" ||
+        left.kind === "image" ||
+        left.kind === "pdf"
+      ) {
+        return left.path === (right as typeof left).path;
+      }
+      return true;
+    },
+    [],
+  );
+
+  const openWorkspaceSurface = useCallback(
+    (
+      nextSurface: Exclude<WorkspaceSurface, { kind: "none" }>,
+      mode: "root" | "push" | "replace",
+    ) => {
+      if (isSameWorkspaceSurface(currentWorkspace, nextSurface)) {
+        if (mode === "root" && workspaceHistory.length > 0) {
+          setWorkspaceHistory([]);
+        }
+        applyWorkspaceSurface(nextSurface);
+        return;
+      }
+
+      if (mode === "root") {
+        setWorkspaceHistory([]);
+      } else if (mode === "push" && currentWorkspace.kind !== "none") {
+        setWorkspaceHistory([...workspaceHistory, currentWorkspace]);
+      }
+
+      applyWorkspaceSurface(nextSurface);
+    },
+    [
+      applyWorkspaceSurface,
+      currentWorkspace,
+      isSameWorkspaceSurface,
+      workspaceHistory,
+    ],
+  );
+
+  const closeWorkspaceSurface = useCallback(
+    (kind: WorkspaceSurface["kind"]) => {
+      if (currentWorkspace.kind !== kind) {
+        return;
+      }
+
+      if (workspaceHistory.length === 0) {
+        applyWorkspaceSurface({ kind: "none" });
+        return;
+      }
+
+      const nextHistory = workspaceHistory.slice(0, -1);
+      const previousSurface = workspaceHistory[workspaceHistory.length - 1]!;
+      setWorkspaceHistory(nextHistory);
+      applyWorkspaceSurface(previousSurface);
+    },
+    [applyWorkspaceSurface, currentWorkspace.kind, workspaceHistory],
+  );
+
+  const setCmsOpen = useCallback(
+    (open: boolean) => {
+      if (open) {
+        openWorkspaceSurface({ kind: "cms" }, "root");
+        return;
+      }
+      if (currentWorkspace.kind !== "cms") {
+        return;
+      }
+      setWorkspaceHistory([]);
+      applyWorkspaceSurface({ kind: "none" });
+    },
+    [applyWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
+  );
+
+  const setEditingTextFile = useCallback(
+    (path: string | null) => {
+      if (!path) {
+        closeWorkspaceSurface("text");
+        return;
+      }
+
+      const openMode =
+        currentWorkspace.kind === "none"
+          ? "root"
+          : currentWorkspace.kind === "cms"
+            ? "push"
+            : "replace";
+      openWorkspaceSurface({ kind: "text", path }, openMode);
+    },
+    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
+  );
+
+  const setViewingImagePath = useCallback(
+    (path: string | null) => {
+      if (!path) {
+        closeWorkspaceSurface("image");
+        return;
+      }
+
+      const openMode =
+        currentWorkspace.kind === "none"
+          ? "root"
+          : currentWorkspace.kind === "cms"
+            ? "push"
+            : "replace";
+      openWorkspaceSurface({ kind: "image", path }, openMode);
+    },
+    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
+  );
+
+  const setViewingPdfPath = useCallback(
+    (path: string | null) => {
+      if (!path) {
+        closeWorkspaceSurface("pdf");
+        return;
+      }
+
+      const openMode =
+        currentWorkspace.kind === "none"
+          ? "root"
+          : currentWorkspace.kind === "cms"
+            ? "push"
+            : "replace";
+      openWorkspaceSurface({ kind: "pdf", path }, openMode);
+    },
+    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
+  );
 
   const setSessionHistoryOpen = useCallback((open: boolean) => {
     if (open) {
@@ -342,52 +560,6 @@ export function PreviewProvider({
       clearIframeLoadWatchdog();
     };
   }, [clearIframeLoadingDelayTimer, clearIframeLoadWatchdog]);
-
-  type SavePatch =
-    | VivdPatch
-    | { type: "setAttr"; selector: string; name: "src"; value: string };
-
-  type ImagePatch =
-    | Extract<SavePatch, { type: "setAttr" }>
-    | Extract<SavePatch, { type: "setAstroText" }>;
-
-  const pendingImagePatchesRef = useRef<
-    Map<string, ImagePatch>
-  >(new Map());
-  const baselineSrcRef = useRef<Map<string, string | null>>(new Map());
-  const editModeCleanupRef = useRef<(() => void) | null>(null);
-
-  const [selectorMode, setSelectorModeState] = useState(false);
-  const [selectedElement, setSelectedElement] =
-    useState<SelectedElement | null>(null);
-  const [pendingChatMessage, setPendingChatMessage] = useState<{
-    kind?: "task";
-    message: string;
-    startNewSession?: boolean;
-  } | null>(null);
-  const [pendingNewSessionRequestId, setPendingNewSessionRequestId] = useState<
-    number | null
-  >(null);
-  const [editingTextFile, setEditingTextFile] = useState<string | null>(null);
-  const [viewingImagePath, setViewingImagePath] = useState<string | null>(null);
-  const [viewingPdfPath, setViewingPdfPath] = useState<string | null>(null);
-  const [editingAsset, setEditingAsset] = useState<
-    AssetItem | FileTreeNode | null
-  >(null);
-  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<
-    AssetItem | FileTreeNode | null
-  >(null);
-  const mobileContainerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const initialGenerationRequested =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("initialGeneration") === "1";
-  const requestedInitialSessionId =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("sessionId")?.trim() || null
-      : null;
-
-  const utils = trpc.useUtils();
 
   const syncUnsavedChangesState = useCallback(() => {
     setHasUnsavedChanges(pendingImagePatchesRef.current.size > 0);
@@ -1439,7 +1611,7 @@ export function PreviewProvider({
     setChatOpen,
     assetsOpen: assetsOpenState,
     setAssetsOpen,
-    cmsOpen,
+    cmsOpen: cmsOpenState,
     setCmsOpen,
     sessionHistoryOpen: sessionHistoryOpenState,
     setSessionHistoryOpen,
@@ -1505,15 +1677,15 @@ export function PreviewProvider({
     clearPendingNewSessionRequest,
 
     // Text Editor in preview area
-    editingTextFile,
+    editingTextFile: editingTextFileState,
     setEditingTextFile,
 
     // Image Viewer in preview area
-    viewingImagePath,
+    viewingImagePath: viewingImagePathState,
     setViewingImagePath,
 
     // PDF Viewer in preview area
-    viewingPdfPath,
+    viewingPdfPath: viewingPdfPathState,
     setViewingPdfPath,
 
     // Asset actions

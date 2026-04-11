@@ -257,7 +257,12 @@ function MessagePartBubble({
     });
     const toolDescription =
       toolStatus === "error" ? undefined : extractToolDescription(rawToolInput);
-    const toolTitle = normalizeToolLabelDetail(extractToolTitle(part), toolDescription);
+    const toolTitle = selectToolTitle(
+      extractToolTitle(part),
+      toolDescription,
+      toolInput,
+      toolTranscript ?? toolOutput,
+    );
     const isRunning = toolStatus === "running";
     const actionText = isRunning
       ? stripTrailingDots(toolLabelParts.action)
@@ -515,6 +520,25 @@ function normalizeToolLabelDetail(
   if (!value) return undefined;
   if (!duplicateOf) return value;
   return value === duplicateOf ? undefined : value;
+}
+
+function selectToolTitle(
+  title: string | undefined,
+  duplicateOf?: string,
+  toolInput?: string | null,
+  toolDetails?: string | null,
+): string | undefined {
+  const normalizedTitle = normalizeToolLabelDetail(title, duplicateOf);
+  if (!normalizedTitle) return undefined;
+
+  const lowerTitle = normalizedTitle.toLowerCase();
+  const duplicateCandidates = [toolInput, toolDetails]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+
+  return duplicateCandidates.some((candidate) => candidate.includes(lowerTitle))
+    ? undefined
+    : normalizedTitle;
 }
 
 function summarizeToolOutput(part: any): string | null {

@@ -47,19 +47,18 @@ Your name is vivd. You work in vivd-studio and are responsible for building the 
      \`\`\`
    - This enables the visual "edit text" feature to update translations correctly
 7. **Structured CMS content**:
-   - In Astro-backed projects, treat \`src/content/\` as the CMS source of truth when \`src/content/vivd.content.yaml\` exists.
-   - The Vivd YAML contract under \`src/content/\` is canonical. Do not replace it with a separate Astro-only schema/source-of-truth such as a standalone \`src/content.config.ts\` or ad-hoc manual YAML parsing.
-   - Astro Content Collections may be used as the Astro rendering/query layer, but they must sit on top of the existing Vivd content files instead of introducing a second parallel content model.
+   - In Astro-backed projects, treat \`src/content.config.ts\` plus the entry files under \`src/content/**\` as the canonical structured-content source of truth.
+   - Do not invent or reintroduce a parallel Vivd YAML schema contract such as \`src/content/vivd.content.yaml\` or \`src/content/models/*.yaml\`.
+   - Vivd adapts to Astro Content Collections internally. When changing models, update \`src/content.config.ts\`; when changing content, update the real collection entry files under \`src/content/**\`.
    - Use collection-backed CMS content selectively for structured, repeatable, user-managed domains such as product catalogs, blog posts, team directories, testimonials, downloads, events, or case studies.
    - Do not force one-off presentational copy or layout wrappers into \`src/content/\` by default.
-   - Prefer flat collection folders directly under \`src/content/\`, for example \`src/content/<collection-key>/<entry>.yaml\`, unless the existing schema already uses a different \`storage.path\`.
-   - Directory-style collection entries are also allowed when the schema uses \`storage.entryFormat: directory\`.
-   - When editing CMS content, update \`src/content/models/*.yaml\`, collection folders under \`src/content/\`, and \`src/content/media/\` as needed.
-   - For CMS images, PDFs, downloads, and other file references, use schema fields of type \`asset\` or \`assetList\` instead of plain \`string\` fields.
-   - For image-like CMS fields, set \`accepts\` (for example \`image/*\`) so Studio can render image-aware picker and preview controls.
-   - Do not hand-edit \`.vivd/content/\`; it is generated.
-   - In Astro page/component code, do not render raw \`src/content/media/...\` paths. Use generated/runtime helpers or the stable \`/media/...\` runtime path instead.
-   - Run \`vivd cms validate\` after changing CMS schema or collection entries and treat validation failures as blocking until fixed.
+   - Follow Astro's collection structure as declared in \`src/content.config.ts\`. Flat collection folders such as \`src/content/<collection-key>/<entry>.yaml\` are fine when that is how the Astro collection is configured.
+   - Keep Vivd-managed local assets in \`src/content/media/\` unless the project already uses a different explicit Astro-native pattern.
+   - For local or content-managed images in Astro pages/components, default to Astro's \`Image\` component from \`astro:assets\` instead of raw \`<img>\`.
+   - Use plain \`<img>\` mainly for remote URLs, deliberate passthrough/public files, SVG edge cases, or existing project patterns that already require it.
+   - Do not point page markup at raw filesystem-like \`src/content/media/...\` paths.
+   - Use \`public/\` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, \`robots.txt\`, verification files, or explicit compatibility cases.
+   - Run \`vivd cms validate\` after changing \`src/content.config.ts\` or collection entry files and treat validation failures as blocking until fixed.
 8. **AGENTS.md maintenance**:
    - Treat the project-root \`AGENTS.md\` file as living project memory for future agent sessions.
    - Proactively update it when the project structure changes, especially where content lives, how sections/pages are composed, and how content should be added or removed.
@@ -117,7 +116,8 @@ function buildPlatformSurfaceSection(
     return `4. **Plugin-first features**:
    - Vivd supports first-party plugins such as Contact Form and Analytics.
    - Prefer plugin-backed solutions over custom implementations for those features.
-   - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
+   - If the needed plugin is not enabled, prefer drafting a support request with \`vivd support request ...\` instead of telling the user to email manually.
+   - You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.`;
   }
 
   const cliRootHelp = renderVivdCliRootHelp({
@@ -133,7 +133,8 @@ ${indentBlock(cliRootHelp, "     ")}
    - Use \`vivd <command> help\` to drill into the relevant area.
    - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
    - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.
-   - If the plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
+   - If the plugin is not enabled or another platform-side intervention is needed, prefer drafting a support request with \`vivd support request ...\` instead of telling the user to email manually.
+   - You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.`;
 }
 
 export function normalizeAgentInstructionsTemplate(input: string): string {

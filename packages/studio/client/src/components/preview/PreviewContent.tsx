@@ -252,12 +252,8 @@ export function PreviewContent() {
     if (!canNavigatePrevious) return;
     const prevFile = navigableFiles[currentFileIndex - 1];
     if (prevFile.isImage) {
-      setViewingPdfPath(null);
       setViewingImagePath(prevFile.path);
     } else {
-      // Switch to text editor
-      setViewingPdfPath(null);
-      setViewingImagePath(null);
       setEditingTextFile(prevFile.path);
     }
   }, [
@@ -265,7 +261,6 @@ export function PreviewContent() {
     navigableFiles,
     currentFileIndex,
     setViewingImagePath,
-    setViewingPdfPath,
     setEditingTextFile,
   ]);
 
@@ -273,12 +268,8 @@ export function PreviewContent() {
     if (!canNavigateNext) return;
     const nextFile = navigableFiles[currentFileIndex + 1];
     if (nextFile.isImage) {
-      setViewingPdfPath(null);
       setViewingImagePath(nextFile.path);
     } else {
-      // Switch to text editor
-      setViewingPdfPath(null);
-      setViewingImagePath(null);
       setEditingTextFile(nextFile.path);
     }
   }, [
@@ -286,7 +277,6 @@ export function PreviewContent() {
     navigableFiles,
     currentFileIndex,
     setViewingImagePath,
-    setViewingPdfPath,
     setEditingTextFile,
   ]);
 

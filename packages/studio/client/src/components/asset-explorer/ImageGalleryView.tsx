@@ -62,17 +62,10 @@ export function ImageGalleryView({
       if (item.type === "folder") {
         onNavigate(item.path);
       } else if (item.isImage) {
-        // Open image in viewer panel (like code view)
-        setEditingTextFile(null);
-        setViewingPdfPath(null);
         setViewingImagePath(item.path);
       } else if (item.mimeType?.includes("pdf") || item.name.toLowerCase().endsWith(".pdf")) {
-        setEditingTextFile(null);
-        setViewingImagePath(null);
         setViewingPdfPath(item.path);
       } else if (item.type === "file" && isTextFile(item.name)) {
-        setViewingImagePath(null);
-        setViewingPdfPath(null);
         onTextEdit(item.path);
       } else if (item.type === "file") {
         const url = buildImageUrl(projectSlug, version, item.path);

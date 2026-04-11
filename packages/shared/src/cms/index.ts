@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml, parse as parseYaml } from "yaml";
+import { inspectAstroCollectionsWorkspace } from "./astroCollections.js";
 
 export const CMS_VERSION = 1;
 export const CMS_CONTENT_ROOT = path.join("src", "content");
-export const CMS_ARTIFACT_ROOT = path.join(".vivd", "content");
 
 const SUPPORTED_FIELD_TYPES = new Set([
   "string",
@@ -33,8 +33,9 @@ export interface CmsPaths {
   modelsRoot: string;
   collectionsRoot: string;
   mediaRoot: string;
-  artifactsRoot: string;
 }
+
+export type CmsSourceKind = "legacy-yaml" | "astro-collections";
 
 export interface CmsModelRef {
   key: string;
@@ -121,6 +122,7 @@ export interface CmsModelRecord {
 }
 
 export interface CmsValidationReport {
+  sourceKind: CmsSourceKind;
   initialized: boolean;
   valid: boolean;
   paths: CmsPaths;
@@ -138,16 +140,6 @@ export interface CmsScaffoldResult {
   created: string[];
   skipped: string[];
   paths: CmsPaths;
-}
-
-export interface CmsBuildArtifactsResult {
-  paths: CmsPaths;
-  outputDir: string;
-  manifestPath: string;
-  modelCount: number;
-  entryCount: number;
-  assetCount: number;
-  mediaFileCount: number;
 }
 
 type ReferenceCheck = {
@@ -223,6 +215,17 @@ function defaultRootConfig(): CmsRootConfig {
   };
 }
 
+function getDefaultAstroCmsPaths(projectDir: string): CmsPaths {
+  return {
+    projectDir,
+    contentRoot: path.join(projectDir, "src", "content"),
+    rootConfigPath: path.join(projectDir, "src", "content.config.ts"),
+    modelsRoot: path.join(projectDir, "src"),
+    collectionsRoot: path.join(projectDir, "src", "content"),
+    mediaRoot: path.join(projectDir, "src", "content", "media"),
+  };
+}
+
 export function getCmsPaths(projectDir: string): CmsPaths {
   return {
     projectDir,
@@ -231,7 +234,6 @@ export function getCmsPaths(projectDir: string): CmsPaths {
     modelsRoot: path.join(projectDir, CMS_CONTENT_ROOT, "models"),
     collectionsRoot: path.join(projectDir, CMS_CONTENT_ROOT, "collections"),
     mediaRoot: path.join(projectDir, CMS_CONTENT_ROOT, "media"),
-    artifactsRoot: path.join(projectDir, CMS_ARTIFACT_ROOT),
   };
 }
 
@@ -1079,11 +1081,37 @@ async function countFilesRecursively(root: string): Promise<number> {
 }
 
 export async function getCmsStatus(projectDir: string): Promise<CmsValidationReport> {
+  const astroReport = await inspectAstroCollectionsWorkspace(projectDir);
+  if (astroReport) {
+    return astroReport;
+  }
+
+  if (await isAstroProject(projectDir)) {
+    const paths = getDefaultAstroCmsPaths(projectDir);
+    return {
+      sourceKind: "astro-collections",
+      initialized: false,
+      valid: false,
+      paths,
+      defaultLocale: null,
+      locales: [],
+      modelCount: 0,
+      entryCount: 0,
+      assetCount: 0,
+      mediaFileCount: await countFilesRecursively(paths.mediaRoot),
+      errors: [
+        `Missing ${toPosix(path.relative(projectDir, paths.rootConfigPath))}. Astro-backed projects now use Astro Content Collections as the source of truth. Create \`src/content.config.ts\` and export \`collections\` before using Studio CMS.`,
+      ],
+      models: [],
+    };
+  }
+
   const paths = getCmsPaths(projectDir);
   const errors: string[] = [];
   const rootConfig = await readRootConfig(paths, errors);
   if (!rootConfig) {
     return {
+      sourceKind: "legacy-yaml",
       initialized: false,
       valid: false,
       paths,
@@ -1133,6 +1161,7 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
   );
 
   return {
+    sourceKind: "legacy-yaml",
     initialized: true,
     valid: errors.length === 0,
     paths,
@@ -1149,6 +1178,14 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
 
 export async function validateCmsWorkspace(projectDir: string): Promise<CmsValidationReport> {
   return getCmsStatus(projectDir);
+}
+
+async function ensureLegacyYamlWorkspaceOperationSupported(projectDir: string): Promise<void> {
+  if ((await inspectAstroCollectionsWorkspace(projectDir)) || (await isAstroProject(projectDir))) {
+    throw new Error(
+      "Astro-backed projects now use `src/content.config.ts` and Astro entry files as the source of truth. Vivd YAML scaffold/build commands are only supported for the legacy YAML CMS path.",
+    );
+  }
 }
 
 async function writeYamlFile(filePath: string, value: unknown): Promise<void> {
@@ -1278,6 +1315,7 @@ async function createDefaultRichTextSidecars(
 }
 
 export async function scaffoldCmsWorkspace(projectDir: string): Promise<CmsScaffoldResult> {
+  await ensureLegacyYamlWorkspaceOperationSupported(projectDir);
   const paths = getCmsPaths(projectDir);
   const created: string[] = [];
   const skipped: string[] = [];
@@ -1320,6 +1358,7 @@ export async function scaffoldCmsModel(
   projectDir: string,
   modelKey: string,
 ): Promise<CmsScaffoldResult> {
+  await ensureLegacyYamlWorkspaceOperationSupported(projectDir);
   const normalizedKey = modelKey.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-_]*$/.test(normalizedKey)) {
     throw new Error(`Invalid model key: ${modelKey}`);
@@ -1376,6 +1415,7 @@ export async function scaffoldCmsEntry(
   modelKey: string,
   entryKey: string,
 ): Promise<CmsScaffoldResult> {
+  await ensureLegacyYamlWorkspaceOperationSupported(projectDir);
   const normalizedModelKey = modelKey.trim().toLowerCase();
   const normalizedEntryKey = entryKey.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-_]*$/.test(normalizedEntryKey)) {
@@ -1437,344 +1477,6 @@ export async function scaffoldCmsEntry(
   return { created, skipped, paths };
 }
 
-const GENERATED_RUNTIME_SOURCE = `import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
-
-function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.join(ROOT, relativePath), "utf8"));
-}
-
-const manifestCache = { value: null };
-const modelCache = new Map();
-const assetsCache = { value: null };
-
-export function getManifest() {
-  if (!manifestCache.value) {
-    manifestCache.value = readJson("manifest.json");
-  }
-  return manifestCache.value;
-}
-
-export function getModel(modelKey) {
-  if (!modelCache.has(modelKey)) {
-    modelCache.set(modelKey, readJson(path.join("models", modelKey + ".json")));
-  }
-  return modelCache.get(modelKey);
-}
-
-export function getCmsCollection(modelKey, options = {}) {
-  const entries = Array.isArray(getModel(modelKey)?.entries) ? getModel(modelKey).entries : [];
-  if (options.includeInactive) return entries;
-  return entries.filter((entry) => entry.status !== "inactive");
-}
-
-export function getCmsEntry(modelKey, entryKey, options = {}) {
-  return getCmsCollection(modelKey, options).find((entry) => entry.key === entryKey) ?? null;
-}
-
-export function listAssets(modelKey) {
-  if (!assetsCache.value) {
-    assetsCache.value = readJson("assets.json");
-  }
-  if (!modelKey) return assetsCache.value;
-  return assetsCache.value.filter((asset) => asset.modelKey === modelKey);
-}
-
-export function resolveCmsAsset(assetRef) {
-  if (!assetRef) return null;
-  if (typeof assetRef === "string") {
-    return listAssets().find((asset) => asset.id === assetRef || asset.relativePath === assetRef) ?? null;
-  }
-  if (typeof assetRef === "object") {
-    if (assetRef.id) {
-      return listAssets().find((asset) => asset.id === assetRef.id) ?? assetRef;
-    }
-    if (assetRef.path) {
-      return listAssets().find((asset) => asset.relativePath === assetRef.path) ?? assetRef;
-    }
-  }
-  return null;
-}
-`;
-
-const GENERATED_RUNTIME_TYPES = `export declare function getManifest(): any;
-export declare function getModel(modelKey: string): any;
-export declare function getCmsCollection(modelKey: string, options?: { includeInactive?: boolean }): any[];
-export declare function getCmsEntry(modelKey: string, entryKey: string, options?: { includeInactive?: boolean }): any | null;
-export declare function listAssets(modelKey?: string): any[];
-export declare function resolveCmsAsset(assetRef: unknown): any | null;
-`;
-
-const GENERATED_CMS_HELPERS_SOURCE = `import {
-  getCmsCollection as getRuntimeCmsCollection,
-  getCmsEntry as getRuntimeCmsEntry,
-  listAssets as getRuntimeAssets,
-  resolveCmsAsset as resolveRuntimeCmsAsset,
-} from "../../../.vivd/content/runtime.mjs";
-
-export const VIVD_MEDIA_URL_BASE = "/media";
-
-function normalizeMediaInputPath(value: string): string {
-  return String(value || "")
-    .replace(/\\\\/g, "/")
-    .replace(/^\\/+/, "")
-    .replace(/^src\\/content\\/media\\/+/, "")
-    .replace(/^media\\/+/, "");
-}
-
-function normalizeAssetRecord(asset: any): any | null {
-  if (!asset || typeof asset !== "object") return null;
-
-  const normalizedPath =
-    typeof asset.artifactPath === "string"
-      ? normalizeMediaInputPath(asset.artifactPath)
-      : typeof asset.relativePath === "string"
-        ? normalizeMediaInputPath(asset.relativePath)
-        : typeof asset.path === "string"
-          ? normalizeMediaInputPath(asset.path)
-          : "";
-
-  return {
-    ...asset,
-    path: normalizedPath,
-    url: toMediaUrl(normalizedPath),
-  };
-}
-
-export function toMediaUrl(value: string): string {
-  const normalized = normalizeMediaInputPath(value);
-  return normalized ? VIVD_MEDIA_URL_BASE + "/" + normalized : VIVD_MEDIA_URL_BASE;
-}
-
-export function getCmsCollection(
-  modelKey: string,
-  options?: { includeInactive?: boolean },
-): any[] {
-  return getRuntimeCmsCollection(modelKey, options);
-}
-
-export function getCmsEntry(
-  modelKey: string,
-  entryKey: string,
-  options?: { includeInactive?: boolean },
-): any | null {
-  return getRuntimeCmsEntry(modelKey, entryKey, options);
-}
-
-export function listAssets(modelKey?: string): any[] {
-  return getRuntimeAssets(modelKey)
-    .map((asset: any) => normalizeAssetRecord(asset))
-    .filter(Boolean);
-}
-
-export function resolveCmsAsset(assetRef: unknown): any | null {
-  const resolved = resolveRuntimeCmsAsset(assetRef);
-  if (resolved) {
-    return normalizeAssetRecord(resolved);
-  }
-
-  if (typeof assetRef === "string") {
-    const path = normalizeMediaInputPath(assetRef);
-    return {
-      path,
-      url: toMediaUrl(path),
-    };
-  }
-
-  if (
-    assetRef &&
-    typeof assetRef === "object" &&
-    "path" in assetRef &&
-    typeof (assetRef as { path?: unknown }).path === "string"
-  ) {
-    const pathValue = (assetRef as { path: string }).path;
-    return {
-      ...assetRef,
-      path: normalizeMediaInputPath(pathValue),
-      url: toMediaUrl(pathValue),
-    };
-  }
-
-  return null;
-}
-`;
-
-const ASTRO_MEDIA_ROUTE_SOURCE = `import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const PROJECT_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../..",
-);
-const SOURCE_MEDIA_ROOT = path.join(PROJECT_ROOT, "src", "content", "media");
-const ARTIFACT_MEDIA_ROOT = path.join(PROJECT_ROOT, ".vivd", "content", "media");
-
-export const prerender = true;
-
-function normalizeRequestPath(value) {
-  return String(value || "")
-    .replace(/\\\\/g, "/")
-    .replace(/^\\/+/, "")
-    .replace(/^media\\/+/, "");
-}
-
-async function pathExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function safeJoin(rootDir, relativePath) {
-  const resolvedRoot = path.resolve(rootDir);
-  const resolvedPath = path.resolve(resolvedRoot, relativePath);
-  if (
-    resolvedPath !== resolvedRoot &&
-    !resolvedPath.startsWith(resolvedRoot + path.sep)
-  ) {
-    return null;
-  }
-  return resolvedPath;
-}
-
-async function listFiles(rootDir, prefix = "") {
-  const entries = await fs.readdir(rootDir, { withFileTypes: true });
-  const results = [];
-
-  for (const entry of entries) {
-    const relativePath = prefix ? prefix + "/" + entry.name : entry.name;
-    const absolutePath = path.join(rootDir, entry.name);
-
-    if (entry.isDirectory()) {
-      results.push(...(await listFiles(absolutePath, relativePath)));
-      continue;
-    }
-
-    if (entry.isFile()) {
-      results.push(relativePath);
-    }
-  }
-
-  return results;
-}
-
-function getMimeType(filePath) {
-  const extension = path.extname(filePath).toLowerCase();
-  switch (extension) {
-    case ".avif":
-      return "image/avif";
-    case ".gif":
-      return "image/gif";
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".json":
-      return "application/json";
-    case ".pdf":
-      return "application/pdf";
-    case ".png":
-      return "image/png";
-    case ".svg":
-      return "image/svg+xml";
-    case ".txt":
-      return "text/plain; charset=utf-8";
-    case ".webp":
-      return "image/webp";
-    case ".xml":
-      return "application/xml";
-    default:
-      return "application/octet-stream";
-  }
-}
-
-async function getMediaRoots() {
-  const roots = [];
-  if (await pathExists(SOURCE_MEDIA_ROOT)) {
-    roots.push(SOURCE_MEDIA_ROOT);
-  }
-  if (await pathExists(ARTIFACT_MEDIA_ROOT)) {
-    roots.push(ARTIFACT_MEDIA_ROOT);
-  }
-  return Array.from(new Set(roots));
-}
-
-export const getStaticPaths = async () => {
-  const roots = await getMediaRoots();
-  const seen = new Set<string>();
-
-  for (const rootDir of roots) {
-    for (const relativePath of await listFiles(rootDir)) {
-      seen.add(relativePath);
-    }
-  }
-
-  return Array.from(seen).map((relativePath) => ({
-    params: {
-      path: relativePath,
-    },
-  }));
-};
-
-export const GET = async ({ params }) => {
-  const requestedPath = normalizeRequestPath(
-    typeof params.path === "string" ? params.path : "",
-  );
-
-  if (!requestedPath) {
-    return new Response("Not found", { status: 404 });
-  }
-
-  for (const rootDir of await getMediaRoots()) {
-    const filePath = safeJoin(rootDir, requestedPath);
-    if (!filePath) {
-      continue;
-    }
-
-    try {
-      const stats = await fs.stat(filePath);
-      if (!stats.isFile()) {
-        continue;
-      }
-
-      const body = await fs.readFile(filePath);
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "Content-Type": getMimeType(filePath),
-          "Cache-Control": "public, max-age=3600",
-        },
-      });
-    } catch {
-      continue;
-    }
-  }
-
-  return new Response("Not found", { status: 404 });
-};
-`;
-
-function buildManifest(report: CmsValidationReport) {
-  return {
-    version: CMS_VERSION,
-    generatedAt: new Date().toISOString(),
-    contentRoot: CMS_CONTENT_ROOT,
-    defaultLocale: report.defaultLocale,
-    locales: report.locales,
-    models: report.models.map((model) => ({
-      key: model.key,
-      label: model.label,
-      primaryField: model.display?.primaryField ?? null,
-      entryCount: model.entries.length,
-    })),
-  };
-}
-
 async function readPackageJson(projectDir: string): Promise<Record<string, unknown> | null> {
   const packageJsonPath = path.join(projectDir, "package.json");
   if (!(await pathExists(packageJsonPath))) {
@@ -1817,98 +1519,4 @@ async function isAstroProject(projectDir: string): Promise<boolean> {
     typeof dependencies?.astro === "string" ||
     typeof devDependencies?.astro === "string"
   );
-}
-
-async function writeFileIfMissing(filePath: string, content: string): Promise<void> {
-  if (await pathExists(filePath)) {
-    return;
-  }
-
-  await ensureDirectory(path.dirname(filePath));
-  await fs.writeFile(filePath, content, "utf8");
-}
-
-async function ensureAstroAdapterFiles(projectDir: string): Promise<void> {
-  if (!(await isAstroProject(projectDir))) {
-    return;
-  }
-
-  await ensureDirectory(path.join(projectDir, "src", "generated", "vivd"));
-  await fs.writeFile(
-    path.join(projectDir, "src", "generated", "vivd", "cms-helpers.generated.ts"),
-    GENERATED_CMS_HELPERS_SOURCE,
-    "utf8",
-  );
-  await writeFileIfMissing(
-    path.join(projectDir, "src", "pages", "media", "[...path].js"),
-    ASTRO_MEDIA_ROUTE_SOURCE,
-  );
-}
-
-export async function buildCmsArtifacts(projectDir: string): Promise<CmsBuildArtifactsResult> {
-  const report = await validateCmsWorkspace(projectDir);
-  if (!report.initialized) {
-    throw new Error(report.errors.join("\n"));
-  }
-  if (!report.valid) {
-    throw new Error(`CMS validation failed:\n- ${report.errors.join("\n- ")}`);
-  }
-
-  await fs.rm(report.paths.artifactsRoot, { recursive: true, force: true });
-  await ensureDirectory(path.join(report.paths.artifactsRoot, "models"));
-  if (await pathExists(report.paths.mediaRoot)) {
-    await fs.cp(report.paths.mediaRoot, path.join(report.paths.artifactsRoot, "media"), {
-      recursive: true,
-    });
-  }
-
-  const manifest = buildManifest(report);
-  const assets = report.models.flatMap((model) => model.entries.flatMap((entry) => entry.assetRefs));
-  await fs.writeFile(
-    path.join(report.paths.artifactsRoot, "manifest.json"),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-    "utf8",
-  );
-  await fs.writeFile(
-    path.join(report.paths.artifactsRoot, "assets.json"),
-    `${JSON.stringify(assets, null, 2)}\n`,
-    "utf8",
-  );
-  await fs.writeFile(
-    path.join(report.paths.artifactsRoot, "runtime.mjs"),
-    GENERATED_RUNTIME_SOURCE,
-    "utf8",
-  );
-  await fs.writeFile(
-    path.join(report.paths.artifactsRoot, "runtime.d.ts"),
-    GENERATED_RUNTIME_TYPES,
-    "utf8",
-  );
-
-  for (const model of report.models) {
-    const serializedModel = {
-      key: model.key,
-      label: model.label,
-      display: model.display ?? null,
-      fields: model.fields,
-      entries: model.entries,
-    };
-    await fs.writeFile(
-      path.join(report.paths.artifactsRoot, "models", `${model.key}.json`),
-      `${JSON.stringify(serializedModel, null, 2)}\n`,
-      "utf8",
-    );
-  }
-
-  await ensureAstroAdapterFiles(projectDir);
-
-  return {
-    paths: report.paths,
-    outputDir: report.paths.artifactsRoot,
-    manifestPath: path.join(report.paths.artifactsRoot, "manifest.json"),
-    modelCount: report.modelCount,
-    entryCount: report.entryCount,
-    assetCount: report.assetCount,
-    mediaFileCount: report.mediaFileCount,
-  };
 }

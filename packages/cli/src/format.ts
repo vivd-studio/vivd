@@ -109,6 +109,36 @@ export function formatProjectInfoReport(input: {
   ].join("\n");
 }
 
+export function formatSupportRequestReport(input: {
+  recipient: string;
+  subject: string;
+  summary: string;
+  note?: string | null;
+  projectSlug?: string | null;
+  projectVersion?: number | null;
+  enabledPluginIds: string[];
+  mailtoUrl: string;
+  body: string;
+}): string {
+  return [
+    "Support email draft prepared.",
+    "Permission required: ask the user explicitly before contacting support on their behalf.",
+    `Recipient: ${input.recipient}`,
+    `Subject: ${input.subject}`,
+    `Summary: ${input.summary}`,
+    formatStatusLine("Project", input.projectSlug),
+    formatStatusLine("Version", input.projectVersion),
+    `Enabled plugins: ${
+      input.enabledPluginIds.length > 0 ? input.enabledPluginIds.join(", ") : "none"
+    }`,
+    input.note ? `Note: ${input.note}` : "Note: none",
+    `Mailto: ${input.mailtoUrl}`,
+    "",
+    "Body:",
+    input.body,
+  ].join("\n");
+}
+
 export function formatPreviewScreenshotReport(input: {
   path: string;
   capturedUrl: string;
@@ -264,6 +294,7 @@ export function formatPreviewStatusReport(input: {
 }
 
 export function formatCmsStatusReport(input: {
+  sourceKind: "legacy-yaml" | "astro-collections";
   initialized: boolean;
   valid: boolean;
   contentRoot: string;
@@ -279,6 +310,7 @@ export function formatCmsStatusReport(input: {
   errors: string[];
 }): string {
   const lines = [
+    `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
     `CMS root: ${input.contentRoot}`,
     `Initialized: ${input.initialized ? "yes" : "no"}`,
     `Validation: ${input.valid ? "ok" : "failed"}`,
@@ -308,6 +340,7 @@ export function formatCmsStatusReport(input: {
 }
 
 export function formatCmsValidateReport(input: {
+  sourceKind: "legacy-yaml" | "astro-collections";
   valid: boolean;
   modelCount: number;
   entryCount: number;
@@ -316,6 +349,7 @@ export function formatCmsValidateReport(input: {
 }): string {
   if (input.valid) {
     return [
+      `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
       "CMS validate: ok",
       `Models: ${input.modelCount}`,
       `Entries: ${input.entryCount}`,
@@ -323,7 +357,11 @@ export function formatCmsValidateReport(input: {
     ].join("\n");
   }
 
-  return ["CMS validate: failed", ...input.errors.map((error) => `- ${error}`)].join("\n");
+  return [
+    `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
+    "CMS validate: failed",
+    ...input.errors.map((error) => `- ${error}`),
+  ].join("\n");
 }
 
 export function formatCmsScaffoldReport(input: {
@@ -337,25 +375,6 @@ export function formatCmsScaffoldReport(input: {
     ...(input.created.length > 0 ? input.created.map((value) => `- ${value}`) : ["- none"]),
     "Skipped:",
     ...(input.skipped.length > 0 ? input.skipped.map((value) => `- ${value}`) : ["- none"]),
-  ].join("\n");
-}
-
-export function formatCmsBuildArtifactsReport(input: {
-  outputDir: string;
-  manifestPath: string;
-  modelCount: number;
-  entryCount: number;
-  assetCount: number;
-  mediaFileCount: number;
-}): string {
-  return [
-    "CMS artifacts built.",
-    `Output: ${input.outputDir}`,
-    `Manifest: ${input.manifestPath}`,
-    `Models: ${input.modelCount}`,
-    `Entries: ${input.entryCount}`,
-    `Asset refs: ${input.assetCount}`,
-    `Media files copied: ${input.mediaFileCount}`,
   ].join("\n");
 }
 

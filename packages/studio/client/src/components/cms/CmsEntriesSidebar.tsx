@@ -14,6 +14,7 @@ interface CmsEntriesSidebarProps {
   selectedEntryKey: string | null;
   defaultLocale: string;
   reportErrors: string[];
+  allowCreateEntry: boolean;
   creatingEntry: boolean;
   newEntryKey: string;
   isScaffoldingEntry: boolean;
@@ -33,6 +34,7 @@ export function CmsEntriesSidebar({
   selectedEntryKey,
   defaultLocale,
   reportErrors,
+  allowCreateEntry,
   creatingEntry,
   newEntryKey,
   isScaffoldingEntry,
@@ -84,7 +86,7 @@ export function CmsEntriesSidebar({
             Active and inactive collection items
           </p>
         </div>
-        {selectedModel ? (
+        {selectedModel && allowCreateEntry ? (
           <Button variant="outline" size="sm" onClick={onToggleCreateEntry}>
             <Plus className="mr-2 h-4 w-4" />
             Add

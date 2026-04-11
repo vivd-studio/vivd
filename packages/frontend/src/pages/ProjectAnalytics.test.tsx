@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -340,23 +340,52 @@ describe("ProjectAnalytics", () => {
     });
   });
 
-  it("renders analytics summary cards, geography, and path analysis", () => {
+  it("renders analytics tabs and switches between focused views", () => {
     render(
       <MemoryRouter>
         <ProjectAnalytics />
       </MemoryRouter>,
     );
 
+    const openTab = (name: string) => {
+      const tab = screen.getByRole("tab", { name });
+      fireEvent.mouseDown(tab, { button: 0 });
+      fireEvent.click(tab);
+    };
+
     expect(screen.getByRole("heading", { name: "Analytics" })).toBeInTheDocument();
     expect(screen.getAllByText("Pageviews").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unique visitors").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Sessions").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Contact submissions").length).toBeGreaterThan(0);
-    expect(screen.getByText("Top pages")).toBeInTheDocument();
-    expect(screen.getByText("UTM campaign attribution")).toBeInTheDocument();
-    expect(screen.getByText("Country breakdown")).toBeInTheDocument();
-    expect(screen.getByText("Visitor paths")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Traffic" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Behavior" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Attribution" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Leads" })).toBeInTheDocument();
+    expect(screen.getByText("Period comparison")).toBeInTheDocument();
+    expect(screen.queryByText("Top pages")).not.toBeInTheDocument();
 
+    openTab("Traffic");
+    expect(screen.getByText("Top pages")).toBeInTheDocument();
+    expect(screen.getByText("Country breakdown")).toBeInTheDocument();
+    expect(screen.queryByText("Period comparison")).not.toBeInTheDocument();
+
+    const countriesSection = screen.getByText("Country breakdown").closest("section");
+    expect(countriesSection).not.toBeNull();
+    const countries = within(countriesSection!);
+    expect(countries.getByText("DE")).toBeInTheDocument();
+    expect(countries.getByText("222")).toBeInTheDocument();
+
+    openTab("Behavior");
+    expect(screen.getByText("Visitor paths")).toBeInTheDocument();
+    const pathsSection = screen.getByText("Visitor paths").closest("section");
+    expect(pathsSection).not.toBeNull();
+    const paths = within(pathsSection!);
+    expect(paths.getByText("/pricing")).toBeInTheDocument();
+    expect(paths.getByText("/contact")).toBeInTheDocument();
+
+    openTab("Attribution");
     const campaignsSection = screen.getByText("UTM campaign attribution").closest("section");
     expect(campaignsSection).not.toBeNull();
     const campaigns = within(campaignsSection!);
@@ -368,16 +397,8 @@ describe("ProjectAnalytics", () => {
     const sources = within(sourcesSection!);
     expect(sources.getAllByText("google")[0]).toBeInTheDocument();
 
-    const countriesSection = screen.getByText("Country breakdown").closest("section");
-    expect(countriesSection).not.toBeNull();
-    const countries = within(countriesSection!);
-    expect(countries.getByText("DE")).toBeInTheDocument();
-    expect(countries.getByText("222")).toBeInTheDocument();
-
-    const pathsSection = screen.getByText("Visitor paths").closest("section");
-    expect(pathsSection).not.toBeNull();
-    const paths = within(pathsSection!);
-    expect(paths.getByText("/pricing")).toBeInTheDocument();
-    expect(paths.getByText("/contact")).toBeInTheDocument();
+    openTab("Leads");
+    expect(screen.getByText("Lead sources")).toBeInTheDocument();
+    expect(screen.getByText("example.com")).toBeInTheDocument();
   });
 });

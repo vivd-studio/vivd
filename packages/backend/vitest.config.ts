@@ -17,6 +17,10 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../shared/src/studio/index.ts"),
       },
       {
+        find: /^@vivd\/shared\/cms$/,
+        replacement: path.resolve(__dirname, "../shared/src/cms/index.ts"),
+      },
+      {
         find: /^@vivd\/shared\/types$/,
         replacement: path.resolve(__dirname, "../shared/src/types/index.ts"),
       },

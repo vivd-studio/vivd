@@ -21,6 +21,9 @@ interface AIEditDialogProps {
   isPending: boolean;
   projectSlug: string;
   version: number;
+  generatedImage?: AssetItem | null;
+  onAcceptGeneratedImage?: () => void;
+  onRejectGeneratedImage?: () => void;
   onRemoveBackground?: () => void;
   isRemovingBackground?: boolean;
 }
@@ -35,10 +38,32 @@ export function AIEditDialog({
   isPending,
   projectSlug,
   version,
+  generatedImage,
+  onAcceptGeneratedImage,
+  onRejectGeneratedImage,
   onRemoveBackground,
   isRemovingBackground,
 }: AIEditDialogProps) {
   const isProcessing = isPending || isRemovingBackground;
+  const showGeneratedPreview = Boolean(generatedImage);
+
+  const renderImagePreview = (item: AssetItem, heading: string) => (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        {heading}
+      </p>
+      <div className="flex items-center justify-center rounded-lg bg-muted p-2">
+        <FallbackImage
+          srcs={getStudioImageUrlCandidates(projectSlug, version, item.path)}
+          alt={item.name}
+          className="max-h-56 max-w-full rounded object-contain"
+        />
+      </div>
+      <p className="truncate text-xs text-muted-foreground" title={item.path}>
+        {item.path}
+      </p>
+    </div>
+  );
 
   return (
     <Dialog
@@ -47,26 +72,39 @@ export function AIEditDialog({
         if (!isOpen) onClose();
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className={showGeneratedPreview ? "max-w-3xl" : "max-w-lg"}>
         <DialogHeader>
           <DialogTitle>Edit Image with AI</DialogTitle>
         </DialogHeader>
         {editingImage && (
           <div className="space-y-4">
-            <div className="flex items-center justify-center bg-muted rounded-lg p-2">
-              <FallbackImage
-                srcs={getStudioImageUrlCandidates(
-                  projectSlug,
-                  version,
-                  editingImage.path,
-                )}
-                alt={editingImage.name}
-                className="max-w-full max-h-48 object-contain rounded"
-              />
-            </div>
+            {showGeneratedPreview ? (
+              <div className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {renderImagePreview(editingImage, "Current Image")}
+                  {generatedImage ? renderImagePreview(generatedImage, "Edited Candidate") : null}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                  Review the edited image before replacing the current selection. You
+                  can keep the original, accept this version, or generate another one.
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center rounded-lg bg-muted p-2">
+                <FallbackImage
+                  srcs={getStudioImageUrlCandidates(
+                    projectSlug,
+                    version,
+                    editingImage.path,
+                  )}
+                  alt={editingImage.name}
+                  className="max-h-48 max-w-full rounded object-contain"
+                />
+              </div>
+            )}
 
             {/* Quick Actions */}
-            {onRemoveBackground && (
+            {onRemoveBackground && !showGeneratedPreview && (
               <>
                 <div className="flex gap-2">
                   <Button
@@ -106,7 +144,9 @@ export function AIEditDialog({
             <div className="space-y-2">
               {!onRemoveBackground && (
                 <label className="text-sm font-medium">
-                  What would you like to change?
+                  {showGeneratedPreview
+                    ? "Adjust the prompt if you want another version"
+                    : "What would you like to change?"}
                 </label>
               )}
               <Textarea
@@ -118,12 +158,22 @@ export function AIEditDialog({
               />
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={onClose} disabled={isProcessing}>
-                Cancel
+              <Button
+                variant="ghost"
+                onClick={showGeneratedPreview && onRejectGeneratedImage ? onRejectGeneratedImage : onClose}
+                disabled={isProcessing}
+              >
+                {showGeneratedPreview ? "Keep original" : "Cancel"}
               </Button>
+              {showGeneratedPreview && onAcceptGeneratedImage ? (
+                <Button onClick={onAcceptGeneratedImage} disabled={isProcessing}>
+                  Use edited image
+                </Button>
+              ) : null}
               <Button
                 onClick={onSubmit}
                 disabled={!prompt.trim() || isProcessing}
+                variant={showGeneratedPreview ? "outline" : "default"}
               >
                 {isPending ? (
                   <>
@@ -133,7 +183,7 @@ export function AIEditDialog({
                 ) : (
                   <>
                     <Wand2 className="h-4 w-4 mr-2" />
-                    Generate
+                    {showGeneratedPreview ? "Generate another" : "Generate"}
                   </>
                 )}
               </Button>

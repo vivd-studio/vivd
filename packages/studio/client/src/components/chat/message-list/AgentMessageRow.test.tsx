@@ -62,4 +62,56 @@ describe("AgentMessageRow tool details", () => {
     expect(screen.queryByText(/"description":/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\u001b\[32m/)).not.toBeInTheDocument();
   });
+
+  it("hides tool titles that are already present inside the rendered input details", () => {
+    render(
+      <AgentMessageRow
+        item={
+          {
+            kind: "agent",
+            key: "agent-2",
+            runId: "turn-2",
+            orderedParts: [],
+            actionParts: [],
+            responseParts: [],
+            summaryDiffs: [],
+            hasInterleavedParts: false,
+            runInProgress: false,
+            showWorkedSection: false,
+            fallbackState: null,
+          } as any
+        }
+        orderedParts={[
+          {
+            id: "tool-2",
+            type: "tool",
+            tool: "grep",
+            status: "completed",
+            input: {
+              pattern: "getCollection\\('horse'\\)",
+              path: "/home/studio/project/src",
+              include: "*.{astro,ts,js,yaml}",
+            },
+            state: {
+              status: "completed",
+              title: "getCollection\\('horse'\\)",
+              input: {
+                pattern: "getCollection\\('horse'\\)",
+                path: "/home/studio/project/src",
+                include: "*.{astro,ts,js,yaml}",
+              },
+              output: "Found 1 match",
+            },
+          },
+        ]}
+        workedOpen={false}
+        onToggleWorked={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /exploredsrc/i }));
+
+    expect(screen.getAllByText(/getCollection\\\('horse'\\\)/i)).toHaveLength(1);
+    expect(screen.getByText(/Found 1 match/i)).toBeInTheDocument();
+  });
 });

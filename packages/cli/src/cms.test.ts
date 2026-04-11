@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  buildCmsArtifacts,
   getCmsPaths,
   scaffoldCmsEntry,
   scaffoldCmsModel,
@@ -43,99 +42,84 @@ describe("cms workspace utilities", () => {
     expect(report.errors).toEqual([]);
   });
 
-  it("builds .vivd content artifacts and copies referenced media", async () => {
+  it("inspects Astro Content Collections directly from src/content.config.ts", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);
 
-    await scaffoldCmsWorkspace(projectDir);
-    await fs.writeFile(path.join(projectDir, "astro.config.mjs"), "export default {};\n", "utf8");
-    const paths = getCmsPaths(projectDir);
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "blog"), {
+      recursive: true,
+    });
     await fs.writeFile(
-      path.join(paths.modelsRoot, "products.yaml"),
-      `label: Products
-storage:
-  path: ./products
-  entryFormat: file
-display:
-  primaryField: title
-entry:
-  statusField: status
-  fields:
-    slug:
-      type: slug
-      required: true
-    title:
-      type: string
-      localized: true
-      required: true
-    status:
-      type: enum
-      options:
-        - active
-        - inactive
-      default: active
-    heroImage:
-      type: asset
-      accepts:
-        - image/*
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+const blog = defineCollection({
+  schema: ({ image }) =>
+    z.object({
+      title: z.string(),
+      status: z.enum(["active", "inactive"]).optional(),
+      order: z.number().optional(),
+      hero: image().optional(),
+    }),
+});
+
+export const collections = { blog };
 `,
       "utf8",
     );
     await fs.writeFile(
-      paths.rootConfigPath,
-      `version: 1
-defaultLocale: en
-locales:
-  - en
-models:
-  - key: products
-    kind: collection
-    schema: ./models/products.yaml
-`,
-      "utf8",
-    );
-    await fs.mkdir(path.join(paths.contentRoot, "products"), { recursive: true });
-    const mediaDir = path.join(paths.mediaRoot, "products", "alpine-boot");
-    await fs.mkdir(mediaDir, { recursive: true });
-    await fs.writeFile(path.join(mediaDir, "hero.jpg"), "hero-bytes", "utf8");
-    await fs.writeFile(
-      path.join(paths.contentRoot, "products", "alpine-boot.yaml"),
-      `slug: alpine-boot
+      path.join(projectDir, "src", "content", "blog", "welcome.yaml"),
+      `title: Welcome
 status: active
-title:
-  en: Alpine Boot
-heroImage:
-  path: ../media/products/alpine-boot/hero.jpg
+order: 2
+hero: ../media/blog/hero.jpg
 `,
       "utf8",
     );
-
-    const result = await buildCmsArtifacts(projectDir);
-
-    expect(result.modelCount).toBe(1);
-    expect(result.entryCount).toBe(1);
-    expect(result.assetCount).toBe(1);
-    expect(await fs.readFile(path.join(result.outputDir, "manifest.json"), "utf8")).toContain(
-      '"contentRoot": "src/content"',
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "blog", "hero.jpg"),
+      "hero",
+      "utf8",
     );
-    expect(await fs.readFile(path.join(result.outputDir, "runtime.mjs"), "utf8")).toContain(
-      "getCmsCollection",
-    );
-    expect(
-      await fs.readFile(
-        path.join(projectDir, "src", "generated", "vivd", "cms-helpers.generated.ts"),
-        "utf8",
-      ),
-    ).toContain('export const VIVD_MEDIA_URL_BASE = "/media"');
-    expect(
-      await fs.readFile(
-        path.join(projectDir, "src", "pages", "media", "[...path].js"),
-        "utf8",
-      ),
-    ).toContain('const SOURCE_MEDIA_ROOT = path.join(PROJECT_ROOT, "src", "content", "media")');
-    expect(
-      await fs.readFile(path.join(result.outputDir, "media", "products", "alpine-boot", "hero.jpg"), "utf8"),
-    ).toBe("hero-bytes");
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.sourceKind).toBe("astro-collections");
+    expect(report.initialized).toBe(true);
+    expect(report.valid).toBe(true);
+    expect(report.modelCount).toBe(1);
+    expect(report.entryCount).toBe(1);
+    expect(report.assetCount).toBe(1);
+    expect(report.models[0]?.key).toBe("blog");
+    expect(report.models[0]?.relativeSchemaPath).toBe("src/content.config.ts");
+    expect(report.models[0]?.fields.hero).toMatchObject({
+      type: "asset",
+      accepts: ["image/*"],
+      required: false,
+    });
+    expect(report.models[0]?.entries[0]?.relativePath).toBe("src/content/blog/welcome.yaml");
+    expect(report.models[0]?.entries[0]?.values).toMatchObject({
+      title: "Welcome",
+      status: "active",
+      order: 2,
+      hero: "../media/blog/hero.jpg",
+    });
+  });
+
+  it("reports missing src/content.config.ts for Astro projects before falling back to legacy YAML scaffolding", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.writeFile(path.join(projectDir, "astro.config.mjs"), "export default {};\n", "utf8");
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.sourceKind).toBe("astro-collections");
+    expect(report.initialized).toBe(false);
+    expect(report.valid).toBe(false);
+    expect(report.errors[0]).toContain("src/content.config.ts");
+    await expect(scaffoldCmsWorkspace(projectDir)).rejects.toThrow("Astro-backed projects now use");
   });
 
   it("reports validation errors for unsupported schema types and bad asset roots", async () => {

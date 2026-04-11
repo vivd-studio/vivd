@@ -98,23 +98,23 @@ export function renderVivdCliRootHelp(
     ...formatHelpSection("LOCAL CMS", [
       {
         command: "vivd cms status",
-        description: "Inspect the local src/content/ workspace state",
+        description: "Inspect the local Astro content collections and src/content/ asset state",
       },
       {
         command: "vivd cms validate",
-        description: "Validate local CMS files without a connected runtime",
+        description: "Validate Astro content collections and entry files without a connected runtime",
       },
       {
         command: "vivd cms scaffold init",
-        description: "Create the baseline local CMS structure",
+        description: "Legacy YAML CMS only: create the baseline local CMS structure",
       },
       {
         command: "vivd cms scaffold model <key>",
-        description: "Create a starter schema/model file",
+        description: "Legacy YAML CMS only: create a starter schema/model file",
       },
       {
         command: "vivd cms scaffold entry <model-key> <entry-key>",
-        description: "Create a starter content entry file",
+        description: "Legacy YAML CMS only: create a starter content entry file",
       },
       {
         command: "vivd cms help",
@@ -138,6 +138,18 @@ export function renderVivdCliRootHelp(
       {
         command: "vivd publish help",
         description: "Show checklist workflow details",
+      },
+    ]),
+    "",
+    ...formatHelpSection("SUPPORT", [
+      {
+        command: "vivd support request <summary...>",
+        description:
+          "Draft a support email with project context; only use after the user explicitly approves contacting support",
+      },
+      {
+        command: "vivd support help",
+        description: "Show support-contact guidance and consent requirements",
       },
     ]),
     "",
@@ -165,11 +177,13 @@ export function renderVivdCliRootHelp(
       "$ vivd preview status",
       "$ vivd plugins catalog",
       "$ vivd publish checklist show",
+      "$ vivd support request enable analytics for this project",
     ]),
     "",
     ...formatHelpListSection("DISCOVER MORE", [
       "Use `vivd <command> help` for command-specific flags, examples, and subcommands.",
       "Start with `vivd plugins catalog` to discover plugin IDs, then `vivd plugins info <pluginId>`.",
+      "If support intervention is needed, use `vivd support request ...` only after the user explicitly approves contacting support on their behalf.",
       "Connected commands need MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN.",
     ]),
   ].join("\n");

@@ -47,21 +47,24 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("vivd plugins info <pluginId>");
     expect(result.instructions).toContain("vivd plugins config show <pluginId>");
     expect(result.instructions).toContain("vivd plugins action <pluginId> <actionId> [args...]");
+    expect(result.instructions).toContain("vivd support request ...");
     expect(result.instructions).toContain("Use `vivd <command> help` to drill into the relevant area.");
     expect(result.instructions).toContain(
       "If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.",
     );
+    expect(result.instructions).toContain(
+      "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.",
+    );
     expect(result.instructions).toContain("Structured CMS content");
-    expect(result.instructions).toContain("src/content/vivd.content.yaml");
-    expect(result.instructions).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
-    expect(result.instructions).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
-    expect(result.instructions).toContain("Prefer flat collection folders directly under `src/content/`");
-    expect(result.instructions).toContain("Directory-style collection entries are also allowed");
-    expect(result.instructions).toContain("use schema fields of type `asset` or `assetList`");
-    expect(result.instructions).toContain("set `accepts` (for example `image/*`)");
+    expect(result.instructions).toContain("src/content.config.ts");
+    expect(result.instructions).toContain("Do not invent or reintroduce a parallel Vivd YAML schema contract");
+    expect(result.instructions).toContain("Vivd adapts to Astro Content Collections internally");
+    expect(result.instructions).toContain("update `src/content.config.ts`");
+    expect(result.instructions).toContain("default to Astro's `Image` component");
+    expect(result.instructions).toContain("Do not point page markup at raw filesystem-like `src/content/media/...` paths");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
     expect(result.instructions).toContain("vivd cms validate");
-    expect(result.instructions).toContain("asking Vivd support to activate it");
+    expect(result.instructions).toContain("drafting a support request with `vivd support request ...`");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");
     expect(result.instructions).toContain(".vivd/dropped-images/");

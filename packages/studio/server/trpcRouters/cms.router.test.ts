@@ -54,12 +54,10 @@ describe("cms router", () => {
 
     expect(result.report.initialized).toBe(true);
     expect(result.report.valid).toBe(true);
-    expect(result.built).toBe(true);
+    expect(result.built).toBe(false);
+    expect(result.validationOnly).toBe(true);
     await expect(
       fs.stat(path.join(projectDir, "src/content/vivd.content.yaml")),
-    ).resolves.toBeDefined();
-    await expect(
-      fs.stat(path.join(projectDir, ".vivd/content/manifest.json")),
     ).resolves.toBeDefined();
     expect(touchMock).toHaveBeenCalledWith("demo-site");
     expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-initialized", {
@@ -85,7 +83,8 @@ describe("cms router", () => {
     });
 
     expect(result.report.valid).toBe(true);
-    expect(result.built).toBe(true);
+    expect(result.built).toBe(false);
+    expect(result.validationOnly).toBe(true);
     expect(result.report.models).toHaveLength(1);
     expect(result.report.models[0]?.key).toBe("products");
     expect(result.report.models[0]?.entries[0]?.key).toBe("alpine-boot");
@@ -97,5 +96,43 @@ describe("cms router", () => {
         en: "Alpine Boot",
       },
     });
+  });
+
+  it("reports Astro collections as the source of truth and blocks legacy init", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "blog", "welcome.yaml"),
+      "title: Welcome\n",
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const status = await caller.status();
+
+    expect(status.sourceKind).toBe("astro-collections");
+    expect(status.initialized).toBe(true);
+    expect(status.valid).toBe(true);
+    expect(status.modelCount).toBe(1);
+    expect(status.entryCount).toBe(1);
+    await expect(
+      caller.init({
+        slug: "demo-site",
+        version: 1,
+      }),
+    ).rejects.toThrow("Astro-backed projects now use");
   });
 });

@@ -3,7 +3,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
+import type {
+  CmsFieldDefinition,
+  CmsModelRecord,
+  CmsSourceKind,
+} from "@vivd/shared/cms";
 import { getEntryTitle, type CmsFieldSegment } from "./helpers";
 import { CmsFieldRenderer } from "./CmsFieldRenderer";
 
@@ -19,6 +23,8 @@ interface CmsEntryEditorProps {
   canUseAiImages: boolean;
   referenceOptions: Array<{ value: string; label: string }>;
   reportErrors: string[];
+  sourceKind: CmsSourceKind;
+  readOnly: boolean;
   isDirty: boolean;
   busy: boolean;
   isSaving: boolean;
@@ -49,6 +55,8 @@ export function CmsEntryEditor({
   canUseAiImages,
   referenceOptions,
   reportErrors,
+  sourceKind,
+  readOnly,
   isDirty,
   busy,
   isSaving,
@@ -97,24 +105,28 @@ export function CmsEntryEditor({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onMoveEntry(-1)}
-            disabled={busy || selectedEntryIndex <= 0}
-          >
-            <ArrowUp className="mr-2 h-4 w-4" />
-            Up
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onMoveEntry(1)}
-            disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
-          >
-            <ArrowDown className="mr-2 h-4 w-4" />
-            Down
-          </Button>
+          {!readOnly ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onMoveEntry(-1)}
+                disabled={busy || selectedEntryIndex <= 0}
+              >
+                <ArrowUp className="mr-2 h-4 w-4" />
+                Up
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onMoveEntry(1)}
+                disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
+              >
+                <ArrowDown className="mr-2 h-4 w-4" />
+                Down
+              </Button>
+            </>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
@@ -128,20 +140,24 @@ export function CmsEntryEditor({
             size="sm"
             onClick={() => setEditingTextFile(selectedEntry.relativePath)}
           >
-            Raw YAML
+            Entry Source
           </Button>
-          <Button size="sm" disabled={!isDirty || busy} onClick={onSaveEntry}>
-            {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Save
-          </Button>
-          <Button variant="destructive" size="sm" disabled={busy} onClick={onDeleteEntry}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
+          {!readOnly ? (
+            <>
+              <Button size="sm" disabled={!isDirty || busy} onClick={onSaveEntry}>
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Save
+              </Button>
+              <Button variant="destructive" size="sm" disabled={busy} onClick={onDeleteEntry}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
       <ScrollArea className="flex-1">
@@ -153,29 +169,64 @@ export function CmsEntryEditor({
             </div>
           ) : null}
 
-          {Object.entries(selectedModel.fields).map(([fieldKey, field]) => (
-            <CmsFieldRenderer
-              key={fieldKey}
-              projectSlug={projectSlug}
-              version={version}
-              fieldKey={fieldKey}
-              field={field as CmsFieldDefinition}
-              fieldPath={[fieldKey]}
-              draftValues={draftValues}
-              defaultLocale={defaultLocale}
-              locales={locales}
-              selectedEntryRelativePath={selectedEntry.relativePath}
-              selectedEntryKey={selectedEntry.key}
-              selectedModel={selectedModel}
-              sidecarDrafts={sidecarDrafts}
-              canUseAiImages={canUseAiImages}
-              referenceOptions={referenceOptions}
-              applyDraftValue={applyDraftValue}
-              handleRichTextChange={handleRichTextChange}
-              openAssetReference={openAssetReference}
-              openExplorer={openExplorer}
-            />
-          ))}
+          {readOnly ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                {sourceKind === "astro-collections"
+                  ? "Astro Content Collections are the source of truth for this project. Studio can inspect the schema and entries here, but entry editing is not wired yet."
+                  : "This entry is currently inspect-only."}
+              </div>
+              {Object.entries(selectedModel.fields).map(([fieldKey, field]) => (
+                <CmsFieldRenderer
+                  key={fieldKey}
+                  projectSlug={projectSlug}
+                  version={version}
+                  fieldKey={fieldKey}
+                  field={field as CmsFieldDefinition}
+                  fieldPath={[fieldKey]}
+                  draftValues={draftValues}
+                  defaultLocale={defaultLocale}
+                  locales={locales}
+                  selectedEntryRelativePath={selectedEntry.relativePath}
+                  selectedEntryKey={selectedEntry.key}
+                  selectedModel={selectedModel}
+                  sidecarDrafts={sidecarDrafts}
+                  canUseAiImages={canUseAiImages}
+                  readOnly
+                  referenceOptions={referenceOptions}
+                  applyDraftValue={applyDraftValue}
+                  handleRichTextChange={handleRichTextChange}
+                  openAssetReference={openAssetReference}
+                  openExplorer={openExplorer}
+                />
+              ))}
+            </div>
+          ) : (
+            Object.entries(selectedModel.fields).map(([fieldKey, field]) => (
+              <CmsFieldRenderer
+                key={fieldKey}
+                projectSlug={projectSlug}
+                version={version}
+                fieldKey={fieldKey}
+                field={field as CmsFieldDefinition}
+                fieldPath={[fieldKey]}
+                draftValues={draftValues}
+                defaultLocale={defaultLocale}
+                locales={locales}
+                selectedEntryRelativePath={selectedEntry.relativePath}
+                selectedEntryKey={selectedEntry.key}
+                selectedModel={selectedModel}
+                sidecarDrafts={sidecarDrafts}
+                canUseAiImages={canUseAiImages}
+                readOnly={false}
+                referenceOptions={referenceOptions}
+                applyDraftValue={applyDraftValue}
+                handleRichTextChange={handleRichTextChange}
+                openAssetReference={openAssetReference}
+                openExplorer={openExplorer}
+              />
+            ))
+          )}
 
           {reportErrors.length > 0 ? (
             <>

@@ -36,6 +36,16 @@ describe("trpcTimeouts", () => {
     expect(
       resolveTrpcRequestTimeoutMs("/vivd-studio/api/trpc/project.gitSave?batch=1&input=%7B%7D"),
     ).toBe(LONG_TRPC_REQUEST_TIMEOUT_MS);
+    expect(
+      resolveTrpcRequestTimeoutMs(
+        "/vivd-studio/api/trpc/assets.editImageWithAI?batch=1&input=%7B%7D",
+      ),
+    ).toBe(LONG_TRPC_REQUEST_TIMEOUT_MS);
+    expect(
+      resolveTrpcRequestTimeoutMs(
+        "/vivd-studio/api/trpc/assets.createImageWithAI?batch=1&input=%7B%7D",
+      ),
+    ).toBe(LONG_TRPC_REQUEST_TIMEOUT_MS);
   });
 
   it("uses agent-task timeout for long-running agent mutations", () => {

@@ -42,13 +42,11 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("`src/content/media/` by default");
     expect(prompt).toContain("Use `public/` only for passthrough files");
     expect(prompt).toContain("Structured CMS content");
-    expect(prompt).toContain("src/content/vivd.content.yaml");
-    expect(prompt).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
-    expect(prompt).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
-    expect(prompt).toContain("Prefer flat collection folders directly under `src/content/`");
-    expect(prompt).toContain("Directory-style collection entries are also allowed");
-    expect(prompt).toContain("use schema fields of type `asset` or `assetList`");
-    expect(prompt).toContain("set `accepts` (for example `image/*`)");
+    expect(prompt).toContain("src/content.config.ts");
+    expect(prompt).toContain("Do not invent or reintroduce a parallel Vivd YAML schema contract");
+    expect(prompt).toContain("Vivd adapts to Astro Content Collections internally");
+    expect(prompt).toContain("default to Astro's `Image` component");
+    expect(prompt).toContain("Do not point page markup at raw filesystem-like `src/content/media/...` paths");
     expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");
     expect(prompt).toContain("Tool Usage Contract");
@@ -57,6 +55,10 @@ describe("studio AgentInstructionsService fallback", () => {
     );
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
     expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");
+    expect(prompt).toContain("vivd support request ...");
+    expect(prompt).toContain(
+      "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.",
+    );
   });
 
   it("falls back to shared CLI instructions when connected mode is available but backend fetch fails", async () => {
@@ -82,6 +84,7 @@ describe("studio AgentInstructionsService fallback", () => {
       expect(prompt).toContain("DISCOVER MORE");
       expect(prompt).toContain("vivd plugins catalog");
       expect(prompt).toContain("vivd publish checklist show");
+      expect(prompt).toContain("vivd support request <summary...>");
       expect(prompt).toContain(
         "Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as `vivd` CLI work first, not file-search work.",
       );

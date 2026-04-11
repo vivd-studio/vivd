@@ -10,6 +10,8 @@ const PROCEDURE_TIMEOUT_MS = new Map<string, number>([
   ["agent.startInitialGeneration", AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS],
   ["agent.runPrePublishChecklist", LONG_TRPC_REQUEST_TIMEOUT_MS],
   ["agent.fixChecklistItem", LONG_TRPC_REQUEST_TIMEOUT_MS],
+  ["assets.editImageWithAI", LONG_TRPC_REQUEST_TIMEOUT_MS],
+  ["assets.createImageWithAI", LONG_TRPC_REQUEST_TIMEOUT_MS],
   ["project.gitSave", LONG_TRPC_REQUEST_TIMEOUT_MS],
   ["project.gitHubPullFastForward", EXTENDED_TRPC_REQUEST_TIMEOUT_MS],
   ["project.gitHubForceSync", EXTENDED_TRPC_REQUEST_TIMEOUT_MS],

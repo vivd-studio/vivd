@@ -1,11 +1,9 @@
 import { z } from "zod";
 import {
-  buildCmsArtifacts,
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
   validateCmsWorkspace,
-  type CmsBuildArtifactsResult,
   type CmsValidationReport,
 } from "@vivd/shared/cms";
 import { router, publicProcedure } from "../trpc/trpc.js";
@@ -15,7 +13,7 @@ import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 type CmsPrepareResult = {
   report: CmsValidationReport;
   built: boolean;
-  build: CmsBuildArtifactsResult | null;
+  validationOnly: boolean;
   error: string | null;
 };
 
@@ -25,7 +23,7 @@ async function prepareCmsArtifacts(projectDir: string): Promise<CmsPrepareResult
     return {
       report,
       built: false,
-      build: null,
+      validationOnly: false,
       error: report.errors.join("\n"),
     };
   }
@@ -33,16 +31,14 @@ async function prepareCmsArtifacts(projectDir: string): Promise<CmsPrepareResult
     return {
       report,
       built: false,
-      build: null,
+      validationOnly: false,
       error: `CMS validation failed:\n- ${report.errors.join("\n- ")}`,
     };
   }
-
-  const build = await buildCmsArtifacts(projectDir);
   return {
     report,
-    built: true,
-    build,
+    built: false,
+    validationOnly: true,
     error: null,
   };
 }

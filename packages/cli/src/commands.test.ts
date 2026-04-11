@@ -56,6 +56,7 @@ describe("dispatchCli", () => {
     resolveCliRuntimeMock.mockReset();
     resolveCliRuntimeMock.mockReturnValue(runtime);
     delete process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED;
+    delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
   });
 
   it("shows project info with enabled plugins", async () => {
@@ -1064,6 +1065,55 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("\"email\": \"person@example.com\"");
   });
 
+  it("drafts a support request with project context and consent reminder", async () => {
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
+    runtime.client.query.mockResolvedValue({
+      project: {
+        slug: "demo",
+        title: "Demo site",
+        source: "url",
+        currentVersion: 7,
+        requestedVersion: 7,
+      },
+      enabledPluginIds: ["analytics"],
+    });
+
+    const result = await dispatchCli([
+      "support",
+      "request",
+      "enable",
+      "contact_form",
+      "for",
+      "this",
+      "project",
+      "--note",
+      "Customer approved contacting support",
+    ]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      version: 7,
+    });
+    expect(result.human).toContain("Support email draft prepared.");
+    expect(result.human).toContain(
+      "Permission required: ask the user explicitly before contacting support on their behalf.",
+    );
+    expect(result.human).toContain("Recipient: support@vivd.studio");
+    expect(result.human).toContain("Project: demo");
+    expect(result.human).toContain("Version: 7");
+    expect(result.human).toContain("Enabled plugins: analytics");
+    expect(result.human).toContain("Customer approved contacting support");
+    expect(result.human).toContain("mailto:support@vivd.studio");
+    expect(result.human).toContain("Hello Vivd support,");
+  });
+
+  it("requires a support request summary", async () => {
+    await expect(dispatchCli(["support", "request"])).rejects.toThrow(
+      "support request requires a summary",
+    );
+  });
+
   it("shows help with CMS commands", async () => {
     process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = "true";
     const rootHelp = await dispatchCli(["help"]);
@@ -1071,6 +1121,7 @@ describe("dispatchCli", () => {
     const previewHelp = await dispatchCli(["preview", "help"]);
     const pluginsHelp = await dispatchCli(["plugins", "help"]);
     const publishHelp = await dispatchCli(["publish", "help"]);
+    const supportHelp = await dispatchCli(["support", "help"]);
     const contactHelp = await dispatchCli(["plugins", "contact", "help"]);
     const analyticsHelp = await dispatchCli(["plugins", "analytics", "help"]);
 
@@ -1080,6 +1131,7 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("PLUGINS");
     expect(rootHelp.human).toContain("LOCAL CMS");
     expect(rootHelp.human).toContain("PUBLISH CHECKLIST");
+    expect(rootHelp.human).toContain("SUPPORT");
     expect(rootHelp.human).toContain("GLOBAL FLAGS");
     expect(rootHelp.human).toContain("EXAMPLES");
     expect(rootHelp.human).toContain("vivd preview status");
@@ -1090,6 +1142,7 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN");
     expect(rootHelp.human).toContain("vivd cms help");
     expect(rootHelp.human).toContain("vivd publish help");
+    expect(rootHelp.human).toContain("vivd support request <summary...>");
     expect(rootHelp.human).toContain("DISCOVER MORE");
     expect(cmsHelp.human).toContain("vivd cms scaffold init");
     expect(cmsHelp.human).toContain("src/content/");
@@ -1105,6 +1158,8 @@ describe("dispatchCli", () => {
     expect(publishHelp.human).toContain("vivd publish checklist show");
     expect(publishHelp.human).toContain("explicitly asks for a full checklist run");
     expect(publishHelp.human).toContain("inspect or continue checklist items one by one");
+    expect(supportHelp.human).toContain("vivd support request <summary...>");
+    expect(supportHelp.human).toContain("Always ask the user for explicit permission");
     expect(contactHelp.human).toContain("vivd plugins contact info");
     expect(contactHelp.human).toContain("vivd plugins info contact_form");
     expect(contactHelp.human).toContain("vivd plugins contact config show");
@@ -1124,18 +1179,10 @@ describe("dispatchCli", () => {
         tempDir,
       );
       const validateResult = await dispatchCli(["cms", "validate"], tempDir);
-      const buildResult = await dispatchCli(["cms", "build-artifacts"], tempDir);
 
       expect(modelResult.human).toContain("CMS model scaffolded: products");
       expect(entryResult.human).toContain("CMS entry scaffolded: products/alpine-boot");
       expect(validateResult.human).toContain("CMS validate: ok");
-      expect(buildResult.human).toContain("CMS artifacts built.");
-      expect(
-        await fs.readFile(
-          path.join(tempDir, ".vivd", "content", "manifest.json"),
-          "utf8",
-        ),
-      ).toContain('"contentRoot": "src/content"');
       expect(runtime.client.query).not.toHaveBeenCalled();
       expect(runtime.client.mutation).not.toHaveBeenCalled();
     } finally {

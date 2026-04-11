@@ -94,6 +94,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const report = statusQuery.data;
   const defaultLocale = report?.defaultLocale ?? "en";
   const locales = report?.locales.length ? report.locales : [defaultLocale];
+  const isAstroCollectionsSource = report?.sourceKind === "astro-collections";
+  const isAstroReadOnly = isAstroCollectionsSource && report?.initialized;
+  const isAstroMissingConfig = isAstroCollectionsSource && !report?.initialized;
 
   const selectedModel = useMemo(
     () => report?.models.find((model) => model.key === selectedModelKey) ?? null,
@@ -200,6 +203,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       if (result.built) {
         toast.success("CMS validated and derived data refreshed");
         handleRefresh();
+      } else if (result.validationOnly) {
+        toast.success("Content validated");
+        handleRefresh();
       } else {
         toast.error("CMS validation failed", {
           description: result.error ?? "Fix the reported CMS errors.",
@@ -265,12 +271,10 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       if (!selectedEntry || !assetPath.trim()) return;
       const resolvedPath = resolveRelativePath(selectedEntry.relativePath, assetPath);
       if (/\.pdf$/i.test(resolvedPath)) {
-        setViewingImagePath(null);
         setViewingPdfPath(resolvedPath);
         return;
       }
       if (isImagePath(resolvedPath)) {
-        setViewingPdfPath(null);
         setViewingImagePath(resolvedPath);
         return;
       }
@@ -319,6 +323,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       await refreshCms();
       if (result.built) {
         toast.success("CMS entry saved");
+        handleRefresh();
+      } else if (result.validationOnly) {
+        toast.success("Entry saved");
         handleRefresh();
       } else {
         toast.error("CMS saved with validation issues", {
@@ -450,6 +457,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       setNewModelKey("");
       if (result.built) {
         toast.success("Collection scaffolded");
+      } else if (result.validationOnly) {
+        toast.success("Collection created");
       } else {
         toast.error("Collection scaffolded with validation issues", {
           description: result.error ?? undefined,
@@ -479,6 +488,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       setNewEntryKey("");
       if (result.built) {
         toast.success("Entry scaffolded");
+      } else if (result.validationOnly) {
+        toast.success("Entry created");
       } else {
         toast.error("Entry scaffolded with validation issues", {
           description: result.error ?? undefined,
@@ -533,6 +544,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     prepareMutation.isPending ||
     saveTextFileMutation.isPending ||
     deleteAssetMutation.isPending;
+  const description = isAstroCollectionsSource
+    ? "Astro Content Collections inspected from `src/content.config.ts` and `src/content/**`."
+    : "Schema-rendered collection editing for `src/content/`.";
 
   return (
     <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
@@ -555,9 +569,12 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             <Badge variant="outline">
               {report.entryCount} entr{report.entryCount === 1 ? "y" : "ies"}
             </Badge>
+            <Badge variant="outline">
+              {isAstroCollectionsSource ? "Astro Collections" : "Legacy YAML"}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Schema-rendered collection editing for <code>src/content/</code>.
+            {description}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -579,7 +596,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
                 Validate & refresh
               </Button>
             </>
-          ) : (
+          ) : !isAstroMissingConfig ? (
             <Button
               size="sm"
               disabled={initMutation.isPending}
@@ -592,6 +609,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
                   await refreshCms();
                   if (result.built) {
                     toast.success("CMS scaffold created");
+                  } else if (result.validationOnly) {
+                    toast.success("Content initialized");
                   } else {
                     toast.error("CMS scaffold created with validation issues", {
                       description: result.error ?? undefined,
@@ -611,7 +630,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
               )}
               Initialize CMS
             </Button>
-          )}
+          ) : null}
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
@@ -625,42 +644,59 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
               <FileCode className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">CMS scaffold not found</h3>
+              <h3 className="text-lg font-semibold">
+                {isAstroMissingConfig ? "Astro content config not found" : "CMS scaffold not found"}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create the default <code>src/content/</code> structure to start
-                managing collection content in Studio.
+                {isAstroMissingConfig ? (
+                  <>
+                    Add <code>src/content.config.ts</code> and export Astro{" "}
+                    <code>collections</code> before using the Studio content UI.
+                    Studio now adapts to Astro’s source of truth and does not scaffold
+                    <code>content.config.ts</code> for you.
+                  </>
+                ) : (
+                  <>
+                    Create the default <code>src/content/</code> structure to start
+                    managing collection content in Studio.
+                  </>
+                )}
               </p>
             </div>
-            <Button
-              disabled={initMutation.isPending}
-              onClick={async () => {
-                try {
-                  const result = await initMutation.mutateAsync({
-                    slug: projectSlug,
-                    version,
-                  });
-                  await refreshCms();
-                  if (result.built) {
-                    toast.success("CMS scaffold created");
-                  } else {
-                    toast.error("CMS scaffold created with validation issues", {
-                      description: result.error ?? undefined,
+            {!isAstroMissingConfig ? (
+              <Button
+                disabled={initMutation.isPending}
+                onClick={async () => {
+                  try {
+                    const result = await initMutation.mutateAsync({
+                      slug: projectSlug,
+                      version,
+                    });
+                    await refreshCms();
+                    if (result.built) {
+                      toast.success("CMS scaffold created");
+                    } else if (result.validationOnly) {
+                      toast.success("Content initialized");
+                    } else {
+                      toast.error("CMS scaffold created with validation issues", {
+                        description: result.error ?? undefined,
+                      });
+                    }
+                  } catch (error) {
+                    toast.error("Failed to initialize CMS", {
+                      description: error instanceof Error ? error.message : String(error),
                     });
                   }
-                } catch (error) {
-                  toast.error("Failed to initialize CMS", {
-                    description: error instanceof Error ? error.message : String(error),
-                  });
-                }
-              }}
-            >
-              {initMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-2 h-4 w-4" />
-              )}
-              Initialize CMS
-            </Button>
+                }}
+              >
+                {initMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                Initialize CMS
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -669,6 +705,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             models={report.models}
             reportErrors={report.errors}
             selectedModelKey={selectedModelKey}
+            allowCreateModel={!isAstroReadOnly}
             creatingModel={creatingModel}
             newModelKey={newModelKey}
             isScaffoldingModel={scaffoldModelMutation.isPending}
@@ -687,6 +724,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             selectedEntryKey={selectedEntryKey}
             defaultLocale={defaultLocale}
             reportErrors={report.errors}
+            allowCreateEntry={!isAstroReadOnly}
             creatingEntry={creatingEntry}
             newEntryKey={newEntryKey}
             isScaffoldingEntry={scaffoldEntryMutation.isPending}
@@ -712,6 +750,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             canUseAiImages={canUseAiImages}
             referenceOptions={referenceOptions}
             reportErrors={report.errors}
+            sourceKind={report.sourceKind}
+            readOnly={isAstroReadOnly}
             isDirty={isDirty}
             busy={busy}
             isSaving={isSaving}

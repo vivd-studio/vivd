@@ -11,6 +11,7 @@ interface CmsCollectionsSidebarProps {
   models: CmsModelRecord[];
   reportErrors: string[];
   selectedModelKey: string | null;
+  allowCreateModel: boolean;
   creatingModel: boolean;
   newModelKey: string;
   isScaffoldingModel: boolean;
@@ -33,6 +34,7 @@ export function CmsCollectionsSidebar({
   models,
   reportErrors,
   selectedModelKey,
+  allowCreateModel,
   creatingModel,
   newModelKey,
   isScaffoldingModel,
@@ -49,10 +51,12 @@ export function CmsCollectionsSidebar({
           <h3 className="text-sm font-semibold">Collections</h3>
           <p className="text-xs text-muted-foreground">Schema-authored content models</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onToggleCreateModel}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add
-        </Button>
+        {allowCreateModel ? (
+          <Button variant="outline" size="sm" onClick={onToggleCreateModel}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add
+          </Button>
+        ) : null}
       </div>
       {creatingModel ? (
         <div className="space-y-2 border-t px-3 py-3 sm:px-4">

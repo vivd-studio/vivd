@@ -37,6 +37,7 @@ interface CmsFieldRendererProps {
   selectedModel: CmsModelRecord | null;
   sidecarDrafts: Record<string, string>;
   canUseAiImages: boolean;
+  readOnly?: boolean;
   referenceOptions: Array<{ value: string; label: string }>;
   applyDraftValue: (fieldPath: CmsFieldSegment[], nextValue: unknown) => void;
   handleRichTextChange: (
@@ -70,6 +71,7 @@ export function CmsFieldRenderer({
   selectedModel,
   sidecarDrafts,
   canUseAiImages,
+  readOnly = false,
   referenceOptions,
   applyDraftValue,
   handleRichTextChange,
@@ -117,6 +119,8 @@ export function CmsFieldRenderer({
                     id={`${fieldId}.${locale}`}
                     rows={10}
                     value={sidecarDrafts[filePath] ?? ""}
+                    readOnly={readOnly}
+                    disabled={readOnly}
                     onChange={(event) =>
                       handleRichTextChange(fieldPath, locale, event.target.value)
                     }
@@ -150,6 +154,8 @@ export function CmsFieldRenderer({
                       ? (localizedValue[locale] as string)
                       : ""
                   }
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(event) =>
                     applyDraftValue(fieldPath, {
                       ...localizedValue,
@@ -165,6 +171,8 @@ export function CmsFieldRenderer({
                       ? (localizedValue[locale] as string)
                       : ""
                   }
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(event) =>
                     applyDraftValue(fieldPath, {
                       ...localizedValue,
@@ -192,6 +200,8 @@ export function CmsFieldRenderer({
         <Input
           id={fieldId}
           value={typeof rawValue === "string" ? rawValue : ""}
+          readOnly={readOnly}
+          disabled={readOnly}
           onChange={(event) => applyDraftValue(fieldPath, event.target.value)}
         />
       </div>
@@ -206,6 +216,8 @@ export function CmsFieldRenderer({
           id={fieldId}
           rows={field.type === "richText" ? 10 : 5}
           value={typeof rawValue === "string" ? rawValue : ""}
+          readOnly={readOnly}
+          disabled={readOnly}
           onChange={(event) =>
             field.type === "richText" && field.storage === "sidecar-markdown"
               ? handleRichTextChange(fieldPath, null, event.target.value)
@@ -224,6 +236,8 @@ export function CmsFieldRenderer({
           id={fieldId}
           type="number"
           value={typeof rawValue === "number" ? String(rawValue) : ""}
+          readOnly={readOnly}
+          disabled={readOnly}
           onChange={(event) =>
             applyDraftValue(
               fieldPath,
@@ -250,6 +264,7 @@ export function CmsFieldRenderer({
         <Checkbox
           id={fieldId}
           checked={Boolean(rawValue)}
+          disabled={readOnly}
           onCheckedChange={(checked) => applyDraftValue(fieldPath, Boolean(checked))}
         />
       </div>
@@ -262,9 +277,10 @@ export function CmsFieldRenderer({
         <Label>{label}</Label>
         <Select
           value={typeof rawValue === "string" ? rawValue : ""}
+          disabled={readOnly}
           onValueChange={(value) => applyDraftValue(fieldPath, value)}
         >
-          <SelectTrigger>
+          <SelectTrigger disabled={readOnly}>
             <SelectValue placeholder="Select an option" />
           </SelectTrigger>
           <SelectContent>
@@ -285,11 +301,12 @@ export function CmsFieldRenderer({
         <Label>{label}</Label>
         <Select
           value={deriveReferenceValue(rawValue) || "__empty__"}
+          disabled={readOnly}
           onValueChange={(value) =>
             applyDraftValue(fieldPath, value === "__empty__" ? "" : value)
           }
         >
-          <SelectTrigger>
+          <SelectTrigger disabled={readOnly}>
             <SelectValue placeholder="Select an entry" />
           </SelectTrigger>
           <SelectContent>
@@ -325,6 +342,7 @@ export function CmsFieldRenderer({
         mediaRootPath={mediaRootPath}
         defaultFolderPath={defaultFolderPath}
         canUseAiImages={canUseAiImages}
+        readOnly={readOnly}
         onChange={(nextValue) => applyDraftValue(fieldPath, nextValue)}
         onOpenAsset={openAssetReference}
       />
@@ -349,13 +367,14 @@ export function CmsFieldRenderer({
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={openExplorer}>
+            <Button variant="outline" size="sm" onClick={openExplorer} disabled={readOnly}>
               <FolderOpen className="mr-2 h-4 w-4" />
               Explorer
             </Button>
             <Button
               variant="outline"
               size="sm"
+              disabled={readOnly}
               onClick={() => {
                 const nextItem =
                   items[0] && typeof items[0] === "object" && !Array.isArray(items[0])
@@ -386,6 +405,7 @@ export function CmsFieldRenderer({
                 mediaRootPath={mediaRootPath}
                 defaultFolderPath={defaultFolderPath}
                 canUseAiImages={canUseAiImages}
+                readOnly={readOnly}
                 compact
                 onChange={(nextValue) => {
                   const nextItems = [...items];
@@ -399,6 +419,7 @@ export function CmsFieldRenderer({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  disabled={readOnly}
                   onClick={() => {
                     const nextItems = [...items];
                     nextItems.splice(index, 1);
@@ -439,6 +460,7 @@ export function CmsFieldRenderer({
               selectedModel={selectedModel}
               sidecarDrafts={sidecarDrafts}
               canUseAiImages={canUseAiImages}
+              readOnly={readOnly}
               referenceOptions={referenceOptions}
               applyDraftValue={applyDraftValue}
               handleRichTextChange={handleRichTextChange}
@@ -465,6 +487,7 @@ export function CmsFieldRenderer({
           <Button
             variant="outline"
             size="sm"
+            disabled={readOnly}
             onClick={() =>
               applyDraftValue(fieldPath, [
                 ...items,
@@ -523,6 +546,7 @@ export function CmsFieldRenderer({
                         selectedModel={selectedModel}
                         sidecarDrafts={sidecarDrafts}
                         canUseAiImages={canUseAiImages}
+                        readOnly={readOnly}
                         referenceOptions={referenceOptions}
                         applyDraftValue={applyDraftValue}
                         handleRichTextChange={handleRichTextChange}
@@ -546,6 +570,7 @@ export function CmsFieldRenderer({
                     selectedModel={selectedModel}
                     sidecarDrafts={sidecarDrafts}
                     canUseAiImages={canUseAiImages}
+                    readOnly={readOnly}
                     referenceOptions={referenceOptions}
                     applyDraftValue={applyDraftValue}
                     handleRichTextChange={handleRichTextChange}

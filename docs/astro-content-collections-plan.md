@@ -1,0 +1,226 @@
+# Astro Content Collections Plan
+
+## Goal
+
+Use Astro Content Collections as the only supported structured-content source of truth for Astro-backed Vivd projects.
+
+Vivd should not introduce a second repo-visible CMS contract for Astro projects. Studio and the CLI should adapt to Astro's existing content model instead of asking Astro projects to adapt to Vivd-owned YAML schemas.
+
+## Decision Summary
+
+For Astro-backed projects:
+
+- `src/content.config.ts` is the canonical model/schema definition surface.
+- Astro collection entry files under `src/content/**` are the canonical structured-content entry files.
+- `src/content/media/` is the canonical Vivd-managed local asset root for shared/local site assets.
+- `public/` is reserved for passthrough files that intentionally need raw framework-public URLs.
+- Vivd may keep an internal adapter layer for Studio/CLI, but that adapter must not become a second project-owned source of truth.
+
+This plan supersedes the earlier YAML-first CMS direction in `docs/file-based-cms-spec.md` for Astro-backed projects.
+
+## Source Of Truth
+
+### Models
+
+The only canonical model definition for Astro projects should be:
+
+- `src/content.config.ts`
+
+That means:
+
+- collections are defined with Astro's own `defineCollection(...)` pattern
+- field/schema definitions come from the Astro/Zod schema inside that file
+- Vivd should inspect and adapt that schema, not replace it with `src/content/vivd.content.yaml` or `src/content/models/*.yaml`
+
+### Entries
+
+The only canonical collection entry files should be the files Astro expects under `src/content/**`.
+
+Vivd should:
+
+- read them directly
+- validate them against the Astro/Zod schema
+- edit them in place
+
+Vivd should not generate or require a parallel normalized runtime snapshot of all entries in order for the project to work locally.
+
+### Assets
+
+The canonical asset rules for Astro-backed Vivd projects are:
+
+- `src/content/media/` for Vivd-managed local assets
+- `public/` only for passthrough/static-public files
+
+Examples for `public/`:
+
+- favicons
+- manifest icons
+- `robots.txt`
+- verification files
+- explicit compatibility cases where a raw public URL is the right answer
+
+## Vivd Adapter Layer
+
+Vivd still needs an internal adapter, but that adapter should live inside Vivd code rather than as a second repo contract.
+
+Recommended ownership:
+
+- internal adapter interface in Vivd code
+- first implementation: `AstroCollectionsAdapter`
+
+Its job is to normalize Astro's model into something Studio and the CLI can use consistently.
+
+Responsibilities:
+
+- inspect `src/content.config.ts`
+- discover collections and their schemas
+- normalize supported Astro/Zod schema shapes into the same field metadata shape the Studio CMS form renderer already consumes
+- list, read, create, update, and delete entries
+- resolve asset/media field behavior
+- expose a stable Studio/CLI-facing contract
+
+Non-responsibilities:
+
+- replacing Astro's content model
+- inventing a second schema format
+- requiring a generated runtime snapshot just to make the project work locally
+
+## Image And Media Strategy
+
+### Rendering Rule
+
+To simplify drag/drop and local asset handling, Vivd should push Astro projects toward one rendering convention:
+
+- for local/content-managed images, default to Astro's `Image` component
+- use plain `<img>` only for remote URLs, deliberate passthrough/public assets, SVG edge cases, or explicit compatibility reasons
+
+This should become the default guidance in agents, templates, and generated Astro starters.
+
+### Why
+
+This gives Vivd a narrower and more reliable image-editing contract:
+
+- local managed images go through Astro's image pipeline
+- content-folder images are first-class
+- Studio image-drop handling does not have to support every arbitrary string `src` pattern from day one
+
+### Drag/Drop Scope
+
+Initial supported image-drop targets should be:
+
+- CMS/content-bound image fields
+- Astro `Image` usage tied to local/content-managed assets
+
+Initial non-goals:
+
+- arbitrary raw `<img src="...">` rewrites across every possible pattern
+
+### Shared Media URLs
+
+If Astro-native entry images and `Image` usage do not fully cover shared gallery-style assets, Vivd may add a very small project-local helper or scaffold for stable `/media/...` exposure.
+
+That helper should stay thin:
+
+- no generated runtime snapshot of all entries/assets
+- no hidden `.vivd` runtime dependency
+- no second content model
+
+## Studio Scope
+
+### Phase 1
+
+Studio should support:
+
+- collection discovery
+- entry browsing
+- schema-driven field rendering directly from the normalized `src/content.config.ts` adapter output
+- entry creation/deletion
+- entry editing
+- asset selection/upload/replacement
+- validation against the Astro/Zod schema
+
+Even before full Astro-native writes land, the Studio CMS surface should keep using the structured form UI rather than falling back to a generic parsed-data dump.
+
+### Model Editing
+
+Model editing should not be the first goal.
+
+Because models live in `src/content.config.ts`, v1 should treat schema editing as:
+
+- inspect/read-only in Studio
+- maybe source-file open/jump actions
+
+Later, if needed, Vivd can add constrained AST-based edits for documented supported patterns.
+
+Vivd should not attempt to support arbitrary TypeScript metaprogramming in `src/content.config.ts`.
+
+## CLI Scope
+
+The CLI should evolve from the current YAML-first CMS commands toward Astro-native content operations.
+
+Likely direction:
+
+- inspect Astro collections
+- validate entries against Astro schema
+- scaffold missing helper/media files only when needed
+
+The CLI should stop implying that Astro projects need Vivd-owned YAML schema files to participate in Studio CMS flows.
+
+## Refactor Plan
+
+### 1. Introduce a small internal content-system interface
+
+Define a Vivd-internal abstraction for Studio and CLI content work, with Astro as the first implementation.
+
+Suggested capabilities:
+
+- inspect collections
+- inspect supported field shapes
+- list/get/create/update/delete entries
+- resolve asset fields and media roots
+
+### 2. Implement `AstroCollectionsAdapter`
+
+The first and only supported structured-content adapter should read:
+
+- `src/content.config.ts`
+- Astro collection entry files under `src/content/**`
+
+This adapter should normalize supported Astro/Zod schema patterns into Vivd UI metadata.
+
+### 3. Switch Studio read path to Astro-native data
+
+Refactor Studio CMS read/discovery to use the Astro adapter instead of the YAML-first shared CMS package.
+
+### 4. Switch Studio entry CRUD to Astro-native files
+
+Refactor creation/edit/delete/reorder flows so they update Astro entry files directly.
+
+### 5. Narrow image/drop behavior around Astro `Image`
+
+Update agent guidance and Studio persistence rules so local/content-managed images default to Astro `Image`.
+
+### 6. Remove the YAML-first Astro path
+
+Deprecate and then remove the Astro-facing assumptions around:
+
+- `src/content/vivd.content.yaml`
+- `src/content/models/*.yaml`
+- generated runtime snapshots used to make Astro work
+
+## Acceptance Criteria
+
+The pivot is complete when:
+
+- an Astro project can be cloned and run locally without any Vivd-specific generated runtime snapshot of entries
+- `src/content.config.ts` is the only model/schema source of truth
+- Studio can inspect and edit supported Astro collection entries directly
+- local/content-managed images default to Astro `Image`
+- drag/drop is scoped to supported Astro-native image patterns instead of broad arbitrary HTML rewriting
+- agent instructions and starter templates reflect the Astro-native contract
+
+## Open Questions
+
+- what exact supported subset of Astro/Zod schema patterns should Studio v1 support?
+- should Vivd keep any project-local media helper/scaffold for stable shared `/media/...` URLs, or can Astro-native image usage plus limited `public/` coverage handle enough cases?
+- should the CLI continue exposing `cms` commands under the same name, or should Astro-native content tooling be surfaced with new command names?

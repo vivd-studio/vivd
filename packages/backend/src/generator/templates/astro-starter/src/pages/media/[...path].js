@@ -7,7 +7,6 @@ const PROJECT_ROOT = path.resolve(
   "../../..",
 );
 const SOURCE_MEDIA_ROOT = path.join(PROJECT_ROOT, "src", "content", "media");
-const ARTIFACT_MEDIA_ROOT = path.join(PROJECT_ROOT, ".vivd", "content", "media");
 
 export const prerender = true;
 
@@ -89,23 +88,11 @@ function getMimeType(filePath) {
   }
 }
 
-async function getMediaRoots() {
-  const roots = [];
-  if (await pathExists(SOURCE_MEDIA_ROOT)) {
-    roots.push(SOURCE_MEDIA_ROOT);
-  }
-  if (await pathExists(ARTIFACT_MEDIA_ROOT)) {
-    roots.push(ARTIFACT_MEDIA_ROOT);
-  }
-  return Array.from(new Set(roots));
-}
-
 export const getStaticPaths = async () => {
-  const roots = await getMediaRoots();
   const seen = new Set();
 
-  for (const rootDir of roots) {
-    for (const relativePath of await listFiles(rootDir)) {
+  if (await pathExists(SOURCE_MEDIA_ROOT)) {
+    for (const relativePath of await listFiles(SOURCE_MEDIA_ROOT)) {
       seen.add(relativePath);
     }
   }
@@ -126,30 +113,26 @@ export const GET = async ({ params }) => {
     return new Response("Not found", { status: 404 });
   }
 
-  for (const rootDir of await getMediaRoots()) {
-    const filePath = safeJoin(rootDir, requestedPath);
-    if (!filePath) {
-      continue;
-    }
-
-    try {
-      const stats = await fs.stat(filePath);
-      if (!stats.isFile()) {
-        continue;
-      }
-
-      const body = await fs.readFile(filePath);
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "Content-Type": getMimeType(filePath),
-          "Cache-Control": "public, max-age=3600",
-        },
-      });
-    } catch {
-      continue;
-    }
+  const filePath = safeJoin(SOURCE_MEDIA_ROOT, requestedPath);
+  if (!filePath) {
+    return new Response("Not found", { status: 404 });
   }
 
-  return new Response("Not found", { status: 404 });
+  try {
+    const stats = await fs.stat(filePath);
+    if (!stats.isFile()) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const body = await fs.readFile(filePath);
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": getMimeType(filePath),
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
 };

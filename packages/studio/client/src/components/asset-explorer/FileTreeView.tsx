@@ -244,19 +244,10 @@ export function FileTreeView({
     if (item.type === "folder") {
       toggleExpanded(item.path);
     } else if (item.isImage) {
-      // Open image in viewer panel - close text editor first
-      setEditingTextFile(null);
-      setViewingPdfPath(null);
       setViewingImagePath(item.path);
     } else if (isPdfFile(item)) {
-      // Open PDF in viewer panel - close other overlays first
-      setEditingTextFile(null);
-      setViewingImagePath(null);
       setViewingPdfPath(item.path);
     } else if (isTextFile(item.name)) {
-      // Text file - open in editor, close other overlays first
-      setViewingImagePath(null);
-      setViewingPdfPath(null);
       setEditingTextFile(item.path);
     } else {
       // Binary/unknown file - open in a new tab (download fallback)
