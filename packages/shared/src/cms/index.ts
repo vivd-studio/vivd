@@ -4,6 +4,7 @@ import { stringify as stringifyYaml, parse as parseYaml } from "yaml";
 import {
   createAstroCollectionEntry,
   inspectAstroCollectionsWorkspace,
+  updateAstroCollectionModel,
 } from "./astroCollections.js";
 
 export const CMS_VERSION = 1;
@@ -63,6 +64,7 @@ export interface CmsFieldDefinition {
   options?: string[];
   accepts?: string[];
   storage?: string;
+  referenceModelKey?: string;
   fields?: Record<string, CmsFieldDefinition>;
   item?: CmsFieldDefinition;
 }
@@ -150,6 +152,11 @@ export interface CmsScaffoldResult {
 export interface CmsCreateEntryResult extends CmsScaffoldResult {
   createdEntryKey: string;
   createdEntryRelativePath: string;
+}
+
+export interface CmsUpdateModelResult {
+  updated: string[];
+  paths: CmsPaths;
 }
 
 type ReferenceCheck = {
@@ -1511,6 +1518,21 @@ export async function createCmsEntry(
     createdEntryKey: normalizedEntryKey,
     createdEntryRelativePath,
   };
+}
+
+export async function updateCmsModel(
+  projectDir: string,
+  modelKey: string,
+  fields: Record<string, CmsFieldDefinition>,
+): Promise<CmsUpdateModelResult> {
+  const astroResult = await updateAstroCollectionModel(projectDir, modelKey, fields);
+  if (astroResult) {
+    return astroResult;
+  }
+
+  throw new Error(
+    "Structured model editing is currently only supported for Astro Content Collections.",
+  );
 }
 
 async function readPackageJson(projectDir: string): Promise<Record<string, unknown> | null> {

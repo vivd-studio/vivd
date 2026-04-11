@@ -6,12 +6,12 @@ import type express from "express";
 import type { Multer } from "multer";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
-import { contactFormPluginBackendHooks } from "@vivd/plugin-contact-form/backendHooks";
 import { analyticsPluginPublicRoutes } from "./analytics/backendContribution";
 import {
   contactFormPluginModule,
   contactFormPluginPublicRoutes,
 } from "./contactForm/backendContribution";
+import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
 import { analyticsPluginModule } from "./analytics/module";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {

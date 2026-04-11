@@ -1,13 +1,9 @@
 import express from "express";
 import { Resend } from "resend";
-import {
-  emailDeliverabilityService,
-  isSesFeedbackAutoConfirmEnabled,
-  type EmailFeedbackEventType,
-} from "@vivd/backend/src/services/email/deliverability";
+import type { ContactFormFeedbackRouterDeps } from "../ports";
 
 const SES_NOTIFICATION_TYPES = new Set(["bounce", "complaint"]);
-const RESEND_TO_FEEDBACK_TYPE: Record<string, EmailFeedbackEventType> = {
+const RESEND_TO_FEEDBACK_TYPE: Record<string, "bounce" | "complaint"> = {
   "email.bounced": "bounce",
   "email.complained": "complaint",
 };
@@ -52,13 +48,13 @@ function readFirstTagValue(
   return readString(raw);
 }
 
-function normalizeSesNotificationType(value: unknown): EmailFeedbackEventType | null {
+function normalizeSesNotificationType(value: unknown): "bounce" | "complaint" | null {
   const parsed = readString(value)?.toLowerCase();
   if (!parsed || !SES_NOTIFICATION_TYPES.has(parsed)) return null;
-  return parsed as EmailFeedbackEventType;
+  return parsed as "bounce" | "complaint";
 }
 
-function normalizeResendNotificationType(value: unknown): EmailFeedbackEventType | null {
+function normalizeResendNotificationType(value: unknown): "bounce" | "complaint" | null {
   const parsed = readString(value)?.toLowerCase();
   if (!parsed) return null;
   return RESEND_TO_FEEDBACK_TYPE[parsed] || null;
@@ -82,7 +78,7 @@ function parseNotificationBody(rawBody: unknown): Record<string, unknown> | null
 
 function parseNotificationRecipients(
   notification: Record<string, unknown>,
-  type: EmailFeedbackEventType,
+  type: "bounce" | "complaint",
 ): string[] {
   if (type === "bounce") {
     const bounce = asRecord(notification.bounce);
@@ -115,8 +111,11 @@ function parseNotificationRecipients(
   return emails;
 }
 
-async function confirmSubscription(subscribeUrl: string): Promise<void> {
-  if (!isSesFeedbackAutoConfirmEnabled()) return;
+async function confirmSubscription(
+  subscribeUrl: string,
+  autoConfirmEnabled: boolean,
+): Promise<void> {
+  if (!autoConfirmEnabled) return;
 
   try {
     await fetch(subscribeUrl, { method: "GET" });
@@ -143,7 +142,9 @@ function readFlowTag(tags: Record<string, unknown> | null): string {
   );
 }
 
-export function createEmailFeedbackRouter() {
+export function createEmailFeedbackRouter(
+  deps: ContactFormFeedbackRouterDeps,
+) {
   const router = express.Router();
   const jsonParser = express.json({ limit: "256kb" });
   const rawJsonParser = express.text({ limit: "256kb", type: "application/json" });
@@ -169,7 +170,10 @@ export function createEmailFeedbackRouter() {
     if (messageType === "SubscriptionConfirmation") {
       const subscribeUrl = readString(envelope.SubscribeURL);
       if (subscribeUrl) {
-        await confirmSubscription(subscribeUrl);
+        await confirmSubscription(
+          subscribeUrl,
+          deps.isSesFeedbackAutoConfirmEnabled(),
+        );
       }
       return res.status(200).json({ ok: true });
     }
@@ -196,7 +200,7 @@ export function createEmailFeedbackRouter() {
 
     const occurredAt = readString(mail?.timestamp) || undefined;
 
-    const result = await emailDeliverabilityService.recordFeedback({
+    const result = await deps.emailDeliverabilityService.recordFeedback({
       type,
       recipientEmails,
       provider: "ses",
@@ -272,7 +276,7 @@ export function createEmailFeedbackRouter() {
     const recipientEmails = readStringArray(data?.to);
     const occurredAt = readString(parsedEvent.created_at) || readString(data?.created_at) || undefined;
 
-    const result = await emailDeliverabilityService.recordFeedback({
+    const result = await deps.emailDeliverabilityService.recordFeedback({
       type,
       recipientEmails,
       provider: "resend",

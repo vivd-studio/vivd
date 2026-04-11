@@ -94,10 +94,6 @@ export function CmsAssetField({
   const currentIsImage =
     imageMode && /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(resolvedAssetPath);
   const assetFilename = resolvedAssetPath.split("/").pop() || assetPath || label;
-  const resolvedReferenceValue = buildRelativeReferencePath(
-    entryRelativePath,
-    resolvedAssetPath || mediaRootPath,
-  );
   const generatedImageItem = useMemo<AssetItem | null>(
     () =>
       aiCandidatePath
@@ -276,12 +272,40 @@ export function CmsAssetField({
     </div>
   );
 
+  const pathInput = (
+    <div className="min-w-0 flex-1 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          Path
+        </p>
+        {hasAsset ? (
+          <p className="truncate text-[11px] text-muted-foreground">
+            Relative media reference
+          </p>
+        ) : null}
+      </div>
+      <Input
+        id={fieldId}
+        value={assetPath}
+        className={`${compact ? "h-8" : "h-9"} border-border/50 bg-background text-xs text-foreground/80`}
+        placeholder={
+          imageMode
+            ? "../../../media/products/item/hero.webp"
+            : "../../../media/files/brochure.pdf"
+        }
+        readOnly={readOnly}
+        disabled={readOnly}
+        onChange={(event) => onChange(setAssetPathValue(value, event.target.value))}
+      />
+    </div>
+  );
+
   const selectedAssetCard = hasAsset ? (
     <div className="space-y-3">
       {currentIsImage && canPreviewAsset ? (
         <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/15">
+          <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/15">
+            <ContextMenuTrigger asChild>
               <div className="flex flex-col gap-3 p-3 sm:flex-row">
                 <button
                   type="button"
@@ -315,22 +339,12 @@ export function CmsAssetField({
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 border-t border-border/50 bg-background/90 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    Path
-                  </p>
-                  <p
-                    className="truncate text-xs text-foreground/80"
-                    title={resolvedReferenceValue}
-                  >
-                    {resolvedReferenceValue}
-                  </p>
-                </div>
-                {actionButtons}
-              </div>
+            </ContextMenuTrigger>
+            <div className="flex flex-col gap-3 border-t border-border/50 bg-background/90 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+              {pathInput}
+              <div className="shrink-0">{actionButtons}</div>
             </div>
-          </ContextMenuTrigger>
+          </div>
           <ContextMenuContent className="w-52">
             <ContextMenuItem onClick={() => onOpenAsset(assetPath)}>
               Open preview
@@ -377,16 +391,9 @@ export function CmsAssetField({
             </div>
             {openPreviewButton}
           </div>
-          <div className="flex flex-col gap-2 border-t border-border/50 bg-background/90 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Path
-              </p>
-              <p className="truncate text-xs text-foreground/80" title={resolvedReferenceValue}>
-                {resolvedReferenceValue}
-              </p>
-            </div>
-            {actionButtons}
+          <div className="flex flex-col gap-3 border-t border-border/50 bg-background/90 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+            {pathInput}
+            <div className="shrink-0">{actionButtons}</div>
           </div>
         </div>
       )}
@@ -398,7 +405,10 @@ export function CmsAssetField({
           ? "Choose an image from the media library, upload one, or generate a new one."
           : "Choose a file from the media library or upload a new one."}
       </p>
-      <div className="mt-3">{actionButtons}</div>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {pathInput}
+        <div className="shrink-0">{actionButtons}</div>
+      </div>
     </div>
   );
 
@@ -424,30 +434,6 @@ export function CmsAssetField({
         </div>
 
         {selectedAssetCard}
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-muted-foreground">Path</p>
-            {hasAsset ? (
-              <p className="truncate text-[11px] text-muted-foreground">
-                Relative media reference
-              </p>
-            ) : null}
-          </div>
-          <Input
-            id={fieldId}
-            value={assetPath}
-            className="h-9 border-border/50 bg-muted/10 text-xs text-foreground/80"
-            placeholder={
-              imageMode
-                ? "../../../media/products/item/hero.webp"
-                : "../../../media/files/brochure.pdf"
-            }
-            readOnly={readOnly}
-            disabled={readOnly}
-            onChange={(event) => onChange(setAssetPathValue(value, event.target.value))}
-          />
-        </div>
       </div>
 
       {!readOnly ? (

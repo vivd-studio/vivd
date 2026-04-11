@@ -1,21 +1,41 @@
 import { eq } from "drizzle-orm";
 import { createContactFormPluginBackendContribution } from "@vivd/plugin-contact-form/backend/contribution";
+import { contactFormPluginDefinition } from "@vivd/plugin-contact-form/backend/module";
 import { db } from "../../../db";
-import { organizationMember, projectPluginInstance } from "../../../db/schema";
+import {
+  contactFormRecipientVerification,
+  contactFormSubmission,
+  organizationMember,
+  pluginEntitlement,
+  projectMeta,
+  projectPluginInstance,
+} from "../../../db/schema";
+import { emailDeliverabilityService, isSesFeedbackAutoConfirmEnabled } from "../../email/deliverability";
+import {
+  buildContactSubmissionEmail,
+} from "../../email/templates";
+import { getEmailDeliveryService } from "../../integrations/EmailDeliveryService";
 import { pluginEntitlementService } from "../PluginEntitlementService";
-import { projectPluginInstanceService } from "../core/instanceService";
+import {
+  ensureProjectPluginInstance,
+  getProjectPluginInstance,
+} from "../core/instanceStore";
 import { getContactFormSubmitEndpoint } from "./publicApi";
 import { contactFormRecipientVerificationService } from "./recipientVerification";
 import { inferContactFormAutoSourceHosts } from "./sourceHosts";
+import { contactFormTurnstileService } from "./turnstile";
 
 export const contactFormPluginBackendContribution =
   createContactFormPluginBackendContribution({
     projectPluginInstanceService: {
       ensurePluginInstance(options) {
-        return projectPluginInstanceService.ensurePluginInstance(options);
+        return ensureProjectPluginInstance({
+          ...options,
+          defaultConfig: contactFormPluginDefinition.defaultConfig,
+        });
       },
       getPluginInstance(options) {
-        return projectPluginInstanceService.getPluginInstance(options);
+        return getProjectPluginInstance(options);
       },
       async updatePluginInstance(options) {
         const updates: {
@@ -43,8 +63,22 @@ export const contactFormPluginBackendContribution =
     },
     pluginEntitlementService,
     recipientVerificationService: contactFormRecipientVerificationService,
+    turnstileService: contactFormTurnstileService,
     getContactFormSubmitEndpoint,
     inferSourceHosts: inferContactFormAutoSourceHosts,
+    emailDeliverabilityService,
+    emailDeliveryService: getEmailDeliveryService(),
+    buildContactSubmissionEmail,
+    isSesFeedbackAutoConfirmEnabled,
+    db,
+    tables: {
+      contactFormRecipientVerification,
+      contactFormSubmission,
+      pluginEntitlement,
+      projectMeta,
+      projectPluginInstance,
+      organizationMember,
+    },
     async listVerifiedOrganizationMemberEmails(options) {
       const members = await db.query.organizationMember.findMany({
         where: eq(organizationMember.organizationId, options.organizationId),

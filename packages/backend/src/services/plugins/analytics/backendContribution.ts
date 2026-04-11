@@ -1,4 +1,5 @@
 import { createAnalyticsPluginBackendContribution } from "@vivd/plugin-analytics/backend/contribution";
+import { analyticsPluginDefinition } from "@vivd/plugin-analytics/backend/module";
 import { db } from "../../../db";
 import {
   analyticsEvent,
@@ -6,7 +7,10 @@ import {
   projectPluginInstance,
 } from "../../../db/schema";
 import { pluginEntitlementService } from "../PluginEntitlementService";
-import { projectPluginInstanceService } from "../core/instanceService";
+import {
+  ensureProjectPluginInstance,
+  getProjectPluginInstance,
+} from "../core/instanceStore";
 import { getPublicPluginApiBaseUrl } from "../runtime/publicApi";
 import { inferProjectPluginSourceHosts } from "../runtime/sourceHosts";
 import {
@@ -24,7 +28,17 @@ export const analyticsPluginBackendContribution =
       projectPluginInstance,
     },
     pluginEntitlementService,
-    projectPluginInstanceService,
+    projectPluginInstanceService: {
+      ensurePluginInstance(options) {
+        return ensureProjectPluginInstance({
+          ...options,
+          defaultConfig: analyticsPluginDefinition.defaultConfig,
+        });
+      },
+      getPluginInstance(options) {
+        return getProjectPluginInstance(options);
+      },
+    },
     getPublicPluginApiBaseUrl,
     inferSourceHosts: inferProjectPluginSourceHosts,
     hostUtils: {

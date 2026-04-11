@@ -4,6 +4,7 @@ import { usePreview } from "@/components/preview/PreviewContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildAssetFileUrl } from "@/components/asset-explorer/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -15,7 +16,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import type { CmsModelRecord } from "@vivd/shared/cms";
+import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
 import {
   buildRichTextReference,
   getCmsEntryFileFormat,
@@ -32,6 +33,7 @@ import {
 import { CmsCollectionsSidebar } from "./CmsCollectionsSidebar";
 import { CmsEntriesSidebar } from "./CmsEntriesSidebar";
 import { CmsEntryEditor } from "./CmsEntryEditor";
+import { CmsModelEditor } from "./CmsModelEditor";
 
 interface CmsPanelProps {
   projectSlug: string;
@@ -71,6 +73,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const initMutation = trpc.cms.init.useMutation();
   const scaffoldModelMutation = trpc.cms.scaffoldModel.useMutation();
   const createEntryMutation = trpc.cms.createEntry.useMutation();
+  const updateModelMutation = trpc.cms.updateModel.useMutation();
   const prepareMutation = trpc.cms.prepare.useMutation();
   const saveTextFileMutation = trpc.assets.saveTextFile.useMutation();
   const deleteAssetMutation = trpc.assets.deleteAsset.useMutation();
@@ -88,6 +91,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const [newModelKey, setNewModelKey] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
   const [newEntryKey, setNewEntryKey] = useState("");
+  const [editorMode, setEditorMode] = useState<"entry" | "model">("entry");
 
   const report = statusQuery.data;
   const defaultLocale = report?.defaultLocale ?? "en";
@@ -108,6 +112,10 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const referenceOptions = useMemo(
     () => buildReferenceOptions(report?.models ?? [], defaultLocale),
     [defaultLocale, report?.models],
+  );
+  const collectionOptions = useMemo(
+    () => (report?.models ?? []).map((model) => model.key),
+    [report?.models],
   );
   const selectedEntryFormat = selectedEntry
     ? getCmsEntryFileFormat(selectedEntry.relativePath)
@@ -156,6 +164,16 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     }
     setSelectedEntryKey(selectedModel.entries[0]?.key ?? null);
   }, [selectedEntryKey, selectedModel]);
+
+  useEffect(() => {
+    if (!selectedModel) {
+      setEditorMode("entry");
+      return;
+    }
+    if (selectedModel.entries.length === 0) {
+      setEditorMode("model");
+    }
+  }, [selectedModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -538,6 +556,35 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     version,
   ]);
 
+  const handleSaveModel = useCallback(
+    async (fields: Record<string, CmsFieldDefinition>) => {
+      if (!selectedModel) return;
+      try {
+        const result = await updateModelMutation.mutateAsync({
+          slug: projectSlug,
+          version,
+          modelKey: selectedModel.key,
+          fields,
+        });
+        await refreshCms();
+        if (result.built) {
+          toast.success("Collection schema updated");
+        } else if (result.validationOnly) {
+          toast.success("Collection model saved");
+        } else {
+          toast.error("Collection schema saved with validation issues", {
+            description: result.error ?? undefined,
+          });
+        }
+      } catch (error) {
+        toast.error("Failed to save collection model", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [projectSlug, refreshCms, selectedModel, updateModelMutation, version],
+  );
+
   if (statusQuery.isLoading) {
     return (
       <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
@@ -570,6 +617,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     initMutation.isPending ||
     scaffoldModelMutation.isPending ||
     createEntryMutation.isPending ||
+    updateModelMutation.isPending ||
     prepareMutation.isPending ||
     saveTextFileMutation.isPending ||
     deleteAssetMutation.isPending;
@@ -767,38 +815,63 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             onSelectEntry={setSelectedEntryKey}
           />
 
-          <CmsEntryEditor
-            projectSlug={projectSlug}
-            version={version}
-            selectedModel={selectedModel}
-            selectedEntryKey={selectedEntryKey}
-            draftValues={draftValues}
-            defaultLocale={defaultLocale}
-            locales={locales}
-            sidecarDrafts={sidecarDrafts}
-            canUseAiImages={canUseAiImages}
-            referenceOptions={referenceOptions}
-            reportErrors={report.errors}
-            sourceKind={report.sourceKind}
-            readOnly={!isSelectedEntryWritable}
-            readOnlyMessage={
-              !isSelectedEntryWritable && selectedEntryFormat
-                ? `Studio can inspect this Astro entry, but ${selectedEntryFormat} entries are not writable yet.`
-                : null
-            }
-            isDirty={isDirty}
-            busy={busy}
-            isSaving={isSaving}
-            loadingSidecars={loadingSidecars}
-            setEditingTextFile={setEditingTextFile}
-            applyDraftValue={applyDraftValue}
-            handleRichTextChange={handleRichTextChange}
-            openAssetReference={openAssetReference}
-            openExplorer={openExplorer}
-            onMoveEntry={handleMoveEntry}
-            onSaveEntry={() => void handleSaveEntry()}
-            onDeleteEntry={() => void handleDeleteEntry()}
-          />
+          <div className="flex min-w-0 flex-1 flex-col">
+            {selectedModel ? (
+              <div className="border-b px-4 py-3 sm:px-5">
+                <Tabs value={editorMode} onValueChange={(value) => setEditorMode(value as "entry" | "model")}>
+                  <TabsList>
+                    <TabsTrigger value="entry">Entries</TabsTrigger>
+                    <TabsTrigger value="model">Model</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            ) : null}
+
+            {editorMode === "model" ? (
+              <CmsModelEditor
+                selectedModel={selectedModel}
+                collectionOptions={collectionOptions}
+                busy={busy}
+                isSaving={updateModelMutation.isPending}
+                reportErrors={report.errors}
+                setEditingTextFile={setEditingTextFile}
+                onSaveModel={(fields) => void handleSaveModel(fields)}
+              />
+            ) : (
+              <CmsEntryEditor
+                projectSlug={projectSlug}
+                version={version}
+                selectedModel={selectedModel}
+                selectedEntryKey={selectedEntryKey}
+                draftValues={draftValues}
+                defaultLocale={defaultLocale}
+                locales={locales}
+                sidecarDrafts={sidecarDrafts}
+                canUseAiImages={canUseAiImages}
+                referenceOptions={referenceOptions}
+                reportErrors={report.errors}
+                sourceKind={report.sourceKind}
+                readOnly={!isSelectedEntryWritable}
+                readOnlyMessage={
+                  !isSelectedEntryWritable && selectedEntryFormat
+                    ? `Studio can inspect this Astro entry, but ${selectedEntryFormat} entries are not writable yet.`
+                    : null
+                }
+                isDirty={isDirty}
+                busy={busy}
+                isSaving={isSaving}
+                loadingSidecars={loadingSidecars}
+                setEditingTextFile={setEditingTextFile}
+                applyDraftValue={applyDraftValue}
+                handleRichTextChange={handleRichTextChange}
+                openAssetReference={openAssetReference}
+                openExplorer={openExplorer}
+                onMoveEntry={handleMoveEntry}
+                onSaveEntry={() => void handleSaveEntry()}
+                onDeleteEntry={() => void handleDeleteEntry()}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

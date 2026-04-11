@@ -9,6 +9,7 @@ import type {
   CmsFieldDefinition,
   CmsModelRecord,
   CmsPaths,
+  CmsUpdateModelResult,
   CmsValidationReport,
 } from "./index.js";
 
@@ -783,8 +784,15 @@ function parseSchemaExpression(
       };
     }
     case "reference": {
+      const referenceModelKey = unwrapped.arguments[0]
+        ? expressionToStringLiteral(unwrapped.arguments[0]) ?? undefined
+        : undefined;
       return {
-        field: { type: "reference", required: true },
+        field: {
+          type: "reference",
+          required: true,
+          referenceModelKey,
+        },
         supported: true,
       };
     }
@@ -1104,6 +1112,191 @@ function inferEntryLayoutFromModel(model: CmsModelRecord): {
   };
 }
 
+function renderObjectKey(key: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
+}
+
+function usesImageHelperInField(field: CmsFieldDefinition): boolean {
+  if (field.type === "asset" || field.type === "assetList") {
+    return true;
+  }
+  if (field.type === "object") {
+    return Object.values(field.fields ?? {}).some(usesImageHelperInField);
+  }
+  if (field.type === "list" && field.item) {
+    return usesImageHelperInField(field.item);
+  }
+  return false;
+}
+
+function usesReferenceHelperInField(field: CmsFieldDefinition): boolean {
+  if (field.type === "reference") {
+    return true;
+  }
+  if (field.type === "object") {
+    return Object.values(field.fields ?? {}).some(usesReferenceHelperInField);
+  }
+  if (field.type === "list" && field.item) {
+    return usesReferenceHelperInField(field.item);
+  }
+  return false;
+}
+
+function serializeDefaultValue(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  if (typeof serialized !== "string") {
+    throw new Error("Unsupported default value in Astro model editor");
+  }
+  return serialized;
+}
+
+function buildAstroObjectExpression(
+  fields: Record<string, CmsFieldDefinition>,
+  propertyIndent: string,
+): string {
+  const entries = Object.entries(fields);
+  if (entries.length === 0) {
+    return "z.object({})";
+  }
+
+  const innerIndent = `${propertyIndent}  `;
+  return `z.object({\n${entries
+    .map(
+      ([fieldKey, field]) =>
+        `${innerIndent}${renderObjectKey(fieldKey)}: ${buildAstroFieldExpression(field, innerIndent)},`,
+    )
+    .join("\n")}\n${propertyIndent}})`;
+}
+
+function buildAstroFieldExpression(
+  field: CmsFieldDefinition,
+  propertyIndent: string,
+): string {
+  let expression = "";
+
+  switch (field.type) {
+    case "slug":
+    case "string":
+    case "text":
+    case "richText":
+      expression = "z.string()";
+      break;
+    case "date":
+    case "datetime":
+      expression = "z.coerce.date()";
+      break;
+    case "number":
+      expression = "z.number()";
+      break;
+    case "boolean":
+      expression = "z.boolean()";
+      break;
+    case "enum":
+      expression = `z.enum([${(field.options ?? []).map((option) => JSON.stringify(option)).join(", ")}])`;
+      break;
+    case "asset":
+      expression = "image()";
+      break;
+    case "assetList":
+      expression = "z.array(image())";
+      break;
+    case "reference":
+      if (!field.referenceModelKey?.trim()) {
+        throw new Error("Reference fields require a target collection");
+      }
+      expression = `reference(${JSON.stringify(field.referenceModelKey.trim())})`;
+      break;
+    case "object":
+      expression = buildAstroObjectExpression(field.fields ?? {}, propertyIndent);
+      break;
+    case "list":
+      expression = `z.array(${buildAstroFieldExpression(field.item ?? { type: "string" }, propertyIndent)})`;
+      break;
+    default:
+      expression = "z.string()";
+      break;
+  }
+
+  if (field.description?.trim()) {
+    expression += `.describe(${JSON.stringify(field.description.trim())})`;
+  }
+  if (typeof field.default !== "undefined") {
+    expression += `.default(${serializeDefaultValue(field.default)})`;
+  } else if (field.required === false) {
+    expression += ".optional()";
+  }
+
+  return expression;
+}
+
+function buildAstroSchemaExpression(
+  fields: Record<string, CmsFieldDefinition>,
+  propertyIndent: string,
+): string {
+  const objectExpression = buildAstroObjectExpression(fields, propertyIndent);
+  if (Object.values(fields).some(usesImageHelperInField)) {
+    return `({ image }) => ${objectExpression}`;
+  }
+  return objectExpression;
+}
+
+function getLineIndent(source: string, position: number): string {
+  const lineStart = source.lastIndexOf("\n", Math.max(position - 1, 0)) + 1;
+  return source.slice(lineStart, position).match(/^\s*/)?.[0] ?? "";
+}
+
+function ensureAstroContentImports(
+  source: string,
+  requiredImports: Set<string>,
+): string {
+  if (requiredImports.size === 0) {
+    return source;
+  }
+
+  const sourceFile = ts.createSourceFile(
+    "content.config.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  let astroImport: ts.ImportDeclaration | null = null;
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === "astro:content"
+    ) {
+      astroImport = statement;
+      break;
+    }
+  }
+
+  const orderedImports = [...requiredImports].sort((left, right) =>
+    left.localeCompare(right),
+  );
+
+  if (!astroImport) {
+    return `import { ${orderedImports.join(", ")} } from "astro:content";\n${source}`;
+  }
+
+  const existingImports = new Set<string>();
+  const namedBindings = astroImport.importClause?.namedBindings;
+  if (namedBindings && ts.isNamedImports(namedBindings)) {
+    for (const element of namedBindings.elements) {
+      existingImports.add(element.name.text);
+    }
+  }
+
+  const mergedImports = [...new Set([...existingImports, ...orderedImports])].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const replacement = `import { ${mergedImports.join(", ")} } from "astro:content";`;
+
+  return `${source.slice(0, astroImport.getStart(sourceFile))}${replacement}${source.slice(astroImport.getEnd())}`;
+}
+
 export async function createAstroCollectionEntry(
   projectDir: string,
   modelKey: string,
@@ -1164,6 +1357,99 @@ export async function createAstroCollectionEntry(
     paths: report.paths,
     createdEntryKey: normalizedEntryKey,
     createdEntryRelativePath: relativeEntryPath,
+  };
+}
+
+export async function updateAstroCollectionModel(
+  projectDir: string,
+  modelKey: string,
+  fields: Record<string, CmsFieldDefinition>,
+): Promise<CmsUpdateModelResult | null> {
+  const configPath = await findAstroContentConfigPath(projectDir);
+  if (!configPath) {
+    return null;
+  }
+
+  const source = await fs.readFile(configPath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    configPath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    configPath.endsWith(".js") || configPath.endsWith(".mjs")
+      ? ts.ScriptKind.JS
+      : ts.ScriptKind.TS,
+  );
+
+  const { declarations, collectionsObject } = findExportedCollectionsObject(sourceFile);
+  if (!collectionsObject) {
+    throw new Error("Could not find exported Astro collections object");
+  }
+
+  let collectionConfig: ts.ObjectLiteralExpression | null = null;
+  let schemaNode: ts.Expression | null = null;
+
+  for (const property of collectionsObject.properties) {
+    let collectionKey: string | null = null;
+    let initializer: ts.Expression | null = null;
+
+    if (ts.isPropertyAssignment(property)) {
+      collectionKey =
+        ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+          ? property.name.text
+          : null;
+      initializer = property.initializer;
+    } else if (ts.isShorthandPropertyAssignment(property)) {
+      collectionKey = property.name.text;
+      initializer = declarations.get(property.name.text) ?? null;
+    }
+
+    if (collectionKey !== modelKey.trim() || !initializer) {
+      continue;
+    }
+
+    const resolvedInitializer = ts.isIdentifier(initializer)
+      ? declarations.get(initializer.text) ?? initializer
+      : initializer;
+    const initializerExpression = withTransparentWrappers(resolvedInitializer);
+    if (!ts.isCallExpression(initializerExpression)) {
+      throw new Error(`Collection ${modelKey} must call defineCollection(...)`);
+    }
+
+    const collectionArg = initializerExpression.arguments[0];
+    collectionConfig =
+      collectionArg && ts.isObjectLiteralExpression(withTransparentWrappers(collectionArg))
+        ? (withTransparentWrappers(collectionArg) as ts.ObjectLiteralExpression)
+        : null;
+    if (!collectionConfig) {
+      throw new Error(`Collection ${modelKey} must pass an object literal to defineCollection(...)`);
+    }
+
+    schemaNode = getObjectPropertyValue(collectionConfig, "schema");
+    break;
+  }
+
+  if (!collectionConfig || !schemaNode) {
+    throw new Error(`Collection not found: ${modelKey}`);
+  }
+
+  const schemaPropertyIndent = getLineIndent(source, schemaNode.getStart(sourceFile));
+  const nextSchemaExpression = buildAstroSchemaExpression(fields, schemaPropertyIndent);
+  let nextSource = `${source.slice(0, schemaNode.getStart(sourceFile))}${nextSchemaExpression}${source.slice(schemaNode.getEnd())}`;
+
+  const requiredImports = new Set(["defineCollection", "z"]);
+  if (Object.values(fields).some(usesReferenceHelperInField)) {
+    requiredImports.add("reference");
+  }
+  nextSource = ensureAstroContentImports(nextSource, requiredImports);
+
+  if (nextSource !== source) {
+    await fs.writeFile(configPath, nextSource, "utf8");
+  }
+
+  return {
+    updated: [toPosix(path.relative(projectDir, configPath))],
+    paths: buildAstroPaths(projectDir, configPath),
   };
 }
 

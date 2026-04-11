@@ -5,7 +5,7 @@
 Status: Draft  
 Last updated: 2026-04-07
 
-This document is a fresh planning pass for Vivd CMS and supersedes the earlier DB-first/CLI-first leaning in `docs/headless-cms-agent-plan.md`.
+This document is a fresh planning pass for Vivd CMS and supersedes the earlier DB-first/CLI-first leaning in `docs/old/headless-cms-agent-plan.md`.
 
 ## Summary
 

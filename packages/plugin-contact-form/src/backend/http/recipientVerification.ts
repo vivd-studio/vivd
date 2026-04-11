@@ -1,5 +1,5 @@
 import express from "express";
-import { contactFormRecipientVerificationService } from "../recipientVerification";
+import type { ContactRecipientVerificationRouterDeps } from "../ports";
 
 function escapeHtml(value: string): string {
   return value
@@ -40,7 +40,9 @@ function renderVerificationPage(input: {
   ].join("");
 }
 
-export function createContactRecipientVerificationRouter() {
+export function createContactRecipientVerificationRouter(
+  deps: ContactRecipientVerificationRouterDeps,
+) {
   const router = express.Router();
 
   router.get("/contact/v1/recipient-verify", async (req, res) => {
@@ -48,7 +50,7 @@ export function createContactRecipientVerificationRouter() {
 
     try {
       const result =
-        await contactFormRecipientVerificationService.verifyRecipientByToken(token);
+        await deps.recipientVerificationService.verifyRecipientByToken(token);
 
       if (result.status === "verified") {
         return res.status(200).send(

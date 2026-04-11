@@ -63,13 +63,14 @@ vi.mock("../src/db", () => ({
 
 vi.mock("../src/services/email/templates", () => ({
   buildContactRecipientVerificationEmail: vi.fn(),
+  buildContactSubmissionEmail: vi.fn(),
 }));
 
 vi.mock("../src/services/integrations/EmailDeliveryService", () => ({
   getEmailDeliveryService: vi.fn(),
 }));
 
-import { contactFormRecipientVerificationService } from "@vivd/plugin-contact-form/backend/recipientVerification";
+import { contactFormRecipientVerificationService } from "../src/services/plugins/contactForm/recipientVerification";
 
 describe("contactFormRecipientVerificationService.markRecipientVerified", () => {
   beforeEach(() => {

@@ -1,19 +1,14 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@vivd/backend/src/db";
-import {
-  contactFormRecipientVerification,
-  organizationMember,
-  projectPluginInstance,
-} from "@vivd/backend/src/db/schema";
-import { buildContactRecipientVerificationEmail } from "@vivd/backend/src/services/email/templates";
-import { getEmailDeliveryService } from "@vivd/backend/src/services/integrations/EmailDeliveryService";
 import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./config";
-import { getContactRecipientVerificationEndpoint } from "./publicApi";
+import type {
+  ContactFormRecipientVerificationServiceDeps,
+  ContactFormRecipientVerificationTables,
+} from "./ports";
 
 const recipientEmailSchema = z.string().email();
 const DEFAULT_TOKEN_EXPIRY_SECONDS = 24 * 60 * 60;
@@ -139,12 +134,29 @@ export class ContactRecipientVerificationPendingLimitError extends Error {
   }
 }
 
-class ContactFormRecipientVerificationService {
+type PendingRecipientRow = {
+  email: string;
+  lastSentAt: Date | null;
+};
+
+type VerifiedRecipientRow = {
+  email: string;
+};
+
+class ContactFormRecipientVerificationServiceImpl {
+  constructor(
+    private readonly deps: ContactFormRecipientVerificationServiceDeps,
+  ) {}
+
+  private get tables(): ContactFormRecipientVerificationTables {
+    return this.deps.tables;
+  }
+
   private async listOrganizationEmails(options: {
     organizationId: string;
   }): Promise<{ email: string; emailVerified: boolean }[]> {
-    const members = await db.query.organizationMember.findMany({
-      where: eq(organizationMember.organizationId, options.organizationId),
+    const members = await this.deps.db.query.organizationMember.findMany({
+      where: eq(this.tables.organizationMember.organizationId, options.organizationId),
       with: {
         user: {
           columns: {
@@ -173,8 +185,8 @@ class ContactFormRecipientVerificationService {
     pluginInstanceId: string;
     email: string;
   }): Promise<void> {
-    const pluginInstance = await db.query.projectPluginInstance.findFirst({
-      where: eq(projectPluginInstance.id, options.pluginInstanceId),
+    const pluginInstance = await this.deps.db.query.projectPluginInstance.findFirst({
+      where: eq(this.tables.projectPluginInstance.id, options.pluginInstanceId),
       columns: {
         id: true,
         configJson: true,
@@ -193,13 +205,13 @@ class ContactFormRecipientVerificationService {
       return;
     }
 
-    await db
-      .update(projectPluginInstance)
+    await this.deps.db
+      .update(this.tables.projectPluginInstance)
       .set({
         configJson: nextConfig,
         updatedAt: new Date(),
       })
-      .where(eq(projectPluginInstance.id, pluginInstance.id));
+      .where(eq(this.tables.projectPluginInstance.id, pluginInstance.id));
   }
 
   async listRecipientDirectory(options: {
@@ -210,11 +222,11 @@ class ContactFormRecipientVerificationService {
     const normalizedVerifiedEmails = normalizeUniqueEmails(options.verifiedRecipientEmails);
     const [organizationEmails, pendingRows] = await Promise.all([
       this.listOrganizationEmails({ organizationId: options.organizationId }),
-      db.query.contactFormRecipientVerification.findMany({
+      this.deps.db.query.contactFormRecipientVerification.findMany({
         where: and(
-          eq(contactFormRecipientVerification.organizationId, options.organizationId),
-          eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-          eq(contactFormRecipientVerification.status, "pending"),
+          eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+          eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+          eq(this.tables.contactFormRecipientVerification.status, "pending"),
         ),
         columns: {
           email: true,
@@ -224,14 +236,16 @@ class ContactFormRecipientVerificationService {
     ]);
 
     const verifiedEmailSet = new Set(normalizedVerifiedEmails);
-    const pendingEntries = pendingRows
-      .map((row) => ({
+    const pendingEntries = (pendingRows as PendingRecipientRow[])
+      .map((row: PendingRecipientRow) => ({
         email: normalizeEmailAddress(row.email),
         lastSentAt: row.lastSentAt ? row.lastSentAt.toISOString() : null,
       }))
       .filter((row) => row.email.length > 0)
       .sort((left, right) => left.email.localeCompare(right.email));
-    const pendingEmailSet = new Set(pendingEntries.map((entry) => entry.email));
+    const pendingEmailSet = new Set<string>(
+      pendingEntries.map((entry) => entry.email),
+    );
 
     const optionEmailSet = new Set<string>();
     for (const row of organizationEmails) optionEmailSet.add(row.email);
@@ -262,19 +276,23 @@ class ContactFormRecipientVerificationService {
       return new Set<string>();
     }
 
-    const rows = await db.query.contactFormRecipientVerification.findMany({
+    const rows = await this.deps.db.query.contactFormRecipientVerification.findMany({
       where: and(
-        eq(contactFormRecipientVerification.organizationId, options.organizationId),
-        eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-        eq(contactFormRecipientVerification.status, "verified"),
-        inArray(contactFormRecipientVerification.email, normalizedEmails),
+        eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+        eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+        eq(this.tables.contactFormRecipientVerification.status, "verified"),
+        inArray(this.tables.contactFormRecipientVerification.email, normalizedEmails),
       ),
       columns: {
         email: true,
       },
     });
 
-    return new Set(rows.map((row) => normalizeEmailAddress(row.email)));
+    return new Set(
+      (rows as VerifiedRecipientRow[]).map((row: VerifiedRecipientRow) =>
+        normalizeEmailAddress(row.email),
+      ),
+    );
   }
 
   async requestRecipientVerification(options: {
@@ -290,12 +308,12 @@ class ContactFormRecipientVerificationService {
       throw new ContactRecipientEmailFormatError();
     }
 
-    const pluginInstance = await db.query.projectPluginInstance.findFirst({
+    const pluginInstance = await this.deps.db.query.projectPluginInstance.findFirst({
       where: and(
-        eq(projectPluginInstance.id, options.pluginInstanceId),
-        eq(projectPluginInstance.organizationId, options.organizationId),
-        eq(projectPluginInstance.projectSlug, options.projectSlug),
-        eq(projectPluginInstance.pluginId, "contact_form"),
+        eq(this.tables.projectPluginInstance.id, options.pluginInstanceId),
+        eq(this.tables.projectPluginInstance.organizationId, options.organizationId),
+        eq(this.tables.projectPluginInstance.projectSlug, options.projectSlug),
+        eq(this.tables.projectPluginInstance.pluginId, "contact_form"),
       ),
       columns: {
         id: true,
@@ -329,8 +347,8 @@ class ContactFormRecipientVerificationService {
         pluginInstanceId: pluginInstance.id,
         email: normalizedEmail,
       });
-      await db
-        .update(contactFormRecipientVerification)
+      await this.deps.db
+        .update(this.tables.contactFormRecipientVerification)
         .set({
           status: "verified",
           verificationTokenHash: null,
@@ -340,9 +358,9 @@ class ContactFormRecipientVerificationService {
         })
         .where(
           and(
-            eq(contactFormRecipientVerification.organizationId, options.organizationId),
-            eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-            eq(contactFormRecipientVerification.email, normalizedEmail),
+            eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+            eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+            eq(this.tables.contactFormRecipientVerification.email, normalizedEmail),
           ),
         );
 
@@ -353,11 +371,11 @@ class ContactFormRecipientVerificationService {
       };
     }
 
-    const existing = await db.query.contactFormRecipientVerification.findFirst({
+    const existing = await this.deps.db.query.contactFormRecipientVerification.findFirst({
       where: and(
-        eq(contactFormRecipientVerification.organizationId, options.organizationId),
-        eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-        eq(contactFormRecipientVerification.email, normalizedEmail),
+        eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+        eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+        eq(this.tables.contactFormRecipientVerification.email, normalizedEmail),
       ),
       columns: {
         id: true,
@@ -379,16 +397,16 @@ class ContactFormRecipientVerificationService {
     }
 
     if (!existing) {
-      const pendingCountRows = await db
+      const pendingCountRows = await this.deps.db
         .select({
           count: sql<number>`count(*)`,
         })
-        .from(contactFormRecipientVerification)
+        .from(this.tables.contactFormRecipientVerification)
         .where(
           and(
-            eq(contactFormRecipientVerification.organizationId, options.organizationId),
-            eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-            eq(contactFormRecipientVerification.status, "pending"),
+            eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+            eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+            eq(this.tables.contactFormRecipientVerification.status, "pending"),
           ),
         );
 
@@ -412,7 +430,7 @@ class ContactFormRecipientVerificationService {
       }
     }
 
-    const verificationEndpoint = getContactRecipientVerificationEndpoint({
+    const verificationEndpoint = this.deps.getContactRecipientVerificationEndpoint({
       requestHost: options.requestHost,
     });
 
@@ -422,8 +440,8 @@ class ContactFormRecipientVerificationService {
     let verificationRowId = existing?.id ?? null;
 
     if (existing) {
-      await db
-        .update(contactFormRecipientVerification)
+      await this.deps.db
+        .update(this.tables.contactFormRecipientVerification)
         .set({
           pluginInstanceId: pluginInstance.id,
           status: "pending",
@@ -433,11 +451,11 @@ class ContactFormRecipientVerificationService {
           verifiedAt: null,
           updatedAt: now,
         })
-        .where(eq(contactFormRecipientVerification.id, existing.id));
+        .where(eq(this.tables.contactFormRecipientVerification.id, existing.id));
     } else {
       const newRowId = randomUUID();
       verificationRowId = newRowId;
-      await db.insert(contactFormRecipientVerification).values({
+      await this.deps.db.insert(this.tables.contactFormRecipientVerification).values({
         id: newRowId,
         organizationId: options.organizationId,
         projectSlug: options.projectSlug,
@@ -457,13 +475,12 @@ class ContactFormRecipientVerificationService {
     const verificationUrl = `${verificationEndpoint}?token=${encodeURIComponent(
       verificationToken,
     )}`;
-    const template = await buildContactRecipientVerificationEmail({
+    const template = await this.deps.buildRecipientVerificationEmail({
       projectSlug: options.projectSlug,
       verificationUrl,
       expiresInSeconds: tokenExpirySeconds,
     });
-    const emailService = getEmailDeliveryService();
-    const emailResult = await emailService.send({
+    const emailResult = await this.deps.emailDeliveryService.send({
       to: [normalizedEmail],
       subject: template.subject,
       text: template.text,
@@ -484,19 +501,19 @@ class ContactFormRecipientVerificationService {
         email: normalizedEmail,
       });
       if (existing) {
-        await db
-          .update(contactFormRecipientVerification)
+        await this.deps.db
+          .update(this.tables.contactFormRecipientVerification)
           .set({
             verificationTokenHash: null,
             verificationTokenExpiresAt: null,
             lastSentAt: existing.lastSentAt ?? null,
             updatedAt: new Date(),
           })
-          .where(eq(contactFormRecipientVerification.id, existing.id));
+          .where(eq(this.tables.contactFormRecipientVerification.id, existing.id));
       } else if (verificationRowId) {
-        await db
-          .delete(contactFormRecipientVerification)
-          .where(eq(contactFormRecipientVerification.id, verificationRowId));
+        await this.deps.db
+          .delete(this.tables.contactFormRecipientVerification)
+          .where(eq(this.tables.contactFormRecipientVerification.id, verificationRowId));
       }
       throw new ContactRecipientVerificationSendError();
     }
@@ -520,12 +537,12 @@ class ContactFormRecipientVerificationService {
       throw new ContactRecipientEmailFormatError();
     }
 
-    const pluginInstance = await db.query.projectPluginInstance.findFirst({
+    const pluginInstance = await this.deps.db.query.projectPluginInstance.findFirst({
       where: and(
-        eq(projectPluginInstance.id, options.pluginInstanceId),
-        eq(projectPluginInstance.organizationId, options.organizationId),
-        eq(projectPluginInstance.projectSlug, options.projectSlug),
-        eq(projectPluginInstance.pluginId, "contact_form"),
+        eq(this.tables.projectPluginInstance.id, options.pluginInstanceId),
+        eq(this.tables.projectPluginInstance.organizationId, options.organizationId),
+        eq(this.tables.projectPluginInstance.projectSlug, options.projectSlug),
+        eq(this.tables.projectPluginInstance.pluginId, "contact_form"),
       ),
       columns: {
         id: true,
@@ -540,11 +557,11 @@ class ContactFormRecipientVerificationService {
     const currentRecipients = new Set(
       config.recipientEmails.map((value) => normalizeEmailAddress(value)),
     );
-    const existing = await db.query.contactFormRecipientVerification.findFirst({
+    const existing = await this.deps.db.query.contactFormRecipientVerification.findFirst({
       where: and(
-        eq(contactFormRecipientVerification.organizationId, options.organizationId),
-        eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
-        eq(contactFormRecipientVerification.email, normalizedEmail),
+        eq(this.tables.contactFormRecipientVerification.organizationId, options.organizationId),
+        eq(this.tables.contactFormRecipientVerification.projectSlug, options.projectSlug),
+        eq(this.tables.contactFormRecipientVerification.email, normalizedEmail),
       ),
       columns: {
         id: true,
@@ -577,8 +594,8 @@ class ContactFormRecipientVerificationService {
       });
 
       if (existing) {
-        await db
-          .update(contactFormRecipientVerification)
+        await this.deps.db
+          .update(this.tables.contactFormRecipientVerification)
           .set({
             pluginInstanceId: pluginInstance.id,
             status: "verified",
@@ -587,7 +604,7 @@ class ContactFormRecipientVerificationService {
             verifiedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(contactFormRecipientVerification.id, existing.id));
+          .where(eq(this.tables.contactFormRecipientVerification.id, existing.id));
       }
 
       return {
@@ -600,10 +617,10 @@ class ContactFormRecipientVerificationService {
     const now = new Date();
     const nextConfig = withRecipientEmail(config, normalizedEmail);
 
-    await db.transaction(async (tx) => {
+    await this.deps.db.transaction(async (tx) => {
       if (existing) {
         await tx
-          .update(contactFormRecipientVerification)
+          .update(this.tables.contactFormRecipientVerification)
           .set({
             pluginInstanceId: pluginInstance.id,
             status: "verified",
@@ -612,9 +629,9 @@ class ContactFormRecipientVerificationService {
             verifiedAt: now,
             updatedAt: now,
           })
-          .where(eq(contactFormRecipientVerification.id, existing.id));
+          .where(eq(this.tables.contactFormRecipientVerification.id, existing.id));
       } else {
-        await tx.insert(contactFormRecipientVerification).values({
+        await tx.insert(this.tables.contactFormRecipientVerification).values({
           id: randomUUID(),
           organizationId: options.organizationId,
           projectSlug: options.projectSlug,
@@ -632,12 +649,12 @@ class ContactFormRecipientVerificationService {
       }
 
       await tx
-        .update(projectPluginInstance)
+        .update(this.tables.projectPluginInstance)
         .set({
           configJson: nextConfig,
           updatedAt: now,
         })
-        .where(eq(projectPluginInstance.id, pluginInstance.id));
+        .where(eq(this.tables.projectPluginInstance.id, pluginInstance.id));
     });
 
     return {
@@ -656,10 +673,10 @@ class ContactFormRecipientVerificationService {
     }
 
     const tokenHash = hashToken(normalizedToken);
-    const row = await db.query.contactFormRecipientVerification.findFirst({
+    const row = await this.deps.db.query.contactFormRecipientVerification.findFirst({
       where: and(
-        eq(contactFormRecipientVerification.verificationTokenHash, tokenHash),
-        eq(contactFormRecipientVerification.status, "pending"),
+        eq(this.tables.contactFormRecipientVerification.verificationTokenHash, tokenHash),
+        eq(this.tables.contactFormRecipientVerification.status, "pending"),
       ),
       columns: {
         id: true,
@@ -676,20 +693,20 @@ class ContactFormRecipientVerificationService {
 
     const now = new Date();
     if (!row.verificationTokenExpiresAt || row.verificationTokenExpiresAt <= now) {
-      await db
-        .update(contactFormRecipientVerification)
+      await this.deps.db
+        .update(this.tables.contactFormRecipientVerification)
         .set({
           verificationTokenHash: null,
           verificationTokenExpiresAt: null,
           updatedAt: now,
         })
-        .where(eq(contactFormRecipientVerification.id, row.id));
+        .where(eq(this.tables.contactFormRecipientVerification.id, row.id));
       return { status: "expired" };
     }
 
     const normalizedEmail = normalizeEmailAddress(row.email);
-    const pluginInstance = await db.query.projectPluginInstance.findFirst({
-      where: eq(projectPluginInstance.id, row.pluginInstanceId),
+    const pluginInstance = await this.deps.db.query.projectPluginInstance.findFirst({
+      where: eq(this.tables.projectPluginInstance.id, row.pluginInstanceId),
       columns: {
         id: true,
         configJson: true,
@@ -703,9 +720,9 @@ class ContactFormRecipientVerificationService {
     const nextConfig = withRecipientEmail(config, normalizedEmail);
 
     let verified = false;
-    await db.transaction(async (tx) => {
+    await this.deps.db.transaction(async (tx) => {
       const [updatedVerification] = await tx
-        .update(contactFormRecipientVerification)
+        .update(this.tables.contactFormRecipientVerification)
         .set({
           status: "verified",
           verificationTokenHash: null,
@@ -715,21 +732,21 @@ class ContactFormRecipientVerificationService {
         })
         .where(
           and(
-            eq(contactFormRecipientVerification.id, row.id),
-            eq(contactFormRecipientVerification.status, "pending"),
-            eq(contactFormRecipientVerification.verificationTokenHash, tokenHash),
+            eq(this.tables.contactFormRecipientVerification.id, row.id),
+            eq(this.tables.contactFormRecipientVerification.status, "pending"),
+            eq(this.tables.contactFormRecipientVerification.verificationTokenHash, tokenHash),
           ),
         )
-        .returning({ id: contactFormRecipientVerification.id });
+        .returning({ id: this.tables.contactFormRecipientVerification.id });
       if (!updatedVerification) return;
 
       await tx
-        .update(projectPluginInstance)
+        .update(this.tables.projectPluginInstance)
         .set({
           configJson: nextConfig,
           updatedAt: now,
         })
-        .where(eq(projectPluginInstance.id, pluginInstance.id));
+        .where(eq(this.tables.projectPluginInstance.id, pluginInstance.id));
 
       verified = true;
     });
@@ -746,5 +763,12 @@ class ContactFormRecipientVerificationService {
   }
 }
 
-export const contactFormRecipientVerificationService =
-  new ContactFormRecipientVerificationService();
+export function createContactFormRecipientVerificationService(
+  deps: ContactFormRecipientVerificationServiceDeps,
+) {
+  return new ContactFormRecipientVerificationServiceImpl(deps);
+}
+
+export type ContactFormRecipientVerificationService = ReturnType<
+  typeof createContactFormRecipientVerificationService
+>;

@@ -238,7 +238,7 @@ describe("CmsAssetField", () => {
     });
   });
 
-  it("shows the stored path inline without the old advanced disclosure copy", () => {
+  it("shows a single inline path input without the old advanced disclosure copy", () => {
     render(
       <CmsAssetField
         projectSlug="demo"
@@ -257,6 +257,8 @@ describe("CmsAssetField", () => {
     );
 
     expect(screen.queryByText("Advanced path reference")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("../media/horse/apollo/horse-1.webp")).toBeVisible();
+    const inlinePathInputs = screen.getAllByDisplayValue("../media/horse/apollo/horse-1.webp");
+    expect(inlinePathInputs).toHaveLength(1);
+    expect(inlinePathInputs[0]).toBeVisible();
   });
 });

@@ -17,7 +17,7 @@ implementation details.
 - `docs/opencode-chat-refactor-plan.md`
 - `docs/opencode-chat-sync-analysis.md`
 - `docs/self-hosting-profile-split-plan.md`
-- `docs/refactoring-day-checklist.md`
+- `docs/old/refactoring-day-checklist.md`
 
 ## Rules For Closing Items
 

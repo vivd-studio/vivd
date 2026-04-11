@@ -171,6 +171,36 @@ galleryImages:
     expect(report.assetCount).toBe(3);
   });
 
+  it("preserves Astro reference target metadata for structured CMS editing", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "posts"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, reference, z } from "astro:content";
+
+const posts = defineCollection({
+  schema: z.object({
+    title: z.string(),
+    author: reference("authors").optional(),
+  }),
+});
+
+export const collections = { posts };
+`,
+      "utf8",
+    );
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.models[0]?.fields.author).toMatchObject({
+      type: "reference",
+      referenceModelKey: "authors",
+      required: false,
+    });
+  });
+
   it("reports missing src/content.config.ts for Astro projects before falling back to legacy YAML scaffolding", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);

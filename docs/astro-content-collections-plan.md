@@ -144,16 +144,27 @@ Even before full Astro-native writes land, the Studio CMS surface should keep us
 
 ### Model Editing
 
-Model editing should not be the first goal.
+Model editing should stay constrained, but it no longer needs to stay read-only.
 
-Because models live in `src/content.config.ts`, v1 should treat schema editing as:
+Because models live in `src/content.config.ts`, Studio should support:
 
-- inspect/read-only in Studio
-- maybe source-file open/jump actions
-
-Later, if needed, Vivd can add constrained AST-based edits for documented supported patterns.
+- structured editing for the supported normalized field tree
+- constrained AST-backed rewrites of the target collection `schema` block only
+- source-file open/jump actions as the fallback for unsupported custom TypeScript patterns
 
 Vivd should not attempt to support arbitrary TypeScript metaprogramming in `src/content.config.ts`.
+
+### Preview Save Resolution
+
+Preview text editing and image dropping should not remain a separate source-of-truth path for Astro CMS-backed sites.
+
+The next persistence step should be:
+
+- resolve preview text edits back to the owning CMS entry field when the selected DOM node comes from collection content
+- resolve preview image drops back to the owning CMS asset field when the selected image comes from collection content
+- fall back to raw Astro/HTML patching only when no CMS field ownership can be resolved confidently
+
+This keeps the page preview useful without letting it silently diverge from the actual entry/model source files.
 
 ## CLI Scope
 

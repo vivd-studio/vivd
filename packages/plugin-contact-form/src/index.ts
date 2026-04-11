@@ -7,11 +7,9 @@ export {
   contactFormPluginDefinition,
 } from "./backend/module";
 export {
-  buildContactFormOrganizationProjectSummaries,
-  cleanupContactFormEntitlementFields,
-  prepareContactFormEntitlementFields,
+  createContactFormPluginBackendHooks,
 } from "./backend/adminHooks";
-export { contactFormPluginBackendHooks } from "./backendHooks";
+export { createContactFormPluginBackendHooks as createContactFormBackendHooks } from "./backendHooks";
 export { contactFormPluginDescriptor } from "./descriptor";
 export {
   createContactFormPluginBackendContribution,

@@ -204,54 +204,53 @@ vi.mock("../src/services/plugins/contactForm/turnstile", () => ({
   },
 }));
 
-vi.mock("@vivd/plugin-contact-form/backend/adminHooks", () => ({
-  buildContactFormOrganizationProjectSummaries: vi.fn(),
-  prepareContactFormEntitlementFields: vi.fn(async (options) => {
-    const automationIssue = getTurnstileAutomationIssueMock();
-    if (automationIssue) {
-      throw new Error(automationIssue);
-    }
+vi.mock("../src/services/plugins/contactForm/backendHooks", () => ({
+  contactFormPluginBackendHooks: {
+    buildOrganizationProjectSummaries: vi.fn(),
+    prepareProjectEntitlementFields: vi.fn(async (options) => {
+      const automationIssue = getTurnstileAutomationIssueMock();
+      if (automationIssue) {
+        throw new Error(automationIssue);
+      }
 
-    if (options.state !== "enabled" || options.turnstileEnabled !== true) {
+      if (options.state !== "enabled" || options.turnstileEnabled !== true) {
+        return {
+          turnstileEnabled: false,
+          turnstileWidgetId: null,
+          turnstileSiteKey: null,
+          turnstileSecretKey: null,
+        };
+      }
+
+      const prepared = await prepareTurnstileWidgetMock({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        existingWidgetId: options.existingProjectEntitlement?.turnstileWidgetId ?? null,
+        existingSiteKey: options.existingProjectEntitlement?.turnstileSiteKey ?? null,
+        existingSecretKey: options.existingProjectEntitlement?.turnstileSecretKey ?? null,
+      });
+
       return {
-        turnstileEnabled: false,
-        turnstileWidgetId: null,
-        turnstileSiteKey: null,
-        turnstileSecretKey: null,
+        turnstileEnabled: true,
+        turnstileWidgetId: prepared.widgetId,
+        turnstileSiteKey: prepared.siteKey,
+        turnstileSecretKey: prepared.secretKey,
       };
-    }
-
-    const prepared = await prepareTurnstileWidgetMock({
-      organizationId: options.organizationId,
-      projectSlug: options.projectSlug,
-      existingWidgetId: options.existingProjectEntitlement?.turnstileWidgetId ?? null,
-      existingSiteKey: options.existingProjectEntitlement?.turnstileSiteKey ?? null,
-      existingSecretKey: options.existingProjectEntitlement?.turnstileSecretKey ?? null,
-    });
-
-    return {
-      turnstileEnabled: true,
-      turnstileWidgetId: prepared.widgetId,
-      turnstileSiteKey: prepared.siteKey,
-      turnstileSecretKey: prepared.secretKey,
-    };
-  }),
-  cleanupContactFormEntitlementFields: vi.fn(async (options) => {
-    const widgetId = options.existingProjectEntitlement?.turnstileWidgetId;
-    if (
-      options.state !== "enabled" &&
-      widgetId
-    ) {
-      await deleteTurnstileWidgetMock(widgetId);
-    }
-    if (
-      options.state === "enabled" &&
-      options.turnstileEnabled !== true &&
-      widgetId
-    ) {
-      await deleteTurnstileWidgetMock(widgetId);
-    }
-  }),
+    }),
+    cleanupProjectEntitlementFields: vi.fn(async (options) => {
+      const widgetId = options.existingProjectEntitlement?.turnstileWidgetId;
+      if (options.state !== "enabled" && widgetId) {
+        await deleteTurnstileWidgetMock(widgetId);
+      }
+      if (
+        options.state === "enabled" &&
+        options.turnstileEnabled !== true &&
+        widgetId
+      ) {
+        await deleteTurnstileWidgetMock(widgetId);
+      }
+    }),
+  },
 }));
 
 vi.mock("../src/auth", () => ({

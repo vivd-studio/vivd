@@ -207,4 +207,53 @@ export const collections = {
       fs.readFile(path.join(projectDir, "src", "content", "notes", "first-note.md"), "utf8"),
     ).resolves.toContain("---");
   });
+
+  it("updates Astro collection schemas through the structured model editor path", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.updateModel({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "blog",
+      fields: {
+        title: { type: "string", required: true },
+        heroImage: {
+          type: "asset",
+          required: false,
+          description: "Primary image",
+        },
+        author: {
+          type: "reference",
+          required: false,
+          referenceModelKey: "authors",
+        },
+      },
+    });
+
+    expect(result.report.valid).toBe(true);
+    const nextConfig = await fs.readFile(path.join(projectDir, "src", "content.config.ts"), "utf8");
+    expect(nextConfig).toContain('import { defineCollection, reference, z } from "astro:content";');
+    expect(nextConfig).toContain("schema: ({ image }) => z.object({");
+    expect(nextConfig).toContain('heroImage: image().describe("Primary image").optional(),');
+    expect(nextConfig).toContain('author: reference("authors").optional(),');
+    expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-model-updated", {
+      slug: "demo-site",
+      version: 1,
+    });
+  });
 });

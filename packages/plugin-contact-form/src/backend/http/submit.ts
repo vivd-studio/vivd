@@ -1,17 +1,9 @@
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import type { Multer } from "multer";
 import { z } from "zod";
-import { db } from "@vivd/backend/src/db";
-import { contactFormSubmission, projectPluginInstance } from "@vivd/backend/src/db/schema";
 import { contactFormPluginConfigSchema } from "../config";
-import { pluginEntitlementService } from "@vivd/backend/src/services/plugins/PluginEntitlementService";
-import { inferContactFormAutoSourceHosts } from "../sourceHosts";
-import { contactFormTurnstileService } from "../turnstile";
-import { getEmailDeliveryService } from "@vivd/backend/src/services/integrations/EmailDeliveryService";
-import { buildContactSubmissionEmail } from "@vivd/backend/src/services/email/templates";
-import { emailDeliverabilityService } from "@vivd/backend/src/services/email/deliverability";
+import type { ContactFormPublicRouterDeps } from "../ports";
 import {
   extractSourceHostFromHeaders,
   isHostAllowed,
@@ -20,10 +12,6 @@ import {
   resolveEffectiveSourceHosts,
   resolveRedirectTarget,
 } from "./helpers";
-
-export type ContactFormPublicRouterDeps = {
-  upload: Pick<Multer, "none">;
-};
 
 const emailFieldSchema = z.string().email();
 const DEFAULT_MIN_REPEAT_SECONDS = 2;
@@ -303,6 +291,7 @@ export function createContactFormPublicRouter(
   const router = express.Router();
   const formParser = express.urlencoded({ extended: false, limit: "256kb" });
   const jsonParser = express.json({ limit: "256kb" });
+  const { contactFormSubmission, projectPluginInstance } = deps.tables;
 
   router.post(
     "/contact/v1/submit",
@@ -316,7 +305,7 @@ export function createContactFormPublicRouter(
         return sendSubmitError(req, res, 400, "missing_token", "token is required");
       }
 
-      const pluginInstance = await db.query.projectPluginInstance.findFirst({
+      const pluginInstance = await deps.db.query.projectPluginInstance.findFirst({
         where: and(
           eq(projectPluginInstance.publicToken, token),
           eq(projectPluginInstance.pluginId, "contact_form"),
@@ -328,7 +317,7 @@ export function createContactFormPublicRouter(
         return sendSubmitError(req, res, 404, "invalid_token", "plugin token not found");
       }
 
-      const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+      const entitlement = await deps.pluginEntitlementService.resolveEffectiveEntitlement({
         organizationId: pluginInstance.organizationId,
         projectSlug: pluginInstance.projectSlug,
         pluginId: "contact_form",
@@ -355,7 +344,7 @@ export function createContactFormPublicRouter(
         referer: req.get("referer"),
       });
 
-      const inferredSourceHosts = await inferContactFormAutoSourceHosts({
+      const inferredSourceHosts = await deps.inferSourceHosts({
         organizationId: pluginInstance.organizationId,
         projectSlug: pluginInstance.projectSlug,
       });
@@ -431,7 +420,7 @@ export function createContactFormPublicRouter(
           );
         }
 
-        const turnstileResult = await contactFormTurnstileService.verifyToken({
+        const turnstileResult = await deps.turnstileService.verifyToken({
           secretKey: turnstileSecretKey,
           token: turnstileToken,
           remoteIp: extractClientIp(req),
@@ -472,7 +461,7 @@ export function createContactFormPublicRouter(
       }
 
       const recipientDeliveryFilter =
-        await emailDeliverabilityService.filterSuppressedRecipients({
+        await deps.emailDeliverabilityService.filterSuppressedRecipients({
           recipientEmails,
         });
       if (recipientDeliveryFilter.deliverableRecipients.length === 0) {
@@ -564,7 +553,7 @@ export function createContactFormPublicRouter(
         abuseConfig.rateLimitPerTokenPerMinute > 0 ||
         abuseConfig.rateLimitPerTokenPerHour > 0
       ) {
-        const tokenRateRows = await db
+        const tokenRateRows = await deps.db
           .select({
             minuteCount: sql<number>`count(*) filter (where ${contactFormSubmission.createdAt} >= ${tokenRateMinuteStart})`,
             hourCount: sql<number>`count(*)`,
@@ -612,7 +601,7 @@ export function createContactFormPublicRouter(
         ) {
           const ipRateMinuteStart = new Date(now.getTime() - 60_000);
           const ipRateHourStart = new Date(now.getTime() - 60 * 60_000);
-          const ipRateRows = await db
+          const ipRateRows = await deps.db
             .select({
               minuteCount: sql<number>`count(*) filter (where ${contactFormSubmission.createdAt} >= ${ipRateMinuteStart})`,
               hourCount: sql<number>`count(*)`,
@@ -659,7 +648,7 @@ export function createContactFormPublicRouter(
           abuseConfig.duplicateWindowSeconds * 1_000,
         );
         const ipWindowStart = new Date(now.getTime() - ipQueryWindowMs);
-        const recentByIp = await db
+        const recentByIp = await deps.db
           .select({
             createdAt: contactFormSubmission.createdAt,
             payload: contactFormSubmission.payload,
@@ -692,7 +681,10 @@ export function createContactFormPublicRouter(
         if (abuseConfig.duplicateWindowSeconds > 0) {
           const duplicateWindowMs = abuseConfig.duplicateWindowSeconds * 1_000;
           const incomingPayloadSignature = serializeSubmissionPayload(payload);
-          const duplicateFound = recentByIp.some((row) => {
+          const duplicateFound = recentByIp.some((row: {
+            createdAt: Date;
+            payload: unknown;
+          }) => {
             if (!isWithinWindow(row.createdAt, now, duplicateWindowMs)) return false;
             const existingPayloadSignature = serializeSubmissionPayload(
               normalizeSubmissionPayload(row.payload),
@@ -716,7 +708,7 @@ export function createContactFormPublicRouter(
         monthStart.setUTCDate(1);
         monthStart.setUTCHours(0, 0, 0, 0);
 
-        const currentMonthRows = await db
+        const currentMonthRows = await deps.db
           .select({
             count: sql<number>`count(*)`,
           })
@@ -744,7 +736,7 @@ export function createContactFormPublicRouter(
 
       const submittedAt = new Date();
 
-      await db.insert(contactFormSubmission).values({
+      await deps.db.insert(contactFormSubmission).values({
         id: randomUUID(),
         organizationId: pluginInstance.organizationId,
         projectSlug: pluginInstance.projectSlug,
@@ -762,7 +754,7 @@ export function createContactFormPublicRouter(
       );
       const replyToEmail = replyToField?.value?.trim() || null;
       const submittedAtLabel = formatSubmittedAtForEmail(submittedAt);
-      const submissionEmail = await buildContactSubmissionEmail({
+      const submissionEmail = await deps.buildContactSubmissionEmail({
         projectSlug: pluginInstance.projectSlug,
         submittedAtLabel,
         replyToEmail,
@@ -773,8 +765,7 @@ export function createContactFormPublicRouter(
         unknownFields,
       });
 
-      const emailService = getEmailDeliveryService();
-      const emailResult = await emailService.send({
+      const emailResult = await deps.emailDeliveryService.send({
         to: recipientDeliveryFilter.deliverableRecipients,
         subject: sanitizeSubject(fields._subject || "", pluginInstance.projectSlug),
         text: submissionEmail.text,

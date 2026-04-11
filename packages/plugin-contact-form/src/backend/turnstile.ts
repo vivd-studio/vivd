@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db } from "@vivd/backend/src/db";
-import {
-  pluginEntitlement,
-  projectMeta,
-  projectPluginInstance,
-} from "@vivd/backend/src/db/schema";
 import { contactFormPluginConfigSchema } from "./config";
 import { resolveEffectiveSourceHosts, toTurnstileDomains } from "./hostUtils";
-import { inferContactFormAutoSourceHosts } from "./sourceHosts";
+import type {
+  ContactFormTurnstileServiceDeps,
+  ContactFormTurnstileWidgetCredentials,
+  ContactFormTurnstileVerificationResult,
+} from "./ports";
 
 const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -41,20 +39,7 @@ interface CloudflareWidgetResult {
   domains?: string[];
 }
 
-export interface ContactFormTurnstileWidgetCredentials {
-  widgetId: string;
-  siteKey: string;
-  secretKey: string;
-  domains: string[];
-}
-
-export interface TurnstileVerificationResult {
-  success: boolean;
-  errorCodes: string[];
-  hostname: string | null;
-  action: string | null;
-  cdata: string | null;
-}
+export type TurnstileVerificationResult = ContactFormTurnstileVerificationResult;
 
 class MissingProjectError extends Error {
   constructor(message: string) {
@@ -171,7 +156,11 @@ function normalizeContactFormConfig(rawConfig: unknown) {
   return contactFormPluginConfigSchema.parse({});
 }
 
-class ContactFormTurnstileService {
+class ContactFormTurnstileServiceImpl {
+  constructor(
+    private readonly deps: ContactFormTurnstileServiceDeps,
+  ) {}
+
   getAutomationConfigurationIssue(): string | null {
     return buildAutomationConfigIssue();
   }
@@ -280,10 +269,10 @@ class ContactFormTurnstileService {
       );
     }
 
-    const project = await db.query.projectMeta.findFirst({
+    const project = await this.deps.db.query.projectMeta.findFirst({
       where: and(
-        eq(projectMeta.organizationId, options.organizationId),
-        eq(projectMeta.slug, options.projectSlug),
+        eq(this.deps.tables.projectMeta.organizationId, options.organizationId),
+        eq(this.deps.tables.projectMeta.slug, options.projectSlug),
       ),
       columns: { slug: true },
     });
@@ -294,11 +283,11 @@ class ContactFormTurnstileService {
       );
     }
 
-    const pluginInstance = await db.query.projectPluginInstance.findFirst({
+    const pluginInstance = await this.deps.db.query.projectPluginInstance.findFirst({
       where: and(
-        eq(projectPluginInstance.organizationId, options.organizationId),
-        eq(projectPluginInstance.projectSlug, options.projectSlug),
-        eq(projectPluginInstance.pluginId, "contact_form"),
+        eq(this.deps.tables.projectPluginInstance.organizationId, options.organizationId),
+        eq(this.deps.tables.projectPluginInstance.projectSlug, options.projectSlug),
+        eq(this.deps.tables.projectPluginInstance.pluginId, "contact_form"),
       ),
       columns: {
         configJson: true,
@@ -306,7 +295,7 @@ class ContactFormTurnstileService {
     });
 
     const pluginConfig = normalizeContactFormConfig(pluginInstance?.configJson);
-    const inferredSourceHosts = await inferContactFormAutoSourceHosts({
+    const inferredSourceHosts = await this.deps.inferSourceHosts({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
     });
@@ -413,10 +402,10 @@ class ContactFormTurnstileService {
     cleaned: number;
     failed: number;
   }> {
-    const rows = await db.query.pluginEntitlement.findMany({
+    const rows = await this.deps.db.query.pluginEntitlement.findMany({
       where: and(
-        eq(pluginEntitlement.pluginId, "contact_form"),
-        eq(pluginEntitlement.scope, "project"),
+        eq(this.deps.tables.pluginEntitlement.pluginId, "contact_form"),
+        eq(this.deps.tables.pluginEntitlement.scope, "project"),
       ),
     });
 
@@ -432,15 +421,15 @@ class ContactFormTurnstileService {
           await this.deleteWidget(row.turnstileWidgetId);
         }
         if (row.turnstileWidgetId || row.turnstileSiteKey || row.turnstileSecretKey) {
-          await db
-            .update(pluginEntitlement)
+          await this.deps.db
+            .update(this.deps.tables.pluginEntitlement)
             .set({
               turnstileWidgetId: null,
               turnstileSiteKey: null,
               turnstileSecretKey: null,
               updatedAt: new Date(),
             })
-            .where(eq(pluginEntitlement.id, row.id));
+            .where(eq(this.deps.tables.pluginEntitlement.id, row.id));
           cleaned += 1;
         }
         continue;
@@ -455,30 +444,30 @@ class ContactFormTurnstileService {
           existingSecretKey: row.turnstileSecretKey,
         });
 
-        await db
-          .update(pluginEntitlement)
+        await this.deps.db
+          .update(this.deps.tables.pluginEntitlement)
           .set({
             turnstileWidgetId: credentials.widgetId,
             turnstileSiteKey: credentials.siteKey,
             turnstileSecretKey: credentials.secretKey,
             updatedAt: new Date(),
           })
-          .where(eq(pluginEntitlement.id, row.id));
+          .where(eq(this.deps.tables.pluginEntitlement.id, row.id));
         synced += 1;
       } catch (error) {
         if (error instanceof MissingProjectError) {
           if (row.turnstileWidgetId) {
             await this.deleteWidget(row.turnstileWidgetId);
           }
-          await db
-            .update(pluginEntitlement)
+          await this.deps.db
+            .update(this.deps.tables.pluginEntitlement)
             .set({
               turnstileWidgetId: null,
               turnstileSiteKey: null,
               turnstileSecretKey: null,
               updatedAt: new Date(),
             })
-            .where(eq(pluginEntitlement.id, row.id));
+            .where(eq(this.deps.tables.pluginEntitlement.id, row.id));
           cleaned += 1;
           continue;
         }
@@ -497,10 +486,22 @@ class ContactFormTurnstileService {
   }
 }
 
-export const contactFormTurnstileService = new ContactFormTurnstileService();
+export function createContactFormTurnstileService(
+  deps: ContactFormTurnstileServiceDeps,
+) {
+  return new ContactFormTurnstileServiceImpl(deps);
+}
 
-export function startContactFormTurnstileSyncJob(): () => void {
-  const service = contactFormTurnstileService;
+export type ContactFormTurnstileService = ReturnType<
+  typeof createContactFormTurnstileService
+>;
+
+export function startContactFormTurnstileSyncJob(
+  service: Pick<
+    ContactFormTurnstileService,
+    "isAutomationConfigured" | "getAutomationConfigurationIssue" | "getSyncIntervalMs" | "syncAllProjectEntitlements"
+  >,
+): () => void {
 
   if (!service.isAutomationConfigured()) {
     const issue = service.getAutomationConfigurationIssue();

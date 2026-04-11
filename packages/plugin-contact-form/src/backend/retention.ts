@@ -1,6 +1,5 @@
 import { lt } from "drizzle-orm";
-import { db } from "@vivd/backend/src/db";
-import { contactFormSubmission } from "@vivd/backend/src/db/schema";
+import type { ContactFormRetentionDeps } from "./ports";
 
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -35,26 +34,29 @@ function getRetentionCutoff(now: Date, retentionDays: number): Date {
 }
 
 export async function purgeExpiredContactSubmissions(
+  deps: ContactFormRetentionDeps,
   now: Date = new Date(),
 ): Promise<number> {
   const retentionDays = getContactSubmissionRetentionDays();
   if (retentionDays === 0) return 0;
 
   const cutoff = getRetentionCutoff(now, retentionDays);
-  const deletedRows = await db
-    .delete(contactFormSubmission)
-    .where(lt(contactFormSubmission.createdAt, cutoff))
-    .returning({ id: contactFormSubmission.id });
+  const deletedRows = await deps.db
+    .delete(deps.tables.contactFormSubmission)
+    .where(lt(deps.tables.contactFormSubmission.createdAt, cutoff))
+    .returning({ id: deps.tables.contactFormSubmission.id });
 
   return deletedRows.length;
 }
 
-export function startContactSubmissionRetentionJob(): () => void {
+export function startContactSubmissionRetentionJob(
+  deps: ContactFormRetentionDeps,
+): () => void {
   const cleanupIntervalMs = getContactSubmissionRetentionCleanupIntervalMs();
 
   const runCleanup = async () => {
     try {
-      const deletedCount = await purgeExpiredContactSubmissions();
+      const deletedCount = await purgeExpiredContactSubmissions(deps);
       if (deletedCount > 0) {
         console.log(
           `[ContactSubmissionRetention] Purged ${deletedCount} expired submissions`,

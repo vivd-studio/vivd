@@ -4,7 +4,9 @@ import {
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
+  updateCmsModel,
   validateCmsWorkspace,
+  type CmsFieldDefinition,
   type CmsValidationReport,
 } from "@vivd/shared/cms";
 import { router, publicProcedure } from "../trpc/trpc.js";
@@ -63,6 +65,23 @@ const mutationInput = z.object({
   slug: z.string(),
   version: z.number(),
 });
+
+const cmsFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
+  z.object({
+    type: z.string(),
+    label: z.string().optional(),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    localized: z.boolean().optional(),
+    default: z.unknown().optional(),
+    options: z.array(z.string()).optional(),
+    accepts: z.array(z.string()).optional(),
+    storage: z.string().optional(),
+    referenceModelKey: z.string().optional(),
+    fields: z.object({}).catchall(cmsFieldDefinitionSchema).optional(),
+    item: cmsFieldDefinitionSchema.optional(),
+  }),
+);
 
 export const cmsRouter = router({
   status: publicProcedure.query(async ({ ctx }) => {
@@ -134,6 +153,28 @@ export const cmsRouter = router({
       markCmsWorkspaceChange(input.slug, input.version, "cms-entry-created");
       return {
         created,
+        ...prepared,
+      };
+    }),
+
+  updateModel: publicProcedure
+    .input(
+      mutationInput.extend({
+        modelKey: z.string().min(1),
+        fields: z.object({}).catchall(cmsFieldDefinitionSchema),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const projectDir = requireWorkspace(ctx);
+      const updated = await updateCmsModel(
+        projectDir,
+        input.modelKey,
+        input.fields as Record<string, CmsFieldDefinition>,
+      );
+      const prepared = await prepareCmsArtifacts(projectDir);
+      markCmsWorkspaceChange(input.slug, input.version, "cms-model-updated");
+      return {
+        updated,
         ...prepared,
       };
     }),

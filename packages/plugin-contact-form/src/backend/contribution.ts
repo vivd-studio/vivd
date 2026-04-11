@@ -92,17 +92,39 @@ export function createContactFormPluginBackendContribution(
       {
         routeId: "contact_form.email_feedback",
         mountPath: "",
-        createRouter: () => createEmailFeedbackRouter(),
+        createRouter: () =>
+          createEmailFeedbackRouter({
+            emailDeliverabilityService: deps.emailDeliverabilityService,
+            isSesFeedbackAutoConfirmEnabled:
+              deps.isSesFeedbackAutoConfirmEnabled,
+          }),
       },
       {
         routeId: "contact_form.recipient_verification",
         mountPath: "/plugins",
-        createRouter: () => createContactRecipientVerificationRouter(),
+        createRouter: () =>
+          createContactRecipientVerificationRouter({
+            recipientVerificationService: deps.recipientVerificationService,
+          }),
       },
       {
         routeId: "contact_form.submit",
         mountPath: "/plugins",
-        createRouter: (routeDeps) => createContactFormPublicRouter(routeDeps),
+        createRouter: (routeDeps) =>
+          createContactFormPublicRouter({
+            upload: routeDeps.upload,
+            db: deps.db,
+            tables: {
+              contactFormSubmission: deps.tables.contactFormSubmission,
+              projectPluginInstance: deps.tables.projectPluginInstance,
+            },
+            pluginEntitlementService: deps.pluginEntitlementService,
+            inferSourceHosts: deps.inferSourceHosts,
+            turnstileService: deps.turnstileService,
+            buildContactSubmissionEmail: deps.buildContactSubmissionEmail,
+            emailDeliveryService: deps.emailDeliveryService,
+            emailDeliverabilityService: deps.emailDeliverabilityService,
+          }),
       },
     ],
   };
