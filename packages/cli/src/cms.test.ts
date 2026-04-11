@@ -108,7 +108,7 @@ hero: ../media/blog/hero.jpg
     });
   });
 
-  it("promotes obvious string-based Astro image fields back to asset UI metadata", async () => {
+  it("adds image editor hints for obvious string-based Astro image fields without rewriting schema types", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);
 
@@ -162,14 +162,58 @@ galleryImages:
 
     expect(report.valid).toBe(true);
     expect(report.models[0]?.fields.profileImage).toMatchObject({
-      type: "asset",
+      type: "string",
       accepts: ["image/*"],
     });
     expect(report.models[0]?.fields.galleryImages).toMatchObject({
-      type: "assetList",
+      type: "list",
       accepts: ["image/*"],
+      item: {
+        type: "string",
+        accepts: ["image/*"],
+      },
     });
     expect(report.assetCount).toBe(3);
+  });
+
+  it("reads Astro i18n locale settings instead of hardcoding english", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "astro.config.mjs"),
+      `import { defineConfig } from "astro/config";
+
+export default defineConfig({
+  i18n: {
+    defaultLocale: "de",
+    locales: ["de", "en"],
+  },
+});
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.valid).toBe(true);
+    expect(report.defaultLocale).toBe("de");
+    expect(report.locales).toEqual(["de", "en"]);
   });
 
   it("preserves Astro reference target metadata for structured CMS editing", async () => {

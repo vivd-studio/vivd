@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml, parse as parseYaml } from "yaml";
 import {
+  createAstroCollectionModel,
   createAstroCollectionEntry,
   inspectAstroCollectionsWorkspace,
   updateAstroCollectionModel,
@@ -354,7 +355,14 @@ function normalizeUpdatedFieldValue(
   field: CmsFieldDefinition | null,
   value: unknown,
 ): unknown {
-  if (!field || field.type !== "asset" || typeof value !== "string") {
+  const fieldActsLikeAsset =
+    field &&
+    typeof value === "string" &&
+    (field.type === "asset" ||
+      (field.type === "string" &&
+        (field.accepts ?? []).some((accept) => accept.startsWith("image/"))));
+
+  if (!fieldActsLikeAsset) {
     return value;
   }
 
@@ -1567,11 +1575,30 @@ export async function scaffoldCmsModel(
   projectDir: string,
   modelKey: string,
 ): Promise<CmsScaffoldResult> {
-  await ensureLegacyYamlWorkspaceOperationSupported(projectDir);
   const normalizedKey = modelKey.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-_]*$/.test(normalizedKey)) {
     throw new Error(`Invalid model key: ${modelKey}`);
   }
+
+  const astroResult = await createAstroCollectionModel(projectDir, normalizedKey, {
+    slug: {
+      type: "string",
+      required: false,
+    },
+    title: {
+      type: "string",
+      required: true,
+    },
+    order: {
+      type: "number",
+      required: false,
+    },
+  });
+  if (astroResult) {
+    return astroResult;
+  }
+
+  await ensureLegacyYamlWorkspaceOperationSupported(projectDir);
 
   const result = await scaffoldCmsWorkspace(projectDir);
   const paths = result.paths;

@@ -136,6 +136,40 @@ export const collections = {
     ).rejects.toThrow("Astro-backed projects now use");
   });
 
+  it("creates Astro collection models in src/content.config.ts through the structured CMS path", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "media"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      "export const collections = {};\n",
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.scaffoldModel({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "blog",
+    });
+
+    expect(result.report.sourceKind).toBe("astro-collections");
+    expect(result.report.valid).toBe(true);
+    expect(result.report.modelCount).toBe(1);
+    expect(result.report.models[0]?.key).toBe("blog");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content.config.ts"), "utf8"),
+    ).resolves.toContain("blog: defineCollection({");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content.config.ts"), "utf8"),
+    ).resolves.toContain("title: z.string(),");
+    await expect(
+      fs.stat(path.join(projectDir, "src", "content", "blog", ".gitkeep")),
+    ).resolves.toBeDefined();
+    expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-model-scaffolded", {
+      slug: "demo-site",
+      version: 1,
+    });
+  });
+
   it("creates Astro collection entries as real collection files", async () => {
     await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
     await fs.writeFile(

@@ -98,7 +98,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const locales = report?.locales.length ? report.locales : [defaultLocale];
   const isAstroCollectionsSource = report?.sourceKind === "astro-collections";
   const isAstroMissingConfig = isAstroCollectionsSource && !report?.initialized;
-  const allowAstroSchemaScaffolding = !isAstroCollectionsSource;
+  const allowCreateModel = Boolean(report?.initialized);
 
   const selectedModel = useMemo(
     () => report?.models.find((model) => model.key === selectedModelKey) ?? null,
@@ -778,11 +778,11 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <CmsCollectionsSidebar
-            models={report.models}
-            reportErrors={report.errors}
-            selectedModelKey={selectedModelKey}
-            allowCreateModel={allowAstroSchemaScaffolding}
+            <CmsCollectionsSidebar
+              models={report.models}
+              reportErrors={report.errors}
+              selectedModelKey={selectedModelKey}
+              allowCreateModel={allowCreateModel}
             creatingModel={creatingModel}
             newModelKey={newModelKey}
             isScaffoldingModel={scaffoldModelMutation.isPending}

@@ -1,3 +1,4 @@
+import { definePluginPackageDescriptors } from "@vivd/shared/types";
 import type {
   PluginModule as SharedPluginModule,
   PluginPackageDescriptor,
@@ -102,28 +103,8 @@ export interface BackendPluginPackageDescriptor
   backend: BackendPluginContribution<string>;
 }
 
-function defineBackendPluginPackageDescriptors<
-  const T extends readonly BackendPluginPackageDescriptor[],
->(
-  descriptors: T,
-) {
-  return descriptors;
-}
-
-type PluginIdsFromDescriptors<T extends readonly { pluginId: string }[]> = {
-  [K in keyof T]: T[K] extends { pluginId: infer TPluginId extends string }
-    ? TPluginId
-    : never;
-};
-
-export function extractPluginIds<const T extends readonly { pluginId: string }[]>(
-  descriptors: T,
-): PluginIdsFromDescriptors<T> {
-  return descriptors.map((descriptor) => descriptor.pluginId) as PluginIdsFromDescriptors<T>;
-}
-
 export const backendPluginPackageDescriptors =
-  defineBackendPluginPackageDescriptors([
+  definePluginPackageDescriptors([
   {
     ...contactFormPluginDescriptor,
     backend: {

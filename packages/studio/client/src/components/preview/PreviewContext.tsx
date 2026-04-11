@@ -893,6 +893,18 @@ export function PreviewProvider({
           return;
         }
         const newValue = toAstroRuntimeAssetPath(assetPath, baseline);
+        if (!newValue) {
+          if (previousSrcAttr) {
+            targetImg.setAttribute("src", previousSrcAttr);
+          } else {
+            targetImg.removeAttribute("src");
+          }
+          toast.error(
+            "Vivd can only save Astro preview drops directly for CMS-bound images or `public/` assets. Bind the image to CMS content or use a public asset URL.",
+          );
+          syncUnsavedChangesState();
+          return;
+        }
         if (baseline === newValue) {
           pendingImagePatchesRef.current.delete(key);
         } else {

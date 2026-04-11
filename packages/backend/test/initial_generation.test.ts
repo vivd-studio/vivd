@@ -53,6 +53,21 @@ describe("initial generation helpers", () => {
         fs.existsSync(path.join(tmpDir, "src", "pages", "index.astro")),
       ).toBe(true);
       expect(
+        fs.existsSync(path.join(tmpDir, "src", "content.config.ts")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "content", "vivd.content.yaml")),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "content", "models")),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "content", "collections")),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "pages", "media", "[...path].js")),
+      ).toBe(false);
+      expect(
         fs.existsSync(path.join(tmpDir, "src", "layouts", "Layout.astro")),
       ).toBe(true);
       expect(

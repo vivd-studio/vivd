@@ -14,6 +14,24 @@ export interface PluginActionDefinition {
   arguments: PluginActionArgumentDefinition[];
 }
 
+export type PluginReadArgumentType = "string" | "integer" | "boolean";
+
+export interface PluginReadArgumentDefinition {
+  name: string;
+  type: PluginReadArgumentType;
+  required: boolean;
+  description?: string;
+  allowedValues?: Array<string | number | boolean>;
+  defaultValue?: string | number | boolean;
+}
+
+export interface PluginReadDefinition {
+  readId: string;
+  title: string;
+  description: string;
+  arguments: PluginReadArgumentDefinition[];
+}
+
 export interface PluginConfigCapabilityDefinition {
   format: "json";
   supportsShow: boolean;
@@ -25,6 +43,7 @@ export interface PluginCapabilityDefinition {
   supportsInfo: boolean;
   config: PluginConfigCapabilityDefinition | null;
   actions: PluginActionDefinition[];
+  reads?: PluginReadDefinition[];
 }
 
 export type PluginCategory = "forms" | "marketing" | "commerce" | "utility";

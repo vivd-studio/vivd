@@ -14,7 +14,10 @@ import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-import type { AnalyticsSummaryPayload } from "../shared/summary";
+import {
+  ANALYTICS_SUMMARY_READ_ID,
+  type AnalyticsSummaryPayload,
+} from "../shared/summary";
 
 type AnalyticsRange = 7 | 30;
 type ComparisonMetric = AnalyticsSummaryPayload["comparison"]["totals"]["pageviews"];
@@ -204,7 +207,7 @@ export default function AnalyticsProjectPage() {
     {
       slug,
       pluginId: typedPluginId,
-      readId: "summary",
+      readId: ANALYTICS_SUMMARY_READ_ID,
       input: { rangeDays },
     },
     { enabled: !!projectSlug && analyticsEnabled },

@@ -1,7 +1,8 @@
-import type {
-  PluginPackageDescriptor,
-  ProjectPluginUiRegistry,
+import {
+  buildSharedProjectPluginUiRegistry,
+  definePluginPackageDescriptors,
 } from "@vivd/shared/types";
+import type { PluginPackageDescriptor } from "@vivd/shared/types";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 import { analyticsFrontendPluginModule } from "./analytics/module";
@@ -10,7 +11,7 @@ import type { FrontendPluginModule } from "./types";
 
 type FrontendPluginDescriptor = PluginPackageDescriptor<string, FrontendPluginModule>;
 
-export const frontendPluginDescriptors = [
+export const frontendPluginDescriptors = definePluginPackageDescriptors([
   {
     ...contactFormPluginDescriptor,
     frontend: contactFormFrontendPluginModule,
@@ -19,15 +20,10 @@ export const frontendPluginDescriptors = [
     ...analyticsPluginDescriptor,
     frontend: analyticsFrontendPluginModule,
   },
-] satisfies readonly FrontendPluginDescriptor[];
+] as const satisfies readonly FrontendPluginDescriptor[]);
 
-export const frontendSharedProjectPluginUiRegistry = Object.fromEntries(
-  frontendPluginDescriptors.flatMap((descriptor) =>
-    descriptor.sharedProjectUi
-      ? [[descriptor.pluginId, descriptor.sharedProjectUi] as const]
-      : [],
-  ),
-) satisfies ProjectPluginUiRegistry;
+export const frontendSharedProjectPluginUiRegistry =
+  buildSharedProjectPluginUiRegistry(frontendPluginDescriptors);
 
 export const frontendPluginModules = frontendPluginDescriptors.flatMap(
   (descriptor) => (descriptor.frontend ? [descriptor.frontend] : []),

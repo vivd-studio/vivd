@@ -2,22 +2,13 @@ import { describe, expect, it } from "vitest";
 import { toAstroRuntimeAssetPath } from "./assetPathMapping";
 
 describe("toAstroRuntimeAssetPath", () => {
-  it("maps canonical content media files to the /media runtime path", () => {
+  it("does not invent public runtime URLs for src/content/media assets", () => {
     expect(
       toAstroRuntimeAssetPath(
         "src/content/media/brands/logo.png",
         "/images/old-logo.png",
       ),
-    ).toBe("/media/brands/logo.png");
-  });
-
-  it("preserves relative formatting when the baseline src was relative", () => {
-    expect(
-      toAstroRuntimeAssetPath(
-        "src/content/media/pages/home/hero.webp",
-        "images/hero.webp",
-      ),
-    ).toBe("media/pages/home/hero.webp");
+    ).toBeNull();
   });
 
   it("keeps legacy public assets on the public URL form", () => {

@@ -9,6 +9,7 @@ import type {
   CmsFieldDefinition,
   CmsModelRecord,
   CmsPaths,
+  CmsScaffoldResult,
   CmsUpdateModelResult,
   CmsValidationReport,
 } from "./index.js";
@@ -18,6 +19,13 @@ const ASTRO_CONTENT_CONFIG_CANDIDATES = [
   path.join("src", "content.config.mts"),
   path.join("src", "content.config.js"),
   path.join("src", "content.config.mjs"),
+];
+const ASTRO_CONFIG_CANDIDATES = [
+  "astro.config.ts",
+  "astro.config.mts",
+  "astro.config.js",
+  "astro.config.mjs",
+  "astro.config.cjs",
 ];
 
 const TITLE_FIELD_KEYS = new Set(["title", "name", "label"]);
@@ -79,6 +87,11 @@ type SchemaParseContext = {
   label: string;
 };
 
+type AstroI18nConfig = {
+  defaultLocale: string | null;
+  locales: string[];
+};
+
 function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
@@ -122,6 +135,16 @@ async function countFilesRecursively(root: string): Promise<number> {
 
 async function findAstroContentConfigPath(projectDir: string): Promise<string | null> {
   for (const relativePath of ASTRO_CONTENT_CONFIG_CANDIDATES) {
+    const absolutePath = path.join(projectDir, relativePath);
+    if (await pathExists(absolutePath)) {
+      return absolutePath;
+    }
+  }
+  return null;
+}
+
+async function findAstroConfigPath(projectDir: string): Promise<string | null> {
+  for (const relativePath of ASTRO_CONFIG_CANDIDATES) {
     const absolutePath = path.join(projectDir, relativePath);
     if (await pathExists(absolutePath)) {
       return absolutePath;
@@ -298,7 +321,21 @@ function collectNonEmptyStringValues(values: unknown[]): string[] {
     .filter((value) => value.length > 0);
 }
 
-function shouldPromoteStringFieldToImageAsset(fieldKey: string, values: unknown[]): boolean {
+function fieldAcceptsImages(field: CmsFieldDefinition): boolean {
+  return (field.accepts ?? []).some((accept) => accept.startsWith("image/"));
+}
+
+function withImageAccepts(field: CmsFieldDefinition): CmsFieldDefinition {
+  if (fieldAcceptsImages(field)) {
+    return field;
+  }
+  return {
+    ...field,
+    accepts: [...(field.accepts ?? []), "image/*"],
+  };
+}
+
+function shouldHintStringFieldAsImage(fieldKey: string, values: unknown[]): boolean {
   const nonEmptyValues = collectNonEmptyStringValues(values);
   const allLookManagedImageLike =
     nonEmptyValues.length > 0 && nonEmptyValues.every(looksLikeManagedImageReference);
@@ -310,7 +347,7 @@ function shouldPromoteStringFieldToImageAsset(fieldKey: string, values: unknown[
   return looksLikeImageFieldName(fieldKey) && nonEmptyValues.length === 0;
 }
 
-function shouldPromoteStringListToImageAssetList(fieldKey: string, values: unknown[]): boolean {
+function shouldHintStringListAsImage(fieldKey: string, values: unknown[]): boolean {
   const flattenedItems = values.flatMap((value) => (Array.isArray(value) ? value : []));
   const nonEmptyValues = collectNonEmptyStringValues(flattenedItems);
   const allLookManagedImageLike =
@@ -323,29 +360,24 @@ function shouldPromoteStringListToImageAssetList(fieldKey: string, values: unkno
   return looksLikeImageListFieldName(fieldKey) && nonEmptyValues.length === 0;
 }
 
-function applyAstroFieldHeuristics(
+function applyAstroFieldHints(
   fieldKey: string,
   field: CmsFieldDefinition,
   values: unknown[],
 ): CmsFieldDefinition {
-  if (field.type === "string" && shouldPromoteStringFieldToImageAsset(fieldKey, values)) {
-    return {
-      ...field,
-      type: "asset",
-      accepts: ["image/*"],
-    };
+  if (field.type === "string" && shouldHintStringFieldAsImage(fieldKey, values)) {
+    return withImageAccepts(field);
   }
 
   if (
     field.type === "list" &&
     field.item?.type === "string" &&
-    shouldPromoteStringListToImageAssetList(fieldKey, values)
+    shouldHintStringListAsImage(fieldKey, values)
   ) {
     return {
       ...field,
-      type: "assetList",
-      accepts: ["image/*"],
-      item: undefined,
+      accepts: [...new Set([...(field.accepts ?? []), "image/*"])],
+      item: withImageAccepts(field.item),
     };
   }
 
@@ -355,7 +387,7 @@ function applyAstroFieldHeuristics(
       const nestedValues = values.map((value) =>
         isRecord(value) ? value[nestedKey] : undefined,
       );
-      nextFields[nestedKey] = applyAstroFieldHeuristics(
+      nextFields[nestedKey] = applyAstroFieldHints(
         nestedKey,
         nestedField,
         nestedValues,
@@ -371,26 +403,182 @@ function applyAstroFieldHeuristics(
     const flattenedValues = values.flatMap((value) => (Array.isArray(value) ? value : []));
     return {
       ...field,
-      item: applyAstroFieldHeuristics(fieldKey, field.item, flattenedValues),
+      item: applyAstroFieldHints(fieldKey, field.item, flattenedValues),
     };
   }
 
   return field;
 }
 
-function applyAstroFieldHeuristicsToFields(
+function applyAstroFieldHintsToFields(
   fields: Record<string, CmsFieldDefinition>,
   entries: CmsEntryRecord[],
 ): Record<string, CmsFieldDefinition> {
   const nextFields: Record<string, CmsFieldDefinition> = {};
   for (const [fieldKey, field] of Object.entries(fields)) {
-    nextFields[fieldKey] = applyAstroFieldHeuristics(
+    nextFields[fieldKey] = applyAstroFieldHints(
       fieldKey,
       field,
       entries.map((entry) => entry.values[fieldKey]),
     );
   }
   return nextFields;
+}
+
+function resolveExpressionFromDeclarations(
+  expression: ts.Expression,
+  declarations: Map<string, ts.Expression>,
+): ts.Expression {
+  const unwrapped = withTransparentWrappers(expression);
+  if (ts.isIdentifier(unwrapped)) {
+    return declarations.get(unwrapped.text) ?? unwrapped;
+  }
+  return unwrapped;
+}
+
+function parseStringArrayLiteral(expression: ts.Expression): string[] | null {
+  const unwrapped = withTransparentWrappers(expression);
+  if (!ts.isArrayLiteralExpression(unwrapped)) {
+    return null;
+  }
+  const values: string[] = [];
+  for (const element of unwrapped.elements) {
+    const stringValue = expressionToStringLiteral(element);
+    if (!stringValue) {
+      return null;
+    }
+    values.push(stringValue);
+  }
+  return values;
+}
+
+function parseAstroLocales(expression: ts.Expression): string[] | null {
+  const unwrapped = withTransparentWrappers(expression);
+  if (!ts.isArrayLiteralExpression(unwrapped)) {
+    return null;
+  }
+
+  const locales: string[] = [];
+  for (const element of unwrapped.elements) {
+    const stringValue = expressionToStringLiteral(element);
+    if (stringValue) {
+      locales.push(stringValue);
+      continue;
+    }
+
+    if (!ts.isObjectLiteralExpression(withTransparentWrappers(element))) {
+      return null;
+    }
+
+    const localeObject = withTransparentWrappers(element) as ts.ObjectLiteralExpression;
+    const codesExpression = getObjectPropertyValue(localeObject, "codes");
+    const codeExpression = getObjectPropertyValue(localeObject, "code");
+    const pathExpression = getObjectPropertyValue(localeObject, "path");
+
+    const codes = codesExpression ? parseStringArrayLiteral(codesExpression) : null;
+    const singleCode = codeExpression ? expressionToStringLiteral(codeExpression) : null;
+    const fallbackPath = pathExpression ? expressionToStringLiteral(pathExpression) : null;
+
+    if (codes?.length) {
+      locales.push(...codes);
+      continue;
+    }
+    if (singleCode) {
+      locales.push(singleCode);
+      continue;
+    }
+    if (fallbackPath) {
+      locales.push(fallbackPath);
+      continue;
+    }
+    return null;
+  }
+
+  return locales;
+}
+
+async function inspectAstroProjectLocales(projectDir: string): Promise<AstroI18nConfig> {
+  const configPath = await findAstroConfigPath(projectDir);
+  if (!configPath) {
+    return {
+      defaultLocale: null,
+      locales: [],
+    };
+  }
+
+  const source = await fs.readFile(configPath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    configPath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    configPath.endsWith(".js") || configPath.endsWith(".mjs") || configPath.endsWith(".cjs")
+      ? ts.ScriptKind.JS
+      : ts.ScriptKind.TS,
+  );
+
+  const declarations = new Map<string, ts.Expression>();
+  let exportExpression: ts.Expression | null = null;
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+        declarations.set(declaration.name.text, declaration.initializer);
+      }
+      continue;
+    }
+
+    if (ts.isExportAssignment(statement)) {
+      exportExpression = statement.expression;
+    }
+  }
+
+  if (!exportExpression) {
+    return {
+      defaultLocale: null,
+      locales: [],
+    };
+  }
+
+  const resolvedExport = resolveExpressionFromDeclarations(exportExpression, declarations);
+  const configExpression =
+    ts.isCallExpression(resolvedExport) && resolvedExport.arguments[0]
+      ? resolveExpressionFromDeclarations(resolvedExport.arguments[0], declarations)
+      : resolvedExport;
+  if (!ts.isObjectLiteralExpression(withTransparentWrappers(configExpression))) {
+    return {
+      defaultLocale: null,
+      locales: [],
+    };
+  }
+
+  const configObject = withTransparentWrappers(configExpression) as ts.ObjectLiteralExpression;
+  const i18nExpression = getObjectPropertyValue(configObject, "i18n");
+  if (!i18nExpression || !ts.isObjectLiteralExpression(withTransparentWrappers(i18nExpression))) {
+    return {
+      defaultLocale: null,
+      locales: [],
+    };
+  }
+
+  const i18nObject = withTransparentWrappers(i18nExpression) as ts.ObjectLiteralExpression;
+  const defaultLocaleExpression = getObjectPropertyValue(i18nObject, "defaultLocale");
+  const localesExpression = getObjectPropertyValue(i18nObject, "locales");
+  const defaultLocale = defaultLocaleExpression
+    ? expressionToStringLiteral(defaultLocaleExpression)
+    : null;
+  const locales = localesExpression ? parseAstroLocales(localesExpression) ?? [] : [];
+  const normalizedLocales = [...new Set(locales.filter((locale) => locale.trim().length > 0))];
+
+  if (defaultLocale && !normalizedLocales.includes(defaultLocale)) {
+    normalizedLocales.unshift(defaultLocale);
+  }
+
+  return {
+    defaultLocale: defaultLocale ?? normalizedLocales[0] ?? null,
+    locales: normalizedLocales,
+  };
 }
 
 function resolveCollectionRoot(
@@ -885,7 +1073,7 @@ function collectAssetRefs(
   const assetRefs: CmsAssetRecord[] = [];
 
   function visitField(fieldKey: string, field: CmsFieldDefinition, value: unknown, pathPrefix = fieldKey) {
-    if (field.type === "asset") {
+    if (field.type === "asset" || (field.type === "string" && fieldAcceptsImages(field))) {
       const pathValue =
         typeof value === "string"
           ? value
@@ -907,9 +1095,20 @@ function collectAssetRefs(
       return;
     }
 
-    if (field.type === "assetList" && Array.isArray(value)) {
+    if (
+      (field.type === "assetList" ||
+        (field.type === "list" &&
+          field.item?.type === "string" &&
+          (fieldAcceptsImages(field) || fieldAcceptsImages(field.item)))) &&
+      Array.isArray(value)
+    ) {
       value.forEach((item, index) => {
-        visitField(pathPrefix, { type: "asset" }, item, `${pathPrefix}[${index}]`);
+        visitField(
+          pathPrefix,
+          { type: "asset", accepts: ["image/*"] },
+          item,
+          `${pathPrefix}[${index}]`,
+        );
       });
       return;
     }
@@ -1360,6 +1559,115 @@ export async function createAstroCollectionEntry(
   };
 }
 
+function buildAstroCollectionProperty(
+  modelKey: string,
+  fields: Record<string, CmsFieldDefinition>,
+  propertyIndent: string,
+): string {
+  const schemaIndent = `${propertyIndent}  `;
+  return `${propertyIndent}${renderObjectKey(modelKey)}: defineCollection({\n${schemaIndent}schema: ${buildAstroSchemaExpression(fields, schemaIndent)},\n${propertyIndent}}),`;
+}
+
+export async function createAstroCollectionModel(
+  projectDir: string,
+  modelKey: string,
+  fields: Record<string, CmsFieldDefinition>,
+): Promise<CmsScaffoldResult | null> {
+  const configPath = await findAstroContentConfigPath(projectDir);
+  if (!configPath) {
+    return null;
+  }
+
+  const normalizedKey = modelKey.trim();
+  if (!normalizedKey) {
+    throw new Error("Collection key is required");
+  }
+
+  const source = await fs.readFile(configPath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    configPath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    configPath.endsWith(".js") || configPath.endsWith(".mjs")
+      ? ts.ScriptKind.JS
+      : ts.ScriptKind.TS,
+  );
+
+  const { collectionsObject } = findExportedCollectionsObject(sourceFile);
+  if (!collectionsObject) {
+    throw new Error("Could not find exported Astro collections object");
+  }
+
+  for (const property of collectionsObject.properties) {
+    const propertyName =
+      ts.isPropertyAssignment(property) &&
+      (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+        ? property.name.text
+        : ts.isShorthandPropertyAssignment(property)
+          ? property.name.text
+          : null;
+    if (propertyName === normalizedKey) {
+      throw new Error(`Collection already exists: ${normalizedKey}`);
+    }
+  }
+
+  const objectIndent = getLineIndent(source, collectionsObject.getStart(sourceFile));
+  const propertyIndent = `${objectIndent}  `;
+  const propertyText = buildAstroCollectionProperty(normalizedKey, fields, propertyIndent);
+
+  let nextSource = source;
+  if (collectionsObject.properties.length === 0) {
+    const replacement = `{\n${propertyText}\n${objectIndent}}`;
+    nextSource = `${source.slice(0, collectionsObject.getStart(sourceFile))}${replacement}${source.slice(collectionsObject.getEnd())}`;
+  } else {
+    const insertPos = collectionsObject.getEnd() - 1;
+    const trailingSegment = source.slice(
+      collectionsObject.properties[collectionsObject.properties.length - 1]!.getEnd(),
+      insertPos,
+    );
+    const needsComma = !trailingSegment.includes(",");
+    nextSource = `${source.slice(0, insertPos)}${needsComma ? "," : ""}\n${propertyText}\n${objectIndent}${source.slice(insertPos)}`;
+  }
+
+  const requiredImports = new Set(["defineCollection", "z"]);
+  if (Object.values(fields).some(usesReferenceHelperInField)) {
+    requiredImports.add("reference");
+  }
+  nextSource = ensureAstroContentImports(nextSource, requiredImports);
+
+  if (nextSource !== source) {
+    await fs.writeFile(configPath, nextSource, "utf8");
+  }
+
+  const collectionRoot = path.join(projectDir, "src", "content", normalizedKey);
+  const created: string[] = [];
+  const skipped: string[] = [];
+
+  if (await pathExists(collectionRoot)) {
+    skipped.push(toPosix(path.relative(projectDir, collectionRoot)));
+  } else {
+    await fs.mkdir(collectionRoot, { recursive: true });
+    created.push(toPosix(path.relative(projectDir, collectionRoot)));
+  }
+
+  const placeholderPath = path.join(collectionRoot, ".gitkeep");
+  if (await pathExists(placeholderPath)) {
+    skipped.push(toPosix(path.relative(projectDir, placeholderPath)));
+  } else {
+    await fs.writeFile(placeholderPath, "", "utf8");
+    created.push(toPosix(path.relative(projectDir, placeholderPath)));
+  }
+
+  created.unshift(toPosix(path.relative(projectDir, configPath)));
+
+  return {
+    created,
+    skipped,
+    paths: buildAstroPaths(projectDir, configPath),
+  };
+}
+
 export async function updateAstroCollectionModel(
   projectDir: string,
   modelKey: string,
@@ -1565,7 +1873,7 @@ async function parseCollections(
   const models: CmsModelRecord[] = [];
   for (const parsedModel of parsedModels) {
     const entries = await buildEntriesForCollection(projectDir, parsedModel);
-    const fields = applyAstroFieldHeuristicsToFields(parsedModel.fields, entries);
+    const fields = applyAstroFieldHintsToFields(parsedModel.fields, entries);
     for (const entry of entries) {
       entry.assetRefs = collectAssetRefs(projectDir, entry, parsedModel.key, fields);
     }
@@ -1610,6 +1918,7 @@ export async function inspectAstroCollectionsWorkspace(
       : ts.ScriptKind.TS,
   );
 
+  const localeConfig = await inspectAstroProjectLocales(projectDir);
   const models = await parseCollections(projectDir, configPath, sourceFile, errors);
   const entryCount = models.reduce((total, model) => total + model.entries.length, 0);
   const assetCount = models.reduce(
@@ -1623,8 +1932,8 @@ export async function inspectAstroCollectionsWorkspace(
     initialized: true,
     valid: errors.length === 0,
     paths,
-    defaultLocale: "en",
-    locales: ["en"],
+    defaultLocale: localeConfig.defaultLocale,
+    locales: localeConfig.locales,
     modelCount: models.length,
     entryCount,
     assetCount,

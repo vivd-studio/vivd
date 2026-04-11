@@ -11,6 +11,8 @@ import type {
 import { UnsupportedPluginReadError } from "@vivd/shared/types";
 import { analyticsPluginConfigSchema, type AnalyticsPluginConfig } from "./config";
 import {
+  ANALYTICS_SUMMARY_READ_ID,
+  analyticsSummaryReadDefinition,
   analyticsSummaryReadInputSchema,
   type AnalyticsSummaryPayload,
   type AnalyticsSummaryRange,
@@ -38,6 +40,7 @@ export const analyticsPluginDefinition = {
       supportsTemplate: true,
     },
     actions: [],
+    reads: [analyticsSummaryReadDefinition],
   },
   listUi: {
     projectPanel: "custom",
@@ -116,7 +119,7 @@ async function runAnalyticsRead(
   runtime: AnalyticsPluginBackendRuntime,
   options: PluginReadContext,
 ): Promise<ProjectPluginReadPayload<"analytics">> {
-  if (options.readId !== "summary") {
+  if (options.readId !== ANALYTICS_SUMMARY_READ_ID) {
     throw new UnsupportedPluginReadError("analytics", options.readId);
   }
 

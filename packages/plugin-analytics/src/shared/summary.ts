@@ -1,4 +1,7 @@
+import type { PluginReadDefinition } from "@vivd/shared/types";
 import { z } from "zod";
+
+export const ANALYTICS_SUMMARY_READ_ID = "summary";
 
 export const analyticsSummaryRangeSchema = z.union([
   z.literal(7),
@@ -13,6 +16,23 @@ export type AnalyticsSummaryRange = z.infer<typeof analyticsSummaryRangeSchema>;
 export type AnalyticsSummaryReadInput = z.infer<
   typeof analyticsSummaryReadInputSchema
 >;
+
+export const analyticsSummaryReadDefinition = {
+  readId: ANALYTICS_SUMMARY_READ_ID,
+  title: "Summary",
+  description:
+    "Load the aggregated analytics dashboard summary for a project over a trailing day range.",
+  arguments: [
+    {
+      name: "rangeDays",
+      type: "integer",
+      required: false,
+      description: "Trailing day range to query.",
+      allowedValues: [7, 30],
+      defaultValue: 30,
+    },
+  ],
+} satisfies PluginReadDefinition;
 
 export interface AnalyticsComparisonMetric {
   current: number;

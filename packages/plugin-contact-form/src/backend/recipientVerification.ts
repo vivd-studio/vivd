@@ -56,6 +56,10 @@ function hashToken(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function hashValueForLogs(value: string): string {
+  return hashToken(value).slice(0, 12);
+}
+
 function generateVerificationToken(): string {
   return `${randomUUID()}.${randomBytes(24).toString("base64url")}`;
 }
@@ -500,7 +504,7 @@ class ContactFormRecipientVerificationServiceImpl {
         error: emailResult.error,
         organizationId: options.organizationId,
         projectSlug: options.projectSlug,
-        email: normalizedEmail,
+        recipientEmailHash: hashValueForLogs(normalizedEmail),
       });
       if (existing) {
         await this.deps.db

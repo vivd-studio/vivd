@@ -121,7 +121,7 @@ async function confirmSubscription(
     await fetch(subscribeUrl, { method: "GET" });
   } catch (error) {
     console.error("[EmailFeedback] Failed to auto-confirm SES SNS subscription", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error : String(error),
     });
   }
 }
@@ -254,7 +254,7 @@ export function createEmailFeedbackRouter(
       });
     } catch (error) {
       console.warn("[EmailFeedback] Resend webhook signature verification failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error : String(error),
       });
       return res.status(401).json({ ok: false, error: "unauthorized" });
     }

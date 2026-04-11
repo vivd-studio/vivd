@@ -14,6 +14,7 @@ For Astro-backed projects:
 - Astro collection entry files under `src/content/**` are the canonical structured-content entry files.
 - `src/content/media/` is the canonical Vivd-managed local asset root for shared/local site assets.
 - `public/` is reserved for passthrough files that intentionally need raw framework-public URLs.
+- generated Astro starters should include an Astro-native `src/content.config.ts` from day one, not a Vivd YAML shadow schema
 - Vivd may keep an internal adapter layer for Studio/CLI, but that adapter must not become a second project-owned source of truth.
 
 This plan supersedes the earlier YAML-first CMS direction in `docs/file-based-cms-spec.md` for Astro-backed projects.
@@ -111,14 +112,18 @@ Initial supported image-drop targets should be:
 
 - CMS/content-bound image fields
 - Astro `Image` usage tied to local/content-managed assets
+- deliberate `public/` assets where a raw runtime URL is already the right Astro-native answer
 
 Initial non-goals:
 
 - arbitrary raw `<img src="...">` rewrites across every possible pattern
+- inventing default public runtime URLs for `src/content/media/**` when no CMS ownership is available
 
 ### Shared Media URLs
 
 If Astro-native entry images and `Image` usage do not fully cover shared gallery-style assets, Vivd may add a very small project-local helper or scaffold for stable `/media/...` exposure.
+
+That should be opt-in rather than part of the default Astro starter.
 
 That helper should stay thin:
 
@@ -135,6 +140,7 @@ Studio should support:
 - collection discovery
 - entry browsing
 - schema-driven field rendering directly from the normalized `src/content.config.ts` adapter output, with a narrow Studio-side fallback for obvious image-like `string` / `string[]` fields
+- collection creation into `src/content.config.ts`
 - entry creation/deletion
 - entry editing
 - asset selection/upload/replacement
@@ -148,6 +154,7 @@ Model editing should stay constrained, but it no longer needs to stay read-only.
 
 Because models live in `src/content.config.ts`, Studio should support:
 
+- collection creation in the supported exported `collections` object shape
 - structured editing for the supported normalized field tree
 - constrained AST-backed rewrites of the target collection `schema` block only
 - source-file open/jump actions as the fallback for unsupported custom TypeScript patterns
@@ -162,7 +169,7 @@ The next persistence step should be:
 
 - resolve preview text edits back to the owning CMS entry field when the selected DOM node comes from collection content
 - resolve preview image drops back to the owning CMS asset field when the selected image comes from collection content
-- fall back to raw Astro/HTML patching only when no CMS field ownership can be resolved confidently
+- fall back to raw Astro/HTML patching only when no CMS field ownership can be resolved confidently, with raw Astro source rewrites narrowed to public-URL-safe cases instead of inventing runtime URLs for `src/content/media/**`
 
 This keeps the page preview useful without letting it silently diverge from the actual entry/model source files.
 
@@ -194,7 +201,7 @@ Likely direction:
 
 - inspect Astro collections
 - validate entries against Astro schema
-- scaffold missing helper/media files only when needed
+- scaffold only Astro-native files or helpers when needed, for example an empty `src/content.config.ts` in starters or a local `cmsBindings.ts` helper
 
 The CLI should stop implying that Astro projects need Vivd-owned YAML schema files to participate in Studio CMS flows.
 
@@ -246,6 +253,7 @@ The pivot is complete when:
 
 - an Astro project can be cloned and run locally without any Vivd-specific generated runtime snapshot of entries
 - `src/content.config.ts` is the only model/schema source of truth
+- generated Astro starters do not ship `src/content/vivd.content.yaml`, `src/content/models/*.yaml`, or a default `/media/...` compatibility route
 - Studio can inspect and edit supported Astro collection entries directly
 - local/content-managed images default to Astro `Image`
 - drag/drop is scoped to supported Astro-native image patterns instead of broad arbitrary HTML rewriting

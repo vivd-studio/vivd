@@ -1,19 +1,15 @@
-import type {
-  PluginPackageDescriptor,
-  ProjectPluginUiRegistry,
+import {
+  buildSharedProjectPluginUiRegistry,
+  definePluginPackageDescriptors,
 } from "@vivd/shared/types";
+import type { PluginPackageDescriptor } from "@vivd/shared/types";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 
-export const studioPluginDescriptors = [
+export const studioPluginDescriptors = definePluginPackageDescriptors([
   contactFormPluginDescriptor,
   analyticsPluginDescriptor,
-] satisfies readonly PluginPackageDescriptor[];
+] as const satisfies readonly PluginPackageDescriptor[]);
 
-export const studioSharedProjectPluginUiRegistry = Object.fromEntries(
-  studioPluginDescriptors.flatMap((descriptor) =>
-    descriptor.sharedProjectUi
-      ? [[descriptor.pluginId, descriptor.sharedProjectUi] as const]
-      : [],
-  ),
-) satisfies ProjectPluginUiRegistry;
+export const studioSharedProjectPluginUiRegistry =
+  buildSharedProjectPluginUiRegistry(studioPluginDescriptors);

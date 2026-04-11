@@ -735,9 +735,10 @@ export function createContactFormPublicRouter(
       }
 
       const submittedAt = new Date();
+      const submissionId = randomUUID();
 
       await deps.db.insert(contactFormSubmission).values({
-        id: randomUUID(),
+        id: submissionId,
         organizationId: pluginInstance.organizationId,
         projectSlug: pluginInstance.projectSlug,
         pluginInstanceId: pluginInstance.id,
@@ -780,6 +781,7 @@ export function createContactFormPublicRouter(
 
       if (!emailResult.accepted) {
         console.error("[PublicPlugins] Contact submission email delivery failed", {
+          submissionId,
           provider: emailResult.provider,
           error: emailResult.error,
           organizationId: pluginInstance.organizationId,

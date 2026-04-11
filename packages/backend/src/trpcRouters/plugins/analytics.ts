@@ -8,6 +8,7 @@ import type {
 } from "../../services/plugins/ProjectPluginService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { analyticsPluginConfigSchema } from "@vivd/plugin-analytics/backend/config";
+import { ANALYTICS_SUMMARY_READ_ID } from "@vivd/plugin-analytics/shared/summary";
 import {
   ensureProjectPluginInstance,
   getProjectPluginInfo,
@@ -141,7 +142,7 @@ export const analyticsSummaryPluginProcedure = projectMemberProcedure
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,
       pluginId: "analytics",
-      readId: "summary",
+      readId: ANALYTICS_SUMMARY_READ_ID,
       input: {
         rangeDays: input.rangeDays,
       },

@@ -18,6 +18,7 @@
     "./cli/module": "./src/cli/module.ts",
     "./frontend/module": "./src/frontend/module.ts",
     "./frontend/AnalyticsProjectPage": "./src/frontend/AnalyticsProjectPage.tsx",
+    "./shared/summary": "./src/shared/summary.ts",
     "./shared/projectUi": "./src/shared/projectUi.ts"
   },
   "scripts": {

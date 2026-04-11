@@ -394,7 +394,7 @@ class ContactFormTurnstileServiceImpl {
     } catch (error) {
       console.warn("[ContactFormTurnstile] Failed to delete widget", {
         widgetId: widget,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error : String(error),
       });
     }
   }
@@ -479,7 +479,7 @@ class ContactFormTurnstileServiceImpl {
           entitlementId: row.id,
           organizationId: row.organizationId,
           projectSlug: row.projectSlug,
-          error: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error : String(error),
         });
       }
     }
@@ -526,7 +526,7 @@ export function startContactFormTurnstileSyncJob(
       }
     } catch (error) {
       console.error("[ContactFormTurnstile] Sync failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error : String(error),
       });
     } finally {
       running = false;

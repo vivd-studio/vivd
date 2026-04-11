@@ -102,7 +102,6 @@ async function sendTransactionalAuthEmail(input: {
     console.error("[Auth] Transactional email delivery failed", {
       provider: result.provider,
       error: result.error,
-      to: input.to,
       metadata: input.metadata,
     });
   }

@@ -149,7 +149,8 @@ class ProjectPluginService {
     input?: Record<string, unknown>;
   }): Promise<ProjectPluginReadPayload> {
     const module = getPluginModule(options.pluginId);
-    if (!module.runRead) {
+    const availableReads = module.definition.capabilities.reads ?? [];
+    if (!module.runRead || !availableReads.some((read) => read.readId === options.readId)) {
       throw new UnsupportedPluginReadError(options.pluginId, options.readId);
     }
     return module.runRead({

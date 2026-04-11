@@ -80,9 +80,8 @@ export function createContactRecipientVerificationRouter(
         }),
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       console.error("[ContactRecipientVerification] Failed to verify token", {
-        error: message,
+        error: error instanceof Error ? error : String(error),
       });
       return res.status(500).send(
         renderVerificationPage({
