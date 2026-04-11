@@ -7,6 +7,7 @@ import type { Multer } from "multer";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 import { analyticsPluginPublicRoutes } from "./analytics/backendContribution";
+import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
 import {
   contactFormPluginModule,
   contactFormPluginPublicRoutes,
@@ -40,7 +41,17 @@ export interface BackendPluginPreparedEntitlementFields {
   turnstileSecretKey: string | null;
 }
 
+export interface BackendPluginProjectUsageCount {
+  organizationId: string;
+  projectSlug: string;
+  count: number;
+}
+
 export interface BackendPluginIntegrationHooks {
+  listProjectUsageCounts?: (options: {
+    organizationId?: string;
+    startedAt: Date;
+  }) => Promise<BackendPluginProjectUsageCount[]>;
   buildOrganizationProjectSummaries?: BackendPluginIntegrationOrganizationHook;
   prepareProjectEntitlementFields?: (options: {
     organizationId: string;
@@ -126,6 +137,7 @@ export const backendPluginPackageDescriptors =
     backend: {
       module: analyticsPluginModule,
       publicRoutes: analyticsPluginPublicRoutes,
+      hooks: analyticsPluginBackendHooks,
     } as BackendPluginContribution<"analytics">,
   },
 ] as const);

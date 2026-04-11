@@ -4,30 +4,23 @@ import type {
   PluginCatalogEntry,
   PluginDefinition,
 } from "@vivd/shared/types";
-
-export class UnsupportedPluginActionError extends Error {
-  constructor(pluginId: string, actionId: string) {
-    super(`Plugin ${pluginId} does not support action "${actionId}"`);
-    this.name = "UnsupportedPluginActionError";
-  }
-}
-
-export class PluginActionArgumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PluginActionArgumentError";
-  }
-}
+export {
+  PluginActionArgumentError,
+  UnsupportedPluginActionError,
+  UnsupportedPluginReadError,
+} from "@vivd/shared/types";
 
 export type {
   PluginModule,
   PluginOperationContext,
   PluginPublicErrorContext,
   PluginPublicErrorPayload,
+  PluginReadContext,
   PluginUpdateConfigContext,
   ProjectPluginActionPayload,
   PluginInfoSourcePayload,
   ProjectPluginInfoContractPayload,
+  ProjectPluginReadPayload,
 } from "@vivd/shared/types";
 
 function clonePlainObject<T>(value: T): T {

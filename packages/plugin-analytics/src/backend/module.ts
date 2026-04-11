@@ -4,9 +4,17 @@ import type {
   PluginModule,
   PluginOperationContext,
   PluginPublicErrorContext,
+  PluginReadContext,
   PluginUpdateConfigContext,
+  ProjectPluginReadPayload,
 } from "@vivd/shared/types";
+import { UnsupportedPluginReadError } from "@vivd/shared/types";
 import { analyticsPluginConfigSchema, type AnalyticsPluginConfig } from "./config";
+import {
+  analyticsSummaryReadInputSchema,
+  type AnalyticsSummaryPayload,
+  type AnalyticsSummaryRange,
+} from "../shared/summary";
 
 export const analyticsPluginDefinition = {
   pluginId: "analytics",
@@ -78,6 +86,11 @@ export interface AnalyticsPluginBackendRuntime {
     projectSlug: string;
     config: AnalyticsPluginConfig;
   }): Promise<AnalyticsPluginInfoSource>;
+  readSummary(options: {
+    organizationId: string;
+    projectSlug: string;
+    rangeDays: AnalyticsSummaryRange;
+  }): Promise<AnalyticsSummaryPayload>;
   isNotEnabledError(error: unknown): boolean;
 }
 
@@ -96,6 +109,26 @@ function toAnalyticsInfoPayload(
     usage: info.usage,
     details: null,
     instructions: info.instructions,
+  };
+}
+
+async function runAnalyticsRead(
+  runtime: AnalyticsPluginBackendRuntime,
+  options: PluginReadContext,
+): Promise<ProjectPluginReadPayload<"analytics">> {
+  if (options.readId !== "summary") {
+    throw new UnsupportedPluginReadError("analytics", options.readId);
+  }
+
+  const input = analyticsSummaryReadInputSchema.parse(options.input);
+  return {
+    pluginId: "analytics",
+    readId: options.readId,
+    result: await runtime.readSummary({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      rangeDays: input.rangeDays,
+    }),
   };
 }
 
@@ -118,6 +151,9 @@ export function createAnalyticsPluginModule(
           config: analyticsPluginConfigSchema.parse(options.config),
         }),
       );
+    },
+    runRead(options) {
+      return runAnalyticsRead(runtime, options);
     },
     mapPublicError(context: PluginPublicErrorContext) {
       if (runtime.isNotEnabledError(context.error)) {

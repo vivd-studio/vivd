@@ -8,7 +8,7 @@ const {
   useParamsMock,
   analyticsEnsureUseMutationMock,
   analyticsInfoUseQueryMock,
-  analyticsSummaryUseQueryMock,
+  pluginReadUseQueryMock,
   catalogInvalidateMock,
   infoInvalidateMock,
   projectListUseQueryMock,
@@ -18,7 +18,7 @@ const {
   useParamsMock: vi.fn(),
   analyticsEnsureUseMutationMock: vi.fn(),
   analyticsInfoUseQueryMock: vi.fn(),
-  analyticsSummaryUseQueryMock: vi.fn(),
+  pluginReadUseQueryMock: vi.fn(),
   catalogInvalidateMock: vi.fn(),
   infoInvalidateMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
@@ -70,8 +70,8 @@ vi.mock("@/lib/trpc", () => ({
       info: {
         useQuery: analyticsInfoUseQueryMock,
       },
-      analyticsSummary: {
-        useQuery: analyticsSummaryUseQueryMock,
+      read: {
+        useQuery: pluginReadUseQueryMock,
       },
     },
     project: {
@@ -283,7 +283,7 @@ describe("ProjectAnalytics", () => {
     useParamsMock.mockReset();
     analyticsEnsureUseMutationMock.mockReset();
     analyticsInfoUseQueryMock.mockReset();
-    analyticsSummaryUseQueryMock.mockReset();
+    pluginReadUseQueryMock.mockReset();
     catalogInvalidateMock.mockReset();
     infoInvalidateMock.mockReset();
     projectListUseQueryMock.mockReset();
@@ -309,8 +309,12 @@ describe("ProjectAnalytics", () => {
       isLoading: false,
       refetch: vi.fn().mockResolvedValue(undefined),
     });
-    analyticsSummaryUseQueryMock.mockReturnValue({
-      data: makeSummary(),
+    pluginReadUseQueryMock.mockReturnValue({
+      data: {
+        pluginId: "analytics",
+        readId: "summary",
+        result: makeSummary(),
+      },
       error: null,
       isLoading: false,
       isFetching: false,

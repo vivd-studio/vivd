@@ -1,10 +1,8 @@
-import type {
-  OrganizationPluginIssue,
-  PluginSurfaceBadge,
-} from "./surfaceTypes";
+import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
-import type { PluginId } from "./registry";
-import { backendPluginPackageDescriptors } from "./descriptors";
+import type { PluginId } from "./catalog";
+import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
+import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
 
 export interface OrganizationPluginInstanceSnapshot {
   status: string | null;
@@ -17,6 +15,45 @@ export interface OrganizationPluginProjectIntegrationSummary {
   issues: OrganizationPluginIssue[];
 }
 
+export interface BackendPluginProjectUsageCount {
+  organizationId: string;
+  projectSlug: string;
+  count: number;
+}
+
+const backendPluginHooks = new Map<
+  PluginId,
+  {
+    listProjectUsageCounts?: (options: {
+      organizationId?: string;
+      startedAt: Date;
+    }) => Promise<BackendPluginProjectUsageCount[]>;
+    buildOrganizationProjectSummaries?: (options: {
+      organizationId: string;
+      projectSlugs: string[];
+      instancesByProjectSlug: Map<
+        string,
+        OrganizationPluginInstanceSnapshot | null
+      >;
+    }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>;
+    prepareProjectEntitlementFields?: (options: {
+      organizationId: string;
+      projectSlug: string;
+      state: PluginEntitlementState;
+      turnstileEnabled: boolean;
+      existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
+    }) => Promise<PreparedPluginEntitlementFields>;
+    cleanupProjectEntitlementFields?: (options: {
+      state: PluginEntitlementState;
+      turnstileEnabled: boolean;
+      existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
+    }) => Promise<void>;
+  }
+>([
+  ["contact_form", contactFormPluginBackendHooks],
+  ["analytics", analyticsPluginBackendHooks],
+]);
+
 const organizationPluginHooks = new Map<
   PluginId,
   (options: {
@@ -25,17 +62,46 @@ const organizationPluginHooks = new Map<
     instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
   }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>
 >(
-  backendPluginPackageDescriptors.flatMap((descriptor) =>
-    descriptor.backend.hooks?.buildOrganizationProjectSummaries
+  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
+    hooks.buildOrganizationProjectSummaries
       ? [
           [
-            descriptor.pluginId as PluginId,
-            descriptor.backend.hooks.buildOrganizationProjectSummaries,
+            pluginId,
+            hooks.buildOrganizationProjectSummaries,
           ] as const,
         ]
       : [],
   ),
 );
+
+const pluginUsageHooks = new Map<
+  PluginId,
+  (options: {
+    organizationId?: string;
+    startedAt: Date;
+  }) => Promise<BackendPluginProjectUsageCount[]>
+>(
+  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
+    hooks.listProjectUsageCounts
+      ? [
+          [
+            pluginId,
+            hooks.listProjectUsageCounts,
+          ] as const,
+        ]
+      : [],
+  ),
+);
+
+export async function listPluginProjectUsageCounts(options: {
+  pluginId: PluginId;
+  organizationId?: string;
+  startedAt: Date;
+}): Promise<BackendPluginProjectUsageCount[]> {
+  const hook = pluginUsageHooks.get(options.pluginId);
+  if (!hook) return [];
+  return hook(options);
+}
 
 export async function buildOrganizationPluginProjectSummaries(options: {
   pluginId: PluginId;
@@ -77,14 +143,14 @@ interface SuperAdminEntitlementHook {
 }
 
 const superAdminEntitlementHooks = new Map<PluginId, SuperAdminEntitlementHook>(
-  backendPluginPackageDescriptors.flatMap((descriptor) => {
-    const prepare = descriptor.backend.hooks?.prepareProjectEntitlementFields;
-    const cleanup = descriptor.backend.hooks?.cleanupProjectEntitlementFields;
+  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) => {
+    const prepare = hooks.prepareProjectEntitlementFields;
+    const cleanup = hooks.cleanupProjectEntitlementFields;
     if (!prepare || !cleanup) return [];
 
     return [
       [
-        descriptor.pluginId as PluginId,
+        pluginId,
         {
           prepareProjectEntitlementFields: prepare,
           cleanupProjectEntitlementFields: cleanup,

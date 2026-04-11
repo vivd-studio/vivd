@@ -1,11 +1,13 @@
 import { z } from "zod";
 import {
   createCmsEntry,
+  updateCmsEntryFields,
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
   updateCmsModel,
   validateCmsWorkspace,
+  type CmsEntryFieldUpdate,
   type CmsFieldDefinition,
   type CmsValidationReport,
 } from "@vivd/shared/cms";
@@ -82,6 +84,15 @@ const cmsFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
     item: cmsFieldDefinitionSchema.optional(),
   }),
 );
+
+const cmsEntryFieldUpdateSchema = z.object({
+  modelKey: z.string().min(1),
+  entryKey: z.string().min(1),
+  fieldPath: z
+    .array(z.union([z.string().min(1), z.number().int().nonnegative()]))
+    .min(1),
+  value: z.unknown(),
+});
 
 export const cmsRouter = router({
   status: publicProcedure.query(async ({ ctx }) => {
@@ -173,6 +184,26 @@ export const cmsRouter = router({
       );
       const prepared = await prepareCmsArtifacts(projectDir);
       markCmsWorkspaceChange(input.slug, input.version, "cms-model-updated");
+      return {
+        updated,
+        ...prepared,
+      };
+    }),
+
+  applyPreviewFieldUpdates: publicProcedure
+    .input(
+      mutationInput.extend({
+        updates: z.array(cmsEntryFieldUpdateSchema).min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const projectDir = requireWorkspace(ctx);
+      const updated = await updateCmsEntryFields(
+        projectDir,
+        input.updates as CmsEntryFieldUpdate[],
+      );
+      const prepared = await prepareCmsArtifacts(projectDir);
+      markCmsWorkspaceChange(input.slug, input.version, "cms-preview-updated");
       return {
         updated,
         ...prepared,

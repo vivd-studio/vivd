@@ -29,6 +29,7 @@ const SUPPORTED_FIELD_TYPES = new Set([
 
 const LOCALIZED_FIELD_TYPES = new Set(["string", "text", "richText"]);
 const TITLE_FIELD_KEYS = new Set(["title", "name", "label"]);
+const NON_LOCAL_ASSET_REFERENCE_REGEX = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 export interface CmsPaths {
   projectDir: string;
@@ -159,6 +160,18 @@ export interface CmsUpdateModelResult {
   paths: CmsPaths;
 }
 
+export interface CmsEntryFieldUpdate {
+  modelKey: string;
+  entryKey: string;
+  fieldPath: Array<string | number>;
+  value: unknown;
+}
+
+export interface CmsUpdateEntriesResult {
+  updated: string[];
+  paths: CmsPaths;
+}
+
 type ReferenceCheck = {
   sourcePath: string;
   modelKey: string;
@@ -182,6 +195,182 @@ function titleizeKey(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizePosixPath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function dirnamePosix(value: string): string {
+  const normalized = normalizePosixPath(value);
+  const lastSlash = normalized.lastIndexOf("/");
+  return lastSlash >= 0 ? normalized.slice(0, lastSlash) : "";
+}
+
+function buildRelativeReferencePath(baseFilePath: string, targetPath: string): string {
+  const baseDir = dirnamePosix(baseFilePath) || ".";
+  return path.posix.relative(baseDir, normalizePosixPath(targetPath).replace(/^\/+/, "")) || ".";
+}
+
+function getCmsEntryFileFormat(filePath: string): "yaml" | "json" | "markdown" | "unsupported" {
+  const normalized = normalizePosixPath(filePath).toLowerCase();
+  if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
+    return "yaml";
+  }
+  if (normalized.endsWith(".json")) {
+    return "json";
+  }
+  if (
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".mdx") ||
+    normalized.endsWith(".markdown")
+  ) {
+    return "markdown";
+  }
+  return "unsupported";
+}
+
+function serializeCmsEntryValues(
+  filePath: string,
+  value: Record<string, unknown>,
+  currentContent = "",
+): string {
+  const format = getCmsEntryFileFormat(filePath);
+  switch (format) {
+    case "yaml":
+      return `${stringifyYaml(value)}\n`;
+    case "json":
+      return `${JSON.stringify(value, null, 2)}\n`;
+    case "markdown": {
+      const frontmatter = stringifyYaml(value).trimEnd();
+      const existingMatch = currentContent.match(/^---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n)?/);
+      const body = existingMatch ? currentContent.slice(existingMatch[0].length) : currentContent;
+      if (!body.length) {
+        return `---\n${frontmatter}\n---\n`;
+      }
+      return `---\n${frontmatter}\n---\n\n${body.replace(/^\r?\n/, "")}`;
+    }
+    default:
+      throw new Error(`Unsupported CMS entry format for ${filePath}`);
+  }
+}
+
+function setValueAtPath<T>(
+  root: T,
+  pathSegments: Array<string | number>,
+  nextValue: unknown,
+): T {
+  if (pathSegments.length === 0) {
+    return nextValue as T;
+  }
+
+  const [head, ...tail] = pathSegments;
+  if (typeof head === "number") {
+    const currentArray = Array.isArray(root) ? [...root] : [];
+    currentArray[head] = setValueAtPath(currentArray[head], tail, nextValue);
+    return currentArray as T;
+  }
+
+  const currentRecord: Record<string, unknown> = isRecord(root) ? { ...root } : {};
+  currentRecord[head] = setValueAtPath(currentRecord[head], tail, nextValue);
+  return currentRecord as T;
+}
+
+function resolveFieldDefinitionAtPath(
+  fields: Record<string, CmsFieldDefinition>,
+  fieldPath: Array<string | number>,
+): CmsFieldDefinition | null {
+  const [rootSegment, ...rest] = fieldPath;
+  if (typeof rootSegment !== "string") {
+    return null;
+  }
+
+  let current: CmsFieldDefinition | undefined = fields[rootSegment];
+  if (!current) {
+    return null;
+  }
+
+  let index = 0;
+  while (index < rest.length) {
+    const segment = rest[index];
+
+    if (current.localized) {
+      if (typeof segment !== "string") {
+        return null;
+      }
+      index += 1;
+      if (index >= rest.length) {
+        return current;
+      }
+      continue;
+    }
+
+    if (current.type === "object") {
+      if (typeof segment !== "string") {
+        return null;
+      }
+      current = current.fields?.[segment];
+      if (!current) {
+        return null;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (current.type === "list") {
+      if (typeof segment !== "number" || !current.item) {
+        return null;
+      }
+      current = current.item;
+      index += 1;
+      continue;
+    }
+
+    if (current.type === "assetList") {
+      if (typeof segment !== "number") {
+        return null;
+      }
+      current = {
+        type: "asset",
+        required: current.required,
+        accepts: current.accepts,
+      };
+      index += 1;
+      continue;
+    }
+
+    return null;
+  }
+
+  return current;
+}
+
+function normalizeUpdatedFieldValue(
+  entryRelativePath: string,
+  field: CmsFieldDefinition | null,
+  value: unknown,
+): unknown {
+  if (!field || field.type !== "asset" || typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = normalizePosixPath(value.trim());
+  if (!trimmed) {
+    return "";
+  }
+  if (
+    trimmed.startsWith("./") ||
+    trimmed.startsWith("../") ||
+    trimmed.startsWith("/") ||
+    NON_LOCAL_ASSET_REFERENCE_REGEX.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  return buildRelativeReferencePath(entryRelativePath, trimmed);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -1517,6 +1706,80 @@ export async function createCmsEntry(
     ...scaffold,
     createdEntryKey: normalizedEntryKey,
     createdEntryRelativePath,
+  };
+}
+
+export async function updateCmsEntryFields(
+  projectDir: string,
+  updates: CmsEntryFieldUpdate[],
+): Promise<CmsUpdateEntriesResult> {
+  if (updates.length === 0) {
+    throw new Error("At least one CMS entry update is required");
+  }
+
+  const report = await getCmsStatus(projectDir);
+  if (!report.initialized) {
+    throw new Error("CMS workspace not initialized");
+  }
+
+  const updatesByEntry = new Map<string, CmsEntryFieldUpdate[]>();
+  for (const update of updates) {
+    const modelKey = update.modelKey.trim();
+    const entryKey = update.entryKey.trim();
+    if (!modelKey || !entryKey || update.fieldPath.length === 0) {
+      throw new Error("Invalid CMS preview field update");
+    }
+    const key = `${modelKey}:${entryKey}`;
+    const existing = updatesByEntry.get(key) ?? [];
+    existing.push({
+      ...update,
+      modelKey,
+      entryKey,
+    });
+    updatesByEntry.set(key, existing);
+  }
+
+  const updated = new Set<string>();
+
+  for (const [entryId, entryUpdates] of updatesByEntry.entries()) {
+    const [modelKey, entryKey] = entryId.split(":");
+    const model = report.models.find((item) => item.key === modelKey);
+    if (!model) {
+      throw new Error(`Collection not found: ${modelKey}`);
+    }
+
+    const entry = model.entries.find((item) => item.key === entryKey);
+    if (!entry) {
+      throw new Error(`Entry not found: ${entryId}`);
+    }
+
+    let nextValues = cloneValue(entry.values);
+    for (const update of entryUpdates) {
+      const fieldDefinition = resolveFieldDefinitionAtPath(model.fields, update.fieldPath);
+      if (!fieldDefinition) {
+        throw new Error(
+          `Field not found for ${entryId}: ${update.fieldPath.map((segment) => String(segment)).join(".")}`,
+        );
+      }
+
+      nextValues = setValueAtPath(
+        nextValues,
+        update.fieldPath,
+        normalizeUpdatedFieldValue(entry.relativePath, fieldDefinition, update.value),
+      );
+    }
+
+    const currentContent = await fs.readFile(entry.filePath, "utf8");
+    const nextContent = serializeCmsEntryValues(entry.relativePath, nextValues, currentContent);
+    if (nextContent !== currentContent) {
+      await fs.writeFile(entry.filePath, nextContent, "utf8");
+      updated.add(entry.relativePath);
+    }
+  }
+
+  return {
+    updated: [...updated].sort((left, right) => left.localeCompare(right)),
+    paths: report.paths,
   };
 }
 

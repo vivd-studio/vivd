@@ -8,7 +8,7 @@ import {
   PLUGIN_IDS,
   getPluginDefaultEnabledByProfile,
   type PluginId,
-} from "../plugins/registry";
+} from "../plugins/catalog";
 import {
   getSystemSettingJsonValue,
   getSystemSettingValue,

@@ -8,6 +8,7 @@
     "./descriptor": "./src/descriptor.ts",
     "./backend/config": "./src/backend/config.ts",
     "./backend/contribution": "./src/backend/contribution.ts",
+    "./backend/integrationHooks": "./src/backend/integrationHooks.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/ports": "./src/backend/ports.ts",
     "./backend/publicApi": "./src/backend/publicApi.ts",

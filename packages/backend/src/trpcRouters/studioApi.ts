@@ -28,7 +28,7 @@ import {
   projectPluginService,
 } from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
-import { PLUGIN_IDS } from "../services/plugins/registry";
+import { PLUGIN_IDS } from "../services/plugins/catalog";
 import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
 import {
   extractRequestHost,

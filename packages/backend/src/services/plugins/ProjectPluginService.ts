@@ -6,7 +6,6 @@ import {
   type ContactFormPluginPayload,
 } from "./contactForm/service";
 import {
-  analyticsPluginService,
   type AnalyticsPluginInfoPayload,
   type AnalyticsPluginPayload,
   type AnalyticsSummaryPayload,
@@ -20,6 +19,8 @@ import {
   PluginActionArgumentError,
   type ProjectPluginActionPayload,
   type ProjectPluginInfoContractPayload,
+  type ProjectPluginReadPayload,
+  UnsupportedPluginReadError,
   UnsupportedPluginActionError,
 } from "./core/module";
 import { pluginEntitlementService } from "./PluginEntitlementService";
@@ -28,11 +29,11 @@ import {
   type ProjectPluginCatalogItem,
 } from "./surfaceTypes";
 import {
-  getPluginModule,
   listPluginCatalogEntries,
   type PluginCatalogEntry,
   type PluginId,
-} from "./registry";
+} from "./catalog";
+import { getPluginModule } from "./registry";
 
 export interface PluginCatalogForProject {
   project: {
@@ -140,12 +141,23 @@ class ProjectPluginService {
     return module.runAction(options);
   }
 
-  async getAnalyticsSummary(options: {
+  async readPluginData(options: {
     organizationId: string;
     projectSlug: string;
-    rangeDays: 7 | 30;
-  }): Promise<AnalyticsSummaryPayload> {
-    return analyticsPluginService.getAnalyticsSummary(options);
+    pluginId: PluginId;
+    readId: string;
+    input?: Record<string, unknown>;
+  }): Promise<ProjectPluginReadPayload> {
+    const module = getPluginModule(options.pluginId);
+    if (!module.runRead) {
+      throw new UnsupportedPluginReadError(options.pluginId, options.readId);
+    }
+    return module.runRead({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      readId: options.readId,
+      input: options.input ?? {},
+    });
   }
 }
 
@@ -156,6 +168,7 @@ export type {
   AnalyticsPluginInfoPayload,
   AnalyticsPluginPayload,
   AnalyticsSummaryPayload,
+  ProjectPluginReadPayload,
   ProjectPluginInstanceSummary,
 };
 export {
@@ -163,5 +176,6 @@ export {
   ContactFormRecipientRequiredError,
   ContactFormRecipientVerificationError,
   PluginActionArgumentError,
+  UnsupportedPluginReadError,
   UnsupportedPluginActionError,
 };

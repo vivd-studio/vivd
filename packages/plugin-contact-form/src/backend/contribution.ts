@@ -1,4 +1,5 @@
 import type { PluginModule } from "@vivd/shared/types";
+import { createContactFormPluginBackendHooks } from "./adminHooks";
 import { createEmailFeedbackRouter } from "./http/feedback";
 import { createContactRecipientVerificationRouter } from "./http/recipientVerification";
 import { createContactFormPublicRouter } from "./http/submit";
@@ -23,6 +24,7 @@ import type {
 export interface ContactFormPluginBackendContribution {
   service: ContactFormPluginService;
   module: PluginModule<"contact_form">;
+  hooks: ReturnType<typeof createContactFormPluginBackendHooks>;
   publicRoutes: ReadonlyArray<ContactFormBackendRouteDefinition>;
 }
 
@@ -30,6 +32,16 @@ export function createContactFormPluginBackendContribution(
   deps: ContactFormPluginBackendContributionDeps,
 ): ContactFormPluginBackendContribution {
   const service = createContactFormPluginService(deps);
+  const hooks = createContactFormPluginBackendHooks({
+    db: deps.db,
+    tables: {
+      contactFormSubmission: deps.tables.contactFormSubmission,
+      contactFormRecipientVerification:
+        deps.tables.contactFormRecipientVerification,
+      pluginEntitlement: deps.tables.pluginEntitlement,
+    },
+    turnstileService: deps.turnstileService,
+  });
 
   return {
     service,
@@ -88,6 +100,7 @@ export function createContactFormPluginBackendContribution(
         return null;
       },
     }),
+    hooks,
     publicRoutes: [
       {
         routeId: "contact_form.email_feedback",

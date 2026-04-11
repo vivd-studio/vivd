@@ -343,11 +343,64 @@ describe.sequential("DB integration: public plugin HTTP contract", () => {
           utm_campaign: "spring-launch",
         });
 
-        const summary = await projectPluginService.getAnalyticsSummary({
+        const summaryResult = await projectPluginService.readPluginData({
           organizationId: fixture.orgId,
           projectSlug: fixture.projectSlug,
-          rangeDays: 7,
+          pluginId: "analytics",
+          readId: "summary",
+          input: {
+            rangeDays: 7,
+          },
         });
+        const summary = summaryResult.result as {
+          enabled: boolean;
+          totals: {
+            events: number;
+            pageviews: number;
+            uniqueVisitors: number;
+            uniqueSessions: number;
+          };
+          topPages: Array<{
+            path: string;
+            pageviews: number;
+            uniqueVisitors: number;
+          }>;
+          topReferrers: Array<{
+            referrerHost: string;
+            events: number;
+          }>;
+          countries: Array<{
+            countryCode: string;
+            pageviews: number;
+            uniqueVisitors: number;
+            uniqueSessions: number;
+            share: number;
+          }>;
+          contactForm: {
+            enabled: boolean;
+            submissions: number;
+            uniqueSourceHosts: number;
+            conversionRatePct: number;
+            topSourceHosts: Array<{
+              sourceHost: string;
+              submissions: number;
+            }>;
+          };
+          funnel: {
+            pageviews: number;
+            formViews: number;
+            formStarts: number;
+            submissions: number;
+          };
+          attribution: {
+            sources: Array<{
+              utmSource: string;
+              pageviews: number;
+              submissions: number;
+              submissionRatePct: number;
+            }>;
+          };
+        };
         expect(summary.enabled).toBe(true);
         expect(summary.totals).toMatchObject({
           events: 3,

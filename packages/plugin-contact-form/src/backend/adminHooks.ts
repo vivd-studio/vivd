@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { contactFormPluginConfigSchema } from "./config";
 import type { ContactFormAdminHooksDeps } from "./ports";
 
@@ -59,6 +59,47 @@ export function createContactFormPluginBackendHooks(
   deps: ContactFormAdminHooksDeps,
 ) {
   return {
+    async listProjectUsageCounts(options: {
+      organizationId?: string;
+      startedAt: Date;
+    }): Promise<Array<{
+      organizationId: string;
+      projectSlug: string;
+      count: number;
+    }>> {
+      const rows = await deps.db
+        .select({
+          organizationId: deps.tables.contactFormSubmission.organizationId,
+          projectSlug: deps.tables.contactFormSubmission.projectSlug,
+          count: sql<number>`count(*)`,
+        })
+        .from(deps.tables.contactFormSubmission)
+        .where(
+          and(
+            gte(
+              deps.tables.contactFormSubmission.createdAt,
+              options.startedAt,
+            ),
+            options.organizationId
+              ? eq(
+                  deps.tables.contactFormSubmission.organizationId,
+                  options.organizationId,
+                )
+              : undefined,
+          ),
+        )
+        .groupBy(
+          deps.tables.contactFormSubmission.organizationId,
+          deps.tables.contactFormSubmission.projectSlug,
+        );
+
+      return rows.map((row: any) => ({
+        organizationId: row.organizationId,
+        projectSlug: row.projectSlug,
+        count: Number(row.count) || 0,
+      }));
+    },
+
     async buildOrganizationProjectSummaries(options: {
       organizationId: string;
       projectSlugs: string[];

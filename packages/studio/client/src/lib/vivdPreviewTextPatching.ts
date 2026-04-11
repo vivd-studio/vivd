@@ -1,3 +1,8 @@
+import {
+  readCmsBindingFromElement,
+  type CmsPreviewFieldUpdate,
+} from "./cmsPreviewBindings";
+
 export type VivdTextNodePatch = {
   type: "setTextNode";
   selector: string;
@@ -28,7 +33,11 @@ export type AstroTextPatch = {
   newValue: string;
 };
 
-export type VivdPatch = VivdTextNodePatch | VivdI18nPatch | AstroTextPatch;
+export type VivdPatch =
+  | VivdTextNodePatch
+  | VivdI18nPatch
+  | AstroTextPatch
+  | CmsPreviewFieldUpdate;
 
 const normalizeLang = (lang: string) => lang.trim().toLowerCase();
 const isLanguageCode = (value: string) => /^[a-z]{2}(-[a-z]{2})?$/.test(value);
@@ -155,7 +164,20 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
     const sourceFile = node.getAttribute("data-vivd-source-file");
     const sourceLoc = node.getAttribute("data-vivd-source-loc");
 
-    // PRIORITY 1: Check for i18n key first (works for both Astro and static HTML)
+    // PRIORITY 1: Check for explicit CMS ownership first.
+    const cmsBinding = readCmsBindingFromElement(node);
+    if (cmsBinding && (cmsBinding.kind === null || cmsBinding.kind === "text")) {
+      patches.push({
+        type: "setCmsField",
+        modelKey: cmsBinding.modelKey,
+        entryKey: cmsBinding.entryKey,
+        fieldPath: cmsBinding.fieldPath,
+        value: current,
+      });
+      return;
+    }
+
+    // PRIORITY 2: Check for i18n key first (works for both Astro and static HTML)
     // This allows data-i18n attributes to work even in Astro projects
     if (i18nKeyFromNode) {
       const selector = `[data-i18n="${i18nKeyFromNode.replace(/"/g, '\\"')}"]`;
@@ -168,7 +190,7 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
       }
     }
 
-    // PRIORITY 2: Check for data-i18n on parent/ancestor elements
+    // PRIORITY 3: Check for data-i18n on parent/ancestor elements
     const parentEl = selectorIndex.get(parentSelector) ?? null;
     const resolvedI18nEl = parentEl?.closest?.("[data-i18n]") ?? null;
     const i18nEl = resolvedI18nEl || node.closest?.("[data-i18n]");
@@ -180,7 +202,7 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
       }
     }
 
-    // PRIORITY 3: Astro source file patching (only if no i18n key found)
+    // PRIORITY 4: Astro source file patching (only if no i18n key found)
     if (sourceFile) {
       const key = `${sourceFile}:${baseline}`;
       astroEdits.set(key, {
@@ -192,7 +214,7 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
       return;
     }
 
-    // PRIORITY 4: Fall back to direct text node patching (no i18n, no Astro source)
+    // PRIORITY 5: Fall back to direct text node patching (no CMS/i18n/Astro source)
     patches.push({
       type: "setTextNode",
       selector: parentSelector,

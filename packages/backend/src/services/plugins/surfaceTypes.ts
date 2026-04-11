@@ -3,7 +3,7 @@ import type {
   PluginEntitlementScope,
   PluginEntitlementState,
 } from "./PluginEntitlementService";
-import type { PluginCatalogEntry, PluginId } from "./registry";
+import type { PluginCatalogEntry, PluginId } from "./catalog";
 
 export type PluginInstallState = "disabled" | "available" | "enabled" | "suspended";
 export type PluginIssueSeverity = "warning" | "info";

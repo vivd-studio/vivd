@@ -7,6 +7,7 @@ import {
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
+  updateCmsEntryFields,
   validateCmsWorkspace,
 } from "./cms.js";
 
@@ -199,6 +200,54 @@ export const collections = { posts };
       referenceModelKey: "authors",
       required: false,
     });
+  });
+
+  it("updates markdown Astro entries without overwriting the body content", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "notes"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  notes: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "notes", "welcome.md"),
+      `---
+title: Welcome
+---
+
+This body should stay here.
+`,
+      "utf8",
+    );
+
+    const result = await updateCmsEntryFields(projectDir, [
+      {
+        modelKey: "notes",
+        entryKey: "welcome",
+        fieldPath: ["title"],
+        value: "Updated welcome",
+      },
+    ]);
+
+    expect(result.updated).toEqual(["src/content/notes/welcome.md"]);
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "notes", "welcome.md"), "utf8"),
+    ).resolves.toContain("This body should stay here.");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "notes", "welcome.md"), "utf8"),
+    ).resolves.toContain("title: Updated welcome");
   });
 
   it("reports missing src/content.config.ts for Astro projects before falling back to legacy YAML scaffolding", async () => {

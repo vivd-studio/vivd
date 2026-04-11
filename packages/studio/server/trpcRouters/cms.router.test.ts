@@ -256,4 +256,66 @@ export const collections = {
       version: 1,
     });
   });
+
+  it("applies preview-owned CMS field updates back into Astro entry files", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "blog"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: ({ image }) =>
+      z.object({
+        title: z.string(),
+        heroImage: image().optional(),
+      }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "blog", "welcome.yaml"),
+      `title: Welcome
+heroImage: ../media/blog/original.webp
+`,
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.applyPreviewFieldUpdates({
+      slug: "demo-site",
+      version: 1,
+      updates: [
+        {
+          modelKey: "blog",
+          entryKey: "welcome",
+          fieldPath: ["title"],
+          value: "Updated welcome",
+        },
+        {
+          modelKey: "blog",
+          entryKey: "welcome",
+          fieldPath: ["heroImage"],
+          value: "src/content/media/blog/replaced.webp",
+        },
+      ],
+    });
+
+    expect(result.report.valid).toBe(true);
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "welcome.yaml"), "utf8"),
+    ).resolves.toContain("title: Updated welcome");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "welcome.yaml"), "utf8"),
+    ).resolves.toContain("heroImage: ../media/blog/replaced.webp");
+    expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-preview-updated", {
+      slug: "demo-site",
+      version: 1,
+    });
+  });
 });

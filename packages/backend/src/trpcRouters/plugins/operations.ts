@@ -3,11 +3,12 @@ import { z } from "zod";
 import {
   PluginActionArgumentError,
   projectPluginService,
+  UnsupportedPluginReadError,
   UnsupportedPluginActionError,
 } from "../../services/plugins/ProjectPluginService";
 import { getPluginModule, type PluginId } from "../../services/plugins/registry";
 
-type PluginOperationKind = "updateConfig" | "runAction";
+type PluginOperationKind = "read" | "updateConfig" | "runAction";
 
 export function extractRequestHost(
   rawHost: string | string[] | undefined,
@@ -28,11 +29,13 @@ export function throwPluginOperationError(options: {
   operation: PluginOperationKind;
   error: unknown;
   actionId?: string;
+  readId?: string;
 }): never {
   const mappedError = getPluginModule(options.pluginId).mapPublicError?.({
     operation: options.operation,
     error: options.error,
     actionId: options.actionId,
+    readId: options.readId,
   });
   if (mappedError) {
     throw new TRPCError(mappedError);
@@ -44,6 +47,7 @@ export function throwPluginOperationError(options: {
     });
   }
   if (
+    options.error instanceof UnsupportedPluginReadError ||
     options.error instanceof UnsupportedPluginActionError ||
     options.error instanceof PluginActionArgumentError
   ) {
@@ -83,6 +87,25 @@ export async function updateProjectPluginConfig(options: {
     throwPluginOperationError({
       pluginId: options.pluginId,
       operation: "updateConfig",
+      error,
+    });
+  }
+}
+
+export async function readProjectPluginData(options: {
+  organizationId: string;
+  projectSlug: string;
+  pluginId: PluginId;
+  readId: string;
+  input?: Record<string, unknown>;
+}) {
+  try {
+    return await projectPluginService.readPluginData(options);
+  } catch (error) {
+    throwPluginOperationError({
+      pluginId: options.pluginId,
+      operation: "read",
+      readId: options.readId,
       error,
     });
   }

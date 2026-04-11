@@ -86,6 +86,17 @@ export interface AnalyticsPluginServiceDeps {
   getPublicPluginApiBaseUrl: AnalyticsPublicPluginApiResolver;
 }
 
+export interface AnalyticsPluginUsageCountRow {
+  organizationId: string;
+  projectSlug: string;
+  count: number;
+}
+
+export interface AnalyticsPluginIntegrationHooksDeps {
+  db: Pick<AnalyticsPluginDatabase, "select">;
+  tables: Pick<AnalyticsPluginTables, "analyticsEvent">;
+}
+
 export interface AnalyticsPublicRouterDeps {
   upload: Pick<Multer, "none">;
   db: AnalyticsPluginQueryDatabase;

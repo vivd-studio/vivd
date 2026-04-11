@@ -4,13 +4,14 @@ import { projectMemberProcedure } from "../../trpc";
 import type {
   AnalyticsPluginInfoPayload,
   AnalyticsPluginPayload,
+  AnalyticsSummaryPayload,
 } from "../../services/plugins/ProjectPluginService";
-import { projectPluginService } from "../../services/plugins/ProjectPluginService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { analyticsPluginConfigSchema } from "@vivd/plugin-analytics/backend/config";
 import {
   ensureProjectPluginInstance,
   getProjectPluginInfo,
+  readProjectPluginData,
   updateProjectPluginConfig,
 } from "./operations";
 
@@ -136,9 +137,14 @@ export const analyticsUpdateConfigPluginProcedure = projectMemberProcedure
 export const analyticsSummaryPluginProcedure = projectMemberProcedure
   .input(analyticsSummaryInput)
   .query(async ({ ctx, input }) => {
-    return projectPluginService.getAnalyticsSummary({
+    const result = await readProjectPluginData({
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,
-      rangeDays: input.rangeDays,
+      pluginId: "analytics",
+      readId: "summary",
+      input: {
+        rangeDays: input.rangeDays,
+      },
     });
+    return result.result as AnalyticsSummaryPayload;
   });

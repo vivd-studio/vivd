@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   ensurePluginInstanceMock,
   getPluginInfoContractMock,
+  readPluginDataMock,
   updatePluginConfigByIdMock,
   runPluginActionMock,
   PluginActionArgumentErrorMock,
@@ -17,6 +18,7 @@ const {
   return {
     ensurePluginInstanceMock: vi.fn(),
     getPluginInfoContractMock: vi.fn(),
+    readPluginDataMock: vi.fn(),
     updatePluginConfigByIdMock: vi.fn(),
     runPluginActionMock: vi.fn(),
     PluginActionArgumentErrorMock: PluginActionArgumentError,
@@ -59,10 +61,17 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     ensurePluginInstance: ensurePluginInstanceMock,
     getPluginInfoContract: getPluginInfoContractMock,
+    readPluginData: readPluginDataMock,
     updatePluginConfigById: updatePluginConfigByIdMock,
     runPluginAction: runPluginActionMock,
   },
   PluginActionArgumentError: PluginActionArgumentErrorMock,
+  UnsupportedPluginReadError: class UnsupportedPluginReadError extends Error {
+    constructor() {
+      super("Unsupported plugin read");
+      this.name = "UnsupportedPluginReadError";
+    }
+  },
   UnsupportedPluginActionError: class UnsupportedPluginActionError extends Error {
     constructor() {
       super("Unsupported plugin action");
@@ -88,6 +97,7 @@ import { router } from "../src/trpc";
 import {
   ensurePluginProcedure,
   infoPluginProcedure,
+  readPluginProcedure,
   runPluginActionProcedure,
   updatePluginConfigProcedure,
 } from "../src/trpcRouters/plugins/generic";
@@ -136,6 +146,7 @@ describe("plugins.generic router", () => {
   const pluginsRouter = router({
     ensure: ensurePluginProcedure,
     info: infoPluginProcedure,
+    read: readPluginProcedure,
     updateConfig: updatePluginConfigProcedure,
     action: runPluginActionProcedure,
   });
@@ -143,6 +154,7 @@ describe("plugins.generic router", () => {
   beforeEach(() => {
     ensurePluginInstanceMock.mockReset();
     getPluginInfoContractMock.mockReset();
+    readPluginDataMock.mockReset();
     updatePluginConfigByIdMock.mockReset();
     runPluginActionMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
@@ -229,6 +241,40 @@ describe("plugins.generic router", () => {
       projectSlug: "site-1",
       pluginId: "analytics",
       config: { enableClientTracking: true },
+    });
+  });
+
+  it("returns plugin data through the generic read procedure", async () => {
+    readPluginDataMock.mockResolvedValueOnce({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        enabled: true,
+      },
+    });
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.read({
+        slug: "site-1",
+        pluginId: "analytics",
+        readId: "summary",
+        input: { rangeDays: 30 },
+      }),
+    ).resolves.toMatchObject({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        enabled: true,
+      },
+    });
+    expect(readPluginDataMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "analytics",
+      readId: "summary",
+      input: { rangeDays: 30 },
     });
   });
 

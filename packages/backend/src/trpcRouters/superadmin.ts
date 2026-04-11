@@ -33,7 +33,7 @@ import {
   PLUGIN_IDS,
   type PluginId,
   listPluginCatalogEntries,
-} from "../services/plugins/registry";
+} from "../services/plugins/catalog";
 import {
   getSystemSettingValue,
   setSystemSettingValue,

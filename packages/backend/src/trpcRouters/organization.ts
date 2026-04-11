@@ -18,13 +18,18 @@ import { auth } from "../auth";
 import { domainService } from "../services/publish/DomainService";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
 import { installProfileService } from "../services/system/InstallProfileService";
-import { PLUGIN_IDS, listPluginCatalogEntries } from "../services/plugins/registry";
+import {
+  PLUGIN_IDS,
+  listPluginCatalogEntries,
+  type PluginId,
+} from "../services/plugins/catalog";
 import {
   buildOrganizationPluginProjectSummaries,
 } from "../services/plugins/integrationHooks";
 import type {
   OrganizationProjectPluginItem,
   OrganizationPluginIssue,
+  PluginSurfaceBadge,
 } from "../services/plugins/surfaceTypes";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
@@ -301,28 +306,50 @@ export const organizationRouter = router({
       );
     }
 
-    const contactInstancesByProjectSlug = new Map<
-      string,
-      { status: string | null; configJson: unknown } | null
-    >(
-      projects.map((project) => [
-        project.slug,
-        instanceByProjectPluginId.get(`${project.slug}:contact_form`)
-          ? {
-              status:
-                instanceByProjectPluginId.get(`${project.slug}:contact_form`)?.status ?? null,
-              configJson:
-                instanceByProjectPluginId.get(`${project.slug}:contact_form`)?.configJson ?? null,
-            }
-          : null,
-      ]),
+    const pluginSummariesByPluginId = new Map<
+      PluginId,
+      Map<
+        string,
+        {
+          summaryLines: string[];
+          badges: PluginSurfaceBadge[];
+          issues: OrganizationPluginIssue[];
+        }
+      >
+    >();
+
+    await Promise.all(
+      pluginCatalog.map(async (catalog) => {
+        const instancesByProjectSlug = new Map<
+          string,
+          { status: string | null; configJson: unknown } | null
+        >(
+          projects.map((project) => {
+            const instance = instanceByProjectPluginId.get(
+              `${project.slug}:${catalog.pluginId}`,
+            );
+            return [
+              project.slug,
+              instance
+                ? {
+                    status: instance.status ?? null,
+                    configJson: instance.configJson ?? null,
+                  }
+                : null,
+            ] as const;
+          }),
+        );
+
+        const summaries = await buildOrganizationPluginProjectSummaries({
+          pluginId: catalog.pluginId,
+          organizationId,
+          projectSlugs,
+          instancesByProjectSlug,
+        });
+
+        pluginSummariesByPluginId.set(catalog.pluginId, summaries);
+      }),
     );
-    const contactFormSummaries = await buildOrganizationPluginProjectSummaries({
-      pluginId: "contact_form",
-      organizationId,
-      projectSlugs,
-      instancesByProjectSlug: contactInstancesByProjectSlug,
-    });
 
     const deployedByProjectSlug = new Map<
       string,
@@ -340,22 +367,17 @@ export const organizationRouter = router({
 
     const rows = projects.map((project) => {
       const projectSlug = project.slug;
-      const contactFormSummary =
-        contactFormSummaries.get(projectSlug) ?? {
-          summaryLines: [],
-          badges: [],
-          issues: [] as OrganizationPluginIssue[],
-        };
-
       const plugins = pluginCatalog.map((catalog): OrganizationProjectPluginItem => {
         const instance = instanceByProjectPluginId.get(
           `${projectSlug}:${catalog.pluginId}`,
         );
         const status = toPluginInstanceStatus(instance?.status ?? null);
         const pluginSummary =
-          catalog.pluginId === "contact_form"
-            ? contactFormSummary
-            : { summaryLines: [], badges: [] };
+          pluginSummariesByPluginId.get(catalog.pluginId)?.get(projectSlug) ?? {
+            summaryLines: [],
+            badges: [],
+            issues: [] as OrganizationPluginIssue[],
+          };
 
         return {
           pluginId: catalog.pluginId,
@@ -371,13 +393,20 @@ export const organizationRouter = router({
         };
       });
 
+      const issues = pluginCatalog.flatMap(
+        (catalog) =>
+          pluginSummariesByPluginId
+            .get(catalog.pluginId)
+            ?.get(projectSlug)?.issues ?? [],
+      );
+
       return {
         projectSlug,
         projectTitle: project.title,
         updatedAt: project.updatedAt.toISOString(),
         deployedDomain: deployedByProjectSlug.get(projectSlug)?.domain ?? null,
         plugins,
-        issues: contactFormSummary.issues,
+        issues,
       };
     });
 

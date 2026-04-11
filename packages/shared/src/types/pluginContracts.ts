@@ -99,6 +99,12 @@ export interface ProjectPluginActionPayload<TPluginId extends string = string> {
   result: unknown;
 }
 
+export interface ProjectPluginReadPayload<TPluginId extends string = string> {
+  pluginId: TPluginId;
+  readId: string;
+  result: unknown;
+}
+
 export class UnsupportedPluginActionError extends Error {
   constructor(pluginId: string, actionId: string) {
     super(`Plugin ${pluginId} does not support action "${actionId}"`);
@@ -110,6 +116,13 @@ export class PluginActionArgumentError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "PluginActionArgumentError";
+  }
+}
+
+export class UnsupportedPluginReadError extends Error {
+  constructor(pluginId: string, readId: string) {
+    super(`Plugin ${pluginId} does not support read "${readId}"`);
+    this.name = "UnsupportedPluginReadError";
   }
 }
 
@@ -127,6 +140,11 @@ export interface PluginActionContext extends PluginOperationContext {
   args: string[];
   requestedByUserId?: string | null;
   requestHost?: string | null;
+}
+
+export interface PluginReadContext extends PluginOperationContext {
+  readId: string;
+  input: Record<string, unknown>;
 }
 
 export interface PluginInfoSourcePayload {
@@ -154,9 +172,10 @@ export interface PluginPublicErrorPayload {
 }
 
 export interface PluginPublicErrorContext {
-  operation: "info" | "updateConfig" | "runAction";
+  operation: "info" | "updateConfig" | "runAction" | "read";
   error: unknown;
   actionId?: string;
+  readId?: string;
 }
 
 export interface PluginModule<TPluginId extends string = string> {
@@ -175,6 +194,9 @@ export interface PluginModule<TPluginId extends string = string> {
   runAction?(
     options: PluginActionContext,
   ): Promise<ProjectPluginActionPayload<TPluginId>>;
+  runRead?(
+    options: PluginReadContext,
+  ): Promise<ProjectPluginReadPayload<TPluginId>>;
   mapPublicError?(
     context: PluginPublicErrorContext,
   ): PluginPublicErrorPayload | null;

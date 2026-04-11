@@ -157,9 +157,11 @@ function normalizeContactFormConfig(rawConfig: unknown) {
 }
 
 class ContactFormTurnstileServiceImpl {
-  constructor(
-    private readonly deps: ContactFormTurnstileServiceDeps,
-  ) {}
+  private readonly deps: ContactFormTurnstileServiceDeps;
+
+  constructor(deps: ContactFormTurnstileServiceDeps) {
+    this.deps = deps;
+  }
 
   getAutomationConfigurationIssue(): string | null {
     return buildAutomationConfigIssue();

@@ -14,10 +14,10 @@ import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
+import type { AnalyticsSummaryPayload } from "../shared/summary";
 
 type AnalyticsRange = 7 | 30;
-type AnalyticsSummary = RouterOutputs["plugins"]["analyticsSummary"];
-type ComparisonMetric = AnalyticsSummary["comparison"]["totals"]["pageviews"];
+type ComparisonMetric = AnalyticsSummaryPayload["comparison"]["totals"]["pageviews"];
 type DailyRow = {
   date: string;
   pageviews: number;
@@ -200,11 +200,18 @@ export default function AnalyticsProjectPage() {
     },
   });
 
-  const analyticsSummaryQuery = trpc.plugins.analyticsSummary.useQuery(
-    { slug, rangeDays },
+  const analyticsSummaryQuery = trpc.plugins.read.useQuery(
+    {
+      slug,
+      pluginId: typedPluginId,
+      readId: "summary",
+      input: { rangeDays },
+    },
     { enabled: !!projectSlug && analyticsEnabled },
   );
-  const analyticsSummary: AnalyticsSummary | undefined = analyticsSummaryQuery.data;
+  const analyticsSummary = analyticsSummaryQuery.data?.result as
+    | AnalyticsSummaryPayload
+    | undefined;
 
   const analyticsRangeLabel = rangeDays === 7 ? "Last 7 days" : "Last 30 days";
 

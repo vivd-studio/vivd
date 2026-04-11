@@ -166,6 +166,26 @@ The next persistence step should be:
 
 This keeps the page preview useful without letting it silently diverge from the actual entry/model source files.
 
+### Preview Ownership Contract
+
+For collection-bound preview editing, Vivd should not rely on heuristic backtracking as the primary path.
+
+Instead, Astro projects should expose a tiny project-local ownership contract in rendered markup for CMS-bound text and images:
+
+- `data-cms-collection`
+- `data-cms-entry`
+- `data-cms-field`
+- `data-cms-kind`
+- optional `data-cms-locale`
+
+Recommended shape:
+
+- keep the helper project-local, for example `src/lib/cmsBindings.ts`
+- keep it framework-plain and repo-owned
+- avoid a required Vivd-specific runtime package for this
+
+Studio should consume that neutral contract and resolve preview saves back into the owning entry field first.
+
 ## CLI Scope
 
 The CLI should evolve from the current YAML-first CMS commands toward Astro-native content operations.

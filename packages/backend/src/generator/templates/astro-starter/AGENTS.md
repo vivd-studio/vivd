@@ -19,6 +19,9 @@ Vivd adapts to Astro Content Collections internally.
 - Prefer `src/content/media/` as the canonical home for Astro-managed site assets.
 - For local or content-managed images in Astro pages/components, default to Astro's `Image` component from `astro:assets`.
 - Use plain `<img>` mainly for remote URLs, deliberate passthrough/public files, SVG edge cases, or existing project patterns that already require it.
+- For CMS-owned text or images that should stay editable from the live preview, emit neutral `data-cms-*` ownership attributes from project code.
+- Prefer the tiny local helper at `src/lib/cmsBindings.ts` for those attributes instead of inventing a Vivd-specific package dependency.
+- Include `data-cms-locale` when binding localized CMS values.
 - Do not point markup at raw `src/content/media/...` filesystem paths.
 - Use `public/` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, `robots.txt`, verification files, or explicit compatibility cases.
 - Run `vivd cms validate` after changing `src/content.config.ts` or collection entry files.

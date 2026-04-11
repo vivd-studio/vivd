@@ -2,6 +2,7 @@ import type express from "express";
 import type { Multer } from "multer";
 import type { PluginModule } from "@vivd/shared/types";
 import { createAnalyticsPublicRouter } from "./http/runtime";
+import { createAnalyticsPluginBackendHooks } from "./integrationHooks";
 import { createAnalyticsPluginModule } from "./module";
 import {
   AnalyticsPluginNotEnabledError,
@@ -17,6 +18,7 @@ export interface AnalyticsBackendRouteDeps {
 export interface AnalyticsPluginBackendContribution {
   service: AnalyticsPluginService;
   module: PluginModule<"analytics">;
+  hooks: ReturnType<typeof createAnalyticsPluginBackendHooks>;
   publicRoutes: ReadonlyArray<{
     routeId: string;
     mountPath: string;
@@ -28,6 +30,12 @@ export function createAnalyticsPluginBackendContribution(
   deps: AnalyticsPluginBackendContributionDeps,
 ): AnalyticsPluginBackendContribution {
   const service = createAnalyticsPluginService(deps);
+  const hooks = createAnalyticsPluginBackendHooks({
+    db: deps.db,
+    tables: {
+      analyticsEvent: deps.tables.analyticsEvent,
+    },
+  });
 
   return {
     service,
@@ -47,10 +55,14 @@ export function createAnalyticsPluginBackendContribution(
         await service.updateAnalyticsConfig(options);
         return service.getAnalyticsInfo(options);
       },
+      readSummary(options) {
+        return service.getAnalyticsSummary(options);
+      },
       isNotEnabledError(error) {
         return error instanceof AnalyticsPluginNotEnabledError;
       },
     }),
+    hooks,
     publicRoutes: [
       {
         routeId: "analytics.public",

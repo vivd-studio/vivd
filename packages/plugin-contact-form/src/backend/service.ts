@@ -137,9 +137,11 @@ function uniqueValues(values: string[]): string[] {
 }
 
 class ContactFormPluginServiceImpl {
-  constructor(
-    private readonly deps: ContactFormPluginServiceDeps,
-  ) {}
+  private readonly deps: ContactFormPluginServiceDeps;
+
+  constructor(deps: ContactFormPluginServiceDeps) {
+    this.deps = deps;
+  }
 
   private async assertRecipientEmailsAreVerified(options: {
     organizationId: string;

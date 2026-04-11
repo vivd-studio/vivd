@@ -1,16 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
-  analyticsEvent,
-  contactFormSubmission,
   organization,
   pluginEntitlement,
   publishedSite,
   projectMeta,
   projectPluginInstance,
 } from "../../db/schema";
-import type { PluginId } from "./registry";
+import { listPluginProjectUsageCounts } from "./integrationHooks";
+import type { PluginId } from "./catalog";
 import { installProfileService } from "../system/InstallProfileService";
 
 export type PluginEntitlementScope =
@@ -277,45 +276,11 @@ class PluginEntitlementService {
     monthStart.setUTCDate(1);
     monthStart.setUTCHours(0, 0, 0, 0);
 
-    const usageRows =
-      options.pluginId === "contact_form"
-        ? await db
-            .select({
-              organizationId: contactFormSubmission.organizationId,
-              projectSlug: contactFormSubmission.projectSlug,
-              count: sql<number>`count(*)`,
-            })
-            .from(contactFormSubmission)
-            .where(
-              and(
-                gte(contactFormSubmission.createdAt, monthStart),
-                options.organizationId
-                  ? eq(contactFormSubmission.organizationId, options.organizationId)
-                  : undefined,
-              ),
-            )
-            .groupBy(
-              contactFormSubmission.organizationId,
-              contactFormSubmission.projectSlug,
-            )
-        : options.pluginId === "analytics"
-          ? await db
-              .select({
-                organizationId: analyticsEvent.organizationId,
-                projectSlug: analyticsEvent.projectSlug,
-                count: sql<number>`count(*)`,
-              })
-              .from(analyticsEvent)
-              .where(
-                and(
-                  gte(analyticsEvent.createdAt, monthStart),
-                  options.organizationId
-                    ? eq(analyticsEvent.organizationId, options.organizationId)
-                    : undefined,
-                ),
-              )
-              .groupBy(analyticsEvent.organizationId, analyticsEvent.projectSlug)
-          : [];
+    const usageRows = await listPluginProjectUsageCounts({
+      pluginId: options.pluginId,
+      organizationId: options.organizationId,
+      startedAt: monthStart,
+    });
     const usageByProject = new Map<string, number>(
       usageRows.map((row) => [
         `${row.organizationId}:${row.projectSlug}`,

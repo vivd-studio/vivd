@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   ensureProjectPluginInstanceMock,
   getProjectPluginInfoMock,
+  readProjectPluginDataMock,
   updateProjectPluginConfigMock,
-  getAnalyticsSummaryMock,
 } = vi.hoisted(() => ({
   ensureProjectPluginInstanceMock: vi.fn(),
   getProjectPluginInfoMock: vi.fn(),
+  readProjectPluginDataMock: vi.fn(),
   updateProjectPluginConfigMock: vi.fn(),
-  getAnalyticsSummaryMock: vi.fn(),
 }));
 
 const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
@@ -42,12 +42,6 @@ vi.mock("../src/db", () => ({
   },
 }));
 
-vi.mock("../src/services/plugins/ProjectPluginService", () => ({
-  projectPluginService: {
-    getAnalyticsSummary: getAnalyticsSummaryMock,
-  },
-}));
-
 vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     resolveEffectiveEntitlement: resolveEffectiveEntitlementMock,
@@ -57,6 +51,7 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 vi.mock("../src/trpcRouters/plugins/operations", () => ({
   ensureProjectPluginInstance: ensureProjectPluginInstanceMock,
   getProjectPluginInfo: getProjectPluginInfoMock,
+  readProjectPluginData: readProjectPluginDataMock,
   updateProjectPluginConfig: updateProjectPluginConfigMock,
   runProjectPluginAction: vi.fn(),
   extractRequestHost: vi.fn(() => "app.vivd.local"),
@@ -117,8 +112,8 @@ describe("plugins.analytics router behavior", () => {
   beforeEach(() => {
     ensureProjectPluginInstanceMock.mockReset();
     getProjectPluginInfoMock.mockReset();
+    readProjectPluginDataMock.mockReset();
     updateProjectPluginConfigMock.mockReset();
-    getAnalyticsSummaryMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
@@ -323,23 +318,27 @@ describe("plugins.analytics router behavior", () => {
   });
 
   it("returns analytics summary for project members", async () => {
-    getAnalyticsSummaryMock.mockResolvedValueOnce({
+    readProjectPluginDataMock.mockResolvedValueOnce({
       pluginId: "analytics",
-      enabled: true,
-      rangeDays: 7,
-      rangeStart: "2026-02-16",
-      rangeEnd: "2026-02-22",
-      totals: {
-        events: 120,
-        pageviews: 104,
-        uniqueVisitors: 52,
-        uniqueSessions: 64,
-        avgPagesPerSession: 1.63,
+      readId: "summary",
+      result: {
+        pluginId: "analytics",
+        enabled: true,
+        rangeDays: 7,
+        rangeStart: "2026-02-16",
+        rangeEnd: "2026-02-22",
+        totals: {
+          events: 120,
+          pageviews: 104,
+          uniqueVisitors: 52,
+          uniqueSessions: 64,
+          avgPagesPerSession: 1.63,
+        },
+        daily: [],
+        topPages: [],
+        topReferrers: [],
+        devices: [],
       },
-      daily: [],
-      topPages: [],
-      topReferrers: [],
-      devices: [],
     });
 
     const caller = pluginsRouter.createCaller(makeContext());
@@ -355,10 +354,14 @@ describe("plugins.analytics router behavior", () => {
       rangeDays: 7,
     });
 
-    expect(getAnalyticsSummaryMock).toHaveBeenCalledWith({
+    expect(readProjectPluginDataMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
-      rangeDays: 7,
+      pluginId: "analytics",
+      readId: "summary",
+      input: {
+        rangeDays: 7,
+      },
     });
   });
 });

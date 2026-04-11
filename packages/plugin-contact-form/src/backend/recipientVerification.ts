@@ -144,9 +144,11 @@ type VerifiedRecipientRow = {
 };
 
 class ContactFormRecipientVerificationServiceImpl {
-  constructor(
-    private readonly deps: ContactFormRecipientVerificationServiceDeps,
-  ) {}
+  private readonly deps: ContactFormRecipientVerificationServiceDeps;
+
+  constructor(deps: ContactFormRecipientVerificationServiceDeps) {
+    this.deps = deps;
+  }
 
   private get tables(): ContactFormRecipientVerificationTables {
     return this.deps.tables;

@@ -204,7 +204,7 @@ export interface ContactFormPluginBackendContributionDeps
     html: string;
   }>;
   isSesFeedbackAutoConfirmEnabled(): boolean;
-  db: ContactFormPublicRouterDatabase;
+  db: ContactFormPublicRouterDatabase & ContactFormAdminHooksDatabase;
   tables: ContactFormPluginBackendTables;
 }
 
@@ -313,6 +313,7 @@ export interface ContactFormAdminHooksDatabase {
 }
 
 export interface ContactFormAdminHooksTables {
+  contactFormSubmission: any;
   contactFormRecipientVerification: any;
   pluginEntitlement: any;
 }
