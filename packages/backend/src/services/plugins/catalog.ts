@@ -7,10 +7,10 @@ import type {
   PluginDefinition as SharedPluginDefinition,
 } from "@vivd/shared/types";
 import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
-import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
+import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
 
 export const pluginPackageDescriptors = definePluginPackageDescriptors([
-  contactFormPluginDescriptor,
+  contactFormPluginManifest,
   analyticsPluginManifest,
 ] as const);
 

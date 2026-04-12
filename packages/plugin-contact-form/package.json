@@ -6,10 +6,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./descriptor": "./src/descriptor.ts",
+    "./manifest": "./src/manifest.ts",
     "./backendHooks": "./src/backendHooks.ts",
     "./backend/config": "./src/backend/config.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/adminHooks": "./src/backend/adminHooks.ts",
+    "./backend/plugin": "./src/backend/plugin.ts",
     "./backend/ports": "./src/backend/ports.ts",
     "./backend/contribution": "./src/backend/contribution.ts",
     "./backend/publicApi": "./src/backend/publicApi.ts",
@@ -24,7 +26,9 @@
     "./backend/http/submit": "./src/backend/http/submit.ts",
     "./backend/http/feedback": "./src/backend/http/feedback.ts",
     "./backend/http/recipientVerification": "./src/backend/http/recipientVerification.ts",
+    "./cli/plugin": "./src/cli/plugin.ts",
     "./cli/module": "./src/cli/module.ts",
+    "./frontend/plugin": "./src/frontend/plugin.ts",
     "./frontend/module": "./src/frontend/module.ts",
     "./frontend/ContactFormProjectPage": "./src/frontend/ContactFormProjectPage.tsx",
     "./shared/projectUi": "./src/shared/projectUi.ts"

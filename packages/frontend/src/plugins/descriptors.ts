@@ -4,17 +4,13 @@ import {
 } from "@vivd/shared/types";
 import type { PluginPackageDescriptor } from "@vivd/shared/types";
 import { analyticsFrontendPluginPackage } from "@vivd/plugin-analytics/frontend/plugin";
-import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
-import { contactFormFrontendPluginModule } from "./contactForm/module";
+import { contactFormFrontendPluginPackage } from "@vivd/plugin-contact-form/frontend/plugin";
 import type { FrontendPluginModule } from "./types";
 
 type FrontendPluginDescriptor = PluginPackageDescriptor<string, FrontendPluginModule>;
 
 export const frontendPluginDescriptors = definePluginPackageDescriptors([
-  {
-    ...contactFormPluginDescriptor,
-    frontend: contactFormFrontendPluginModule,
-  },
+  contactFormFrontendPluginPackage,
   analyticsFrontendPluginPackage,
 ] as const satisfies readonly FrontendPluginDescriptor[]);
 

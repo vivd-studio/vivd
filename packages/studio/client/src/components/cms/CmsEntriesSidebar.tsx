@@ -78,7 +78,7 @@ export function CmsEntriesSidebar({
   );
 
   return (
-    <div className="flex max-h-[320px] w-full flex-col border-b lg:max-h-none lg:w-[280px] lg:min-w-[280px] lg:border-b-0 lg:border-r xl:w-[300px] xl:min-w-[300px]">
+    <div className="flex min-h-0 max-h-[320px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:w-[280px] lg:min-w-[280px] lg:border-b-0 lg:border-r xl:w-[300px] xl:min-w-[300px]">
       <div className="flex items-start justify-between gap-2 px-3 py-3 sm:px-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{selectedModel?.label ?? "Entries"}</h3>

@@ -6,13 +6,9 @@ import type {
 import type express from "express";
 import type { Multer } from "multer";
 import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
-import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
+import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
 import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
-import {
-  contactFormPluginModule,
-  contactFormPluginPublicRoutes,
-} from "./contactForm/backendContribution";
-import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
+import { contactFormPluginBackendContribution } from "./contactForm/backendContribution";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -104,11 +100,11 @@ export interface BackendPluginPackageDescriptor
 export const backendPluginPackageDescriptors =
   definePluginPackageDescriptors([
   {
-    ...contactFormPluginDescriptor,
+    ...contactFormPluginManifest,
     backend: {
-      module: contactFormPluginModule,
-      publicRoutes: contactFormPluginPublicRoutes,
-      hooks: contactFormPluginBackendHooks,
+      module: contactFormPluginBackendContribution.module,
+      publicRoutes: contactFormPluginBackendContribution.publicRoutes,
+      hooks: contactFormPluginBackendContribution.hooks,
     } as BackendPluginContribution<"contact_form">,
   },
   {

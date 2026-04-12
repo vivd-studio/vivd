@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { createContactFormPluginBackendContribution } from "@vivd/plugin-contact-form/backend/contribution";
+import { contactFormBackendPluginPackage } from "@vivd/plugin-contact-form/backend/plugin";
 import { contactFormPluginDefinition } from "@vivd/plugin-contact-form/backend/module";
 import { db } from "../../../db";
 import {
@@ -26,7 +26,7 @@ import { inferContactFormAutoSourceHosts } from "./sourceHosts";
 import { contactFormTurnstileService } from "./turnstile";
 
 export const contactFormPluginBackendContribution =
-  createContactFormPluginBackendContribution({
+  contactFormBackendPluginPackage.backend.createContribution({
     projectPluginInstanceService: {
       ensurePluginInstance(options) {
         return ensureProjectPluginInstance({

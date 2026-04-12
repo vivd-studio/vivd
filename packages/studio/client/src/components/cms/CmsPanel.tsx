@@ -626,7 +626,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     : "Schema-rendered collection editing for `src/content/`.";
 
   return (
-    <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
+    <div className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background">
       <div className="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -777,7 +777,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
             <CmsCollectionsSidebar
               models={report.models}
               reportErrors={report.errors}
@@ -815,7 +815,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             onSelectEntry={setSelectedEntryKey}
           />
 
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {selectedModel ? (
               <div className="border-b px-4 py-3 sm:px-5">
                 <Tabs value={editorMode} onValueChange={(value) => setEditorMode(value as "entry" | "model")}>
