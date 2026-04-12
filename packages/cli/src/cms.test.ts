@@ -51,13 +51,21 @@ describe("cms workspace utilities", () => {
     const firstResult = await installCmsBindingHelper(projectDir);
     const secondResult = await installCmsBindingHelper(projectDir);
     const helperPath = path.join(projectDir, "src", "lib", "cmsBindings.ts");
+    const cmsTextPath = path.join(projectDir, "src", "lib", "cms", "CmsText.astro");
+    const cmsImagePath = path.join(projectDir, "src", "lib", "cms", "CmsImage.astro");
 
     expect(firstResult.created).toContain("src/lib/cmsBindings.ts");
+    expect(firstResult.created).toContain("src/lib/cms/CmsText.astro");
+    expect(firstResult.created).toContain("src/lib/cms/CmsImage.astro");
     expect(firstResult.skipped).toEqual([]);
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-field");
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("CmsBindingFieldPath");
+    await expect(fs.readFile(cmsTextPath, "utf8")).resolves.toContain("cmsTextBindingAttrs");
+    await expect(fs.readFile(cmsImagePath, "utf8")).resolves.toContain("cmsAssetBindingAttrs");
     expect(secondResult.created).toEqual([]);
     expect(secondResult.skipped).toContain("src/lib/cmsBindings.ts");
+    expect(secondResult.skipped).toContain("src/lib/cms/CmsText.astro");
+    expect(secondResult.skipped).toContain("src/lib/cms/CmsImage.astro");
   });
 
   it("upgrades an older scaffolded CMS binding helper in place", async () => {
@@ -345,6 +353,63 @@ This body should stay here.
     await expect(
       fs.readFile(path.join(projectDir, "src", "content", "notes", "welcome.md"), "utf8"),
     ).resolves.toContain("title: Updated welcome");
+  });
+
+  it("normalizes CMS image updates from src/content/media paths back to entry-relative references", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "horse"), { recursive: true });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "horse"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  horse: defineCollection({
+    schema: ({ image }) =>
+      z.object({
+        name: z.string(),
+        image: image(),
+      }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "horse", "apollo.yaml"),
+      `name: Apollo
+image: ../media/horse/original.webp
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "horse", "original.webp"),
+      "original",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "horse", "updated.webp"),
+      "updated",
+      "utf8",
+    );
+
+    const result = await updateCmsEntryFields(projectDir, [
+      {
+        modelKey: "horse",
+        entryKey: "apollo",
+        fieldPath: ["image"],
+        value: "src/content/media/horse/updated.webp",
+      },
+    ]);
+
+    expect(result.updated).toEqual(["src/content/horse/apollo.yaml"]);
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "horse", "apollo.yaml"), "utf8"),
+    ).resolves.toContain("image: ../media/horse/updated.webp");
   });
 
   it("reports missing src/content.config.ts for Astro projects and rejects scaffold commands there", async () => {

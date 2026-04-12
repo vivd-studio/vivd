@@ -6,12 +6,12 @@ import type {
   PluginCatalogEntry as SharedPluginCatalogEntry,
   PluginDefinition as SharedPluginDefinition,
 } from "@vivd/shared/types";
-import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
+import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 
 export const pluginPackageDescriptors = definePluginPackageDescriptors([
   contactFormPluginDescriptor,
-  analyticsPluginDescriptor,
+  analyticsPluginManifest,
 ] as const);
 
 export const PLUGIN_IDS = extractPluginIds(pluginPackageDescriptors);

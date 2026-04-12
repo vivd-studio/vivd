@@ -783,6 +783,51 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("Event types: pageview, custom");
   });
 
+  it("reads generic plugin data through the shared plugin contract", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-plugin-read-"));
+    const inputPath = path.join(tmpDir, "analytics-read.json");
+    await fs.writeFile(
+      inputPath,
+      JSON.stringify({
+        days: 30,
+      }),
+    );
+    runtime.client.query.mockResolvedValue({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        totalVisitors: 123,
+        pageviews: 456,
+      },
+    });
+
+    const result = await dispatchCli(
+      ["plugins", "read", "analytics", "summary", "--file", inputPath],
+      tmpDir,
+    );
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginRead", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "analytics",
+      readId: "summary",
+      input: {
+        days: 30,
+      },
+    });
+    expect(result.data).toEqual({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        totalVisitors: 123,
+        pageviews: 456,
+      },
+    });
+    expect(result.human).toContain("Plugin: analytics");
+    expect(result.human).toContain("Read: summary");
+    expect(result.human).toContain("\"totalVisitors\": 123");
+  });
+
   it("shows generic plugin config and template", async () => {
     runtime.client.query.mockResolvedValue({
       pluginId: "analytics",
@@ -1144,6 +1189,7 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("EXAMPLES");
     expect(rootHelp.human).toContain("vivd preview status");
     expect(rootHelp.human).toContain("vivd preview screenshot [path]");
+    expect(rootHelp.human).toContain("vivd plugins read <pluginId> <readId> [--file <json>]");
     expect(rootHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(rootHelp.human).toContain("vivd plugins help");
     expect(rootHelp.human).not.toContain("PLUGIN SHORTCUTS");
@@ -1162,6 +1208,7 @@ describe("dispatchCli", () => {
     expect(previewHelp.human).toContain("vivd preview screenshot [path]");
     expect(previewHelp.human).toContain(".vivd/dropped-images/");
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
+    expect(pluginsHelp.human).toContain("vivd plugins read <pluginId> <readId> [--file input.json]");
     expect(pluginsHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(publishHelp.human).toContain("vivd publish checklist run");
     expect(publishHelp.human).toContain("vivd publish checklist show");
@@ -1214,9 +1261,11 @@ describe("dispatchCli", () => {
     try {
       const result = await dispatchCli(["cms", "helper", "install"], tempDir);
       const helperPath = path.join(tempDir, "src", "lib", "cmsBindings.ts");
+      const cmsTextPath = path.join(tempDir, "src", "lib", "cms", "CmsText.astro");
 
-      expect(result.human).toContain("CMS binding helper installed.");
+      expect(result.human).toContain("CMS preview toolkit installed.");
       await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-collection");
+      await expect(fs.readFile(cmsTextPath, "utf8")).resolves.toContain("cmsTextBindingAttrs");
       expect(runtime.client.query).not.toHaveBeenCalled();
       expect(runtime.client.mutation).not.toHaveBeenCalled();
     } finally {

@@ -1,0 +1,17 @@
+---
+import { Image } from "astro:assets";
+import { cmsAssetBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
+
+interface Props {
+  collection: string;
+  entry: string;
+  field: CmsBindingFieldPath;
+  locale?: string;
+  [key: string]: unknown;
+}
+
+const { collection, entry, field, locale, ...imageProps } = Astro.props as Props;
+const cmsAttrs = cmsAssetBindingAttrs({ collection, entry, field, locale });
+---
+
+<Image {...cmsAttrs} {...imageProps} />

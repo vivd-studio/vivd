@@ -5,16 +5,14 @@ import type {
 } from "@vivd/shared/types";
 import type express from "express";
 import type { Multer } from "multer";
-import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
+import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
-import { analyticsPluginPublicRoutes } from "./analytics/backendContribution";
-import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
+import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
 import {
   contactFormPluginModule,
   contactFormPluginPublicRoutes,
 } from "./contactForm/backendContribution";
 import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
-import { analyticsPluginModule } from "./analytics/module";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -114,11 +112,11 @@ export const backendPluginPackageDescriptors =
     } as BackendPluginContribution<"contact_form">,
   },
   {
-    ...analyticsPluginDescriptor,
+    ...analyticsPluginManifest,
     backend: {
-      module: analyticsPluginModule,
-      publicRoutes: analyticsPluginPublicRoutes,
-      hooks: analyticsPluginBackendHooks,
+      module: analyticsPluginBackendContribution.module,
+      publicRoutes: analyticsPluginBackendContribution.publicRoutes,
+      hooks: analyticsPluginBackendContribution.hooks,
     } as BackendPluginContribution<"analytics">,
   },
 ] as const);

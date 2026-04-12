@@ -212,6 +212,25 @@ This should stay neutral and repo-owned:
 
 The goal is to make the right binding path obvious to agents and project authors without hiding the underlying CMS ownership contract.
 
+### Localization Split
+
+Localization should keep two distinct source-of-truth lanes:
+
+- localized collection content stays in Astro entry files under `src/content/**`
+- global locale-dictionary UI strings stay in `src/locales/*.json`
+
+Recommended authoring contract:
+
+- use `CmsText` with a `locale` prop, or the lower-level `data-cms-locale`, for localized collection fields
+- use `data-i18n="key"` for locale-dictionary UI copy such as nav labels, generic buttons, placeholders, and other non-entry strings
+- do not put `data-i18n` and CMS ownership attributes on the same element
+
+This keeps preview save deterministic:
+
+- CMS-bound text/image edits resolve back into entry files first
+- locale-dictionary text edits resolve into `src/locales/*.json`
+- raw Astro/HTML patching stays fallback-only
+
 ## CLI Scope
 
 The CLI should evolve from the current YAML-first CMS commands toward Astro-native content operations.

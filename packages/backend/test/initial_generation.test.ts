@@ -59,6 +59,12 @@ describe("initial generation helpers", () => {
         fs.existsSync(path.join(tmpDir, "src", "lib", "cmsBindings.ts")),
       ).toBe(true);
       expect(
+        fs.existsSync(path.join(tmpDir, "src", "lib", "cms", "CmsText.astro")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "lib", "cms", "CmsImage.astro")),
+      ).toBe(true);
+      expect(
         fs.existsSync(path.join(tmpDir, "src", "content", "vivd.content.yaml")),
       ).toBe(false);
       expect(
@@ -131,6 +137,18 @@ describe("initial generation helpers", () => {
           "utf-8",
         ),
       ).toContain("cmsAssetBindingAttrs");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cms", "CmsText.astro"),
+          "utf-8",
+        ),
+      ).toContain("cmsTextBindingAttrs");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cms", "CmsImage.astro"),
+          "utf-8",
+        ),
+      ).toContain('import { Image } from "astro:assets";');
 
       const manifest = JSON.parse(
         fs.readFileSync(

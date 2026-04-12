@@ -18,6 +18,20 @@ export interface PluginPackageDescriptor<
   backend?: TBackend;
 }
 
+export interface PluginPackageManifest<
+  TPluginId extends string = string,
+  TFrontend = unknown,
+  TBackend = unknown,
+> extends PluginPackageDescriptor<TPluginId, TFrontend, TBackend> {
+  manifestVersion: 1;
+}
+
+export function definePluginPackageManifest<
+  const T extends PluginPackageManifest,
+>(manifest: T): T {
+  return manifest;
+}
+
 export function definePluginPackageDescriptors<
   const T extends readonly PluginPackageDescriptor[],
 >(descriptors: T): T {

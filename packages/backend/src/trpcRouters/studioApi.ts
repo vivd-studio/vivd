@@ -33,6 +33,7 @@ import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
 import {
   extractRequestHost,
   getProjectPluginInfo,
+  readProjectPluginData,
   runProjectPluginAction,
   updateProjectPluginConfig,
 } from "./plugins/operations";
@@ -492,6 +493,26 @@ export const studioApiRouter = router({
         organizationId: ctx.organizationId!,
         projectSlug: input.slug,
         pluginId: input.pluginId,
+      });
+    }),
+
+  getProjectPluginRead: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        pluginId: pluginIdSchema,
+        readId: z.string().trim().min(1),
+        input: z.record(z.string(), z.unknown()).default({}),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return readProjectPluginData({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: input.pluginId,
+        readId: input.readId,
+        input: input.input,
       });
     }),
 

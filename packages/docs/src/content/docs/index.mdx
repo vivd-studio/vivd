@@ -6,11 +6,11 @@ hero:
   title: Vivd Docs
   tagline: Product docs for creating, refining, publishing, and operating websites in Vivd.
   actions:
-    - text: Import an existing site
-      link: /import-existing-website/
+    - text: Getting Started
+      link: /getting-started/
       variant: primary
-    - text: Start from scratch
-      link: /create-from-scratch/
+    - text: Self-Hosting
+      link: /self-hosting/
       variant: secondary
     - text: Troubleshooting
       link: /troubleshooting/
@@ -21,18 +21,23 @@ import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import AppCtas from "../../components/AppCtas.astro";
 import DocShot from "../../components/DocShot.astro";
 
-## Choose the right path
+## Getting Started
 
 <CardGrid>
   <LinkCard
-    title="Import an Existing Website"
-    href="/import-existing-website/"
-    description="Fastest route when you already have a live site and want a first draft to refine."
+    title="Getting Started"
+    href="/getting-started/"
+    description="Start here for the main concepts, access assumptions, and the fastest path to a first live site."
   />
   <LinkCard
     title="Create from Scratch"
     href="/create-from-scratch/"
-    description="Best route when you are starting from business information, goals, assets, and references."
+    description="Use this when you are starting from business information, goals, brand assets, and references."
+  />
+  <LinkCard
+    title="Import an Existing Website"
+    href="/import-existing-website/"
+    description="Use this when you already have a live site and want a faster first draft to refine."
   />
   <LinkCard
     title="Edit in Studio"
@@ -58,15 +63,17 @@ import DocShot from "../../components/DocShot.astro";
   caption="Vivd can start from a brief, references, and brand assets instead of forcing you to begin from an existing website."
 />
 
-## Fastest route to a first live site
+## Recommended first read
 
-If you want your first live result quickly, use this order:
+If you are new to Vivd, start with [Getting Started](/getting-started/).
 
-1. [Create a project from an existing website](/import-existing-website/).
-2. [Edit the result in Studio](/edit-in-studio/).
-3. [Run through the publish flow](/publish-your-site/).
+From there, the usual path is:
 
-If you are building a brand-new site instead, start with [Create from Scratch](/create-from-scratch/).
+1. choose the right starting point: [Create from Scratch](/create-from-scratch/) or [Import an Existing Website](/import-existing-website/)
+2. refine the project in [Edit in Studio](/edit-in-studio/)
+3. finish with [Publish Your Site](/publish-your-site/)
+
+If you are self-hosting, keep [Self-Hosting](/self-hosting/) and [Instance Settings](/instance-settings/) close by from the start.
 
 ## Browse by task
 
@@ -99,7 +106,7 @@ If you are building a brand-new site instead, start with [Create from Scratch](/
   <LinkCard
     title="Organization User Management"
     href="/teams-and-access/"
-    description="Understand organization roles, user management, and where admins versus regular users differ."
+    description="Understand organization roles, invited access, and where owners/admins versus regular users differ."
   />
   <LinkCard
     title="Troubleshooting"

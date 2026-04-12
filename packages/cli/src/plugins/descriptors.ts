@@ -1,9 +1,9 @@
 import { definePluginPackageDescriptors } from "@vivd/shared/types";
 import type { PluginPackageDescriptor } from "@vivd/shared/types";
-import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
+import { analyticsCliPluginPackage } from "@vivd/plugin-analytics/cli/plugin";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 
 export const cliPluginDescriptors = definePluginPackageDescriptors([
   contactFormPluginDescriptor,
-  analyticsPluginDescriptor,
+  analyticsCliPluginPackage,
 ] as const satisfies readonly PluginPackageDescriptor[]);

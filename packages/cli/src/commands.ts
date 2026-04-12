@@ -24,6 +24,7 @@ import {
   formatGenericPluginConfigTemplateReport,
   formatGenericPluginConfigUpdateReport,
   formatGenericPluginInfoReport,
+  formatGenericPluginReadReport,
   formatPluginCatalogReport,
   formatPreviewLogsReport,
   formatPreviewScreenshotReport,
@@ -46,7 +47,10 @@ import {
   renderCliPluginInfo,
   resolveCliPluginAlias,
 } from "./plugins/registry.js";
-import type { PluginCliInfoContractPayload } from "@vivd/shared/types";
+import type {
+  PluginCliInfoContractPayload,
+  PluginCliReadResultPayload,
+} from "@vivd/shared/types";
 
 type CommandResult = {
   data: unknown;
@@ -210,6 +214,16 @@ type PluginCatalogResponse = {
           description?: string;
         }>;
       }>;
+      reads?: Array<{
+        readId: string;
+        title?: string;
+        arguments?: Array<{
+          name: string;
+          type?: string;
+          required?: boolean;
+          description?: string;
+        }>;
+      }>;
     };
   }>;
   instances: Array<{ pluginId: string; status: string; instanceId: string }>;
@@ -227,6 +241,7 @@ const GENERAL_HELP: Record<string, string> = {
   plugins: [
     "vivd plugins catalog",
     "vivd plugins info <pluginId>",
+    "vivd plugins read <pluginId> <readId> [--file input.json]",
     "vivd plugins config show <pluginId>",
     "vivd plugins config template <pluginId>",
     "vivd plugins config apply <pluginId> --file config.json",
@@ -245,7 +260,7 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd cms validate",
     "vivd cms helper install",
     "For Astro-backed projects, Vivd CMS reads Astro Content Collections from src/content.config.ts and entry files under src/content/**.",
-    "Use `vivd cms helper install` to add or refresh src/lib/cmsBindings.ts when a project needs CMS-aware preview text or image bindings.",
+    "Use `vivd cms helper install` to add or refresh the local CMS preview toolkit: src/lib/cmsBindings.ts plus src/lib/cms/CmsText.astro and src/lib/cms/CmsImage.astro.",
     "Bind actual CMS-owned render points, not generic layout wrappers.",
     "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
   ].join("\n"),
@@ -629,8 +644,8 @@ async function runCmsHelperInstall(cwd: string): Promise<CommandResult> {
     formatCmsScaffoldReport({
       title:
         result.created.length > 0
-          ? "CMS binding helper installed."
-          : "CMS binding helper already present.",
+          ? "CMS preview toolkit installed."
+          : "CMS preview toolkit already present.",
       created: result.created,
       skipped: result.skipped,
     }),
@@ -933,6 +948,31 @@ async function runPluginsConfigShowGeneric(
         entitled: info.entitled,
       }),
     );
+  });
+}
+
+async function runPluginReadGeneric(
+  pluginId: string,
+  readId: string,
+  flags: CliFlags,
+  cwd: string,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const filePath = flags.file?.trim();
+    const input =
+      filePath == null
+        ? {}
+        : await readJsonFile(filePath === "-" ? "-" : resolveInputPath(filePath, cwd));
+    const result = (await runtime.client.query("studioApi.getProjectPluginRead", {
+      studioId: runtime.config.studioId,
+      slug,
+      pluginId,
+      readId,
+      input,
+    })) as PluginCliReadResultPayload;
+
+    return jsonResult(result, formatGenericPluginReadReport(result));
   });
 }
 
@@ -1277,6 +1317,9 @@ export async function dispatchCli(
       }
       if (second === "info" && third) {
         return runPluginsInfoGeneric(third, parsed.flags);
+      }
+      if (second === "read" && third && rest[0]) {
+        return runPluginReadGeneric(third, rest[0], parsed.flags, cwd);
       }
       if (second === "config" && third === "show" && rest[0]) {
         return runPluginsConfigShowGeneric(rest[0], parsed.flags);

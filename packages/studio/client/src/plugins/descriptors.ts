@@ -3,12 +3,12 @@ import {
   definePluginPackageDescriptors,
 } from "@vivd/shared/types";
 import type { PluginPackageDescriptor } from "@vivd/shared/types";
-import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
+import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 
 export const studioPluginDescriptors = definePluginPackageDescriptors([
   contactFormPluginDescriptor,
-  analyticsPluginDescriptor,
+  analyticsPluginManifest,
 ] as const satisfies readonly PluginPackageDescriptor[]);
 
 export const studioSharedProjectPluginUiRegistry =

@@ -15,6 +15,7 @@ const {
   getProjectVersionMock,
   listCatalogForProjectMock,
   getPluginInfoContractMock,
+  readPluginDataMock,
   updatePluginConfigByIdMock,
   runPluginActionMock,
   renderAgentInstructionsMock,
@@ -41,6 +42,7 @@ const {
   getProjectVersionMock: vi.fn(),
   listCatalogForProjectMock: vi.fn(),
   getPluginInfoContractMock: vi.fn(),
+  readPluginDataMock: vi.fn(),
   updatePluginConfigByIdMock: vi.fn(),
   runPluginActionMock: vi.fn(),
   renderAgentInstructionsMock: vi.fn(),
@@ -116,6 +118,7 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     listCatalogForProject: listCatalogForProjectMock,
     getPluginInfoContract: getPluginInfoContractMock,
+    readPluginData: readPluginDataMock,
     updatePluginConfigById: updatePluginConfigByIdMock,
     runPluginAction: runPluginActionMock,
   },
@@ -205,6 +208,7 @@ describe("studioApi router", () => {
     getProjectVersionMock.mockReset();
     listCatalogForProjectMock.mockReset();
     getPluginInfoContractMock.mockReset();
+    readPluginDataMock.mockReset();
     updatePluginConfigByIdMock.mockReset();
     runPluginActionMock.mockReset();
     renderAgentInstructionsMock.mockReset();
@@ -436,6 +440,13 @@ describe("studioApi router", () => {
         email: "owner@example.com",
         status: "verification_sent",
         cooldownRemainingSeconds: 0,
+      },
+    });
+    readPluginDataMock.mockResolvedValue({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        enabled: true,
       },
     });
     renderAgentInstructionsMock.mockResolvedValue({
@@ -875,6 +886,46 @@ describe("studioApi router", () => {
         },
       }),
     );
+  });
+
+  it("reads generic plugin data for the project", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+    readPluginDataMock.mockResolvedValueOnce({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        enabled: true,
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+      },
+    });
+
+    const result = await caller.getProjectPluginRead({
+      studioId: "studio-1",
+      slug: "site-1",
+      pluginId: "analytics",
+      readId: "summary",
+      input: {
+        days: 30,
+      },
+    });
+
+    expect(readPluginDataMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "analytics",
+      readId: "summary",
+      input: {
+        days: 30,
+      },
+    });
+    expect(result).toEqual({
+      pluginId: "analytics",
+      readId: "summary",
+      result: {
+        enabled: true,
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+      },
+    });
   });
 
   it("runs recipient verification through the generic plugin action procedure", async () => {

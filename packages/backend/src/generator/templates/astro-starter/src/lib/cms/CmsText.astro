@@ -1,0 +1,29 @@
+---
+import { cmsTextBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
+
+interface Props {
+  collection: string;
+  entry: string;
+  field: CmsBindingFieldPath;
+  locale?: string;
+  as?: string;
+  text?: string | number;
+  [key: string]: unknown;
+}
+
+const {
+  collection,
+  entry,
+  field,
+  locale,
+  as: Tag = "span",
+  text,
+  ...htmlProps
+} = Astro.props as Props;
+
+const cmsAttrs = cmsTextBindingAttrs({ collection, entry, field, locale });
+---
+
+<Tag {...cmsAttrs} {...htmlProps}>
+  {text ?? <slot />}
+</Tag>

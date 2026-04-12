@@ -370,6 +370,13 @@ function normalizeUpdatedFieldValue(
   if (!trimmed) {
     return "";
   }
+  const strippedLeadingSlash = trimmed.replace(/^\/+/, "");
+  if (
+    strippedLeadingSlash === "src/content/media" ||
+    strippedLeadingSlash.startsWith("src/content/media/")
+  ) {
+    return buildRelativeReferencePath(entryRelativePath, strippedLeadingSlash);
+  }
   if (
     trimmed.startsWith("./") ||
     trimmed.startsWith("../") ||
@@ -440,6 +447,20 @@ const CMS_BINDING_HELPER_CANDIDATE_RELATIVE_PATHS = [
 const DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH =
   CMS_BINDING_HELPER_CANDIDATE_RELATIVE_PATHS[0]!;
 
+const DEFAULT_CMS_TEXT_COMPONENT_RELATIVE_PATH = path.join(
+  "src",
+  "lib",
+  "cms",
+  "CmsText.astro",
+);
+
+const DEFAULT_CMS_IMAGE_COMPONENT_RELATIVE_PATH = path.join(
+  "src",
+  "lib",
+  "cms",
+  "CmsImage.astro",
+);
+
 const CMS_BINDING_HELPER_SOURCE = [
   "export type CmsBindingFieldPath = string | Array<string | number>;",
   "",
@@ -503,6 +524,71 @@ const CMS_BINDING_HELPER_SOURCE = [
   "}",
 ].join("\n");
 
+const CMS_TEXT_COMPONENT_SOURCE = `---
+import { cmsTextBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
+
+interface Props {
+  collection: string;
+  entry: string;
+  field: CmsBindingFieldPath;
+  locale?: string;
+  as?: string;
+  text?: string | number;
+  [key: string]: unknown;
+}
+
+const {
+  collection,
+  entry,
+  field,
+  locale,
+  as: Tag = "span",
+  text,
+  ...htmlProps
+} = Astro.props as Props;
+
+const cmsAttrs = cmsTextBindingAttrs({ collection, entry, field, locale });
+---
+
+<Tag {...cmsAttrs} {...htmlProps}>
+  {text ?? <slot />}
+</Tag>
+`;
+
+const CMS_IMAGE_COMPONENT_SOURCE = `---
+import { Image } from "astro:assets";
+import { cmsAssetBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
+
+interface Props {
+  collection: string;
+  entry: string;
+  field: CmsBindingFieldPath;
+  locale?: string;
+  [key: string]: unknown;
+}
+
+const { collection, entry, field, locale, ...imageProps } = Astro.props as Props;
+const cmsAttrs = cmsAssetBindingAttrs({ collection, entry, field, locale });
+---
+
+<Image {...cmsAttrs} {...imageProps} />
+`;
+
+const CMS_TOOLKIT_FILE_SPECS = [
+  {
+    relativePath: DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH,
+    source: CMS_BINDING_HELPER_SOURCE,
+  },
+  {
+    relativePath: DEFAULT_CMS_TEXT_COMPONENT_RELATIVE_PATH,
+    source: CMS_TEXT_COMPONENT_SOURCE,
+  },
+  {
+    relativePath: DEFAULT_CMS_IMAGE_COMPONENT_RELATIVE_PATH,
+    source: CMS_IMAGE_COMPONENT_SOURCE,
+  },
+] as const;
+
 function normalizeTextContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
@@ -516,6 +602,29 @@ function isUpgradeableCmsBindingHelperSource(value: string): boolean {
     normalized.includes('"data-cms-field":') &&
     normalized.includes('"data-cms-kind": binding.kind')
   );
+}
+
+function isUpgradeableCmsToolkitSource(relativePath: string, value: string): boolean {
+  if (relativePath === DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH) {
+    return isUpgradeableCmsBindingHelperSource(value);
+  }
+
+  const normalized = normalizeTextContent(value);
+  if (relativePath === DEFAULT_CMS_TEXT_COMPONENT_RELATIVE_PATH) {
+    return (
+      normalized.includes('import { cmsTextBindingAttrs') &&
+      normalized.includes("cmsTextBindingAttrs({ collection, entry, field, locale })")
+    );
+  }
+
+  if (relativePath === DEFAULT_CMS_IMAGE_COMPONENT_RELATIVE_PATH) {
+    return (
+      normalized.includes('import { Image } from "astro:assets";') &&
+      normalized.includes("cmsAssetBindingAttrs({ collection, entry, field, locale })")
+    );
+  }
+
+  return false;
 }
 
 function getDefaultAstroCmsPaths(projectDir: string): CmsPaths {
@@ -1676,30 +1785,35 @@ export async function installCmsBindingHelper(projectDir: string): Promise<CmsSc
   const created: string[] = [];
   const skipped: string[] = [];
   const existingHelperPath = await findExistingCmsBindingHelperRelativePath(projectDir);
-  const desiredSource = `${CMS_BINDING_HELPER_SOURCE}\n`;
+  for (const spec of CMS_TOOLKIT_FILE_SPECS) {
+    const desiredSource = `${spec.source}\n`;
+    const relativePath =
+      spec.relativePath === DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH && existingHelperPath
+        ? existingHelperPath
+        : toPosix(spec.relativePath);
+    const absolutePath = path.join(projectDir, relativePath);
 
-  if (existingHelperPath) {
-    const absoluteHelperPath = path.join(projectDir, existingHelperPath);
-    const currentSource = await fs.readFile(absoluteHelperPath, "utf8");
-    if (normalizeTextContent(currentSource) === normalizeTextContent(desiredSource)) {
-      skipped.push(existingHelperPath);
-      return { created, skipped, paths };
+    if (await pathExists(absolutePath)) {
+      const currentSource = await fs.readFile(absolutePath, "utf8");
+      if (normalizeTextContent(currentSource) === normalizeTextContent(desiredSource)) {
+        skipped.push(relativePath);
+        continue;
+      }
+
+      if (isUpgradeableCmsToolkitSource(spec.relativePath, currentSource)) {
+        await fs.writeFile(absolutePath, desiredSource, "utf8");
+        created.push(relativePath);
+        continue;
+      }
+
+      skipped.push(relativePath);
+      continue;
     }
 
-    if (isUpgradeableCmsBindingHelperSource(currentSource)) {
-      await fs.writeFile(absoluteHelperPath, desiredSource, "utf8");
-      created.push(existingHelperPath);
-      return { created, skipped, paths };
-    }
-
-    skipped.push(existingHelperPath);
-    return { created, skipped, paths };
+    await ensureDirectory(path.dirname(absolutePath));
+    await fs.writeFile(absolutePath, desiredSource, "utf8");
+    created.push(relativePath);
   }
-
-  const helperPath = path.join(projectDir, DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH);
-  await ensureDirectory(path.dirname(helperPath));
-  await fs.writeFile(helperPath, desiredSource, "utf8");
-  created.push(toPosix(DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH));
 
   return { created, skipped, paths };
 }

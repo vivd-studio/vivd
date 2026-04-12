@@ -1,4 +1,4 @@
-import { createAnalyticsPluginBackendContribution } from "@vivd/plugin-analytics/backend/contribution";
+import { analyticsBackendPluginPackage } from "@vivd/plugin-analytics/backend/plugin";
 import { analyticsPluginDefinition } from "@vivd/plugin-analytics/backend/module";
 import { db } from "../../../db";
 import {
@@ -20,7 +20,7 @@ import {
 } from "../runtime/hostUtils";
 
 export const analyticsPluginBackendContribution =
-  createAnalyticsPluginBackendContribution({
+  analyticsBackendPluginPackage.backend.createContribution({
     db,
     tables: {
       analyticsEvent,

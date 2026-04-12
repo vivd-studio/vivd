@@ -106,6 +106,10 @@ export function renderVivdCliRootHelp(
         description: "Show plugin state, usage hints, and supported capabilities",
       },
       {
+        command: "vivd plugins read <pluginId> <readId> [--file <json>]",
+        description: "Run a declared plugin read and print its JSON result",
+      },
+      {
         command: "vivd plugins config show <pluginId>",
         description: "Print the current plugin config",
       },
@@ -134,7 +138,8 @@ export function renderVivdCliRootHelp(
       },
       {
         command: "vivd cms helper install",
-        description: "Add or refresh src/lib/cmsBindings.ts for CMS-aware preview text/image bindings",
+        description:
+          "Add or refresh the local CMS preview toolkit (src/lib/cmsBindings.ts plus src/lib/cms/CmsText.astro and CmsImage.astro)",
       },
       {
         command: "vivd cms help",

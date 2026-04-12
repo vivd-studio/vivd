@@ -42,6 +42,15 @@ export type VivdPatch =
 const normalizeLang = (lang: string) => lang.trim().toLowerCase();
 const isLanguageCode = (value: string) => /^[a-z]{2}(-[a-z]{2})?$/.test(value);
 
+function isElementLike(value: unknown): value is Element {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "getAttribute" in value &&
+      typeof (value as Element).getAttribute === "function",
+  );
+}
+
 export function detectActiveLanguage(doc: Document): string {
   try {
     const view = doc.defaultView ?? null;
@@ -95,8 +104,8 @@ export function getI18nKeyForEditableElement(el: HTMLElement): string | null {
   );
 }
 
-export function serializeI18nElementValue(i18nEl: HTMLElement): string {
-  const clone = i18nEl.cloneNode(true) as HTMLElement;
+export function serializeI18nElementValue(i18nEl: Element): string {
+  const clone = i18nEl.cloneNode(true) as Element;
 
   const helperSpans = clone.querySelectorAll<HTMLElement>(
     "[data-vivd-text-parent-selector][data-vivd-text-node-index]",
@@ -121,7 +130,7 @@ export function serializeI18nElementValue(i18nEl: HTMLElement): string {
 
 export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
   const patches: VivdPatch[] = [];
-  const i18nEdits = new Map<string, HTMLElement>();
+  const i18nEdits = new Map<string, Element>();
   // Track Astro edits by source file + location to dedupe
   const astroEdits = new Map<
     string,
@@ -194,10 +203,10 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
     const parentEl = selectorIndex.get(parentSelector) ?? null;
     const resolvedI18nEl = parentEl?.closest?.("[data-i18n]") ?? null;
     const i18nEl = resolvedI18nEl || node.closest?.("[data-i18n]");
-    if (i18nEl instanceof HTMLElement) {
+    if (isElementLike(i18nEl)) {
       const key = i18nEl.getAttribute("data-i18n") ?? "";
       if (key) {
-        i18nEdits.set(key, i18nEl);
+        i18nEdits.set(key, i18nEl as HTMLElement);
         return;
       }
     }

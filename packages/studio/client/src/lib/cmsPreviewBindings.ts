@@ -24,6 +24,17 @@ const CMS_KIND_ATTR = "data-cms-kind";
 const CMS_LOCALE_ATTR = "data-cms-locale";
 export const CMS_BINDING_SELECTOR = `[${CMS_COLLECTION_ATTR}][${CMS_ENTRY_ATTR}][${CMS_FIELD_ATTR}]`;
 
+function isElementLike(value: unknown): value is Element {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "getAttribute" in value &&
+      typeof (value as Element).getAttribute === "function" &&
+      "closest" in value &&
+      typeof (value as Element).closest === "function",
+  );
+}
+
 export function parseCmsFieldPath(rawFieldPath: string): CmsFieldPathSegment[] {
   const normalized = rawFieldPath.trim();
   if (!normalized) {
@@ -41,10 +52,8 @@ export function parseCmsFieldPath(rawFieldPath: string): CmsFieldPathSegment[] {
 
 export function readCmsBindingFromElement(element: Element | null): CmsPreviewBinding | null {
   const bindingElement =
-    element instanceof HTMLElement
-      ? element.closest(CMS_BINDING_SELECTOR)
-      : null;
-  if (!(bindingElement instanceof HTMLElement)) {
+    element && isElementLike(element) ? element.closest(CMS_BINDING_SELECTOR) : null;
+  if (!isElementLike(bindingElement)) {
     return null;
   }
 

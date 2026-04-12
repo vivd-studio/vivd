@@ -34,4 +34,26 @@ describe("cmsPreviewBindings", () => {
       kind: "text",
     });
   });
+
+  it("supports element-like objects from other windows or runtimes", () => {
+    const bindingElement = {
+      closest: () => bindingElement,
+      getAttribute: (name: string) =>
+        (
+          {
+            "data-cms-collection": "horse",
+            "data-cms-entry": "apollo",
+            "data-cms-field": "description",
+            "data-cms-kind": "text",
+          } satisfies Record<string, string>
+        )[name] ?? null,
+    } as unknown as Element;
+
+    expect(readCmsBindingFromElement(bindingElement)).toEqual({
+      modelKey: "horse",
+      entryKey: "apollo",
+      fieldPath: ["description"],
+      kind: "text",
+    });
+  });
 });

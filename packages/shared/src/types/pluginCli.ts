@@ -12,6 +12,20 @@ export interface PluginCliActionDefinition {
   arguments: PluginCliActionArgumentDefinition[];
 }
 
+export interface PluginCliReadArgumentDefinition {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+}
+
+export interface PluginCliReadDefinition {
+  readId: string;
+  title: string;
+  description: string;
+  arguments: PluginCliReadArgumentDefinition[];
+}
+
 export interface PluginCliConfigCapability {
   supportsShow: boolean;
   supportsApply: boolean;
@@ -26,6 +40,7 @@ export interface PluginCliCatalogEntry {
     supportsInfo: boolean;
     config: PluginCliConfigCapability | null;
     actions: PluginCliActionDefinition[];
+    reads?: PluginCliReadDefinition[];
   };
 }
 
@@ -88,6 +103,12 @@ export interface PluginCliActionResultPayload {
   pluginId: string;
   actionId: string;
   summary: string;
+  result: unknown;
+}
+
+export interface PluginCliReadResultPayload {
+  pluginId: string;
+  readId: string;
   result: unknown;
 }
 

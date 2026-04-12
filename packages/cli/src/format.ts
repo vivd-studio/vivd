@@ -25,6 +25,12 @@ function formatPluginCommandHints(pluginId: string, plugin: {
         name: string;
       }>;
     }>;
+    reads?: Array<{
+      readId: string;
+      arguments?: Array<{
+        name: string;
+      }>;
+    }>;
   };
 }): string {
   const commands: string[] = [];
@@ -46,6 +52,13 @@ function formatPluginCommandHints(pluginId: string, plugin: {
         ? ` ${action.arguments.map((arg) => `<${arg.name}>`).join(" ")}`
         : "";
     commands.push(`action ${pluginId} ${action.actionId}${args}`);
+  }
+  for (const read of plugin.capabilities?.reads ?? []) {
+    const args =
+      read.arguments && read.arguments.length > 0
+        ? " --file input.json"
+        : "";
+    commands.push(`read ${pluginId} ${read.readId}${args}`);
   }
 
   return commands.length > 0 ? commands.join(" | ") : "none";
@@ -400,6 +413,12 @@ export function formatPluginCatalogReport(input: {
           name: string;
         }>;
       }>;
+      reads?: Array<{
+        readId: string;
+        arguments?: Array<{
+          name: string;
+        }>;
+      }>;
     };
   }>;
   instances: Array<{ pluginId: string; status: string; instanceId?: string }>;
@@ -438,6 +457,13 @@ export function formatGenericPluginInfoReport(input: {
           name: string;
         }>;
       }>;
+      reads?: Array<{
+        readId: string;
+        title: string;
+        arguments: Array<{
+          name: string;
+        }>;
+      }>;
     };
   };
   entitled: boolean;
@@ -458,6 +484,16 @@ export function formatGenericPluginInfoReport(input: {
               ? ` ${action.arguments.map((arg) => `<${arg.name}>`).join(" ")}`
               : "";
           return `- ${action.actionId}${args} - ${action.title}`;
+        })
+      : ["- none"];
+  const readLines =
+    (input.catalog.capabilities.reads ?? []).length > 0
+      ? (input.catalog.capabilities.reads ?? []).map((read) => {
+          const args =
+            read.arguments.length > 0
+              ? ` ${read.arguments.map((arg) => `<${arg.name}>`).join(" ")}`
+              : "";
+          return `- ${read.readId}${args} - ${read.title}`;
         })
       : ["- none"];
 
@@ -483,6 +519,8 @@ export function formatGenericPluginInfoReport(input: {
     }`,
     "Actions:",
     ...actionLines,
+    "Reads:",
+    ...readLines,
     "Usage:",
     formatJson(input.usage ?? {}),
     "Current config:",
@@ -552,6 +590,18 @@ export function formatGenericPluginActionReport(input: {
     input.summary,
     `Plugin: ${input.pluginId}`,
     `Action: ${input.actionId}`,
+    formatJson(input.result),
+  ].join("\n");
+}
+
+export function formatGenericPluginReadReport(input: {
+  pluginId: string;
+  readId: string;
+  result: unknown;
+}): string {
+  return [
+    `Plugin: ${input.pluginId}`,
+    `Read: ${input.readId}`,
     formatJson(input.result),
   ].join("\n");
 }
