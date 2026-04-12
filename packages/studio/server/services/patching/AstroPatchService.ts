@@ -19,6 +19,102 @@ export interface ApplyAstroPatchesResult {
   errors: Array<{ file: string; reason: string }>;
 }
 
+type AstroTextMatch =
+  | { kind: "match"; start: number; end: number; value: string }
+  | { kind: "ambiguous"; sample: string }
+  | { kind: "missing"; sample: string };
+
+function truncateForReason(value: string): string {
+  return `${value.slice(0, 50)}${value.length > 50 ? "..." : ""}`;
+}
+
+function parseSourceOffset(content: string, sourceLoc?: string): number | null {
+  if (!sourceLoc) return null;
+  const match = sourceLoc.match(/^(\d+):(\d+)$/);
+  if (!match) return null;
+
+  const line = Number(match[1]);
+  const column = Number(match[2]);
+  if (!Number.isFinite(line) || !Number.isFinite(column) || line < 1 || column < 1) {
+    return null;
+  }
+
+  let offset = 0;
+  let currentLine = 1;
+  while (currentLine < line && offset < content.length) {
+    const nextNewline = content.indexOf("\n", offset);
+    if (nextNewline === -1) {
+      return content.length;
+    }
+    offset = nextNewline + 1;
+    currentLine += 1;
+  }
+
+  return Math.min(offset + column - 1, content.length);
+}
+
+function findAllOccurrences(content: string, search: string): number[] {
+  if (!search) return [];
+  const matches: number[] = [];
+  let start = 0;
+  while (start <= content.length) {
+    const index = content.indexOf(search, start);
+    if (index === -1) break;
+    matches.push(index);
+    start = index + search.length;
+  }
+  return matches;
+}
+
+function selectOccurrence(
+  content: string,
+  search: string,
+  sourceLoc?: string,
+): AstroTextMatch {
+  const occurrences = findAllOccurrences(content, search);
+  if (occurrences.length === 0) {
+    return { kind: "missing", sample: truncateForReason(search) };
+  }
+
+  const targetOffset = parseSourceOffset(content, sourceLoc);
+  if (targetOffset != null) {
+    const nearest = occurrences.reduce((best, current) =>
+      Math.abs(current - targetOffset) < Math.abs(best - targetOffset) ? current : best,
+    );
+    return {
+      kind: "match",
+      start: nearest,
+      end: nearest + search.length,
+      value: search,
+    };
+  }
+
+  if (occurrences.length > 1) {
+    return { kind: "ambiguous", sample: truncateForReason(search) };
+  }
+
+  return {
+    kind: "match",
+    start: occurrences[0]!,
+    end: occurrences[0]! + search.length,
+    value: search,
+  };
+}
+
+function resolveAstroTextMatch(content: string, patch: AstroTextPatch): AstroTextMatch {
+  const exact = selectOccurrence(content, patch.oldValue, patch.sourceLoc);
+  if (exact.kind !== "missing") {
+    return exact;
+  }
+
+  const trimmed = patch.oldValue.trim();
+  if (!trimmed || trimmed === patch.oldValue) {
+    return exact;
+  }
+
+  return selectOccurrence(content, trimmed, patch.sourceLoc);
+}
+
 /**
  * Apply text patches to Astro source files.
  *
@@ -98,30 +194,21 @@ export function applyAstroPatches(
         continue;
       }
 
-      // Try exact match first
-      if (modified.includes(patch.oldValue)) {
-        // Replace only the first occurrence to avoid unintended changes
-        modified = modified.replace(patch.oldValue, patch.newValue);
+      const match = resolveAstroTextMatch(modified, patch);
+      if (match.kind === "match") {
+        const replacement = match.value === patch.oldValue ? patch.newValue : patch.newValue.trim();
+        modified = `${modified.slice(0, match.start)}${replacement}${modified.slice(match.end)}`;
         fileApplied++;
         continue;
       }
 
-      // Try with normalized whitespace (trim leading/trailing but not internal)
-      // This helps when editor adds/removes trailing spaces
-      const oldTrimmed = patch.oldValue.trim();
-      if (modified.includes(oldTrimmed)) {
-        modified = modified.replace(oldTrimmed, patch.newValue.trim());
-        fileApplied++;
-        continue;
-      }
-
-      // Could not find the text to replace
       fileSkipped++;
       result.errors.push({
         file: relativeFile,
-        reason: `Text not found: "${patch.oldValue.slice(0, 50)}${
-          patch.oldValue.length > 50 ? "..." : ""
-        }"`,
+        reason:
+          match.kind === "ambiguous"
+            ? `Ambiguous text match: "${match.sample}"`
+            : `Text not found: "${match.sample}"`,
       });
     }
 

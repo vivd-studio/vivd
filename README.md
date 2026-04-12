@@ -4,7 +4,7 @@
 
 **Build websites by talking to AI**
 
-An AI-powered website builder that turns a brief, a reference site, or a conversation into a live website. Fair-code and self-hostable, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
+An AI-powered website builder and agentic website workflow that turns a brief, a reference site, or a conversation into a live website. Fair-code and self-hostable, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
 
 [Public Docs](https://docs.vivd.studio) · [Features](https://docs.vivd.studio/features/) · [Development](#development) · [Self-Hosting](#self-hosting)
 
@@ -16,15 +16,23 @@ An AI-powered website builder that turns a brief, a reference site, or a convers
 
 ## What vivd is
 
-vivd is a website builder where AI is the interface. Instead of bouncing between a CMS, design tools, hosting dashboards, and hand-written edits, you create a project, describe what you want, and refine it in one place.
+vivd is a website builder where AI is the interface. The practical goal is closer to "AI web agency in product form" than "chat on top of a toy editor": you create a project, describe what you want, and keep moving from first idea to the live site in one system.
 
 You can start from scratch or import an existing website, then keep shaping it in Studio with chat, direct edits, assets, preview, plugins, and publishing flows that all belong to the same project instead of a chain of separate tools.
 
 ![Vivd branded landing page shown beside the Studio chat workspace and embedded project preview](assets/new-screenshots/vivd-studio-vivd-dark.png)
 
-Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, so the agent works inside real project files rather than a toy canvas. That technical split matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, and solve publishing as part of the same system instead of handing you off to another stack at the end.
+Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, so the agent works inside real project files rather than a toy canvas. In Astro-backed projects that means a real Astro workspace with Astro primitives, not a locked black-box builder. That matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, wire plugins into the same project, and solve publishing as part of the same system instead of handing you off to another stack at the end.
 
 Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the same product can work as a hosted platform or as your own one-host deployment.
+
+## Current Product Shape
+
+- Public docs and the `solo` self-host path are open today.
+- The hosted multi-org `platform` product is still invite-led / closed-beta rather than broadly open signup.
+- Astro and plain HTML are the current website project targets, with Astro content collections acting as the structured CMS source of truth where supported.
+- First-party plugin extraction is underway; Contact Form and Analytics already ship as extracted plugin packages behind generic host contracts.
+- A dedicated artifact-builder runtime exists behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but it remains dark-launched until the end-to-end path is production-verified.
 
 Public product docs live in `packages/docs`. Internal planning and architecture notes live in `docs/`.
 
@@ -32,9 +40,9 @@ Public product docs live in `packages/docs`. Internal planning and architecture 
 
 - start from scratch from a brief, design references, and brand assets
 - import an existing website or ZIP into a first draft
-- refine the project in Studio with AI chat, direct edits, preview, files, and assets
-- create and edit images with AI, then keep plugins and analytics inside the same project flow
-- publish to the live domain and self-host the stack when needed
+- refine the project in Studio with AI chat, direct edits, preview, files, assets, and structured CMS flows
+- keep plugins such as Contact Form and Analytics inside the same project flow, with more first-party plugin work in progress
+- publish to the live domain and keep self-hosting as a first-class path instead of a sidecar afterthought
 
 ## What the agent can actually do
 
@@ -42,9 +50,10 @@ The agent in Vivd is not limited to rewriting copy. It can work across the real 
 
 - create and restructure pages, components, styles, and content in the workspace
 - generate images and add them directly into the site
-- add first-party Vivd plugins such as Contact Form and Analytics
-- fetch the plugin information it needs from Vivd itself and wire those plugins into the page autonomously
-- keep working all the way through preview and publishing instead of stopping at mockups
+- add first-party Vivd plugins such as Contact Form and Analytics, and wire plugin-backed features into the real project
+- fetch the plugin information it needs from Vivd itself and use platform-side capabilities instead of stopping at generic chat suggestions
+- keep working all the way through preview, publishing, and the broader website lifecycle instead of stopping at mockups
+- operate on a real Astro project/workspace where supported, so the result is portable and not trapped in Vivd
 
 That is a core part of the product: Vivd ships platform capabilities the agent can actually use, not just a chat box around an LLM. More first-party plugins are planned over time.
 
@@ -52,11 +61,13 @@ That is a core part of the product: Vivd ships platform capabilities the agent c
 
 - `packages/frontend` and `packages/backend` power the main app and control plane.
 - `packages/studio` is the isolated Studio runtime where editing and agent work happen.
+- `packages/cli` is the operator/user CLI surface for connected runtime and platform actions.
 - `packages/scraper` is the dedicated website import/scraping service.
 - `packages/docs` is the public docs site.
 - `packages/shared` holds shared config, contracts, and types used across services.
 - `packages/theme` contains shared design tokens and theme styles.
 - `packages/builder` is the dedicated artifact-builder runtime that is currently still dark-launched.
+- `packages/plugin-*` contains extracted first-party plugin packages such as Contact Form and Analytics.
 - `docs/` holds internal notes, planning, and architecture material.
 
 ## Development
@@ -111,7 +122,7 @@ For tests, prefer targeted runs in the areas you changed before reaching for the
 
 ## Self-Hosting
 
-The public self-host install/docs path currently focuses on `solo`. The hosted Vivd product itself runs the multi-org `platform` mode.
+The public self-host install/docs path currently focuses on `solo`. The hosted Vivd product itself runs the multi-org `platform` mode and is still invite-led rather than broadly open.
 
 Vivd currently ships a first-party `solo` self-host path:
 

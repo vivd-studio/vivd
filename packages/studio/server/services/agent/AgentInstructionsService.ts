@@ -56,6 +56,10 @@ function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
   return fallback;
 }
 
+function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean((env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim());
+}
+
 function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: boolean): string {
   return renderDefaultVivdAgentInstructions({
     projectName: projectSlug,
@@ -65,6 +69,7 @@ function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: b
       process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
       false,
     ),
+    supportRequestEnabled: isSupportRequestEnabled(process.env),
   });
 }
 

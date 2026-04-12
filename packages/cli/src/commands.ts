@@ -8,6 +8,7 @@ import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "
 import { resolveCliRuntime } from "./backend.js";
 import {
   getCmsStatus,
+  installCmsBindingHelper,
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
@@ -230,7 +231,7 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins config template <pluginId>",
     "vivd plugins config apply <pluginId> --file config.json",
     "vivd plugins action <pluginId> <actionId> [args...]",
-    "Legacy aliases still work for current first-party plugins:",
+    "Current first-party shortcut examples:",
     "vivd plugins contact info",
     "vivd plugins contact config show",
     "vivd plugins contact config template",
@@ -242,11 +243,10 @@ const GENERAL_HELP: Record<string, string> = {
   cms: [
     "vivd cms status",
     "vivd cms validate",
-    "vivd cms scaffold init",
-    "vivd cms scaffold model <key>",
-    "vivd cms scaffold entry <model-key> <entry-key>",
+    "vivd cms helper install",
     "For Astro-backed projects, Vivd CMS reads Astro Content Collections from src/content.config.ts and entry files under src/content/**.",
-    "The scaffold commands are legacy YAML helpers and do not apply to Astro-native collections.",
+    "Use `vivd cms helper install` to add or refresh src/lib/cmsBindings.ts when a project needs CMS-aware preview text or image bindings.",
+    "Bind actual CMS-owned render points, not generic layout wrappers.",
     "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
   ].join("\n"),
   publish: [
@@ -266,8 +266,6 @@ const GENERAL_HELP: Record<string, string> = {
     'Example: vivd support request enable analytics for this project --note "Customer approved contacting support"',
   ].join("\n"),
 };
-
-const DEFAULT_SUPPORT_EMAIL = "support@vivd.studio";
 
 function jsonResult(data: unknown, human: string, exitCode?: number): CommandResult {
   return { data, human, exitCode };
@@ -384,6 +382,7 @@ function isPreviewScreenshotCliEnabled(env: NodeJS.ProcessEnv = process.env): bo
 function getRootHelpText(env: NodeJS.ProcessEnv = process.env): string {
   return renderVivdCliRootHelp({
     previewScreenshotEnabled: isPreviewScreenshotCliEnabled(env),
+    supportRequestEnabled: isSupportRequestEnabled(env),
   });
 }
 
@@ -510,8 +509,9 @@ async function withRuntime<T>(
 
 function helpTextFor(topic: string[]): string {
   const normalized = topic.join(" ").trim();
+  const supportRequestEnabled = isSupportRequestEnabled();
   if (!normalized || normalized === "root") {
-    return getRootHelpText();
+    return getRootHelpText(process.env);
   }
   if (normalized.startsWith("preview")) {
     return getPreviewHelpText();
@@ -534,14 +534,21 @@ function helpTextFor(topic: string[]): string {
     return GENERAL_HELP.publish;
   }
   if (normalized.startsWith("support")) {
+    if (!supportRequestEnabled) {
+      return "Support contact is not configured for this runtime.";
+    }
     return getSupportHelpText();
   }
-  return getRootHelpText();
+  return getRootHelpText(process.env);
 }
 
-function resolveSupportEmail(env: NodeJS.ProcessEnv = process.env): string {
+function resolveSupportEmail(env: NodeJS.ProcessEnv = process.env): string | null {
   const configured = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
-  return configured || DEFAULT_SUPPORT_EMAIL;
+  return configured || null;
+}
+
+function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(resolveSupportEmail(env));
 }
 
 function buildSupportRequestSubject(projectSlug: string | null): string {
@@ -612,6 +619,21 @@ async function runCmsValidate(cwd: string): Promise<CommandResult> {
       errors: report.errors,
     }),
     report.valid ? 0 : 1,
+  );
+}
+
+async function runCmsHelperInstall(cwd: string): Promise<CommandResult> {
+  const result = await installCmsBindingHelper(cwd);
+  return jsonResult(
+    result,
+    formatCmsScaffoldReport({
+      title:
+        result.created.length > 0
+          ? "CMS binding helper installed."
+          : "CMS binding helper already present.",
+      created: result.created,
+      skipped: result.skipped,
+    }),
   );
 }
 
@@ -1114,6 +1136,11 @@ async function runSupportRequest(
   summaryTokens: string[],
   flags: CliFlags,
 ): Promise<CommandResult> {
+  const recipient = resolveSupportEmail();
+  if (!recipient) {
+    throw new Error("Support contact is not configured for this runtime.");
+  }
+
   const summary = summaryTokens.join(" ").trim();
   if (!summary) {
     throw new Error(
@@ -1144,7 +1171,6 @@ async function runSupportRequest(
     }
   }
 
-  const recipient = resolveSupportEmail();
   const subject = buildSupportRequestSubject(projectSlug);
   const body = buildSupportRequestBody({
     summary,
@@ -1211,6 +1237,9 @@ export async function dispatchCli(
       }
       if (second === "validate") {
         return runCmsValidate(cwd);
+      }
+      if (second === "helper" && third === "install") {
+        return runCmsHelperInstall(cwd);
       }
       if (second === "scaffold" && third === "init") {
         return runCmsScaffoldInit(cwd);

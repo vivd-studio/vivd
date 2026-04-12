@@ -1,5 +1,6 @@
 export interface RenderVivdCliRootHelpInput {
   previewScreenshotEnabled?: boolean;
+  supportRequestEnabled?: boolean;
 }
 
 type HelpEntry = {
@@ -44,6 +45,33 @@ export function renderVivdCliRootHelp(
       description: "Capture a preview screenshot (experimental; saved under .vivd/dropped-images/ by default)",
     });
   }
+
+  const supportSection = input.supportRequestEnabled
+    ? [
+        "",
+        ...formatHelpSection("SUPPORT", [
+          {
+            command: "vivd support request <summary...>",
+            description:
+              "Draft a support email with project context; only use after the user explicitly approves contacting support",
+          },
+          {
+            command: "vivd support help",
+            description: "Show support-contact guidance and consent requirements",
+          },
+        ]),
+      ]
+    : [];
+
+  const supportExamples = input.supportRequestEnabled
+    ? ["$ vivd support request enable analytics for this project"]
+    : [];
+
+  const supportDiscoverMore = input.supportRequestEnabled
+    ? [
+        "If support intervention is needed, use `vivd support request ...` only after the user explicitly approves contacting support on their behalf.",
+      ]
+    : [];
 
   return [
     "Work with the connected Vivd project, preview runtime, plugins, local CMS workspace, and publish workflow.",
@@ -105,16 +133,8 @@ export function renderVivdCliRootHelp(
         description: "Validate Astro content collections and entry files without a connected runtime",
       },
       {
-        command: "vivd cms scaffold init",
-        description: "Legacy YAML CMS only: create the baseline local CMS structure",
-      },
-      {
-        command: "vivd cms scaffold model <key>",
-        description: "Legacy YAML CMS only: create a starter schema/model file",
-      },
-      {
-        command: "vivd cms scaffold entry <model-key> <entry-key>",
-        description: "Legacy YAML CMS only: create a starter content entry file",
+        command: "vivd cms helper install",
+        description: "Add or refresh src/lib/cmsBindings.ts for CMS-aware preview text/image bindings",
       },
       {
         command: "vivd cms help",
@@ -140,18 +160,7 @@ export function renderVivdCliRootHelp(
         description: "Show checklist workflow details",
       },
     ]),
-    "",
-    ...formatHelpSection("SUPPORT", [
-      {
-        command: "vivd support request <summary...>",
-        description:
-          "Draft a support email with project context; only use after the user explicitly approves contacting support",
-      },
-      {
-        command: "vivd support help",
-        description: "Show support-contact guidance and consent requirements",
-      },
-    ]),
+    ...supportSection,
     "",
     ...formatHelpSection("GLOBAL FLAGS", [
       {
@@ -177,13 +186,13 @@ export function renderVivdCliRootHelp(
       "$ vivd preview status",
       "$ vivd plugins catalog",
       "$ vivd publish checklist show",
-      "$ vivd support request enable analytics for this project",
+      ...supportExamples,
     ]),
     "",
     ...formatHelpListSection("DISCOVER MORE", [
       "Use `vivd <command> help` for command-specific flags, examples, and subcommands.",
       "Start with `vivd plugins catalog` to discover plugin IDs, then `vivd plugins info <pluginId>`.",
-      "If support intervention is needed, use `vivd support request ...` only after the user explicitly approves contacting support on their behalf.",
+      ...supportDiscoverMore,
       "Connected commands need MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN.",
     ]),
   ].join("\n");

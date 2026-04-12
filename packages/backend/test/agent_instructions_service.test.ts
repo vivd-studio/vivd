@@ -17,9 +17,11 @@ describe("AgentInstructionsService", () => {
   beforeEach(() => {
     getSystemSettingValueMock.mockReset();
     getSystemSettingValueMock.mockResolvedValue(null);
+    delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
   });
 
   it("renders default template with source context and enabled plugins", async () => {
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
     const result = await agentInstructionsService.render({
       projectName: "Acme",
       source: "url",
@@ -64,7 +66,9 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("Do not point page markup at raw filesystem-like `src/content/media/...` paths");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
     expect(result.instructions).toContain("vivd cms validate");
-    expect(result.instructions).toContain("drafting a support request with `vivd support request ...`");
+    expect(result.instructions).toContain(
+      "the agent may prepare a support request with `vivd support request ...` on the user's behalf",
+    );
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");
     expect(result.instructions).toContain(".vivd/dropped-images/");
@@ -78,6 +82,19 @@ describe("AgentInstructionsService", () => {
     );
     expect(result.instructions).toContain("User messages may contain `<vivd-internal ... />`");
     expect(result.instructionsHash).toHaveLength(64);
+  });
+
+  it("omits support-command guidance when support email is not configured", async () => {
+    const result = await agentInstructionsService.render({
+      projectName: "Acme",
+      source: "url",
+      enabledPlugins: ["contact_form"],
+    });
+
+    expect(result.instructions).not.toContain("vivd support request");
+    expect(result.instructions).not.toContain(
+      "contacting Vivd support on the user's behalf",
+    );
   });
 
   it("uses custom template from system settings with token replacement", async () => {

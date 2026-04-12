@@ -43,6 +43,8 @@ services:
       VIVD_SELFHOST_UPDATE_HELPER_IMAGE: ${VIVD_SELFHOST_UPDATE_HELPER_IMAGE:-docker:28-cli}
       VIVD_BUCKET_MODE: local
       SCRAPER_API_KEY: ${SCRAPER_API_KEY}
+      VIVD_ANALYTICS_GEOLOCATION_MODE: ${VIVD_ANALYTICS_GEOLOCATION_MODE:-auto}
+      VIVD_ANALYTICS_GEOIP_DB_PATH: ${VIVD_ANALYTICS_GEOIP_DB_PATH:-/app/geoip/GeoLite2-Country.mmdb}
       VIVD_LOCAL_S3_ACCESS_KEY: ${VIVD_LOCAL_S3_ACCESS_KEY}
       VIVD_LOCAL_S3_SECRET_KEY: ${VIVD_LOCAL_S3_SECRET_KEY}
       DOCKER_STUDIO_IMAGE: ghcr.io/vivd-studio/vivd-studio:${VIVD_SELFHOST_IMAGE_TAG:-latest}
@@ -52,6 +54,7 @@ services:
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
+      - ./geoip:/app/geoip:ro
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./:/srv/selfhost:ro
       - /var/run/docker.sock:/var/run/docker.sock

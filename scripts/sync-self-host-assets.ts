@@ -12,7 +12,16 @@ function composeVar(name: string, fallback?: string): string {
   return `\${${name}:-${fallback}}`;
 }
 
-function renderSoloSelfHostComposeBundle(): string {
+const opencodeModelEnvNames = [
+  "OPENCODE_MODEL_STANDARD",
+  "OPENCODE_MODEL_STANDARD_VARIANT",
+  "OPENCODE_MODEL_ADVANCED",
+  "OPENCODE_MODEL_ADVANCED_VARIANT",
+  "OPENCODE_MODEL_PRO",
+  "OPENCODE_MODEL_PRO_VARIANT",
+] as const;
+
+export function renderSoloSelfHostComposeBundle(): string {
   const defaults = soloSelfHostDefaults;
   const selfHostImageTag = composeVar("VIVD_SELFHOST_IMAGE_TAG", "latest");
   const networkName = defaults.dockerStudioNetwork;
@@ -56,9 +65,9 @@ function renderSoloSelfHostComposeBundle(): string {
     `      - GOOGLE_APPLICATION_CREDENTIALS=${composeVar("GOOGLE_APPLICATION_CREDENTIALS", "")}`,
     `      - GOOGLE_APPLICATION_CREDENTIALS_JSON=${composeVar("GOOGLE_APPLICATION_CREDENTIALS_JSON", "")}`,
     `      - VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH=${composeVar("VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH", "")}`,
-    `      - OPENCODE_MODEL_STANDARD=${composeVar("OPENCODE_MODEL_STANDARD", "")}`,
-    `      - OPENCODE_MODEL_ADVANCED=${composeVar("OPENCODE_MODEL_ADVANCED", "")}`,
-    `      - OPENCODE_MODEL_PRO=${composeVar("OPENCODE_MODEL_PRO", "")}`,
+    ...opencodeModelEnvNames.map(
+      (name) => `      - ${name}=${composeVar(name, "")}`,
+    ),
     `      - DOMAIN=${composeVar("DOMAIN")}`,
     `      - BETTER_AUTH_URL=${composeVar("BETTER_AUTH_URL", "")}`,
     `      - VIVD_SCRATCH_CREATION_MODE=${composeVar("VIVD_SCRATCH_CREATION_MODE", defaults.scratchCreationMode)}`,
@@ -77,6 +86,8 @@ function renderSoloSelfHostComposeBundle(): string {
     `      - CADDY_RUNTIME_ROUTES_DIR=${defaults.caddyRuntimeRoutesDir}`,
     `      - CADDY_ADMIN_URL=${defaults.caddyAdminUrl}`,
     `      - SCRAPER_API_KEY=${composeVar("SCRAPER_API_KEY")}`,
+    `      - VIVD_ANALYTICS_GEOLOCATION_MODE=${composeVar("VIVD_ANALYTICS_GEOLOCATION_MODE", "auto")}`,
+    `      - VIVD_ANALYTICS_GEOIP_DB_PATH=${composeVar("VIVD_ANALYTICS_GEOIP_DB_PATH", "/app/geoip/GeoLite2-Country.mmdb")}`,
     `      - CLOUDFLARE_ACCOUNT_ID=${composeVar("CLOUDFLARE_ACCOUNT_ID", "")}`,
     `      - CLOUDFLARE_API_TOKEN=${composeVar("CLOUDFLARE_API_TOKEN", "")}`,
     `      - VIVD_BUCKET_MODE=${composeVar("VIVD_BUCKET_MODE", defaults.bucketMode)}`,
@@ -144,6 +155,7 @@ function renderSoloSelfHostComposeBundle(): string {
     `      - published_sites:${defaults.publishedDir}`,
     `      - caddy_sites:${defaults.caddySitesDir}`,
     `      - caddy_runtime_routes:${defaults.caddyRuntimeRoutesDir}`,
+    "      - ./geoip:/app/geoip:ro",
     "      - ./Caddyfile:/etc/caddy/Caddyfile",
     "      - ./:/srv/selfhost:ro",
     `      - ${defaults.dockerStudioSocketPath}:${defaults.dockerStudioSocketPath}`,
@@ -313,6 +325,8 @@ function renderSoloSelfHostMinimalCompose(): string {
     `      VIVD_SELFHOST_UPDATE_HELPER_IMAGE: ${composeVar("VIVD_SELFHOST_UPDATE_HELPER_IMAGE", "docker:28-cli")}`,
     `      VIVD_BUCKET_MODE: ${defaults.bucketMode}`,
     `      SCRAPER_API_KEY: ${composeVar("SCRAPER_API_KEY")}`,
+    `      VIVD_ANALYTICS_GEOLOCATION_MODE: ${composeVar("VIVD_ANALYTICS_GEOLOCATION_MODE", "auto")}`,
+    `      VIVD_ANALYTICS_GEOIP_DB_PATH: ${composeVar("VIVD_ANALYTICS_GEOIP_DB_PATH", "/app/geoip/GeoLite2-Country.mmdb")}`,
     `      VIVD_LOCAL_S3_ACCESS_KEY: ${composeVar("VIVD_LOCAL_S3_ACCESS_KEY")}`,
     `      VIVD_LOCAL_S3_SECRET_KEY: ${composeVar("VIVD_LOCAL_S3_SECRET_KEY")}`,
     `      DOCKER_STUDIO_IMAGE: ${defaults.dockerStudioImageRepository}:${selfHostImageTag}`,
@@ -322,6 +336,7 @@ function renderSoloSelfHostMinimalCompose(): string {
     `      - published_sites:${defaults.publishedDir}`,
     `      - caddy_sites:${defaults.caddySitesDir}`,
     `      - caddy_runtime_routes:${defaults.caddyRuntimeRoutesDir}`,
+    "      - ./geoip:/app/geoip:ro",
     "      - ./Caddyfile:/etc/caddy/Caddyfile",
     "      - ./:/srv/selfhost:ro",
     `      - ${defaults.dockerStudioSocketPath}:${defaults.dockerStudioSocketPath}`,
@@ -489,7 +504,9 @@ async function main(): Promise<void> {
   await syncInstallScript();
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

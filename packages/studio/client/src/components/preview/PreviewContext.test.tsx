@@ -7,11 +7,13 @@ import { PreviewProvider, usePreview } from "./PreviewContext";
 const mocks = vi.hoisted(() => ({
   invalidateProjectListMock: vi.fn(),
   invalidateGitChangesMock: vi.fn(),
+  invalidateCmsStatusMock: vi.fn(),
   cancelPreviewInfoMock: vi.fn(),
   invalidatePreviewInfoMock: vi.fn(),
   setCurrentVersionMock: vi.fn(),
   keepAliveDevServerMock: vi.fn(),
   applyHtmlPatchesMock: vi.fn(),
+  applyPreviewFieldUpdatesMock: vi.fn(),
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -24,6 +26,9 @@ vi.mock("@/lib/trpc", () => ({
           cancel: mocks.cancelPreviewInfoMock,
           invalidate: mocks.invalidatePreviewInfoMock,
         },
+      },
+      cms: {
+        status: { invalidate: mocks.invalidateCmsStatusMock },
       },
     }),
     project: {
@@ -75,6 +80,14 @@ vi.mock("@/lib/trpc", () => ({
       applyHtmlPatches: {
         useMutation: () => ({
           mutate: mocks.applyHtmlPatchesMock,
+          isPending: false,
+        }),
+      },
+    },
+    cms: {
+      applyPreviewFieldUpdates: {
+        useMutation: () => ({
+          mutate: mocks.applyPreviewFieldUpdatesMock,
           isPending: false,
         }),
       },
@@ -208,11 +221,13 @@ describe("PreviewProvider workspace surfaces", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     mocks.invalidateProjectListMock.mockReset();
     mocks.invalidateGitChangesMock.mockReset();
+    mocks.invalidateCmsStatusMock.mockReset();
     mocks.cancelPreviewInfoMock.mockReset();
     mocks.invalidatePreviewInfoMock.mockReset();
     mocks.setCurrentVersionMock.mockReset();
     mocks.keepAliveDevServerMock.mockReset();
     mocks.applyHtmlPatchesMock.mockReset();
+    mocks.applyPreviewFieldUpdatesMock.mockReset();
   });
 
   afterEach(() => {

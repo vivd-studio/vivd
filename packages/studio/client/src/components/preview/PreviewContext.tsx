@@ -24,6 +24,8 @@ import {
 } from "@/app/config/polling";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useImageDropZone } from "./useImageDropZone";
+import { usePreviewWorkspaceSurface } from "./usePreviewWorkspaceSurface";
+import { usePreviewIframeLoading } from "./usePreviewIframeLoading";
 import {
   DEVICE_PRESETS,
   TABLET_PRESET,
@@ -80,13 +82,6 @@ interface SelectedElement {
   astroSourceFile?: string | null;
   astroSourceLoc?: string | null;
 }
-
-type WorkspaceSurface =
-  | { kind: "none" }
-  | { kind: "cms" }
-  | { kind: "text"; path: string }
-  | { kind: "image"; path: string }
-  | { kind: "pdf"; path: string };
 
 interface PreviewContextValue {
   // Props
@@ -249,12 +244,24 @@ export function PreviewProvider({
   const [assetsOpenState, setAssetsOpenState] = useState(
     initialPanelState.assetsOpen,
   );
-  const [cmsOpenState, setCmsOpenState] = useState(false);
   const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [iframeLoading, setIframeLoading] = useState(true);
-  const iframeLoadingDelayTimerRef = useRef<number | null>(null);
-  const iframeLoadWatchdogRef = useRef<number | null>(null);
+  const {
+    cmsOpenState,
+    setCmsOpen,
+    editingTextFileState,
+    setEditingTextFile,
+    viewingImagePathState,
+    setViewingImagePath,
+    viewingPdfPathState,
+    setViewingPdfPath,
+  } = usePreviewWorkspaceSurface();
+  const {
+    iframeLoading,
+    beginIframeLoading,
+    beginIframeNavigationLoading,
+    endIframeLoading,
+  } = usePreviewIframeLoading();
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
   const [viewportMode, setViewportModeState] = useState<ViewportMode>(() => {
     if (typeof window === "undefined") return "desktop";
@@ -302,14 +309,6 @@ export function PreviewProvider({
   const [pendingNewSessionRequestId, setPendingNewSessionRequestId] = useState<
     number | null
   >(null);
-  const [editingTextFileState, setEditingTextFileState] = useState<string | null>(
-    null,
-  );
-  const [viewingImagePathState, setViewingImagePathState] = useState<string | null>(
-    null,
-  );
-  const [viewingPdfPathState, setViewingPdfPathState] = useState<string | null>(null);
-  const [workspaceHistory, setWorkspaceHistory] = useState<WorkspaceSurface[]>([]);
   const [editingAsset, setEditingAsset] = useState<
     AssetItem | FileTreeNode | null
   >(null);
@@ -331,166 +330,6 @@ export function PreviewProvider({
   const setAssetsOpen = useCallback((open: boolean) => {
     setAssetsOpenState(open);
   }, []);
-
-  const currentWorkspace = useMemo<WorkspaceSurface>(() => {
-    if (editingTextFileState) {
-      return { kind: "text", path: editingTextFileState };
-    }
-    if (viewingImagePathState) {
-      return { kind: "image", path: viewingImagePathState };
-    }
-    if (viewingPdfPathState) {
-      return { kind: "pdf", path: viewingPdfPathState };
-    }
-    if (cmsOpenState) {
-      return { kind: "cms" };
-    }
-    return { kind: "none" };
-  }, [
-    cmsOpenState,
-    editingTextFileState,
-    viewingImagePathState,
-    viewingPdfPathState,
-  ]);
-
-  const applyWorkspaceSurface = useCallback((surface: WorkspaceSurface) => {
-    setCmsOpenState(surface.kind === "cms");
-    setEditingTextFileState(surface.kind === "text" ? surface.path : null);
-    setViewingImagePathState(surface.kind === "image" ? surface.path : null);
-    setViewingPdfPathState(surface.kind === "pdf" ? surface.path : null);
-  }, []);
-
-  const isSameWorkspaceSurface = useCallback(
-    (left: WorkspaceSurface, right: WorkspaceSurface) => {
-      if (left.kind !== right.kind) return false;
-      if (
-        left.kind === "text" ||
-        left.kind === "image" ||
-        left.kind === "pdf"
-      ) {
-        return left.path === (right as typeof left).path;
-      }
-      return true;
-    },
-    [],
-  );
-
-  const openWorkspaceSurface = useCallback(
-    (
-      nextSurface: Exclude<WorkspaceSurface, { kind: "none" }>,
-      mode: "root" | "push" | "replace",
-    ) => {
-      if (isSameWorkspaceSurface(currentWorkspace, nextSurface)) {
-        if (mode === "root" && workspaceHistory.length > 0) {
-          setWorkspaceHistory([]);
-        }
-        applyWorkspaceSurface(nextSurface);
-        return;
-      }
-
-      if (mode === "root") {
-        setWorkspaceHistory([]);
-      } else if (mode === "push" && currentWorkspace.kind !== "none") {
-        setWorkspaceHistory([...workspaceHistory, currentWorkspace]);
-      }
-
-      applyWorkspaceSurface(nextSurface);
-    },
-    [
-      applyWorkspaceSurface,
-      currentWorkspace,
-      isSameWorkspaceSurface,
-      workspaceHistory,
-    ],
-  );
-
-  const closeWorkspaceSurface = useCallback(
-    (kind: WorkspaceSurface["kind"]) => {
-      if (currentWorkspace.kind !== kind) {
-        return;
-      }
-
-      if (workspaceHistory.length === 0) {
-        applyWorkspaceSurface({ kind: "none" });
-        return;
-      }
-
-      const nextHistory = workspaceHistory.slice(0, -1);
-      const previousSurface = workspaceHistory[workspaceHistory.length - 1]!;
-      setWorkspaceHistory(nextHistory);
-      applyWorkspaceSurface(previousSurface);
-    },
-    [applyWorkspaceSurface, currentWorkspace.kind, workspaceHistory],
-  );
-
-  const setCmsOpen = useCallback(
-    (open: boolean) => {
-      if (open) {
-        openWorkspaceSurface({ kind: "cms" }, "root");
-        return;
-      }
-      if (currentWorkspace.kind !== "cms") {
-        return;
-      }
-      setWorkspaceHistory([]);
-      applyWorkspaceSurface({ kind: "none" });
-    },
-    [applyWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
-  );
-
-  const setEditingTextFile = useCallback(
-    (path: string | null) => {
-      if (!path) {
-        closeWorkspaceSurface("text");
-        return;
-      }
-
-      const openMode =
-        currentWorkspace.kind === "none"
-          ? "root"
-          : currentWorkspace.kind === "cms"
-            ? "push"
-            : "replace";
-      openWorkspaceSurface({ kind: "text", path }, openMode);
-    },
-    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
-  );
-
-  const setViewingImagePath = useCallback(
-    (path: string | null) => {
-      if (!path) {
-        closeWorkspaceSurface("image");
-        return;
-      }
-
-      const openMode =
-        currentWorkspace.kind === "none"
-          ? "root"
-          : currentWorkspace.kind === "cms"
-            ? "push"
-            : "replace";
-      openWorkspaceSurface({ kind: "image", path }, openMode);
-    },
-    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
-  );
-
-  const setViewingPdfPath = useCallback(
-    (path: string | null) => {
-      if (!path) {
-        closeWorkspaceSurface("pdf");
-        return;
-      }
-
-      const openMode =
-        currentWorkspace.kind === "none"
-          ? "root"
-          : currentWorkspace.kind === "cms"
-            ? "push"
-            : "replace";
-      openWorkspaceSurface({ kind: "pdf", path }, openMode);
-    },
-    [closeWorkspaceSurface, currentWorkspace.kind, openWorkspaceSurface],
-  );
 
   const setSessionHistoryOpen = useCallback((open: boolean) => {
     if (open) {
@@ -517,56 +356,6 @@ export function PreviewProvider({
     if (typeof window === "undefined") return;
     window.localStorage.setItem(VIEWPORT_MODE_STORAGE_KEY, viewportMode);
   }, [viewportMode]);
-
-  const clearIframeLoadingDelayTimer = useCallback(() => {
-    if (iframeLoadingDelayTimerRef.current === null) return;
-    window.clearTimeout(iframeLoadingDelayTimerRef.current);
-    iframeLoadingDelayTimerRef.current = null;
-  }, []);
-
-  const clearIframeLoadWatchdog = useCallback(() => {
-    if (iframeLoadWatchdogRef.current === null) return;
-    window.clearTimeout(iframeLoadWatchdogRef.current);
-    iframeLoadWatchdogRef.current = null;
-  }, []);
-
-  const startIframeLoadWatchdog = useCallback(() => {
-    clearIframeLoadWatchdog();
-    iframeLoadWatchdogRef.current = window.setTimeout(() => {
-      iframeLoadWatchdogRef.current = null;
-      setIframeLoading(false);
-    }, 25_000);
-  }, [clearIframeLoadWatchdog]);
-
-  const beginIframeLoading = useCallback(() => {
-    clearIframeLoadingDelayTimer();
-    clearIframeLoadWatchdog();
-    setIframeLoading(true);
-    startIframeLoadWatchdog();
-  }, [clearIframeLoadingDelayTimer, startIframeLoadWatchdog]);
-
-  const beginIframeNavigationLoading = useCallback(() => {
-    clearIframeLoadingDelayTimer();
-    // Avoid flicker for fast navigations.
-    iframeLoadingDelayTimerRef.current = window.setTimeout(() => {
-      iframeLoadingDelayTimerRef.current = null;
-      setIframeLoading(true);
-      startIframeLoadWatchdog();
-    }, 150);
-  }, [clearIframeLoadingDelayTimer, startIframeLoadWatchdog]);
-
-  const endIframeLoading = useCallback(() => {
-    clearIframeLoadingDelayTimer();
-    clearIframeLoadWatchdog();
-    setIframeLoading(false);
-  }, [clearIframeLoadingDelayTimer, clearIframeLoadWatchdog]);
-
-  useEffect(() => {
-    return () => {
-      clearIframeLoadingDelayTimer();
-      clearIframeLoadWatchdog();
-    };
-  }, [clearIframeLoadingDelayTimer, clearIframeLoadWatchdog]);
 
   const syncUnsavedChangesState = useCallback(() => {
     setHasUnsavedChanges(pendingImagePatchesRef.current.size > 0);
@@ -1319,13 +1108,16 @@ export function PreviewProvider({
         const hasAstroTextNotFound = rawErrors.some((e) =>
           e.reason.startsWith("Text not found:"),
         );
+        const hasAstroAmbiguousText = rawErrors.some((e) =>
+          e.reason.startsWith("Ambiguous text match:"),
+        );
         const rawApplied = rawResult ? !rawResult.noChanges : false;
         const nothingChanged = cmsApplied === 0 && !rawApplied;
 
         if (nothingChanged) {
           if (rawErrors.length > 0) {
             toast.error(
-              hasMissingElements || hasAstroTextNotFound
+              hasMissingElements || hasAstroTextNotFound || hasAstroAmbiguousText
                 ? "We couldn't change this text here. Please ask the agent to update the source."
                 : "We couldn't apply these changes here. Please ask the agent to update the source.",
             );
@@ -1346,6 +1138,8 @@ export function PreviewProvider({
               ? "Saved (some edited text is generated by JavaScript and can't be saved here — ask the agent to update it)"
               : hasAstroTextNotFound
                 ? "Saved (some edited text is data-driven and can't be saved here — ask the agent to update it)"
+                : hasAstroAmbiguousText
+                  ? "Saved (some edited text appears multiple times and couldn't be matched safely — ask the agent to update it)"
                 : "Saved (some edits were skipped — ask the agent to update the missing ones)",
           );
         } else {

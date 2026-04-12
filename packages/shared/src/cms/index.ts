@@ -430,6 +430,94 @@ function defaultRootConfig(): CmsRootConfig {
   };
 }
 
+const CMS_BINDING_HELPER_CANDIDATE_RELATIVE_PATHS = [
+  path.join("src", "lib", "cmsBindings.ts"),
+  path.join("src", "lib", "cmsBindings.js"),
+  path.join("src", "lib", "cmsBindings.mts"),
+  path.join("src", "lib", "cmsBindings.mjs"),
+];
+
+const DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH =
+  CMS_BINDING_HELPER_CANDIDATE_RELATIVE_PATHS[0]!;
+
+const CMS_BINDING_HELPER_SOURCE = [
+  "export type CmsBindingFieldPath = string | Array<string | number>;",
+  "",
+  "function formatCmsFieldPath(field: CmsBindingFieldPath): string {",
+  '  if (typeof field === "string") {',
+  "    return field;",
+  "  }",
+  "",
+  '  return field.reduce<string>((path, segment, index) => {',
+  '    const token = typeof segment === "number" ? `[${segment}]` : String(segment);',
+  '    if (typeof segment === "number") {',
+  "      return `${path}${token}`;",
+  "    }",
+  '    return index === 0 ? token : `${path}.${token}`;',
+  '  }, "");',
+  "}",
+  "",
+  "export type CmsBindingInput = {",
+  "  collection: string;",
+  "  entry: string;",
+  "  field: CmsBindingFieldPath;",
+  '  kind: "text" | "asset";',
+  "  locale?: string;",
+  "};",
+  "",
+  "export type CmsTextBindingInput = Omit<CmsBindingInput, \"kind\">;",
+  "export type CmsAssetBindingInput = Omit<CmsBindingInput, \"kind\">;",
+  "export type CmsEntryBindingInput = {",
+  "  collection: string;",
+  "  entry: string;",
+  "  locale?: string;",
+  "};",
+  "",
+  "export function cmsBindingAttrs(binding: CmsBindingInput) {",
+  "  return {",
+  '    "data-cms-collection": binding.collection,',
+  '    "data-cms-entry": binding.entry,',
+  '    "data-cms-field": formatCmsFieldPath(binding.field),',
+  '    "data-cms-kind": binding.kind,',
+  '    ...(binding.locale ? { "data-cms-locale": binding.locale } : {}),',
+  "  };",
+  "}",
+  "",
+  "export function cmsTextBindingAttrs(binding: CmsTextBindingInput) {",
+  '  return cmsBindingAttrs({ ...binding, kind: "text" });',
+  "}",
+  "",
+  "export function cmsAssetBindingAttrs(binding: CmsAssetBindingInput) {",
+  '  return cmsBindingAttrs({ ...binding, kind: "asset" });',
+  "}",
+  "",
+  "export function bindCmsEntry(binding: CmsEntryBindingInput) {",
+  "  return {",
+  "    text(field: CmsBindingFieldPath) {",
+  "      return cmsTextBindingAttrs({ ...binding, field });",
+  "    },",
+  "    asset(field: CmsBindingFieldPath) {",
+  "      return cmsAssetBindingAttrs({ ...binding, field });",
+  "    },",
+  "  };",
+  "}",
+].join("\n");
+
+function normalizeTextContent(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+function isUpgradeableCmsBindingHelperSource(value: string): boolean {
+  const normalized = normalizeTextContent(value);
+  return (
+    normalized.includes('export function cmsBindingAttrs(binding: CmsBindingInput)') &&
+    normalized.includes('"data-cms-collection": binding.collection') &&
+    normalized.includes('"data-cms-entry": binding.entry') &&
+    normalized.includes('"data-cms-field":') &&
+    normalized.includes('"data-cms-kind": binding.kind')
+  );
+}
+
 function getDefaultAstroCmsPaths(projectDir: string): CmsPaths {
   return {
     projectDir,
@@ -1327,19 +1415,20 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
   const errors: string[] = [];
   const rootConfig = await readRootConfig(paths, errors);
   if (!rootConfig) {
+    const astroPaths = getDefaultAstroCmsPaths(projectDir);
     return {
-      sourceKind: "legacy-yaml",
+      sourceKind: "astro-collections",
       initialized: false,
       valid: false,
-      paths,
+      paths: astroPaths,
       defaultLocale: null,
       locales: [],
       modelCount: 0,
       entryCount: 0,
       assetCount: 0,
-      mediaFileCount: await countFilesRecursively(paths.mediaRoot),
+      mediaFileCount: await countFilesRecursively(astroPaths.mediaRoot),
       errors: [
-        `Missing ${toPosix(path.relative(projectDir, paths.rootConfigPath))}. Run \`vivd cms scaffold init\` to create the CMS structure.`,
+        `Missing ${toPosix(path.relative(projectDir, astroPaths.rootConfigPath))}. Vivd CMS expects Astro Content Collections as the source of truth. Create \`src/content.config.ts\` and export \`collections\` before using Studio CMS.`,
       ],
       models: [],
     };
@@ -1400,7 +1489,7 @@ export async function validateCmsWorkspace(projectDir: string): Promise<CmsValid
 async function ensureLegacyYamlWorkspaceOperationSupported(projectDir: string): Promise<void> {
   if ((await inspectAstroCollectionsWorkspace(projectDir)) || (await isAstroProject(projectDir))) {
     throw new Error(
-      "Astro-backed projects now use `src/content.config.ts` and Astro entry files as the source of truth. Vivd YAML scaffold/build commands are only supported for the legacy YAML CMS path.",
+      "Astro-backed projects use `src/content.config.ts` and Astro entry files under `src/content/**` as the source of truth. This scaffold command does not apply to Astro Content Collections.",
     );
   }
 }
@@ -1567,6 +1656,50 @@ export async function scaffoldCmsWorkspace(projectDir: string): Promise<CmsScaff
       skipped.push(toPosix(path.relative(projectDir, filePath)));
     }
   }
+
+  return { created, skipped, paths };
+}
+
+async function findExistingCmsBindingHelperRelativePath(
+  projectDir: string,
+): Promise<string | null> {
+  for (const relativePath of CMS_BINDING_HELPER_CANDIDATE_RELATIVE_PATHS) {
+    if (await pathExists(path.join(projectDir, relativePath))) {
+      return toPosix(relativePath);
+    }
+  }
+  return null;
+}
+
+export async function installCmsBindingHelper(projectDir: string): Promise<CmsScaffoldResult> {
+  const paths = getCmsPaths(projectDir);
+  const created: string[] = [];
+  const skipped: string[] = [];
+  const existingHelperPath = await findExistingCmsBindingHelperRelativePath(projectDir);
+  const desiredSource = `${CMS_BINDING_HELPER_SOURCE}\n`;
+
+  if (existingHelperPath) {
+    const absoluteHelperPath = path.join(projectDir, existingHelperPath);
+    const currentSource = await fs.readFile(absoluteHelperPath, "utf8");
+    if (normalizeTextContent(currentSource) === normalizeTextContent(desiredSource)) {
+      skipped.push(existingHelperPath);
+      return { created, skipped, paths };
+    }
+
+    if (isUpgradeableCmsBindingHelperSource(currentSource)) {
+      await fs.writeFile(absoluteHelperPath, desiredSource, "utf8");
+      created.push(existingHelperPath);
+      return { created, skipped, paths };
+    }
+
+    skipped.push(existingHelperPath);
+    return { created, skipped, paths };
+  }
+
+  const helperPath = path.join(projectDir, DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH);
+  await ensureDirectory(path.dirname(helperPath));
+  await fs.writeFile(helperPath, desiredSource, "utf8");
+  created.push(toPosix(DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH));
 
   return { created, skipped, paths };
 }

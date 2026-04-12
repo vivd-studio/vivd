@@ -5,6 +5,7 @@ import { z } from "zod";
 import { analyticsPluginConfigSchema } from "../config";
 import { getAnalyticsTrackEndpoint } from "../publicApi";
 import type { AnalyticsPublicRouterDeps } from "../ports";
+import { createAnalyticsCountryResolver } from "./geolocation";
 
 const DEFAULT_RATE_LIMIT_PER_TOKEN_PER_MINUTE = 240;
 
@@ -115,13 +116,6 @@ function isExcludedPath(pathValue: string, excludedPaths: string[]): boolean {
     if (normalized !== "/" && normalizedPath.startsWith(`${normalized}/`)) return true;
   }
   return false;
-}
-
-function detectCountryCodeFromHeaders(req: express.Request): string | null {
-  const raw = (req.get("cf-ipcountry") || "").trim().toUpperCase();
-  if (!raw || raw.length !== 2) return null;
-  if (!/^[A-Z]{2}$/.test(raw)) return null;
-  return raw;
 }
 
 function inferDeviceType(raw: string, userAgent: string): "desktop" | "mobile" | "tablet" | "bot" | "unknown" {
@@ -428,6 +422,7 @@ export function createAnalyticsPublicRouter(
     isHostAllowed,
     normalizeHostCandidate,
   } = hostUtils;
+  const countryResolver = createAnalyticsCountryResolver();
   const router = express.Router();
   const formParser = express.urlencoded({ extended: false, limit: "128kb" });
   const jsonParser = express.json({ limit: "128kb" });
@@ -644,10 +639,10 @@ export function createAnalyticsPublicRouter(
         readUtmFromFields(fields),
         readUtmFromPath(rawPath),
       );
-      const countryCode = (fields.countryCode || "").trim().toUpperCase();
-      const normalizedCountryCode = /^[A-Z]{2}$/.test(countryCode)
-        ? countryCode
-        : detectCountryCodeFromHeaders(req);
+      const normalizedCountryCode = await countryResolver.resolveCountryCode(
+        req,
+        fields.countryCode || "",
+      );
 
       const payload: Record<string, unknown> = {};
       if (config.captureQueryString && rawPath.includes("?")) {

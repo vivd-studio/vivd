@@ -25,9 +25,11 @@ describe("studio AgentInstructionsService fallback", () => {
     getConnectedBackendAuthConfigMock.mockReset();
     isConnectedModeMock.mockReturnValue(false);
     getConnectedBackendAuthConfigMock.mockReturnValue(null);
+    delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
   });
 
   it("reuses the shared default prompt shape for fallback mode", async () => {
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
     const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
       projectSlug: "demo-project",
       projectVersion: 1,
@@ -62,6 +64,7 @@ describe("studio AgentInstructionsService fallback", () => {
   });
 
   it("falls back to shared CLI instructions when connected mode is available but backend fetch fails", async () => {
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
     isConnectedModeMock.mockReturnValue(true);
     getConnectedBackendAuthConfigMock.mockReturnValue({
       backendUrl: "https://backend.example.test",
@@ -91,5 +94,17 @@ describe("studio AgentInstructionsService fallback", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("omits support-command guidance when support email is not configured", async () => {
+    const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
+      projectSlug: "demo-project",
+      projectVersion: 1,
+    });
+
+    expect(prompt).not.toContain("vivd support request");
+    expect(prompt).not.toContain(
+      "contacting Vivd support on the user's behalf",
+    );
   });
 });

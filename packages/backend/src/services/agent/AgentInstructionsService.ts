@@ -43,6 +43,10 @@ function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
   return fallback;
 }
 
+function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean((env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim());
+}
+
 class AgentInstructionsService {
   getDefaultTemplate(): string {
     return normalizeAgentInstructionsTemplate(DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE);
@@ -81,6 +85,7 @@ class AgentInstructionsService {
               process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
               false,
             ),
+            supportRequestEnabled: isSupportRequestEnabled(process.env),
           })
         : ensureMandatoryToolChannelGuidance(
             normalizeAgentInstructionsTemplate(
@@ -93,6 +98,7 @@ class AgentInstructionsService {
                     process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
                     false,
                   ),
+                  supportRequestEnabled: isSupportRequestEnabled(process.env),
                 }),
               }),
             ),

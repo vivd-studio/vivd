@@ -302,6 +302,22 @@ yields `4096 MiB` by default instead of trying to claim nearly the whole box.
 The optional `DOCKER_STUDIO_MEMORY_AUTO_MIN_MB` floor is opt-in instead of
 being forced on smaller boxes by default.
 
+Optional analytics geolocation:
+
+```env
+# auto   = use proxy/CDN country headers when present, else try local GeoLite2 lookup
+# headers = only use proxy/CDN country headers
+# maxmind = only use the local GeoLite2 database
+# off     = disable country detection
+VIVD_ANALYTICS_GEOLOCATION_MODE=auto
+VIVD_ANALYTICS_GEOIP_DB_PATH=/app/geoip/GeoLite2-Country.mmdb
+```
+
+The Analytics country breakdown works automatically when your proxy already
+injects a country header such as Cloudflare's `cf-ipcountry` or Vercel's
+`x-vercel-ip-country`. For provider-agnostic self-host installs, mount a
+GeoLite2 Country `.mmdb` file into the backend container at the configured path.
+
 ## Notes
 
 - This reference is intentionally scoped to the self-hosted `solo` bundle.

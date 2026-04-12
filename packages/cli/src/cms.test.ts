@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   getCmsPaths,
+  installCmsBindingHelper,
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
@@ -41,6 +42,58 @@ describe("cms workspace utilities", () => {
     expect(report.modelCount).toBe(1);
     expect(report.entryCount).toBe(1);
     expect(report.errors).toEqual([]);
+  });
+
+  it("installs the local CMS binding helper idempotently", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    const firstResult = await installCmsBindingHelper(projectDir);
+    const secondResult = await installCmsBindingHelper(projectDir);
+    const helperPath = path.join(projectDir, "src", "lib", "cmsBindings.ts");
+
+    expect(firstResult.created).toContain("src/lib/cmsBindings.ts");
+    expect(firstResult.skipped).toEqual([]);
+    await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-field");
+    await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("CmsBindingFieldPath");
+    expect(secondResult.created).toEqual([]);
+    expect(secondResult.skipped).toContain("src/lib/cmsBindings.ts");
+  });
+
+  it("upgrades an older scaffolded CMS binding helper in place", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "lib"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "lib", "cmsBindings.ts"),
+      `export type CmsBindingInput = {
+  collection: string;
+  entry: string;
+  field: string;
+  kind: "text" | "asset";
+  locale?: string;
+};
+
+export function cmsBindingAttrs(binding: CmsBindingInput) {
+  return {
+    "data-cms-collection": binding.collection,
+    "data-cms-entry": binding.entry,
+    "data-cms-field": binding.field,
+    "data-cms-kind": binding.kind,
+    ...(binding.locale ? { "data-cms-locale": binding.locale } : {}),
+  };
+}
+`,
+      "utf8",
+    );
+
+    const result = await installCmsBindingHelper(projectDir);
+    const helperPath = path.join(projectDir, "src", "lib", "cmsBindings.ts");
+
+    expect(result.created).toContain("src/lib/cmsBindings.ts");
+    await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("cmsAssetBindingAttrs");
+    await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("CmsBindingFieldPath");
   });
 
   it("inspects Astro Content Collections directly from src/content.config.ts", async () => {
@@ -294,7 +347,7 @@ This body should stay here.
     ).resolves.toContain("title: Updated welcome");
   });
 
-  it("reports missing src/content.config.ts for Astro projects before falling back to legacy YAML scaffolding", async () => {
+  it("reports missing src/content.config.ts for Astro projects and rejects scaffold commands there", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);
 
@@ -306,7 +359,9 @@ This body should stay here.
     expect(report.initialized).toBe(false);
     expect(report.valid).toBe(false);
     expect(report.errors[0]).toContain("src/content.config.ts");
-    await expect(scaffoldCmsWorkspace(projectDir)).rejects.toThrow("Astro-backed projects now use");
+    await expect(scaffoldCmsWorkspace(projectDir)).rejects.toThrow(
+      "This scaffold command does not apply to Astro Content Collections.",
+    );
   });
 
   it("reports validation errors for unsupported schema types and bad asset roots", async () => {

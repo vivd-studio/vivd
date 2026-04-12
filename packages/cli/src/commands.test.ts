@@ -1109,13 +1109,21 @@ describe("dispatchCli", () => {
   });
 
   it("requires a support request summary", async () => {
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
     await expect(dispatchCli(["support", "request"])).rejects.toThrow(
       "support request requires a summary",
     );
   });
 
+  it("rejects support requests when no support email is configured", async () => {
+    await expect(
+      dispatchCli(["support", "request", "enable", "analytics", "for", "this", "project"]),
+    ).rejects.toThrow("Support contact is not configured for this runtime.");
+  });
+
   it("shows help with CMS commands", async () => {
     process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = "true";
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
     const rootHelp = await dispatchCli(["help"]);
     const cmsHelp = await dispatchCli(["cms", "help"]);
     const previewHelp = await dispatchCli(["preview", "help"]);
@@ -1144,7 +1152,8 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("vivd publish help");
     expect(rootHelp.human).toContain("vivd support request <summary...>");
     expect(rootHelp.human).toContain("DISCOVER MORE");
-    expect(cmsHelp.human).toContain("vivd cms scaffold init");
+    expect(cmsHelp.human).toContain("vivd cms helper install");
+    expect(cmsHelp.human).not.toContain("vivd cms scaffold init");
     expect(cmsHelp.human).toContain("src/content/");
     expect(previewHelp.human).toContain("vivd preview status");
     expect(previewHelp.human).toContain("dev server is running");
@@ -1169,6 +1178,15 @@ describe("dispatchCli", () => {
     expect(analyticsHelp.human).toContain("vivd plugins analytics info");
   });
 
+  it("hides support help from the root surface when no support email is configured", async () => {
+    const rootHelp = await dispatchCli(["help"]);
+    const supportHelp = await dispatchCli(["support", "help"]);
+
+    expect(rootHelp.human).not.toContain("SUPPORT");
+    expect(rootHelp.human).not.toContain("vivd support request <summary...>");
+    expect(supportHelp.human).toContain("Support contact is not configured for this runtime.");
+  });
+
   it("scaffolds and validates local CMS content without a connected runtime", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-cms-"));
 
@@ -1183,6 +1201,22 @@ describe("dispatchCli", () => {
       expect(modelResult.human).toContain("CMS model scaffolded: products");
       expect(entryResult.human).toContain("CMS entry scaffolded: products/alpine-boot");
       expect(validateResult.human).toContain("CMS validate: ok");
+      expect(runtime.client.query).not.toHaveBeenCalled();
+      expect(runtime.client.mutation).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("installs the CMS binding helper without a connected runtime", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-cms-helper-"));
+
+    try {
+      const result = await dispatchCli(["cms", "helper", "install"], tempDir);
+      const helperPath = path.join(tempDir, "src", "lib", "cmsBindings.ts");
+
+      expect(result.human).toContain("CMS binding helper installed.");
+      await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-collection");
       expect(runtime.client.query).not.toHaveBeenCalled();
       expect(runtime.client.mutation).not.toHaveBeenCalled();
     } finally {

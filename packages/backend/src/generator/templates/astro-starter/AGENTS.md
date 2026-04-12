@@ -21,6 +21,9 @@ Vivd adapts to Astro Content Collections internally.
 - Use plain `<img>` mainly for remote URLs, deliberate passthrough/public files, SVG edge cases, or existing project patterns that already require it.
 - For CMS-owned text or images that should stay editable from the live preview, emit neutral `data-cms-*` ownership attributes from project code.
 - Prefer the tiny local helper at `src/lib/cmsBindings.ts` for those attributes instead of inventing a Vivd-specific package dependency.
+- If the helper is missing or stale, refresh it with `vivd cms helper install` or recreate the same small local helper directly.
+- Prefer explicit wrappers like `cmsTextBindingAttrs(...)` and `cmsAssetBindingAttrs(...)` when available, or an entry-scoped helper like `const cms = bindCmsEntry({ collection, entry })` followed by `cms.text(...)` / `cms.asset(...)`.
+- Bind every visible render point of a CMS-owned field, not just one occurrence. If the same entry field appears twice on the page, both render points need the CMS binding.
 - Include `data-cms-locale` when binding localized CMS values.
 - Do not point markup at raw `src/content/media/...` filesystem paths.
 - Use `public/` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, `robots.txt`, verification files, or explicit compatibility cases.

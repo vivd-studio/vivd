@@ -193,6 +193,25 @@ Recommended shape:
 
 Studio should consume that neutral contract and resolve preview saves back into the owning entry field first.
 
+### Project-Local CMS Toolkit
+
+The low-level `cmsBindings.ts` helper is a useful primitive, but it should not remain the main agent-facing authoring surface forever.
+
+The next ergonomics step should be a small project-local CMS toolkit under something like `src/lib/cms/`:
+
+- keep the low-level binding helper as the primitive
+- add clearer semantic wrappers such as `CmsText` and `CmsImage`
+- prefer entry-scoped helpers for repeated collection card/list markup
+- keep the toolkit local to the project first, then promote it to a package only if the surface stabilizes and real reuse pressure appears
+
+This should stay neutral and repo-owned:
+
+- do not introduce a required Vivd runtime package just to make CMS preview save work
+- do not create one wrapper per raw HTML tag such as `VivdParagraph` or `VivdSpan`
+- do not try to make field ownership fully implicit at runtime
+
+The goal is to make the right binding path obvious to agents and project authors without hiding the underlying CMS ownership contract.
+
 ## CLI Scope
 
 The CLI should evolve from the current YAML-first CMS commands toward Astro-native content operations.

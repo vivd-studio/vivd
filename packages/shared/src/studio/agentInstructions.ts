@@ -11,6 +11,7 @@ export interface RenderDefaultVivdAgentInstructionsInput {
   sourceContext?: string;
   platformSurfaceMode?: VivdPlatformSurfaceMode;
   previewScreenshotCliEnabled?: boolean;
+  supportRequestEnabled?: boolean;
 }
 
 export const MANDATORY_TOOL_CHANNEL_GUIDANCE = `## Tool Usage Contract
@@ -59,7 +60,8 @@ Your name is Vivd. You work in Vivd Studio and are responsible for building the 
    - Follow Astro's collection structure as declared in \`src/content.config.ts\`. Flat collection folders such as \`src/content/<collection-key>/<entry>.yaml\` are fine when that is how the Astro collection is configured.
    - Keep Vivd-managed local assets in \`src/content/media/\` unless the project already uses a different explicit Astro-native pattern.
    - For local or content-managed images in Astro pages/components, default to Astro's \`Image\` component from \`astro:assets\`. Use plain \`<img>\` mainly for remote URLs, passthrough/public files, SVG edge cases, or established project patterns that already require it.
-   - For CMS-owned text or images that should remain editable from the live preview, add neutral \`data-cms-*\` ownership attributes from project code, preferably through a tiny local helper such as \`src/lib/cmsBindings.ts\`. Include \`data-cms-locale\` for localized values.
+   - For CMS-owned text or images that should remain editable from the live preview, add neutral \`data-cms-*\` ownership attributes from project code, preferably through a tiny local helper such as \`src/lib/cmsBindings.ts\`. If the helper is missing or stale, refresh it with \`vivd cms helper install\` or recreate the same small local helper directly. Prefer explicit wrappers like \`cmsTextBindingAttrs(...)\` and \`cmsAssetBindingAttrs(...)\` when available, or an entry-scoped helper like \`const cms = bindCmsEntry({ collection, entry })\` followed by \`cms.text(...)\` / \`cms.asset(...)\`. Include \`data-cms-locale\` for localized values.
+   - Bind every visible render point of a CMS-owned field, not just one occurrence. If the same entry field is rendered twice on the page, both render points need the CMS binding.
    - For preview image replacement in Astro projects, direct source rewrites are only reliable for CMS-bound images or deliberate \`public/\` assets. If an image should stay editable from the live preview while using \`src/content/media/\`, bind it to CMS content instead of relying on a raw fallback \`src\` rewrite.
    - Do not point page markup at raw filesystem-like \`src/content/media/...\` paths.
    - Use \`public/\` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, \`robots.txt\`, verification files, or explicit compatibility cases.
@@ -109,19 +111,32 @@ function indentBlock(input: string, indent: string): string {
 
 function buildPlatformSurfaceSection(
   mode: VivdPlatformSurfaceMode,
-  options?: { previewScreenshotCliEnabled?: boolean },
+  options?: { previewScreenshotCliEnabled?: boolean; supportRequestEnabled?: boolean },
 ): string {
   if (mode === "plugin-only") {
+    const supportLines = options?.supportRequestEnabled
+      ? [
+          "   - If the needed plugin is not enabled, the agent may prepare a support request with `vivd support request ...` on the user's behalf instead of telling the user to email manually.",
+          `   - ${SUPPORT_REQUEST_PERMISSION_GUIDANCE}`,
+        ]
+      : [];
+
     return `4. **Plugin-first features**:
    - Vivd supports first-party plugins such as Contact Form and Analytics.
-   - Prefer plugin-backed solutions over custom implementations for those features.
-   - If the needed plugin is not enabled, prefer drafting a support request with \`vivd support request ...\` instead of telling the user to email manually.
-   - ${SUPPORT_REQUEST_PERMISSION_GUIDANCE}`;
+   - Prefer plugin-backed solutions over custom implementations for those features.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
   }
 
   const cliRootHelp = renderVivdCliRootHelp({
     previewScreenshotEnabled: options?.previewScreenshotCliEnabled,
+    supportRequestEnabled: options?.supportRequestEnabled,
   });
+
+  const supportLines = options?.supportRequestEnabled
+    ? [
+        "   - If the plugin is not enabled or another platform-side intervention is needed, the agent may prepare a support request with `vivd support request ...` on the user's behalf instead of telling the user to email manually.",
+        `   - ${SUPPORT_REQUEST_PERMISSION_GUIDANCE}`,
+      ]
+    : [];
 
   return `4. **Vivd CLI and platform features**:
    - The \`vivd\` CLI is the default interface for platform-specific actions, configuration, and inspection in this Studio runtime.
@@ -131,9 +146,7 @@ ${indentBlock(cliRootHelp, "     ")}
      \`\`\`
    - Use \`vivd <command> help\` to drill into the relevant area.
    - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
-   - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.
-   - If the plugin is not enabled or another platform-side intervention is needed, prefer drafting a support request with \`vivd support request ...\` instead of telling the user to email manually.
-   - ${SUPPORT_REQUEST_PERMISSION_GUIDANCE}`;
+   - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
 }
 
 export function normalizeAgentInstructionsTemplate(input: string): string {
@@ -183,6 +196,7 @@ export function renderDefaultVivdAgentInstructions(
         input.platformSurfaceMode ?? "cli",
         {
           previewScreenshotCliEnabled: input.previewScreenshotCliEnabled,
+          supportRequestEnabled: input.supportRequestEnabled,
         },
       ),
       mandatory_tool_channel_guidance: MANDATORY_TOOL_CHANNEL_GUIDANCE,

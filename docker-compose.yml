@@ -64,6 +64,8 @@ services:
       - CADDY_ADMIN_URL=http://caddy:2019
       - SCRAPER_URL=${SCRAPER_URL:-http://scraper:3001}
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
+      - VIVD_ANALYTICS_GEOLOCATION_MODE=${VIVD_ANALYTICS_GEOLOCATION_MODE:-auto}
+      - VIVD_ANALYTICS_GEOIP_DB_PATH=${VIVD_ANALYTICS_GEOIP_DB_PATH:-/app/geoip/GeoLite2-Country.mmdb}
       - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       # S3-compatible object storage (studio machine project sync)
@@ -158,6 +160,7 @@ services:
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
+      - ./geoip:/app/geoip:ro
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

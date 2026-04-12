@@ -293,6 +293,10 @@ export function formatPreviewStatusReport(input: {
   return lines.join("\n");
 }
 
+function formatCmsSourceLabel(sourceKind: "legacy-yaml" | "astro-collections"): string {
+  return sourceKind === "astro-collections" ? "Astro Content Collections" : "Vivd YAML CMS";
+}
+
 export function formatCmsStatusReport(input: {
   sourceKind: "legacy-yaml" | "astro-collections";
   initialized: boolean;
@@ -310,7 +314,7 @@ export function formatCmsStatusReport(input: {
   errors: string[];
 }): string {
   const lines = [
-    `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
+    `Source: ${formatCmsSourceLabel(input.sourceKind)}`,
     `CMS root: ${input.contentRoot}`,
     `Initialized: ${input.initialized ? "yes" : "no"}`,
     `Validation: ${input.valid ? "ok" : "failed"}`,
@@ -349,7 +353,7 @@ export function formatCmsValidateReport(input: {
 }): string {
   if (input.valid) {
     return [
-      `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
+      `Source: ${formatCmsSourceLabel(input.sourceKind)}`,
       "CMS validate: ok",
       `Models: ${input.modelCount}`,
       `Entries: ${input.entryCount}`,
@@ -358,7 +362,7 @@ export function formatCmsValidateReport(input: {
   }
 
   return [
-    `Source: ${input.sourceKind === "astro-collections" ? "Astro Content Collections" : "Legacy Vivd YAML"}`,
+    `Source: ${formatCmsSourceLabel(input.sourceKind)}`,
     "CMS validate: failed",
     ...input.errors.map((error) => `- ${error}`),
   ].join("\n");

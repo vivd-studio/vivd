@@ -14,6 +14,7 @@
     "./backend/publicApi": "./src/backend/publicApi.ts",
     "./backend/service": "./src/backend/service.ts",
     "./backend/snippets": "./src/backend/snippets.ts",
+    "./backend/http/geolocation": "./src/backend/http/geolocation.ts",
     "./backend/http/runtime": "./src/backend/http/runtime.ts",
     "./cli/module": "./src/cli/module.ts",
     "./frontend/module": "./src/frontend/module.ts",
@@ -23,5 +24,8 @@
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "maxmind": "^5.0.6"
   }
 }
