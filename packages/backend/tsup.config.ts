@@ -9,6 +9,6 @@ export default defineConfig({
     /^@vivd\/plugin-analytics(\/.*)?$/,
     /^@vivd\/plugin-contact-form(\/.*)?$/,
   ],
-  // Mark extract-zip as external to avoid bundling issues with debug's dynamic require of 'tty'
-  external: ["extract-zip"],
+  // Keep CommonJS-only deps external so Node can load them natively from the ESM bundle.
+  external: ["extract-zip", "maxmind"],
 });

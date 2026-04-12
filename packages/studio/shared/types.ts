@@ -30,6 +30,14 @@ export const setAstroTextPatchSchema = z.object({
   newValue: z.string(),
 });
 
+export const setAstroImagePatchSchema = z.object({
+  type: z.literal("setAstroImage"),
+  sourceFile: z.string(),
+  sourceLoc: z.string().optional(),
+  assetPath: z.string(),
+  oldValue: z.string().optional(),
+});
+
 export const htmlPatchSchema = z.discriminatedUnion("type", [
   setTextNodePatchSchema,
   setAttrPatchSchema,
@@ -41,12 +49,14 @@ export const vivdPatchSchema = z.discriminatedUnion("type", [
   setAttrPatchSchema,
   setI18nPatchSchema,
   setAstroTextPatchSchema,
+  setAstroImagePatchSchema,
 ]);
 
 export type SetTextNodePatch = z.infer<typeof setTextNodePatchSchema>;
 export type SetAttrPatch = z.infer<typeof setAttrPatchSchema>;
 export type SetI18nPatch = z.infer<typeof setI18nPatchSchema>;
 export type SetAstroTextPatch = z.infer<typeof setAstroTextPatchSchema>;
+export type SetAstroImagePatch = z.infer<typeof setAstroImagePatchSchema>;
 export type HtmlPatch = z.infer<typeof htmlPatchSchema>;
 export type VivdPatch = z.infer<typeof vivdPatchSchema>;
 
@@ -63,6 +73,13 @@ export interface AstroTextPatch {
   sourceLoc?: string;
   oldValue: string;
   newValue: string;
+}
+
+export interface AstroImagePatch {
+  sourceFile: string;
+  sourceLoc?: string;
+  assetPath: string;
+  oldValue?: string;
 }
 
 // Preview info

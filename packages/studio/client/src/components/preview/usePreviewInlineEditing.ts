@@ -24,11 +24,19 @@ import {
 
 type SavePatch =
   | VivdPatch
+  | {
+      type: "setAstroImage";
+      sourceFile: string;
+      sourceLoc?: string;
+      assetPath: string;
+      oldValue?: string;
+    }
   | { type: "setAttr"; selector: string; name: "src"; value: string };
 
 type ImagePatch =
   | Extract<SavePatch, { type: "setAttr" }>
   | Extract<SavePatch, { type: "setAstroText" }>
+  | Extract<SavePatch, { type: "setAstroImage" }>
   | Extract<SavePatch, { type: "setCmsField" }>;
 
 interface UsePreviewInlineEditingOptions {
@@ -143,6 +151,14 @@ export function usePreviewInlineEditing({
     return srcMatch ? srcMatch[1] : astroSourceFile;
   }, []);
 
+  const isAstroManagedMediaAssetPath = useCallback((assetPath: string) => {
+    const normalizedPath = assetPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    return (
+      normalizedPath === "src/content/media" ||
+      normalizedPath.startsWith("src/content/media/")
+    );
+  }, []);
+
   const getOriginalAssetUrlFromPreviewUrl = useCallback(
     (src: string | null) => {
       if (!src) return null;
@@ -235,6 +251,17 @@ export function usePreviewInlineEditing({
 
       if (astroSourceFileRaw) {
         const sourceFile = normalizeAstroSourceFile(astroSourceFileRaw);
+        if (isAstroManagedMediaAssetPath(assetPath)) {
+          pendingImagePatchesRef.current.set(key, {
+            type: "setAstroImage",
+            sourceFile,
+            sourceLoc: astroSourceLoc ?? undefined,
+            assetPath: assetPath.replace(/\\/g, "/").replace(/^\/+/, ""),
+            oldValue: baseline ?? undefined,
+          });
+          syncUnsavedChangesState();
+          return;
+        }
         if (!baseline) {
           toast.error(
             "This image doesn't have a source src value, so Vivd can't save the change for Astro projects.",
@@ -705,6 +732,7 @@ export function usePreviewInlineEditing({
     clearPendingPatches,
     collectTextPatchesFromDocument,
     iframeRef,
+    isAstroManagedMediaAssetPath,
     isCmsPreviewFieldUpdate,
     isSaving,
     previewMode,

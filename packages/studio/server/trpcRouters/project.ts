@@ -10,7 +10,7 @@ import {
 import {
   applyAstroPatches,
   hasAstroPatches,
-  type AstroTextPatch,
+  type AstroPatch,
 } from "../services/patching/AstroPatchService.js";
 import {
   applyI18nJsonPatches,
@@ -455,6 +455,13 @@ export const projectRouter = router({
                 oldValue: z.string(),
                 newValue: z.string(),
               }),
+              z.object({
+                type: z.literal("setAstroImage"),
+                sourceFile: z.string().min(1),
+                sourceLoc: z.string().optional(),
+                assetPath: z.string().min(1),
+                oldValue: z.string().optional(),
+              }),
             ]),
           )
           .min(1, "At least one patch is required"),
@@ -473,7 +480,7 @@ export const projectRouter = router({
       const targetPath = path.join(projectDir, input.filePath);
 
       // Separate patches by type
-      const astroPatches: AstroTextPatch[] = [];
+      const astroPatches: AstroPatch[] = [];
       const htmlPatches: HtmlPatch[] = [];
       for (const patch of input.patches) {
         if (patch.type === "setAstroText") {
@@ -483,6 +490,16 @@ export const projectRouter = router({
             sourceLoc: patch.sourceLoc,
             oldValue: patch.oldValue,
             newValue: patch.newValue,
+          });
+          continue;
+        }
+        if (patch.type === "setAstroImage") {
+          astroPatches.push({
+            type: "setAstroImage",
+            sourceFile: patch.sourceFile,
+            sourceLoc: patch.sourceLoc,
+            assetPath: patch.assetPath,
+            oldValue: patch.oldValue,
           });
           continue;
         }

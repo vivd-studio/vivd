@@ -24,6 +24,7 @@ Vivd adapts to Astro Content Collections internally.
 - If the toolkit is missing or stale, refresh it with `vivd cms helper install`.
 - Prefer entry-scoped helpers like `const cms = bindCmsEntry({ collection, entry })` only when a wrapper component is not a good fit.
 - Bind every visible render point of a CMS-owned field, not just one occurrence. If the same entry field appears twice on the page, both render points need the CMS binding.
+- Simple page-owned Astro image render points can also be replaced from preview when they use straightforward `<Image src={...} />` or `<img src="..." />` patterns that Vivd can map back to source.
 - For localized CMS values, pass the locale through the CMS binding path, for example via the `locale` prop on `CmsText` or `data-cms-locale` on a lower-level binding helper.
 - Keep locale-dictionary UI text in `src/locales/*.json` and use `data-i18n="key"` for those strings. Do not stack `data-i18n` on the same element as a CMS ownership binding.
 - Do not point markup at raw `src/content/media/...` filesystem paths.
