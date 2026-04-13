@@ -112,7 +112,6 @@ RUN npm ci -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-
 # Copy built outputs
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/backend/drizzle ./packages/backend/drizzle
-COPY --from=builder /app/packages/builder/dist ./packages/builder/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 
 # Needed so the publish service can reload Caddy's configuration
