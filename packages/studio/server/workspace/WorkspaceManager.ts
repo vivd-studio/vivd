@@ -291,6 +291,9 @@ export class WorkspaceManager {
         throw new Error("Workspace not initialized");
       }
 
+      // Self-heal a stale working-commit marker before staging/saving.
+      await this.getWorkingCommitLocked();
+
       // Stage all changes
       await this.git.raw(["add", "-A"]);
 
@@ -557,11 +560,16 @@ export class WorkspaceManager {
       if (this.git) {
         try {
           const headHash = (await this.git.raw(["rev-parse", "HEAD"])).trim();
+          if (headHash && headHash === hash) {
+            await this.clearWorkingCommit();
+            return null;
+          }
           if (headHash && headHash !== hash) {
             const status = await this.git.raw(["status", "--porcelain"]);
             const nonMarkerStatusLines = this.getRelevantStatusLines(status);
             // If HEAD advanced but there are no real workspace changes, the marker is stale.
             if (nonMarkerStatusLines.length === 0) {
+              await this.clearWorkingCommit();
               return null;
             }
           }

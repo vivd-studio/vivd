@@ -293,6 +293,10 @@ export const projectRouter = router({
       const headCommit = await ctx.workspace.getHeadCommit();
       const effectiveCommitHash = hash || headCommit?.hash || "";
 
+      // Report state even on no-op saves so connected publish/history UIs can
+      // observe cleared working-commit markers immediately.
+      void workspaceStateReporter.reportSoon();
+
       if (!effectiveCommitHash) {
         return {
           success: true,
@@ -307,8 +311,6 @@ export const projectRouter = router({
 
       if (hash) {
         projectTouchReporter.touch(input.slug);
-        // Report state ASAP so publish dialogs reflect the new snapshot without waiting for polling.
-        void workspaceStateReporter.reportSoon();
 
         github = await ctx.workspace.runExclusive("githubPush", async ({ cwd }) => {
           return await syncPushToGitHub({
@@ -397,6 +399,7 @@ export const projectRouter = router({
 
       await ctx.workspace.discardChanges();
       projectTouchReporter.touch(input.slug);
+      void workspaceStateReporter.reportSoon();
       requestBucketSync("project-discard-changes", {
         slug: input.slug,
         version: input.version,

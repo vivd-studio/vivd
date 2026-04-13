@@ -137,7 +137,7 @@ describe("project router gitSave", () => {
     expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
     expect(syncPushToGitHubMock).not.toHaveBeenCalled();
     expect(projectTouchMock).not.toHaveBeenCalled();
-    expect(reportSoonMock).not.toHaveBeenCalled();
+    expect(reportSoonMock).toHaveBeenCalledTimes(1);
   });
 
   it("builds preview artifacts locally for Astro projects after source sync", async () => {

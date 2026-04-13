@@ -190,8 +190,11 @@ export function VersionHistoryPanel({
   const discardMutation = trpc.project.gitDiscardChanges.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
-      utils.project.gitHasChanges.invalidate({ slug: projectSlug, version });
-      utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version });
+      void Promise.all([
+        utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+      ]);
       onRefresh?.();
     },
     onError: (error) => {
