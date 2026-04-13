@@ -58,7 +58,7 @@ describe("studio AgentInstructionsService fallback", () => {
       "Never print pseudo tool-call text such as `[tool_call: ...]`",
     );
     expect(prompt).toContain(
-      "If the user drops an image or preview screenshot and you need to inspect its visual content, you must use the runtime's read tool on that path first; otherwise you have not actually seen the image.",
+      "If the user drops an image or preview screenshot and you need to inspect its visual content, you must use the read tool on that path first; otherwise you have not actually seen the image.",
     );
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
     expect(prompt).toContain(

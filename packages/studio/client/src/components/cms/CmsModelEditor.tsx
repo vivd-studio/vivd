@@ -44,6 +44,16 @@ const FIELD_TYPE_OPTIONS: Array<{ value: CmsFieldDefinition["type"]; label: stri
   { value: "list", label: "List" },
 ];
 
+const LOCALIZABLE_FIELD_TYPES = new Set<CmsFieldDefinition["type"]>([
+  "string",
+  "text",
+  "richText",
+]);
+
+function supportsLocalizedFields(type: CmsFieldDefinition["type"]): boolean {
+  return LOCALIZABLE_FIELD_TYPES.has(type);
+}
+
 interface CmsModelEditorProps {
   selectedModel: CmsModelRecord | null;
   collectionOptions: string[];
@@ -100,6 +110,7 @@ function normalizeFieldForType(
     description: previous.description,
     required: previous.required,
     default: previous.default,
+    localized: supportsLocalizedFields(type) ? previous.localized : undefined,
   };
 }
 
@@ -394,6 +405,26 @@ function CmsModelFieldEditor({
               }
             />
           </div>
+          {supportsLocalizedFields(field.type) ? (
+            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background px-3 py-3">
+              <div>
+                <Label>Localized</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Stores one value per locale and routes preview saves through
+                  the active locale key.
+                </p>
+              </div>
+              <Checkbox
+                checked={field.localized === true}
+                onCheckedChange={(checked) =>
+                  onUpdateField(fieldPath, (current) => ({
+                    ...current,
+                    localized: checked ? true : undefined,
+                  }))
+                }
+              />
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -327,6 +327,17 @@ export function formatCmsStatusReport(input: {
   initialized: boolean;
   valid: boolean;
   contentRoot: string;
+  toolkit: {
+    status: "current" | "stale" | "missing" | "custom";
+    expectedVersion: number;
+    needsInstall: boolean;
+    files: Array<{
+      key: "cmsBindings" | "cmsText" | "cmsImage";
+      relativePath: string;
+      status: "current" | "stale" | "missing" | "custom";
+      currentVersion: number | null;
+    }>;
+  };
   modelCount: number;
   entryCount: number;
   assetCount: number;
@@ -341,6 +352,7 @@ export function formatCmsStatusReport(input: {
   const lines = [
     `Source: ${formatCmsSourceLabel(input.sourceKind)}`,
     `CMS root: ${input.contentRoot}`,
+    `Toolkit: ${input.toolkit.status} (v${input.toolkit.expectedVersion})${input.toolkit.needsInstall ? " - run `vivd cms helper install`" : ""}`,
     `Initialized: ${input.initialized ? "yes" : "no"}`,
     `Validation: ${input.valid ? "ok" : "failed"}`,
     `Models: ${input.modelCount}`,
@@ -364,6 +376,37 @@ export function formatCmsStatusReport(input: {
   } else {
     lines.push("Errors: none");
   }
+
+  return lines.join("\n");
+}
+
+function formatCmsToolkitFileLabel(key: "cmsBindings" | "cmsText" | "cmsImage"): string {
+  if (key === "cmsBindings") return "cmsBindings";
+  if (key === "cmsText") return "CmsText";
+  return "CmsImage";
+}
+
+export function formatCmsToolkitStatusReport(input: {
+  status: "current" | "stale" | "missing" | "custom";
+  expectedVersion: number;
+  needsInstall: boolean;
+  files: Array<{
+    key: "cmsBindings" | "cmsText" | "cmsImage";
+    relativePath: string;
+    status: "current" | "stale" | "missing" | "custom";
+    currentVersion: number | null;
+  }>;
+}): string {
+  const lines = [
+    `CMS toolkit: ${input.status} (expected v${input.expectedVersion})`,
+    `Refresh needed: ${input.needsInstall ? "yes - run \`vivd cms helper install\`" : "no"}`,
+    "Files:",
+    ...input.files.map((file) => {
+      const version =
+        file.currentVersion == null ? "unversioned" : `v${file.currentVersion}`;
+      return `- ${formatCmsToolkitFileLabel(file.key)}: ${file.status} (${version}) - ${file.relativePath}`;
+    }),
+  ];
 
   return lines.join("\n");
 }

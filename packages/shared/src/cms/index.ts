@@ -15,6 +15,7 @@ import {
 } from "./entryUpdates.js";
 
 export const CMS_VERSION = 1;
+export const CMS_TOOLKIT_VERSION = 1;
 export const CMS_CONTENT_ROOT = path.join("src", "content");
 
 const SUPPORTED_FIELD_TYPES = new Set([
@@ -139,6 +140,7 @@ export interface CmsValidationReport {
   initialized: boolean;
   valid: boolean;
   paths: CmsPaths;
+  toolkit: CmsToolkitStatusReport;
   defaultLocale: string | null;
   locales: string[];
   modelCount: number;
@@ -153,6 +155,24 @@ export interface CmsScaffoldResult {
   created: string[];
   skipped: string[];
   paths: CmsPaths;
+}
+
+export type CmsToolkitFileKey = "cmsBindings" | "cmsText" | "cmsImage";
+export type CmsToolkitFileStatus = "current" | "stale" | "missing" | "custom";
+
+export interface CmsToolkitFileReport {
+  key: CmsToolkitFileKey;
+  relativePath: string;
+  status: CmsToolkitFileStatus;
+  expectedVersion: number;
+  currentVersion: number | null;
+}
+
+export interface CmsToolkitStatusReport {
+  status: CmsToolkitFileStatus;
+  expectedVersion: number;
+  needsInstall: boolean;
+  files: CmsToolkitFileReport[];
 }
 
 export interface CmsCreateEntryResult extends CmsScaffoldResult {
@@ -280,7 +300,12 @@ const DEFAULT_CMS_IMAGE_COMPONENT_RELATIVE_PATH = path.join(
 );
 
 const CMS_BINDING_HELPER_SOURCE = [
+  `// vivd-cms-toolkit-version: ${CMS_TOOLKIT_VERSION}`,
   "export type CmsBindingFieldPath = string | Array<string | number>;",
+  "export type CmsLocalizedTextValue =",
+  "  | string",
+  "  | number",
+  "  | Record<string, string | number | null | undefined>;",
   "",
   "function formatCmsFieldPath(field: CmsBindingFieldPath): string {",
   '  if (typeof field === "string") {',
@@ -311,6 +336,53 @@ const CMS_BINDING_HELPER_SOURCE = [
   "  entry: string;",
   "  locale?: string;",
   "};",
+  "",
+  "function normalizeCmsLocale(locale?: string): string {",
+  '  return typeof locale === "string" ? locale.trim() : "";',
+  "}",
+  "",
+  "export function resolveCmsTextValue(",
+  "  value: CmsLocalizedTextValue | undefined,",
+  "  locale?: string,",
+  "  defaultLocale?: string,",
+  "): string | number | undefined {",
+  '  if (typeof value === "undefined") {',
+  "    return undefined;",
+  "  }",
+  "",
+  '  if (typeof value === "string" || typeof value === "number") {',
+  "    return value;",
+  "  }",
+  "",
+  "  if (!value || Array.isArray(value)) {",
+  "    return undefined;",
+  "  }",
+  "",
+  "  const localeMap = value as Record<string, string | number | null | undefined>;",
+  "  const activeLocale = normalizeCmsLocale(locale);",
+  "  if (activeLocale) {",
+  "    const localized = localeMap[activeLocale];",
+  '    if (typeof localized === "string" || typeof localized === "number") {',
+  "      return localized;",
+  "    }",
+  "  }",
+  "",
+  "  const fallbackLocale = normalizeCmsLocale(defaultLocale);",
+  "  if (fallbackLocale) {",
+  "    const fallback = localeMap[fallbackLocale];",
+  '    if (typeof fallback === "string" || typeof fallback === "number") {',
+  "      return fallback;",
+  "    }",
+  "  }",
+  "",
+  "  for (const candidate of Object.values(localeMap)) {",
+  '    if (typeof candidate === "string" || typeof candidate === "number") {',
+  "      return candidate;",
+  "    }",
+  "  }",
+  "",
+  "  return undefined;",
+  "}",
   "",
   "export function cmsBindingAttrs(binding: CmsBindingInput) {",
   "  return {",
@@ -343,15 +415,22 @@ const CMS_BINDING_HELPER_SOURCE = [
 ].join("\n");
 
 const CMS_TEXT_COMPONENT_SOURCE = `---
-import { cmsTextBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
+/* vivd-cms-toolkit-version: ${CMS_TOOLKIT_VERSION} */
+import {
+  cmsTextBindingAttrs,
+  resolveCmsTextValue,
+  type CmsBindingFieldPath,
+  type CmsLocalizedTextValue,
+} from "../cmsBindings";
 
 interface Props {
   collection: string;
   entry: string;
   field: CmsBindingFieldPath;
   locale?: string;
+  defaultLocale?: string;
   as?: string;
-  text?: string | number;
+  text?: CmsLocalizedTextValue;
   [key: string]: unknown;
 }
 
@@ -360,20 +439,23 @@ const {
   entry,
   field,
   locale,
+  defaultLocale,
   as: Tag = "span",
   text,
   ...htmlProps
 } = Astro.props as Props;
 
 const cmsAttrs = cmsTextBindingAttrs({ collection, entry, field, locale });
+const resolvedText = resolveCmsTextValue(text, locale, defaultLocale);
 ---
 
 <Tag {...cmsAttrs} {...htmlProps}>
-  {text ?? <slot />}
+  {resolvedText ?? <slot />}
 </Tag>
 `;
 
 const CMS_IMAGE_COMPONENT_SOURCE = `---
+/* vivd-cms-toolkit-version: ${CMS_TOOLKIT_VERSION} */
 import { Image } from "astro:assets";
 import { cmsAssetBindingAttrs, type CmsBindingFieldPath } from "../cmsBindings";
 
@@ -394,21 +476,35 @@ const cmsAttrs = cmsAssetBindingAttrs({ collection, entry, field, locale });
 
 const CMS_TOOLKIT_FILE_SPECS = [
   {
+    key: "cmsBindings",
     relativePath: DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH,
     source: CMS_BINDING_HELPER_SOURCE,
   },
   {
+    key: "cmsText",
     relativePath: DEFAULT_CMS_TEXT_COMPONENT_RELATIVE_PATH,
     source: CMS_TEXT_COMPONENT_SOURCE,
   },
   {
+    key: "cmsImage",
     relativePath: DEFAULT_CMS_IMAGE_COMPONENT_RELATIVE_PATH,
     source: CMS_IMAGE_COMPONENT_SOURCE,
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  key: CmsToolkitFileKey;
+  relativePath: string;
+  source: string;
+}>;
 
 function normalizeTextContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
+}
+
+function parseCmsToolkitVersion(value: string): number | null {
+  const match = value.match(/vivd-cms-toolkit-version:\s*(\d+)/);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1] ?? "", 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function isUpgradeableCmsBindingHelperSource(value: string): boolean {
@@ -430,7 +526,7 @@ function isUpgradeableCmsToolkitSource(relativePath: string, value: string): boo
   const normalized = normalizeTextContent(value);
   if (relativePath === DEFAULT_CMS_TEXT_COMPONENT_RELATIVE_PATH) {
     return (
-      normalized.includes('import { cmsTextBindingAttrs') &&
+      normalized.includes('from "../cmsBindings";') &&
       normalized.includes("cmsTextBindingAttrs({ collection, entry, field, locale })")
     );
   }
@@ -1312,10 +1408,95 @@ async function countFilesRecursively(root: string): Promise<number> {
   return count;
 }
 
+function summarizeCmsToolkitStatus(
+  files: CmsToolkitFileReport[],
+): CmsToolkitStatusReport["status"] {
+  if (files.some((file) => file.status === "stale")) {
+    return "stale";
+  }
+  if (files.some((file) => file.status === "missing")) {
+    return "missing";
+  }
+  if (files.some((file) => file.status === "custom")) {
+    return "custom";
+  }
+  return "current";
+}
+
+function resolveCmsToolkitRelativePath(
+  defaultRelativePath: string,
+  existingHelperPath: string | null,
+): string {
+  if (
+    defaultRelativePath === DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH &&
+    existingHelperPath
+  ) {
+    return existingHelperPath;
+  }
+  return toPosix(defaultRelativePath);
+}
+
+export async function getCmsToolkitStatus(projectDir: string): Promise<CmsToolkitStatusReport> {
+  const existingHelperPath = await findExistingCmsBindingHelperRelativePath(projectDir);
+  const files: CmsToolkitFileReport[] = [];
+
+  for (const spec of CMS_TOOLKIT_FILE_SPECS) {
+    const relativePath = resolveCmsToolkitRelativePath(spec.relativePath, existingHelperPath);
+    const absolutePath = path.join(projectDir, relativePath);
+    if (!(await pathExists(absolutePath))) {
+      files.push({
+        key: spec.key,
+        relativePath,
+        status: "missing",
+        expectedVersion: CMS_TOOLKIT_VERSION,
+        currentVersion: null,
+      });
+      continue;
+    }
+
+    const currentSource = await fs.readFile(absolutePath, "utf8");
+    const desiredSource = `${spec.source}\n`;
+    const currentVersion = parseCmsToolkitVersion(currentSource);
+    let status: CmsToolkitFileStatus;
+
+    if (normalizeTextContent(currentSource) === normalizeTextContent(desiredSource)) {
+      status = "current";
+    } else if (currentVersion != null && currentVersion < CMS_TOOLKIT_VERSION) {
+      status = "stale";
+    } else if (
+      currentVersion == null &&
+      isUpgradeableCmsToolkitSource(spec.relativePath, currentSource)
+    ) {
+      status = "stale";
+    } else {
+      status = "custom";
+    }
+
+    files.push({
+      key: spec.key,
+      relativePath,
+      status,
+      expectedVersion: CMS_TOOLKIT_VERSION,
+      currentVersion,
+    });
+  }
+
+  return {
+    status: summarizeCmsToolkitStatus(files),
+    expectedVersion: CMS_TOOLKIT_VERSION,
+    needsInstall: files.some((file) => file.status === "missing" || file.status === "stale"),
+    files,
+  };
+}
+
 export async function getCmsStatus(projectDir: string): Promise<CmsValidationReport> {
+  const toolkit = await getCmsToolkitStatus(projectDir);
   const astroReport = await inspectAstroCollectionsWorkspace(projectDir);
   if (astroReport) {
-    return astroReport;
+    return {
+      ...astroReport,
+      toolkit,
+    };
   }
 
   if (await isAstroProject(projectDir)) {
@@ -1325,6 +1506,7 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
       initialized: false,
       valid: false,
       paths,
+      toolkit,
       defaultLocale: null,
       locales: [],
       modelCount: 0,
@@ -1348,6 +1530,7 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
       initialized: false,
       valid: false,
       paths: astroPaths,
+      toolkit,
       defaultLocale: null,
       locales: [],
       modelCount: 0,
@@ -1398,6 +1581,7 @@ export async function getCmsStatus(projectDir: string): Promise<CmsValidationRep
     initialized: true,
     valid: errors.length === 0,
     paths,
+    toolkit,
     defaultLocale: rootConfig.defaultLocale,
     locales: rootConfig.locales,
     modelCount: models.length,
@@ -1605,10 +1789,7 @@ export async function installCmsBindingHelper(projectDir: string): Promise<CmsSc
   const existingHelperPath = await findExistingCmsBindingHelperRelativePath(projectDir);
   for (const spec of CMS_TOOLKIT_FILE_SPECS) {
     const desiredSource = `${spec.source}\n`;
-    const relativePath =
-      spec.relativePath === DEFAULT_CMS_BINDING_HELPER_RELATIVE_PATH && existingHelperPath
-        ? existingHelperPath
-        : toPosix(spec.relativePath);
+    const relativePath = resolveCmsToolkitRelativePath(spec.relativePath, existingHelperPath);
     const absolutePath = path.join(projectDir, relativePath);
 
     if (await pathExists(absolutePath)) {

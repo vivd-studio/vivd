@@ -133,7 +133,7 @@ export const collections = {
         slug: "demo-site",
         version: 1,
       }),
-    ).rejects.toThrow("Astro-backed projects now use");
+    ).rejects.toThrow("Astro-backed projects use `src/content.config.ts`");
   });
 
   it("creates Astro collection models in src/content.config.ts through the structured CMS path", async () => {
@@ -289,6 +289,92 @@ export const collections = {
       slug: "demo-site",
       version: 1,
     });
+  });
+
+  it("supports localized Astro collection fields through schema parsing, entry creation, and preview saves", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "astro.config.mjs"),
+      `import { defineConfig } from "astro/config";
+
+export default defineConfig({
+  i18n: {
+    defaultLocale: "en",
+    locales: ["en", "de"],
+  },
+});
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const updatedModel = await caller.updateModel({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "blog",
+      fields: {
+        title: { type: "string", required: true, localized: true },
+      },
+    });
+
+    expect(updatedModel.report.valid).toBe(true);
+    const updatedConfig = await fs.readFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      "utf8",
+    );
+    expect(updatedConfig).toContain("title: z.object({");
+    expect(updatedConfig).toContain('en: z.string(),');
+    expect(updatedConfig).toContain('de: z.string().optional(),');
+
+    const status = await caller.status();
+    expect(status.locales).toEqual(["en", "de"]);
+    expect(status.defaultLocale).toBe("en");
+    expect(status.models[0]?.fields.title).toMatchObject({
+      type: "string",
+      localized: true,
+    });
+
+    await caller.createEntry({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "blog",
+      entryKey: "new-post",
+    });
+
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "new-post.yaml"), "utf8"),
+    ).resolves.toContain("en: New Post");
+
+    await caller.applyPreviewFieldUpdates({
+      slug: "demo-site",
+      version: 1,
+      updates: [
+        {
+          modelKey: "blog",
+          entryKey: "new-post",
+          fieldPath: ["title", "de"],
+          value: "Neuer Beitrag",
+        },
+      ],
+    });
+
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "new-post.yaml"), "utf8"),
+    ).resolves.toContain("de: Neuer Beitrag");
   });
 
   it("applies preview-owned CMS field updates back into Astro entry files", async () => {

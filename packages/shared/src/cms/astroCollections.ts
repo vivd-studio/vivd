@@ -8,11 +8,26 @@ import type {
   CmsEntryRecord,
   CmsFieldDefinition,
   CmsModelRecord,
+  CmsSourceKind,
   CmsPaths,
   CmsScaffoldResult,
   CmsUpdateModelResult,
-  CmsValidationReport,
 } from "./index.js";
+
+type AstroCollectionsValidationReport = {
+  sourceKind: CmsSourceKind;
+  initialized: boolean;
+  valid: boolean;
+  paths: CmsPaths;
+  defaultLocale: string | null;
+  locales: string[];
+  modelCount: number;
+  entryCount: number;
+  assetCount: number;
+  mediaFileCount: number;
+  errors: string[];
+  models: CmsModelRecord[];
+};
 
 const ASTRO_CONTENT_CONFIG_CANDIDATES = [
   path.join("src", "content.config.ts"),
@@ -85,12 +100,20 @@ type SchemaParseContext = {
   imageHelpers: Set<string>;
   errors: string[];
   label: string;
+  defaultLocale: string | null;
+  locales: string[];
 };
 
 type AstroI18nConfig = {
   defaultLocale: string | null;
   locales: string[];
 };
+
+const LOCALIZABLE_ASTRO_FIELD_TYPES = new Set<CmsFieldDefinition["type"]>([
+  "string",
+  "text",
+  "richText",
+]);
 
 function toPosix(value: string): string {
   return value.split(path.sep).join("/");
@@ -106,6 +129,24 @@ function titleizeKey(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeLocaleCode(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function getAstroSchemaLocales(localeConfig: AstroI18nConfig): string[] {
+  const normalized = [
+    normalizeLocaleCode(localeConfig.defaultLocale),
+    ...localeConfig.locales.map((locale) => normalizeLocaleCode(locale)),
+  ].filter((locale): locale is string => Boolean(locale));
+
+  return normalized.length ? [...new Set(normalized)] : ["en"];
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -744,6 +785,53 @@ function parseSchemaObject(
   return fieldResult.field.fields;
 }
 
+function inferLocalizedFieldFromObject(
+  entries: Array<{ key: string; parsed: ParsedFieldResult }>,
+  context: SchemaParseContext,
+): ParsedFieldResult | null {
+  if (!entries.length || !context.locales.length) {
+    return null;
+  }
+
+  const localeSet = new Set(context.locales);
+  if (!entries.every(({ key }) => localeSet.has(key))) {
+    return null;
+  }
+
+  const firstType = entries[0]?.parsed.field.type;
+  if (!firstType || !LOCALIZABLE_ASTRO_FIELD_TYPES.has(firstType)) {
+    return null;
+  }
+
+  if (
+    !entries.every(
+      ({ parsed }) =>
+        parsed.field.type === firstType &&
+        LOCALIZABLE_ASTRO_FIELD_TYPES.has(parsed.field.type),
+    )
+  ) {
+    return null;
+  }
+
+  const preferredLocale =
+    (context.defaultLocale && localeSet.has(context.defaultLocale)
+      ? context.defaultLocale
+      : entries[0]?.key) ?? null;
+  const preferredEntry =
+    entries.find(({ key }) => key === preferredLocale) ?? entries[0] ?? null;
+  if (!preferredEntry) {
+    return null;
+  }
+
+  return {
+    field: {
+      ...preferredEntry.parsed.field,
+      localized: true,
+    },
+    supported: entries.every(({ parsed }) => parsed.supported),
+  };
+}
+
 function parseSchemaExpression(
   expression: ts.Expression,
   context: SchemaParseContext,
@@ -934,6 +1022,7 @@ function parseSchemaExpression(
         };
       }
       const fields: Record<string, CmsFieldDefinition> = {};
+      const localizedEntries: Array<{ key: string; parsed: ParsedFieldResult }> = [];
       let supported = true;
       for (const property of shape.properties) {
         if (!ts.isPropertyAssignment(property)) {
@@ -956,11 +1045,16 @@ function parseSchemaExpression(
           supported = false;
           continue;
         }
+        localizedEntries.push({ key: propertyName, parsed });
         fields[propertyName] = {
           ...parsed.field,
           label: parsed.field.label ?? titleizeKey(propertyName),
         };
         supported = supported && parsed.supported;
+      }
+      const localizedField = inferLocalizedFieldFromObject(localizedEntries, context);
+      if (localizedField) {
+        return localizedField;
       }
       return {
         field: {
@@ -1352,6 +1446,7 @@ function serializeDefaultValue(value: unknown): string {
 function buildAstroObjectExpression(
   fields: Record<string, CmsFieldDefinition>,
   propertyIndent: string,
+  localeConfig: AstroI18nConfig,
 ): string {
   const entries = Object.entries(fields);
   if (entries.length === 0) {
@@ -1362,7 +1457,7 @@ function buildAstroObjectExpression(
   return `z.object({\n${entries
     .map(
       ([fieldKey, field]) =>
-        `${innerIndent}${renderObjectKey(fieldKey)}: ${buildAstroFieldExpression(field, innerIndent)},`,
+        `${innerIndent}${renderObjectKey(fieldKey)}: ${buildAstroFieldExpression(field, innerIndent, localeConfig)},`,
     )
     .join("\n")}\n${propertyIndent}})`;
 }
@@ -1370,50 +1465,74 @@ function buildAstroObjectExpression(
 function buildAstroFieldExpression(
   field: CmsFieldDefinition,
   propertyIndent: string,
+  localeConfig: AstroI18nConfig,
 ): string {
   let expression = "";
 
-  switch (field.type) {
-    case "slug":
-    case "string":
-    case "text":
-    case "richText":
-      expression = "z.string()";
-      break;
-    case "date":
-    case "datetime":
-      expression = "z.coerce.date()";
-      break;
-    case "number":
-      expression = "z.number()";
-      break;
-    case "boolean":
-      expression = "z.boolean()";
-      break;
-    case "enum":
-      expression = `z.enum([${(field.options ?? []).map((option) => JSON.stringify(option)).join(", ")}])`;
-      break;
-    case "asset":
-      expression = "image()";
-      break;
-    case "assetList":
-      expression = "z.array(image())";
-      break;
-    case "reference":
-      if (!field.referenceModelKey?.trim()) {
-        throw new Error("Reference fields require a target collection");
-      }
-      expression = `reference(${JSON.stringify(field.referenceModelKey.trim())})`;
-      break;
-    case "object":
-      expression = buildAstroObjectExpression(field.fields ?? {}, propertyIndent);
-      break;
-    case "list":
-      expression = `z.array(${buildAstroFieldExpression(field.item ?? { type: "string" }, propertyIndent)})`;
-      break;
-    default:
-      expression = "z.string()";
-      break;
+  if (field.localized) {
+    const locales = getAstroSchemaLocales(localeConfig);
+    const defaultLocale =
+      normalizeLocaleCode(localeConfig.defaultLocale) ?? locales[0] ?? "en";
+    const localeIndent = `${propertyIndent}  `;
+    const localizedField: CmsFieldDefinition = {
+      ...field,
+      localized: undefined,
+      description: undefined,
+      default: undefined,
+    };
+
+    expression = `z.object({\n${locales
+      .map((locale) => {
+        const localeField: CmsFieldDefinition = {
+          ...localizedField,
+          required: locale === defaultLocale ? field.required : false,
+        };
+        return `${localeIndent}${renderObjectKey(locale)}: ${buildAstroFieldExpression(localeField, localeIndent, localeConfig)},`;
+      })
+      .join("\n")}\n${propertyIndent}})`;
+  } else {
+    switch (field.type) {
+      case "slug":
+      case "string":
+      case "text":
+      case "richText":
+        expression = "z.string()";
+        break;
+      case "date":
+      case "datetime":
+        expression = "z.coerce.date()";
+        break;
+      case "number":
+        expression = "z.number()";
+        break;
+      case "boolean":
+        expression = "z.boolean()";
+        break;
+      case "enum":
+        expression = `z.enum([${(field.options ?? []).map((option) => JSON.stringify(option)).join(", ")}])`;
+        break;
+      case "asset":
+        expression = "image()";
+        break;
+      case "assetList":
+        expression = "z.array(image())";
+        break;
+      case "reference":
+        if (!field.referenceModelKey?.trim()) {
+          throw new Error("Reference fields require a target collection");
+        }
+        expression = `reference(${JSON.stringify(field.referenceModelKey.trim())})`;
+        break;
+      case "object":
+        expression = buildAstroObjectExpression(field.fields ?? {}, propertyIndent, localeConfig);
+        break;
+      case "list":
+        expression = `z.array(${buildAstroFieldExpression(field.item ?? { type: "string" }, propertyIndent, localeConfig)})`;
+        break;
+      default:
+        expression = "z.string()";
+        break;
+    }
   }
 
   if (field.description?.trim()) {
@@ -1431,8 +1550,9 @@ function buildAstroFieldExpression(
 function buildAstroSchemaExpression(
   fields: Record<string, CmsFieldDefinition>,
   propertyIndent: string,
+  localeConfig: AstroI18nConfig,
 ): string {
-  const objectExpression = buildAstroObjectExpression(fields, propertyIndent);
+  const objectExpression = buildAstroObjectExpression(fields, propertyIndent, localeConfig);
   if (Object.values(fields).some(usesImageHelperInField)) {
     return `({ image }) => ${objectExpression}`;
   }
@@ -1563,9 +1683,10 @@ function buildAstroCollectionProperty(
   modelKey: string,
   fields: Record<string, CmsFieldDefinition>,
   propertyIndent: string,
+  localeConfig: AstroI18nConfig,
 ): string {
   const schemaIndent = `${propertyIndent}  `;
-  return `${propertyIndent}${renderObjectKey(modelKey)}: defineCollection({\n${schemaIndent}schema: ${buildAstroSchemaExpression(fields, schemaIndent)},\n${propertyIndent}}),`;
+  return `${propertyIndent}${renderObjectKey(modelKey)}: defineCollection({\n${schemaIndent}schema: ${buildAstroSchemaExpression(fields, schemaIndent, localeConfig)},\n${propertyIndent}}),`;
 }
 
 export async function createAstroCollectionModel(
@@ -1614,7 +1735,13 @@ export async function createAstroCollectionModel(
 
   const objectIndent = getLineIndent(source, collectionsObject.getStart(sourceFile));
   const propertyIndent = `${objectIndent}  `;
-  const propertyText = buildAstroCollectionProperty(normalizedKey, fields, propertyIndent);
+  const localeConfig = await inspectAstroProjectLocales(projectDir);
+  const propertyText = buildAstroCollectionProperty(
+    normalizedKey,
+    fields,
+    propertyIndent,
+    localeConfig,
+  );
 
   let nextSource = source;
   if (collectionsObject.properties.length === 0) {
@@ -1742,7 +1869,12 @@ export async function updateAstroCollectionModel(
   }
 
   const schemaPropertyIndent = getLineIndent(source, schemaNode.getStart(sourceFile));
-  const nextSchemaExpression = buildAstroSchemaExpression(fields, schemaPropertyIndent);
+  const localeConfig = await inspectAstroProjectLocales(projectDir);
+  const nextSchemaExpression = buildAstroSchemaExpression(
+    fields,
+    schemaPropertyIndent,
+    localeConfig,
+  );
   let nextSource = `${source.slice(0, schemaNode.getStart(sourceFile))}${nextSchemaExpression}${source.slice(schemaNode.getEnd())}`;
 
   const requiredImports = new Set(["defineCollection", "z"]);
@@ -1765,6 +1897,7 @@ async function parseCollections(
   projectDir: string,
   configPath: string,
   sourceFile: ts.SourceFile,
+  localeConfig: AstroI18nConfig,
   errors: string[],
 ): Promise<CmsModelRecord[]> {
   const { declarations, collectionsObject } = findExportedCollectionsObject(sourceFile);
@@ -1844,6 +1977,8 @@ async function parseCollections(
       imageHelpers: new Set(["image"]),
       errors: fieldErrors,
       label: `${toPosix(path.relative(projectDir, configPath))}:${collectionKey}`,
+      defaultLocale: localeConfig.defaultLocale,
+      locales: getAstroSchemaLocales(localeConfig),
     });
     errors.push(...fieldErrors);
     if (!fields) continue;
@@ -1901,7 +2036,7 @@ async function parseCollections(
 
 export async function inspectAstroCollectionsWorkspace(
   projectDir: string,
-): Promise<CmsValidationReport | null> {
+): Promise<AstroCollectionsValidationReport | null> {
   const configPath = await findAstroContentConfigPath(projectDir);
   if (!configPath) return null;
 
@@ -1919,7 +2054,7 @@ export async function inspectAstroCollectionsWorkspace(
   );
 
   const localeConfig = await inspectAstroProjectLocales(projectDir);
-  const models = await parseCollections(projectDir, configPath, sourceFile, errors);
+  const models = await parseCollections(projectDir, configPath, sourceFile, localeConfig, errors);
   const entryCount = models.reduce((total, model) => total + model.entries.length, 0);
   const assetCount = models.reduce(
     (total, model) =>

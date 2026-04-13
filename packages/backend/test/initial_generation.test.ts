@@ -124,13 +124,37 @@ describe("initial generation helpers", () => {
           path.join(tmpDir, "src", "layouts", "Layout.astro"),
           "utf-8",
         ),
+      ).toContain('lang = "en",');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "layouts", "Layout.astro"),
+          "utf-8",
+        ),
       ).not.toContain("New Astro Site");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "layouts", "Layout.astro"),
+          "utf-8",
+        ),
+      ).toContain("<html lang={lang}>");
       expect(
         fs.readFileSync(
           path.join(tmpDir, "src", "lib", "cmsBindings.ts"),
           "utf-8",
         ),
       ).toContain("CmsBindingFieldPath");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cmsBindings.ts"),
+          "utf-8",
+        ),
+      ).toContain("vivd-cms-toolkit-version");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cmsBindings.ts"),
+          "utf-8",
+        ),
+      ).toContain("resolveCmsTextValue");
       expect(
         fs.readFileSync(
           path.join(tmpDir, "src", "lib", "cmsBindings.ts"),
@@ -145,10 +169,28 @@ describe("initial generation helpers", () => {
       ).toContain("cmsTextBindingAttrs");
       expect(
         fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cms", "CmsText.astro"),
+          "utf-8",
+        ),
+      ).toContain("vivd-cms-toolkit-version");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cms", "CmsText.astro"),
+          "utf-8",
+        ),
+      ).toContain("resolveCmsTextValue");
+      expect(
+        fs.readFileSync(
           path.join(tmpDir, "src", "lib", "cms", "CmsImage.astro"),
           "utf-8",
         ),
       ).toContain('import { Image } from "astro:assets";');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "lib", "cms", "CmsImage.astro"),
+          "utf-8",
+        ),
+      ).toContain("vivd-cms-toolkit-version");
 
       const manifest = JSON.parse(
         fs.readFileSync(

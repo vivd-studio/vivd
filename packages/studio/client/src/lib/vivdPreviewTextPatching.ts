@@ -42,6 +42,37 @@ export type VivdPatch =
 const normalizeLang = (lang: string) => lang.trim().toLowerCase();
 const isLanguageCode = (value: string) => /^[a-z]{2}(-[a-z]{2})?$/.test(value);
 
+function normalizeDetectedLanguage(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeLang(value);
+  if (!isLanguageCode(normalized)) {
+    return null;
+  }
+
+  return normalized.split("-")[0] ?? null;
+}
+
+function detectLanguageFromDocumentUrl(doc: Document): string | null {
+  try {
+    const url = new URL(doc.URL);
+    const languageSegments = url.pathname
+      .split("/")
+      .map((segment) => normalizeDetectedLanguage(segment))
+      .filter((segment): segment is string => Boolean(segment));
+
+    if (languageSegments.length === 1) {
+      return languageSegments[0] ?? null;
+    }
+  } catch {
+    // ignore invalid document URLs
+  }
+
+  return null;
+}
+
 function isElementLike(value: unknown): value is Element {
   return Boolean(
     value &&
@@ -52,6 +83,39 @@ function isElementLike(value: unknown): value is Element {
 }
 
 export function detectActiveLanguage(doc: Document): string {
+  const explicitLang =
+    normalizeDetectedLanguage(
+      doc.documentElement.getAttribute("data-vivd-active-lang") ??
+        doc.body?.getAttribute("data-vivd-active-lang") ??
+        null,
+    ) ?? null;
+  if (explicitLang) {
+    return explicitLang;
+  }
+
+  const htmlLang = normalizeDetectedLanguage(doc.documentElement.getAttribute("lang"));
+  if (htmlLang) {
+    return htmlLang;
+  }
+
+  const urlLang = detectLanguageFromDocumentUrl(doc);
+  if (urlLang) {
+    return urlLang;
+  }
+
+  const langToggle = Array.from(
+    doc.querySelectorAll<HTMLElement>('[id^="lang-"]'),
+  ).find(
+    (el) =>
+      el.classList.contains("font-bold") ||
+      el.getAttribute("aria-current") === "true",
+  );
+  if (langToggle) {
+    const id = langToggle.id ?? "";
+    const match = id.match(/^lang-([a-z]{2})$/i);
+    if (match?.[1]) return normalizeLang(match[1]);
+  }
+
   try {
     const view = doc.defaultView ?? null;
     const storage = view?.localStorage ?? null;
@@ -71,24 +135,6 @@ export function detectActiveLanguage(doc: Document): string {
     }
   } catch {
     // ignore
-  }
-
-  const langToggle = Array.from(
-    doc.querySelectorAll<HTMLElement>('[id^="lang-"]'),
-  ).find(
-    (el) =>
-      el.classList.contains("font-bold") ||
-      el.getAttribute("aria-current") === "true",
-  );
-  if (langToggle) {
-    const id = langToggle.id ?? "";
-    const match = id.match(/^lang-([a-z]{2})$/i);
-    if (match?.[1]) return normalizeLang(match[1]);
-  }
-
-  const htmlLang = doc.documentElement.getAttribute("lang") ?? "";
-  if (htmlLang && isLanguageCode(normalizeLang(htmlLang))) {
-    return normalizeLang(htmlLang).split("-")[0]!;
   }
 
   return "en";

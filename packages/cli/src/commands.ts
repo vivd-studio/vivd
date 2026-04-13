@@ -8,6 +8,7 @@ import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "
 import { resolveCliRuntime } from "./backend.js";
 import {
   getCmsStatus,
+  getCmsToolkitStatus,
   installCmsBindingHelper,
   scaffoldCmsEntry,
   scaffoldCmsModel,
@@ -17,6 +18,7 @@ import {
 import {
   formatCmsScaffoldReport,
   formatCmsStatusReport,
+  formatCmsToolkitStatusReport,
   formatCmsValidateReport,
   formatDoctorReport,
   formatGenericPluginActionReport,
@@ -354,8 +356,10 @@ const GENERAL_HELP: Record<string, string> = {
   cms: [
     "vivd cms status",
     "vivd cms validate",
+    "vivd cms helper status",
     "vivd cms helper install",
     "For Astro-backed projects, Vivd CMS reads Astro Content Collections from src/content.config.ts and entry files under src/content/**.",
+    "Use `vivd cms helper status` to inspect whether the local CMS preview toolkit is current before CMS/localization work.",
     "Use `vivd cms helper install` to add or refresh the local CMS preview toolkit: src/lib/cmsBindings.ts plus src/lib/cms/CmsText.astro and src/lib/cms/CmsImage.astro.",
     "Bind actual CMS-owned render points, not generic layout wrappers.",
     "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
@@ -855,6 +859,7 @@ async function runCmsStatus(cwd: string): Promise<CommandResult> {
       initialized: report.initialized,
       valid: report.valid,
       contentRoot: report.paths.contentRoot,
+      toolkit: report.toolkit,
       modelCount: report.modelCount,
       entryCount: report.entryCount,
       assetCount: report.assetCount,
@@ -864,6 +869,11 @@ async function runCmsStatus(cwd: string): Promise<CommandResult> {
     }),
     report.valid ? 0 : 1,
   );
+}
+
+async function runCmsHelperStatus(cwd: string): Promise<CommandResult> {
+  const report = await getCmsToolkitStatus(cwd);
+  return jsonResult(report, formatCmsToolkitStatusReport(report), report.needsInstall ? 1 : 0);
 }
 
 async function runCmsValidate(cwd: string): Promise<CommandResult> {
@@ -1892,6 +1902,9 @@ export async function dispatchCli(
       }
       if (second === "validate") {
         return runCmsValidate(cwd);
+      }
+      if (second === "helper" && third === "status") {
+        return runCmsHelperStatus(cwd);
       }
       if (second === "helper" && third === "install") {
         return runCmsHelperInstall(cwd);

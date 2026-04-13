@@ -2038,12 +2038,14 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN");
     expect(rootHelp.human).toContain("vivd cms help");
     expect(rootHelp.human).toContain("vivd publish help");
+    expect(rootHelp.human).toContain("vivd cms helper status");
     expect(rootHelp.human).toContain("vivd publish status");
     expect(rootHelp.human).toContain("vivd publish targets");
     expect(rootHelp.human).toContain("vivd publish prepare");
     expect(rootHelp.human).toContain("vivd publish deploy [--domain <domain>]");
     expect(rootHelp.human).toContain("vivd support request <summary...>");
     expect(rootHelp.human).toContain("DISCOVER MORE");
+    expect(cmsHelp.human).toContain("vivd cms helper status");
     expect(cmsHelp.human).toContain("vivd cms helper install");
     expect(cmsHelp.human).not.toContain("vivd cms scaffold init");
     expect(cmsHelp.human).toContain("src/content/");
@@ -2122,6 +2124,29 @@ describe("dispatchCli", () => {
       expect(result.human).toContain("CMS preview toolkit installed.");
       await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-collection");
       await expect(fs.readFile(cmsTextPath, "utf8")).resolves.toContain("cmsTextBindingAttrs");
+      expect(runtime.client.query).not.toHaveBeenCalled();
+      expect(runtime.client.mutation).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports CMS helper freshness without a connected runtime", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-cms-helper-status-"));
+
+    try {
+      const missingResult = await dispatchCli(["cms", "helper", "status"], tempDir);
+
+      expect(missingResult.human).toContain("CMS toolkit: missing");
+      expect(missingResult.human).toContain("run `vivd cms helper install`");
+      expect(missingResult.exitCode).toBe(1);
+
+      await dispatchCli(["cms", "helper", "install"], tempDir);
+      const currentResult = await dispatchCli(["cms", "helper", "status"], tempDir);
+
+      expect(currentResult.human).toContain("CMS toolkit: current");
+      expect(currentResult.human).toContain("cmsBindings: current");
+      expect(currentResult.exitCode).toBe(0);
       expect(runtime.client.query).not.toHaveBeenCalled();
       expect(runtime.client.mutation).not.toHaveBeenCalled();
     } finally {

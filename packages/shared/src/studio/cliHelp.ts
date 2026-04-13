@@ -141,6 +141,10 @@ export function renderVivdCliRootHelp(
         description: "Validate Astro content collections and entry files without a connected runtime",
       },
       {
+        command: "vivd cms helper status",
+        description: "Check whether the local CMS preview toolkit files are current or need a refresh",
+      },
+      {
         command: "vivd cms helper install",
         description:
           "Add or refresh the local CMS preview toolkit (src/lib/cmsBindings.ts plus src/lib/cms/CmsText.astro and CmsImage.astro)",

@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   getCmsPaths,
+  getCmsToolkitStatus,
   installCmsBindingHelper,
   scaffoldCmsEntry,
   scaffoldCmsModel,
@@ -60,6 +61,7 @@ describe("cms workspace utilities", () => {
     expect(firstResult.skipped).toEqual([]);
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("data-cms-field");
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("CmsBindingFieldPath");
+    await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("vivd-cms-toolkit-version");
     await expect(fs.readFile(cmsTextPath, "utf8")).resolves.toContain("cmsTextBindingAttrs");
     await expect(fs.readFile(cmsImagePath, "utf8")).resolves.toContain("cmsAssetBindingAttrs");
     expect(secondResult.created).toEqual([]);
@@ -102,6 +104,49 @@ export function cmsBindingAttrs(binding: CmsBindingInput) {
     expect(result.created).toContain("src/lib/cmsBindings.ts");
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("cmsAssetBindingAttrs");
     await expect(fs.readFile(helperPath, "utf8")).resolves.toContain("CmsBindingFieldPath");
+  });
+
+  it("reports CMS toolkit freshness for missing, stale, current, and custom helper files", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    const helperPath = path.join(projectDir, "src", "lib", "cmsBindings.ts");
+    const cmsTextPath = path.join(projectDir, "src", "lib", "cms", "CmsText.astro");
+
+    let report = await getCmsToolkitStatus(projectDir);
+    expect(report.status).toBe("missing");
+    expect(report.needsInstall).toBe(true);
+    expect(report.files.every((file) => file.status === "missing")).toBe(true);
+
+    await installCmsBindingHelper(projectDir);
+
+    report = await getCmsToolkitStatus(projectDir);
+    expect(report.status).toBe("current");
+    expect(report.needsInstall).toBe(false);
+    expect(report.files.every((file) => file.status === "current")).toBe(true);
+    expect(report.files.every((file) => file.currentVersion === 1)).toBe(true);
+
+    const helperSource = await fs.readFile(helperPath, "utf8");
+    await fs.writeFile(
+      helperPath,
+      helperSource.replace("// vivd-cms-toolkit-version: 1\n", ""),
+      "utf8",
+    );
+
+    report = await getCmsToolkitStatus(projectDir);
+    expect(report.status).toBe("stale");
+    expect(report.needsInstall).toBe(true);
+    expect(report.files.find((file) => file.key === "cmsBindings")?.status).toBe("stale");
+
+    await installCmsBindingHelper(projectDir);
+
+    const cmsTextSource = await fs.readFile(cmsTextPath, "utf8");
+    await fs.writeFile(cmsTextPath, `${cmsTextSource}\n<!-- custom -->\n`, "utf8");
+
+    report = await getCmsToolkitStatus(projectDir);
+    expect(report.status).toBe("custom");
+    expect(report.needsInstall).toBe(false);
+    expect(report.files.find((file) => file.key === "cmsText")?.status).toBe("custom");
   });
 
   it("inspects Astro Content Collections directly from src/content.config.ts", async () => {
