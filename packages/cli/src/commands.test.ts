@@ -539,6 +539,109 @@ describe("dispatchCli", () => {
     }
   });
 
+  it("re-requests artifact preparation when the prepared snapshot lags the saved head commit", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "prepared123",
+                lastSyncedCommitHash: "head789",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "head789",
+                studioWorkingCommitHash: "head789",
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                success: true,
+                hash: "",
+                noChanges: true,
+                github: {
+                  attempted: false,
+                  success: true,
+                },
+                message: "No changes to save. Preparing artifacts for head789",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "head789",
+                lastSyncedCommitHash: "head789",
+                builtAt: "2026-03-29T08:59:30.000Z",
+                sourceBuiltAt: "2026-03-29T08:58:45.000Z",
+                previewBuiltAt: "2026-03-29T08:59:30.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "head789",
+                studioWorkingCommitHash: "head789",
+                studioStateReportedAt: "2026-03-29T08:59:35.000Z",
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const result = await dispatchCli(["publish", "prepare"]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.gitSave",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            slug: "demo",
+            version: 7,
+            message: "Prepare publish artifacts",
+          }),
+        }),
+      );
+      expect(result.human).toContain(
+        "Action: requested artifact preparation for the current saved snapshot",
+      );
+      expect(result.human).toContain("Prepared commit: head789");
+      expect(result.human).toContain("Ready to publish: yes");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("deploys through the local Studio surface and validates the target domain", async () => {
     const fetchMock = vi
       .fn()

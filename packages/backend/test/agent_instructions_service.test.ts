@@ -25,7 +25,7 @@ describe("AgentInstructionsService", () => {
     const result = await agentInstructionsService.render({
       projectName: "Acme",
       source: "url",
-      enabledPlugins: ["contact_form", "analytics"],
+      enabledPlugins: ["contact_form", "analytics", "newsletter"],
     });
 
     expect(result.templateSource).toBe("default");
@@ -33,6 +33,11 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("This website was created from an existing website");
     expect(result.instructions).toContain("- contact_form");
     expect(result.instructions).toContain("- analytics");
+    expect(result.instructions).toContain("- newsletter");
+    expect(result.instructions).toContain("Plugin-specific notes");
+    expect(result.instructions).toContain(
+      "Newsletter / Waitlist: Set `mode=waitlist` before generating snippets when the user asked for a waitlist.",
+    );
     expect(result.instructions).toContain("Enabled plugins for this project");
     expect(result.instructions).toContain("Vivd CLI and platform features");
     expect(result.instructions).toContain(
@@ -89,7 +94,13 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(
       "Never print pseudo tool-call text such as `[tool_call: ...]`",
     );
+    expect(result.instructions).toContain(
+      "If the user drops an image or preview screenshot and you need to inspect its visual content, you must use the runtime's read tool on that path first; otherwise you have not actually seen the image.",
+    );
     expect(result.instructions).toContain("User messages may contain `<vivd-internal ... />`");
+    expect(result.instructions).toContain(
+      "the tag and path alone do not put the attachment into model context",
+    );
     expect(result.instructionsHash).toHaveLength(64);
   });
 
@@ -108,17 +119,19 @@ describe("AgentInstructionsService", () => {
 
   it("uses custom template from system settings with token replacement", async () => {
     getSystemSettingValueMock.mockResolvedValue(
-      "Project={{project_name}} Plugins={{enabled_plugins}} Context={{source_context}} Help={{vivd_cli_root_help}}",
+      "Project={{project_name}} Plugins={{enabled_plugins}} Hints={{plugin_agent_hints}} Context={{source_context}} Help={{vivd_cli_root_help}}",
     );
 
     const result = await agentInstructionsService.render({
       projectName: "Beta",
       source: "scratch",
-      enabledPlugins: [],
+      enabledPlugins: ["newsletter"],
     });
 
     expect(result.templateSource).toBe("system_setting");
-    expect(result.instructions).toContain("Project=Beta Plugins=None Context=");
+    expect(result.instructions).toContain(
+      "Project=Beta Plugins=- newsletter Hints=- Newsletter / Waitlist: Set `mode=waitlist` before generating snippets when the user asked for a waitlist. Context=",
+    );
     expect(result.instructions).toContain("Help=Work with the connected Vivd project");
     expect(result.instructions).toContain("Tool Usage Contract");
     expect(result.instructions).toContain(

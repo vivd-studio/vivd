@@ -487,6 +487,15 @@ export function PublishDialog({
         !olderSnapshotInStudio &&
         !unsavedChangesInStudio,
     );
+    const canRequestPreparePublishArtifacts = Boolean(
+      !olderSnapshotInStudio &&
+        !unsavedChangesInStudio &&
+        !studioStateUnknownWarning &&
+        (missingPublishableSnapshot ||
+          preparingLatestSnapshotWarning ||
+          publishState?.readiness === "artifact_not_ready" ||
+          publishState?.readiness === "not_found"),
+    );
 
     const canPublishNow =
       publishState?.storageEnabled &&
@@ -532,6 +541,9 @@ export function PublishDialog({
       }
       if (missingPublishableSnapshot) {
         return "Prepare your current snapshot once to enable publishing.";
+      }
+      if (preparingLatestSnapshotWarning) {
+        return "Prepare your latest saved snapshot once to enable publishing.";
       }
       if (!publishableCommitMatchesTarget) {
         return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
@@ -863,18 +875,13 @@ export function PublishDialog({
                 </PublishWarningNotice>
               ) : null}
 
-              {preparingLatestSnapshotWarning &&
-              !olderSnapshotInStudio &&
-              !unsavedChangesInStudio &&
-              !studioStateUnknownWarning ? (
-                <PublishWarningNotice title="Preparing your latest changes">
-                  Your latest changes are being prepared for publishing. This can take a little while.
-                </PublishWarningNotice>
-              ) : null}
-
-              {missingPublishableSnapshot ? (
+              {canRequestPreparePublishArtifacts ? (
                 <PublishWarningNotice
-                  title="Prepare this snapshot once"
+                  title={
+                    preparingLatestSnapshotWarning
+                      ? "Prepare your latest saved snapshot"
+                      : "Prepare this snapshot once"
+                  }
                   actions={
                     <Button
                       size="sm"
@@ -898,8 +905,9 @@ export function PublishDialog({
                     </Button>
                   }
                 >
-                  Publishing needs one artifact-preparation run for the current snapshot. This does
-                  not create a new commit.
+                  {preparingLatestSnapshotWarning
+                    ? "The latest saved snapshot is newer than the currently prepared publish artifact. Run prepare once to rebuild it without creating a new commit."
+                    : "Publishing needs one artifact-preparation run for the current snapshot. This does not create a new commit."}
                 </PublishWarningNotice>
               ) : null}
 

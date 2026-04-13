@@ -134,6 +134,7 @@ Use this sequence:
 1. Define or update the plugin definition.
    - Keep the plugin definition in the plugin package
    - Export a safe package descriptor from the plugin package
+   - Put short plugin-specific agent guidance in `definition.agentHints` when the agent needs durable rules that should follow the plugin everywhere
    - Register the plugin through the host descriptor lists instead of adding separate hardcoded arrays/maps per surface
 
 2. Wire the backend module.

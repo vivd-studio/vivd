@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { listInstalledPluginAgentHints } from "@vivd/installed-plugins";
 import {
   applyAgentInstructionsTemplate,
   DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE,
   ensureMandatoryToolChannelGuidance,
+  formatAgentInstructionsPluginHints,
   formatAgentInstructionsPlugins,
   normalizeAgentInstructionsTemplate,
   renderVivdCliRootHelp,
@@ -74,11 +76,13 @@ class AgentInstructionsService {
     input: RenderAgentInstructionsInput,
   ): Promise<RenderAgentInstructionsResult> {
     const { template, source } = await this.getTemplate();
+    const pluginAgentHints = listInstalledPluginAgentHints(input.enabledPlugins);
     const instructions =
       source === "default"
         ? renderDefaultVivdAgentInstructions({
             projectName: input.projectName,
             enabledPlugins: input.enabledPlugins,
+            pluginAgentHints,
             sourceContext: input.source === "url" ? URL_SOURCE_CONTEXT : "",
             platformSurfaceMode: "cli",
             previewScreenshotCliEnabled: parseBooleanEnv(
@@ -92,6 +96,9 @@ class AgentInstructionsService {
               applyAgentInstructionsTemplate(template, {
                 project_name: input.projectName,
                 enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
+                plugin_agent_hints: formatAgentInstructionsPluginHints(
+                  pluginAgentHints,
+                ),
                 source_context: input.source === "url" ? URL_SOURCE_CONTEXT : "",
                 vivd_cli_root_help: renderVivdCliRootHelp({
                   previewScreenshotEnabled: parseBooleanEnv(

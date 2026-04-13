@@ -39,6 +39,9 @@ export const newsletterPluginDefinition = {
   name: "Newsletter / Waitlist",
   description:
     "Capture confirmed newsletter subscribers or waitlist signups for your project.",
+  agentHints: [
+    "Set `mode=waitlist` before generating snippets when the user asked for a waitlist.",
+  ],
   category: "marketing",
   version: 1,
   sortOrder: 30,

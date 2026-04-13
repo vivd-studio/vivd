@@ -8,6 +8,7 @@ export type VivdPlatformSurfaceMode = "cli" | "plugin-only";
 export interface RenderDefaultVivdAgentInstructionsInput {
   projectName: string;
   enabledPlugins?: string[];
+  pluginAgentHints?: string[];
   sourceContext?: string;
   platformSurfaceMode?: VivdPlatformSurfaceMode;
   previewScreenshotCliEnabled?: boolean;
@@ -18,7 +19,8 @@ export const MANDATORY_TOOL_CHANNEL_GUIDANCE = `## Tool Usage Contract
 
 - Use the runtime's real tool/function channel to execute tools.
 - Never print pseudo tool-call text such as \`[tool_call: ...]\`, fake XML/JSON tool blocks, or other internal tool syntax in normal assistant text.
-- If you want to explain what you are about to do, describe it in plain language before or after the real tool call instead of emitting fake tool markup.`;
+- If you want to explain what you are about to do, describe it in plain language before or after the real tool call instead of emitting fake tool markup.
+- File paths and attachment tags do not automatically load file contents into model context. If the user drops an image or preview screenshot and you need to inspect its visual content, you must use the read tool on that path first; otherwise you have not actually seen the image.`;
 
 const SUPPORT_REQUEST_PERMISSION_GUIDANCE =
   "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.";
@@ -39,6 +41,7 @@ Your name is Vivd. You work in Vivd Studio and are responsible for building the 
    - Mobile responsive
 3. **Enabled plugins for this project**:
 {enabled_plugins}
+{plugin_agent_hints_section}
 {platform_surface_section}
 5. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
 6. **Multi-language support**: When adding multiple languages, use JSON files:
@@ -99,7 +102,7 @@ Your name is Vivd. You work in Vivd Studio and are responsible for building the 
 
 User messages may contain \`<vivd-internal ... />\` self-closing tags with metadata:
 
-- \`<vivd-internal type="dropped-file" filename="..." path=".vivd/dropped-images/..." />\` - User dropped a temporary reference file in chat. You can read it for context or move it into the project if it should be kept.
+- \`<vivd-internal type="dropped-file" filename="..." path=".vivd/dropped-images/..." />\` - User dropped a temporary reference file in chat. Use the runtime's read tool on that path if you need the file contents or need to visually inspect an image; the tag and path alone do not put the attachment into model context. Move it into the project only if it should be kept.
 - \`<vivd-internal type="element-ref" source-file="src/components/..." source-loc="20:125" text="..." />\` - For Astro projects: User selected an element. The \`source-file\` is the Astro component path, \`source-loc\` is line:column.
 - \`<vivd-internal type="element-ref" selector="/html/body/..." file="index.html" text="..." />\` - For static HTML: User selected an element. The selector is an XPath.
 
@@ -127,8 +130,7 @@ function buildPlatformSurfaceSection(
     return `4. **Plugin-first features**:
    - Vivd supports first-party plugins such as Contact Form and Analytics.
    - Prefer plugin-backed solutions over custom implementations for those features.
-   - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.
-   - Check plugin config before installing snippets when wording or behavior depends on mode, for example Newsletter \`waitlist\` vs \`newsletter\`.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
+   - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
   }
 
   const cliRootHelp = renderVivdCliRootHelp({
@@ -152,7 +154,6 @@ ${indentBlock(cliRootHelp, "     ")}
    - Use \`vivd <command> help\` to drill into the relevant area.
    - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
    - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.
-   - Check plugin config before installing snippets when wording or behavior depends on mode, for example Newsletter \`waitlist\` vs \`newsletter\`.
    - For publish work, check \`vivd publish status\` and \`vivd publish targets\` first. Publishing requires the current saved Studio snapshot to be prepared; run \`vivd publish prepare\` when needed before \`vivd publish deploy\`.
    - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
 }
@@ -164,6 +165,18 @@ export function normalizeAgentInstructionsTemplate(input: string): string {
 export function formatAgentInstructionsPlugins(enabledPlugins?: string[]): string {
   if (!enabledPlugins || enabledPlugins.length === 0) return "None";
   return enabledPlugins.map((pluginId) => `- ${pluginId}`).join("\n");
+}
+
+export function formatAgentInstructionsPluginHints(pluginAgentHints?: string[]): string {
+  if (!pluginAgentHints || pluginAgentHints.length === 0) return "None";
+  return pluginAgentHints.map((hint) => `- ${hint}`).join("\n");
+}
+
+function buildPluginAgentHintsSection(pluginAgentHints?: string[]): string {
+  if (!pluginAgentHints || pluginAgentHints.length === 0) return "";
+  return `\n**Plugin-specific notes**:\n${formatAgentInstructionsPluginHints(
+    pluginAgentHints,
+  )}`;
 }
 
 export function applyAgentInstructionsTemplate(
@@ -199,6 +212,12 @@ export function renderDefaultVivdAgentInstructions(
     applyAgentInstructionsTemplate(DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE, {
       project_name: input.projectName,
       enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
+      plugin_agent_hints_section: buildPluginAgentHintsSection(
+        input.pluginAgentHints,
+      ),
+      plugin_agent_hints: formatAgentInstructionsPluginHints(
+        input.pluginAgentHints,
+      ),
       source_context: input.sourceContext?.trim() || "",
       platform_surface_section: buildPlatformSurfaceSection(
         input.platformSurfaceMode ?? "cli",

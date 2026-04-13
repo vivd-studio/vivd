@@ -680,6 +680,15 @@ function derivePublishDeploymentState(state: PublishStateResponse) {
       state.publishableCommitHash &&
       state.publishableCommitHash === targetCommitHash,
   );
+  const stalePreparedSnapshot = Boolean(
+    state.readiness === "ready" &&
+      targetCommitHash &&
+      state.publishableCommitHash &&
+      state.publishableCommitHash !== targetCommitHash &&
+      !studioStateUnknownWarning &&
+      !olderSnapshotInStudio &&
+      !unsavedChangesInStudio,
+  );
   const missingPublishableSnapshot = Boolean(
     state.readiness === "ready" &&
       !state.publishableCommitHash &&
@@ -694,6 +703,7 @@ function derivePublishDeploymentState(state: PublishStateResponse) {
     unsavedChangesInStudio,
     targetCommitHash,
     publishableCommitMatchesTarget,
+    stalePreparedSnapshot,
     missingPublishableSnapshot,
     canPublishNow:
       state.storageEnabled &&
@@ -1506,6 +1516,7 @@ async function runPublishPrepare(flags: CliFlags): Promise<CommandResult> {
       !needsSave &&
       (state.readiness === "artifact_not_ready" ||
         state.readiness === "not_found" ||
+        derived.stalePreparedSnapshot ||
         derived.missingPublishableSnapshot);
 
     if (needsSave || needsPrepareRequest) {

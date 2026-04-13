@@ -19,6 +19,7 @@ import {
   getNewsletterSubscribeEndpoint,
   getNewsletterUnsubscribeEndpoint,
 } from "./publicApi";
+import { newsletterPluginDefinition } from "./module";
 import { getNewsletterSnippets } from "./snippets";
 import type {
   NewsletterConfirmByTokenResult,
@@ -150,7 +151,77 @@ function resolveRedirectTarget(
   }
 }
 
-function resolveDefaultSuccessRedirectTarget(options: {
+function extractHostname(host: string): string {
+  const normalized = host.trim().toLowerCase();
+  if (!normalized) return "";
+
+  if (normalized.startsWith("[")) {
+    const closingIndex = normalized.indexOf("]");
+    return closingIndex > 0 ? normalized.slice(1, closingIndex) : normalized;
+  }
+
+  return normalized.split(":")[0] || "";
+}
+
+function isLocalOrLoopbackHostname(hostname: string): boolean {
+  if (!hostname) return false;
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname.endsWith(".localhost")
+  );
+}
+
+function isStudioRuntimePath(pathname: string): boolean {
+  return (
+    pathname === "/_studio" ||
+    pathname.startsWith("/_studio/") ||
+    pathname === "/vivd-studio" ||
+    pathname.startsWith("/vivd-studio/")
+  );
+}
+
+function resolveStudioPublicHosts(
+  deps: NewsletterPluginServiceDeps,
+): string[] {
+  const flyStudioApp = (process.env.FLY_STUDIO_APP || "").trim();
+  return Array.from(
+    new Set(
+      [
+        process.env.FLY_STUDIO_PUBLIC_HOST,
+        flyStudioApp ? `${flyStudioApp}.fly.dev` : null,
+      ]
+        .map((value) => normalizeHostWithUtils(value, deps))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
+function isDurableInferredSuccessRedirectUrl(
+  url: URL,
+  deps: NewsletterPluginServiceDeps,
+): boolean {
+  const hostname = extractHostname(url.host);
+  if (isLocalOrLoopbackHostname(hostname)) return false;
+  if (isStudioRuntimePath(url.pathname || "/")) return false;
+
+  const normalizedHost = normalizeHostWithUtils(url.host, deps);
+  if (!normalizedHost) return false;
+
+  const studioPublicHosts = resolveStudioPublicHosts(deps);
+  if (
+    studioPublicHosts.length > 0 &&
+    deps.hostUtils.isHostAllowed(normalizedHost, studioPublicHosts)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export function resolveDefaultSuccessRedirectTarget(options: {
   rawReferer?: string | null;
   rawOrigin?: string | null;
   allowlist: string[];
@@ -167,6 +238,10 @@ function resolveDefaultSuccessRedirectTarget(options: {
       const host = normalizeHostWithUtils(url.host, options.deps);
       if (!options.deps.hostUtils.isHostAllowed(host, options.allowlist)) {
         continue;
+      }
+      // Do not bake preview/studio/local URLs into confirmation emails.
+      if (!isDurableInferredSuccessRedirectUrl(url, options.deps)) {
+        return null;
       }
       url.searchParams.set("newsletter", "success");
       url.searchParams.set("_vivd_newsletter", "success");
@@ -530,7 +605,7 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
       },
       instructions: [
         "Newsletter signups always use double opt-in in this v1.",
-        "If the user asked for a waitlist, set `mode` to `waitlist` before generating snippets.",
+        ...(newsletterPluginDefinition.agentHints ?? []),
         "Install the generated HTML or Astro snippet and keep the hidden token field unchanged.",
         "Export confirmed subscribers from the project page or with `vivd plugins read newsletter subscribers`.",
       ],

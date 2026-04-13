@@ -26,10 +26,12 @@ describe("studio AgentInstructionsService fallback", () => {
     isConnectedModeMock.mockReturnValue(false);
     getConnectedBackendAuthConfigMock.mockReturnValue(null);
     delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
+    delete process.env.VIVD_ENABLED_PLUGINS;
   });
 
   it("reuses the shared default prompt shape for fallback mode", async () => {
     process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";
+    process.env.VIVD_ENABLED_PLUGINS = "newsletter";
     const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
       projectSlug: "demo-project",
       projectVersion: 1,
@@ -55,8 +57,18 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain(
       "Never print pseudo tool-call text such as `[tool_call: ...]`",
     );
+    expect(prompt).toContain(
+      "If the user drops an image or preview screenshot and you need to inspect its visual content, you must use the runtime's read tool on that path first; otherwise you have not actually seen the image.",
+    );
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
+    expect(prompt).toContain(
+      "the tag and path alone do not put the attachment into model context",
+    );
     expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");
+    expect(prompt).toContain("Plugin-specific notes");
+    expect(prompt).toContain(
+      "Newsletter / Waitlist: Set `mode=waitlist` before generating snippets when the user asked for a waitlist.",
+    );
     expect(prompt).toContain("vivd support request ...");
     expect(prompt).toContain(
       "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.",

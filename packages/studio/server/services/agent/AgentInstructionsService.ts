@@ -1,3 +1,4 @@
+import { listInstalledPluginAgentHints } from "@vivd/installed-plugins";
 import {
   isConnectedMode,
 } from "@vivd/shared";
@@ -61,9 +62,11 @@ function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
 }
 
 function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: boolean): string {
+  const enabledPlugins = readEnabledPluginsFromEnv();
   return renderDefaultVivdAgentInstructions({
     projectName: projectSlug,
-    enabledPlugins: readEnabledPluginsFromEnv(),
+    enabledPlugins,
+    pluginAgentHints: listInstalledPluginAgentHints(enabledPlugins),
     platformSurfaceMode: connectedCliAvailable ? "cli" : "plugin-only",
     previewScreenshotCliEnabled: parseBooleanEnv(
       process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,

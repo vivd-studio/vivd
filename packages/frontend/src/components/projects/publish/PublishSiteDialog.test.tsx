@@ -50,7 +50,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-function renderDialog() {
+function renderDialog(options?: { onOpenStudio?: () => void }) {
   return render(
     <TooltipProvider delayDuration={0}>
       <PublishSiteDialog
@@ -58,7 +58,7 @@ function renderDialog() {
         onOpenChange={vi.fn()}
         slug="site-1"
         version={1}
-        onOpenStudio={vi.fn()}
+        onOpenStudio={options?.onOpenStudio ?? vi.fn()}
       />
     </TooltipProvider>,
   );
@@ -165,6 +165,35 @@ describe("PublishSiteDialog", () => {
     expect(
       await screen.findAllByText("You have unsaved changes in Studio."),
     ).toHaveLength(2);
+    const publishButton = screen.getByRole("button", { name: "Publish site" });
+    expect((publishButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("prompts opening Studio when the prepared snapshot lags the saved head commit", async () => {
+    const openStudioMock = vi.fn();
+    setCommonTrpcMocks({
+      stateOverrides: {
+        publishableCommitHash: "prepared-123",
+        lastSyncedCommitHash: "prepared-123",
+        studioHeadCommitHash: "head-456",
+        studioWorkingCommitHash: "head-456",
+      },
+    });
+
+    renderDialog({ onOpenStudio: openStudioMock });
+
+    expect(
+      screen.getByText(
+        /latest saved snapshot is newer than the currently prepared publish artifact/i,
+      ),
+    ).toBeInTheDocument();
+
+    const openStudioButton = screen.getByRole("button", {
+      name: "Prepare in Studio",
+    });
+    fireEvent.click(openStudioButton);
+    expect(openStudioMock).toHaveBeenCalledTimes(1);
+
     const publishButton = screen.getByRole("button", { name: "Publish site" });
     expect((publishButton as HTMLButtonElement).disabled).toBe(true);
   });

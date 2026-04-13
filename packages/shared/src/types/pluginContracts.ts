@@ -63,6 +63,7 @@ export interface PluginDefinition<TPluginId extends string = string> {
   pluginId: TPluginId;
   name: string;
   description: string;
+  agentHints?: string[];
   category: PluginCategory;
   version: number;
   sortOrder: number;

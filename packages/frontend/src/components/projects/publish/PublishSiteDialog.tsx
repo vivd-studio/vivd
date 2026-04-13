@@ -250,7 +250,7 @@ export function PublishSiteDialog({
       return "Open Studio and click Save to enable publishing.";
     }
     if (!publishableCommitMatchesTarget) {
-      return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
+      return "Open Studio and prepare the latest saved snapshot before publishing.";
     }
     if (!hasDomainInput) return "Enter a domain.";
     if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
@@ -349,7 +349,8 @@ export function PublishSiteDialog({
 
             {preparingLatestSnapshotWarning && !olderSnapshotWarning && !unsavedChangesWarning ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Your latest changes are being prepared for publishing. This can take a little while.
+                Your latest saved snapshot is newer than the currently prepared publish artifact.
+                Open Studio and prepare it once before publishing.
               </div>
             ) : null}
 
@@ -482,7 +483,11 @@ export function PublishSiteDialog({
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
-                {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning || missingCommitMetadataWarning) ? (
+                {onOpenStudio &&
+                (olderSnapshotWarning ||
+                  unsavedChangesWarning ||
+                  missingCommitMetadataWarning ||
+                  preparingLatestSnapshotWarning) ? (
                   <Button
                     variant="outline"
                     onClick={onOpenStudio}
@@ -490,6 +495,8 @@ export function PublishSiteDialog({
                   >
                     {olderSnapshotWarning
                       ? "Restore in Studio"
+                      : preparingLatestSnapshotWarning
+                        ? "Prepare in Studio"
                       : missingCommitMetadataWarning
                         ? "Open Studio to save"
                       : studioStateUnknownWarning
