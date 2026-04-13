@@ -338,7 +338,9 @@ async function buildReadinessFailureMessage(deps: {
   const exitCode = options.container?.State?.ExitCode;
   const image =
     options.container?.Config?.Image || options.container?.Image || "unknown";
-  const name = getContainerName(options.container || undefined) || options.containerId;
+  const name = options.container
+    ? getContainerName(options.container) || options.containerId
+    : options.containerId;
 
   let message =
     options.reason === "stopped"
