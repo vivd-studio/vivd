@@ -275,6 +275,7 @@ describe("InitialGenerationService", () => {
     expect(task).toContain("scratch_brief.txt");
     expect(task).toContain("src/content/media/shared/logo.png");
     expect(task).toContain("canonical home for Astro-managed site assets");
+    expect(task).toContain("Prefer Astro's `Image` component from `astro:assets`");
     expect(task).toContain("https://example.com");
     expect(task).toContain("AGENTS.md");
   });

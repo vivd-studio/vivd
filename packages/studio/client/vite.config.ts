@@ -20,6 +20,10 @@ export default defineConfig({
         __dirname,
         "../../plugin-contact-form/src",
       ),
+      "@vivd/plugin-newsletter": path.resolve(
+        __dirname,
+        "../../plugin-newsletter/src",
+      ),
     },
   },
   build: {

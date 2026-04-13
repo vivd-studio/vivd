@@ -56,6 +56,14 @@ export default defineConfig({
         find: /^@vivd\/plugin-contact-form\/(.*)$/,
         replacement: path.resolve(__dirname, "../plugin-contact-form/src/$1"),
       },
+      {
+        find: /^@vivd\/plugin-newsletter$/,
+        replacement: path.resolve(__dirname, "../plugin-newsletter/src/index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-newsletter\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-newsletter/src/$1"),
+      },
     ],
   },
   test: {

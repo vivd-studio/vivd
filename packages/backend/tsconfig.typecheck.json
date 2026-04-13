@@ -10,6 +10,7 @@
       "@vivd/builder/*": ["../builder/src/*"],
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
+      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }
@@ -18,7 +19,8 @@
     "src/**/*",
     "../builder/src/**/*",
     "../shared/src/**/*",
-    "../plugin-contact-form/src/backend/**/*"
+    "../plugin-contact-form/src/backend/**/*",
+    "../plugin-newsletter/src/backend/**/*"
   ],
   "exclude": ["node_modules", "**/*.spec.ts", "test", "projects", "dist"]
 }

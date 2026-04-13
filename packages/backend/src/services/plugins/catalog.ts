@@ -8,10 +8,12 @@ import type {
 } from "@vivd/shared/types";
 import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
+import { newsletterPluginManifest } from "@vivd/plugin-newsletter/manifest";
 
 export const pluginPackageDescriptors = definePluginPackageDescriptors([
   contactFormPluginManifest,
   analyticsPluginManifest,
+  newsletterPluginManifest,
 ] as const);
 
 export const PLUGIN_IDS = extractPluginIds(pluginPackageDescriptors);

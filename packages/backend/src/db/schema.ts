@@ -604,6 +604,95 @@ export const analyticsEvent = pgTable(
   ],
 );
 
+export const newsletterSubscriber = pgTable(
+  "newsletter_subscriber",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    emailNormalized: text("email_normalized").notNull(),
+    name: text("name"),
+    status: text("status").notNull().default("pending"),
+    mode: text("mode").notNull().default("newsletter"),
+    sourceHost: text("source_host"),
+    sourcePath: text("source_path"),
+    referrerHost: text("referrer_host"),
+    utmSource: text("utm_source"),
+    utmMedium: text("utm_medium"),
+    utmCampaign: text("utm_campaign"),
+    lastIpHash: text("last_ip_hash"),
+    lastConfirmationSentAt: timestamp("last_confirmation_sent_at"),
+    lastSignupAt: timestamp("last_signup_at").defaultNow().notNull(),
+    confirmedAt: timestamp("confirmed_at"),
+    unsubscribedAt: timestamp("unsubscribed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("newsletter_subscriber_plugin_email_unique").on(
+      table.pluginInstanceId,
+      table.emailNormalized,
+    ),
+    index("newsletter_subscriber_org_project_status_created_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.status,
+      table.createdAt,
+    ),
+    index("newsletter_subscriber_plugin_signup_idx").on(
+      table.pluginInstanceId,
+      table.lastSignupAt,
+    ),
+    index("newsletter_subscriber_plugin_updated_idx").on(
+      table.pluginInstanceId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+export const newsletterActionToken = pgTable(
+  "newsletter_action_token",
+  {
+    id: text("id").primaryKey(),
+    subscriberId: text("subscriber_id")
+      .notNull()
+      .references(() => newsletterSubscriber.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    kind: text("kind").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("newsletter_action_token_hash_idx").on(table.tokenHash),
+    index("newsletter_action_token_subscriber_kind_idx").on(
+      table.subscriberId,
+      table.kind,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
@@ -611,6 +700,8 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   contactFormSubmissions: many(contactFormSubmission),
   contactFormRecipientVerifications: many(contactFormRecipientVerification),
   analyticsEvents: many(analyticsEvent),
+  newsletterSubscribers: many(newsletterSubscriber),
+  newsletterActionTokens: many(newsletterActionToken),
 }));
 
 export const projectTagRelations = relations(projectTag, ({ one }) => ({
@@ -685,6 +776,7 @@ export const projectPluginInstanceRelations = relations(
     contactFormSubmissions: many(contactFormSubmission),
     contactFormRecipientVerifications: many(contactFormRecipientVerification),
     analyticsEvents: many(analyticsEvent),
+    newsletterSubscribers: many(newsletterSubscriber),
   }),
 );
 
@@ -733,6 +825,35 @@ export const analyticsEventRelations = relations(
     pluginInstance: one(projectPluginInstance, {
       fields: [analyticsEvent.pluginInstanceId],
       references: [projectPluginInstance.id],
+    }),
+  }),
+);
+
+export const newsletterSubscriberRelations = relations(
+  newsletterSubscriber,
+  ({ one, many }) => ({
+    project: one(projectMeta, {
+      fields: [newsletterSubscriber.organizationId, newsletterSubscriber.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [newsletterSubscriber.pluginInstanceId],
+      references: [projectPluginInstance.id],
+    }),
+    actionTokens: many(newsletterActionToken),
+  }),
+);
+
+export const newsletterActionTokenRelations = relations(
+  newsletterActionToken,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [newsletterActionToken.organizationId, newsletterActionToken.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    subscriber: one(newsletterSubscriber, {
+      fields: [newsletterActionToken.subscriberId],
+      references: [newsletterSubscriber.id],
     }),
   }),
 );

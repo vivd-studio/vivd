@@ -6,6 +6,7 @@ import path from "path";
 const sharedSrc = path.resolve(__dirname, "../shared/src");
 const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
 const pluginContactFormSrc = path.resolve(__dirname, "../plugin-contact-form/src");
+const pluginNewsletterSrc = path.resolve(__dirname, "../plugin-newsletter/src");
 
 export default defineConfig({
   plugins: [react()],
@@ -23,6 +24,14 @@ export default defineConfig({
       {
         find: /^@vivd\/plugin-contact-form\/(.*)$/,
         replacement: `${pluginContactFormSrc}/$1`,
+      },
+      {
+        find: /^@vivd\/plugin-newsletter$/,
+        replacement: path.resolve(pluginNewsletterSrc, "index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-newsletter\/(.*)$/,
+        replacement: `${pluginNewsletterSrc}/$1`,
       },
       { find: /^@vivd\/shared$/, replacement: path.resolve(sharedSrc, "index.ts") },
       { find: /^@vivd\/shared\/(.*)$/, replacement: `${sharedSrc}/$1` },

@@ -30,6 +30,8 @@ import {
   analyticsEvent,
   contactFormRecipientVerification,
   contactFormSubmission,
+  newsletterActionToken,
+  newsletterSubscriber,
   organization,
   pluginEntitlement,
   projectMember,
@@ -397,6 +399,30 @@ export const projectMaintenanceProcedures = {
             )
             .returning({ id: analyticsEvent.id });
           dbRowsMoved += updatedAnalytics.length;
+
+          const updatedNewsletterSubscribers = await tx
+            .update(newsletterSubscriber)
+            .set({ projectSlug: newSlug, updatedAt: new Date() })
+            .where(
+              and(
+                eq(newsletterSubscriber.organizationId, organizationId),
+                eq(newsletterSubscriber.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: newsletterSubscriber.id });
+          dbRowsMoved += updatedNewsletterSubscribers.length;
+
+          const updatedNewsletterTokens = await tx
+            .update(newsletterActionToken)
+            .set({ projectSlug: newSlug })
+            .where(
+              and(
+                eq(newsletterActionToken.organizationId, organizationId),
+                eq(newsletterActionToken.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: newsletterActionToken.id });
+          dbRowsMoved += updatedNewsletterTokens.length;
 
           const updatedMembers = await tx
             .update(projectMember)

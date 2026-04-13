@@ -7,8 +7,10 @@ import type express from "express";
 import type { Multer } from "multer";
 import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
+import { newsletterPluginManifest } from "@vivd/plugin-newsletter/manifest";
 import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
 import { contactFormPluginBackendContribution } from "./contactForm/backendContribution";
+import { newsletterPluginBackendContribution } from "./newsletter/backendContribution";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -114,6 +116,14 @@ export const backendPluginPackageDescriptors =
       publicRoutes: analyticsPluginBackendContribution.publicRoutes,
       hooks: analyticsPluginBackendContribution.hooks,
     } as BackendPluginContribution<"analytics">,
+  },
+  {
+    ...newsletterPluginManifest,
+    backend: {
+      module: newsletterPluginBackendContribution.module,
+      publicRoutes: newsletterPluginBackendContribution.publicRoutes,
+      hooks: newsletterPluginBackendContribution.hooks,
+    } as BackendPluginContribution<"newsletter">,
   },
 ] as const);
 

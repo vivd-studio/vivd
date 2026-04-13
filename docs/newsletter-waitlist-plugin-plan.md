@@ -1,7 +1,21 @@
 # Newsletter / Waitlist Plugin Plan (MVP-First)
 
-Status: Proposed  
-Last updated: 2026-04-12
+Status: Initial v1 implemented  
+Last updated: 2026-04-13
+
+## Implementation Note
+
+The initial shipped scope matches the core audience-capture plan:
+
+- extracted `packages/plugin-newsletter` package
+- public subscribe/confirm/unsubscribe endpoints
+- double opt-in confirmation and one-click unsubscribe
+- project operator UI for list/search/export and small manual actions
+- generic CLI/backend/frontend/Studio plugin integration
+
+One planned abuse-control item is intentionally deferred from this first cut:
+
+- Turnstile is not wired yet for `newsletter`; the current shipped v1 relies on source-host allowlisting, honeypot handling, request caps, and per-token/IP rate limiting, so `listUi.supportsTurnstile` currently remains `false`
 
 ## Goal
 
@@ -112,7 +126,7 @@ Suggested definition shape:
 - `listUi.limitPrompt`: `Set monthly signup limit.\nLeave empty for unlimited.`
 - `listUi.supportsMonthlyLimit`: `true`
 - `listUi.supportsHardStop`: `true`
-- `listUi.supportsTurnstile`: `true`
+- `listUi.supportsTurnstile`: `false` for the initial shipped v1, with generic Turnstile support deferred until the challenge surface is extracted cleanly from Contact Form
 - `listUi.dashboardPath`: `null`
 
 Capabilities:

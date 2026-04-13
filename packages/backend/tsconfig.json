@@ -14,7 +14,8 @@
       "@vivd/builder": ["../builder/src/index.ts"],
       "@vivd/builder/*": ["../builder/src/*"],
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
-      "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"]
+      "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
+      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"]
     }
   },
   "include": ["src/**/*"],

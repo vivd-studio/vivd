@@ -3,6 +3,7 @@ import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";
 import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
 import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
+import { newsletterPluginBackendContribution } from "./newsletter/backendContribution";
 
 export interface OrganizationPluginInstanceSnapshot {
   status: string | null;
@@ -52,6 +53,7 @@ const backendPluginHooks = new Map<
 >([
   ["contact_form", contactFormPluginBackendHooks],
   ["analytics", analyticsPluginBackendHooks],
+  ["newsletter", newsletterPluginBackendContribution.hooks],
 ]);
 
 const organizationPluginHooks = new Map<

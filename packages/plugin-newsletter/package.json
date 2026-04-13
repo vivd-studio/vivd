@@ -1,0 +1,32 @@
+{
+  "name": "@vivd/plugin-newsletter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./manifest": "./src/manifest.ts",
+    "./backend/config": "./src/backend/config.ts",
+    "./backend/contribution": "./src/backend/contribution.ts",
+    "./backend/module": "./src/backend/module.ts",
+    "./backend/plugin": "./src/backend/plugin.ts",
+    "./backend/ports": "./src/backend/ports.ts",
+    "./backend/publicApi": "./src/backend/publicApi.ts",
+    "./backend/service": "./src/backend/service.ts",
+    "./backend/snippets": "./src/backend/snippets.ts",
+    "./backend/http/subscribe": "./src/backend/http/subscribe.ts",
+    "./backend/http/confirm": "./src/backend/http/confirm.ts",
+    "./backend/http/unsubscribe": "./src/backend/http/unsubscribe.ts",
+    "./cli/plugin": "./src/cli/plugin.ts",
+    "./cli/module": "./src/cli/module.ts",
+    "./frontend/plugin": "./src/frontend/plugin.ts",
+    "./frontend/module": "./src/frontend/module.ts",
+    "./frontend/NewsletterProjectPage": "./src/frontend/NewsletterProjectPage.tsx",
+    "./shared/projectUi": "./src/shared/projectUi.ts",
+    "./shared/summary": "./src/shared/summary.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  }
+}

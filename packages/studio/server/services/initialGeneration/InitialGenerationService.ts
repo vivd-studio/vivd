@@ -582,6 +582,7 @@ If something important is missing, you may ask the user clarifying questions usi
 Keep the project as Astro with the existing Tailwind setup. Do not replace the framework.
 Use uploaded source assets from \`${preferredAssetRoot}/\` when relevant.
 Treat \`src/content/media/\` as the canonical home for Astro-managed site assets. If the workspace still has legacy scratch assets under \`images/\`, you may reuse them, but prefer keeping final managed assets under \`src/content/media/\`.
+Prefer Astro's \`Image\` component from \`astro:assets\` for almost all images. Use plain \`<img>\` only when \`Image\` is not practical.
 Use \`public/\` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, verification files, or other explicit compatibility cases. Do not default to moving the whole asset library into \`public/images/\`.
 Treat \`references/\` as working material for inspiration and reconstruction, not as public site assets by default.
 Maintain a clean structure in \`src/layouts\`, \`src/components\`, \`src/styles\`, and any additional content/data files you add.

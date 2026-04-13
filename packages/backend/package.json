@@ -38,6 +38,7 @@
     "@vivd/builder": "1.0.0",
     "@vivd/plugin-analytics": "1.0.0",
     "@vivd/plugin-contact-form": "1.0.0",
+    "@vivd/plugin-newsletter": "1.0.0",
     "@vivd/shared": "1.0.0",
     "archiver": "^7.0.1",
     "axios": "^1.13.2",

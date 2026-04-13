@@ -53,6 +53,9 @@
       "@vivd/plugin-contact-form/*": [
         "../plugin-contact-form/src/*"
       ],
+      "@vivd/plugin-newsletter/*": [
+        "../plugin-newsletter/src/*"
+      ],
       "@vivd/shared": [
         "../shared/src/index.ts"
       ],

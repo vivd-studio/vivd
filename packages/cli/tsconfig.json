@@ -13,6 +13,7 @@
     "paths": {
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
+      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }
@@ -21,6 +22,7 @@
     "src/**/*.ts",
     "../shared/src/**/*.ts",
     "../plugin-analytics/src/cli/**/*.ts",
-    "../plugin-contact-form/src/cli/**/*.ts"
+    "../plugin-contact-form/src/cli/**/*.ts",
+    "../plugin-newsletter/src/cli/**/*.ts"
   ]
 }

@@ -87,7 +87,7 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 }));
 
 vi.mock("../src/services/plugins/registry", () => ({
-  PLUGIN_IDS: ["contact_form", "analytics"],
+  PLUGIN_IDS: ["contact_form", "analytics", "newsletter"],
   getPluginModule: vi.fn(() => ({
     mapPublicError: () => null,
   })),
@@ -202,6 +202,27 @@ describe("plugins.generic router", () => {
       organizationId: "org-1",
       projectSlug: "site-1",
       pluginId: "analytics",
+    });
+  });
+
+  it("accepts newsletter as a generic plugin id", async () => {
+    getPluginInfoContractMock.mockResolvedValueOnce({
+      pluginId: "newsletter",
+      enabled: true,
+    });
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.info({ slug: "site-1", pluginId: "newsletter" }),
+    ).resolves.toMatchObject({
+      pluginId: "newsletter",
+      enabled: true,
+    });
+    expect(getPluginInfoContractMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "newsletter",
     });
   });
 
