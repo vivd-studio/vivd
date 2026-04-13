@@ -88,6 +88,7 @@
 - The publish workflow now points at that production-shaped smoke and sets `FLY_STUDIO_CPU_KIND=performance`, `FLY_STUDIO_CPUS=1`, and `FLY_STUDIO_MEMORY_MB=4096` so the release job matches the normal production guest shape instead of the old `shared / 1024 MiB` default.
 - Even with that better test shape and prod-like guest sizing, the new production-shaped smoke still fell back to `stopped` on `vivd-studio-dev` (`machine=e82620ec70e168`) during the final warm-reconcile park step. That means the remaining false-negative problem is no longer “fresh machine suspends too early”; it is now mostly the validate app behaving harsher than `vivd-studio-prod`.
 - Production `1.2.2` continues to show the same split as before: healthy machines such as `68372d2bd33518` record `update -> start -> suspending -> suspended`, while the persistent outliers such as `e2869e7dcd29d8` record `update -> start -> stop -> exit(requested_stop=true)`. So the current validate-app failure is still materially worse than the production picture.
+- The prod-shaped smoke now captures richer failure context before rethrowing: final machine snapshot, machine-list summary/URLs, best-effort runtime `cleanup/status`, recent events, and tail Fly logs. That should make the next failing CI run materially easier to compare against successful production machines.
 
 ### Production comparison set from the current machine overview screenshot
 

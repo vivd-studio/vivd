@@ -41,7 +41,11 @@ import {
 } from "../../src/services/studioMachines/fly/machineModel";
 import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/provider";
 import { requestRuntime } from "../../src/services/studioMachines/fly/runtimeHttp";
-import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
+import type {
+  FlyMachine,
+  FlyMachineService,
+  FlyStudioMachineSummary,
+} from "../../src/services/studioMachines/fly/types";
 import { buildStudioEnvDriftSubsetFromDesiredEnv } from "../../src/services/studioMachines/fly/runtimeWorkflow";
 import { resolveStableStudioMachineEnv } from "../../src/services/studioMachines/stableRuntimeEnv";
 import {
@@ -74,6 +78,18 @@ type FlyMachineEvent = {
   status?: string;
   source?: string;
   timestamp?: string | number;
+};
+
+type ReconcileFailureDiagnostics = {
+  machineId: string;
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+  driftImage: string;
+  desiredImage: string;
+  reconcileDurationMs: number;
+  error: unknown;
+  provider: FlyStudioMachineProvider;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -317,18 +333,240 @@ function normalizeEventTimestamp(event: FlyMachineEvent): number | null {
   return null;
 }
 
+function formatEvent(event: FlyMachineEvent): string {
+  const timestamp = normalizeEventTimestamp(event);
+  const iso = timestamp ? new Date(timestamp).toISOString() : "unknown-time";
+  return `${iso} ${event.source || "unknown-source"} ${event.type || "unknown-type"} ${
+    event.status || "unknown-status"
+  }`;
+}
+
 function summarizeEvents(events: FlyMachineEvent[], limit = 12): string {
   if (events.length === 0) return "none";
   return events
     .slice(-limit)
-    .map((event) => {
-      const timestamp = normalizeEventTimestamp(event);
-      const iso = timestamp ? new Date(timestamp).toISOString() : "unknown-time";
-      return `- ${iso} ${event.source || "unknown-source"} ${event.type || "unknown-type"} ${
-        event.status || "unknown-status"
-      }`;
-    })
+    .map((event) => `- ${formatEvent(event)}`)
     .join("\n");
+}
+
+function summarizeServices(
+  services: FlyMachineService[] | undefined,
+): Array<Record<string, unknown>> {
+  return (services || []).map((service) => ({
+    protocol: service.protocol ?? null,
+    internal_port: service.internal_port ?? null,
+    autostop: service.autostop ?? null,
+    autostart: service.autostart ?? null,
+    min_machines_running: service.min_machines_running ?? null,
+    ports: (service.ports || []).map((port) => ({
+      port: port.port ?? null,
+      handlers: port.handlers ?? null,
+    })),
+  }));
+}
+
+function formatJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function formatMachineSnapshot(machine: FlyMachine | null): string {
+  if (!machine) return "none";
+  const metadata = (machine.config?.metadata || machine.metadata || {}) as Record<
+    string,
+    string | undefined
+  >;
+
+  return formatJson({
+    id: machine.id,
+    name: machine.name ?? null,
+    state: machine.state ?? null,
+    region: machine.region ?? null,
+    instanceId: machine.instance_id ?? null,
+    createdAt: machine.created_at ?? null,
+    updatedAt: machine.updated_at ?? null,
+    image: stripDigest(
+      typeof machine.config?.image === "string" ? machine.config.image : null,
+    ),
+    guest: machine.config?.guest ?? null,
+    services: summarizeServices(machine.config?.services),
+    metadata: {
+      vivd_image: metadata.vivd_image ?? null,
+      vivd_external_port: metadata.vivd_external_port ?? null,
+      vivd_organization_id: metadata.vivd_organization_id ?? null,
+      vivd_project_slug: metadata.vivd_project_slug ?? null,
+      vivd_project_version: metadata.vivd_project_version ?? null,
+      vivd_studio_id: metadata.vivd_studio_id ?? null,
+    },
+  });
+}
+
+function formatMachineSummary(summary: FlyStudioMachineSummary | null): string {
+  if (!summary) return "none";
+  return formatJson({
+    id: summary.id,
+    state: summary.state ?? null,
+    region: summary.region ?? null,
+    cpuKind: summary.cpuKind ?? null,
+    cpus: summary.cpus ?? null,
+    memoryMb: summary.memoryMb ?? null,
+    image: summary.image ?? null,
+    desiredImage: summary.desiredImage ?? null,
+    externalPort: summary.externalPort ?? null,
+    routePath: summary.routePath ?? null,
+    url: summary.url ?? null,
+    runtimeUrl: summary.runtimeUrl ?? null,
+    compatibilityUrl: summary.compatibilityUrl ?? null,
+    createdAt: summary.createdAt ?? null,
+    updatedAt: summary.updatedAt ?? null,
+  });
+}
+
+function tailLines(text: string, maxLines = 200): string {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length <= maxLines) return lines.join("\n");
+  return lines.slice(-maxLines).join("\n");
+}
+
+function tryReadFlyLogs(machineId: string): string | null {
+  for (const command of ["flyctl", "fly"]) {
+    const result = spawnSync(
+      command,
+      [
+        "logs",
+        "-a",
+        FLY_STUDIO_APP,
+        "--machine",
+        machineId,
+        "--no-tail",
+        "--access-token",
+        FLY_API_TOKEN,
+      ],
+      {
+        encoding: "utf8",
+      },
+    );
+
+    if (result.error) continue;
+    if (result.status !== 0) continue;
+
+    const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+    return output ? tailLines(output) : null;
+  }
+
+  return null;
+}
+
+async function findMachineSummary(options: {
+  provider: FlyStudioMachineProvider;
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+}): Promise<FlyStudioMachineSummary | null> {
+  const summaries = await options.provider.listStudioMachines();
+  return (
+    summaries.find(
+      (machine) =>
+        machine.organizationId === options.organizationId &&
+        machine.projectSlug === options.projectSlug &&
+        machine.version === options.version,
+    ) || null
+  );
+}
+
+async function bestEffortGetMachine(options: {
+  provider: FlyStudioMachineProvider;
+  machineId: string;
+}): Promise<FlyMachine | null> {
+  try {
+    return await getMachine(options.provider, options.machineId);
+  } catch {
+    return null;
+  }
+}
+
+async function bestEffortFindMachineSummary(options: {
+  provider: FlyStudioMachineProvider;
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+}): Promise<FlyStudioMachineSummary | null> {
+  try {
+    return await findMachineSummary(options);
+  } catch {
+    return null;
+  }
+}
+
+async function bestEffortReadCleanupStatus(options: {
+  baseUrl: string;
+  accessToken: string;
+}): Promise<string> {
+  try {
+    const response = await requestRuntime({
+      url: `${options.baseUrl}/vivd-studio/api/cleanup/status`,
+      method: "GET",
+      headers: {
+        [STUDIO_AUTH_HEADER]: options.accessToken,
+        Accept: "application/json",
+      },
+      timeoutMs: 5_000,
+    });
+
+    let body: unknown = response.body;
+    try {
+      body = JSON.parse(response.body || "{}");
+    } catch {
+      body = response.body || "";
+    }
+
+    return formatJson({
+      status: response.status,
+      body,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `error: ${message}`;
+  }
+}
+
+async function collectReconcileFailureDiagnostics(
+  options: ReconcileFailureDiagnostics,
+): Promise<string> {
+  const machine = await bestEffortGetMachine({
+    provider: options.provider,
+    machineId: options.machineId,
+  });
+  const summary = await bestEffortFindMachineSummary({
+    provider: options.provider,
+    organizationId: options.organizationId,
+    projectSlug: options.projectSlug,
+    version: options.version,
+  });
+  const events = await getMachineEvents(options.machineId);
+  const accessToken = machine ? getStudioAccessTokenFromMachine(machine) : null;
+  const baseUrl =
+    summary?.runtimeUrl || summary?.compatibilityUrl || summary?.url || null;
+  const cleanupStatus =
+    accessToken && baseUrl
+      ? await bestEffortReadCleanupStatus({ baseUrl, accessToken })
+      : "skipped (missing runtime URL or access token)";
+  const logs = tryReadFlyLogs(options.machineId);
+  const message =
+    options.error instanceof Error ? options.error.message : String(options.error);
+
+  return [
+    `machine=${options.machineId}`,
+    `project=${options.organizationId}:${options.projectSlug}/v${options.version}`,
+    `driftImage=${stripDigest(options.driftImage)}`,
+    `desiredImage=${stripDigest(options.desiredImage)}`,
+    `reconcileDuration=${formatDuration(options.reconcileDurationMs)}`,
+    `originalError=${message}`,
+    `machine snapshot:\n${formatMachineSnapshot(machine)}`,
+    `machine summary:\n${formatMachineSummary(summary)}`,
+    `cleanup status:\n${cleanupStatus}`,
+    `events:\n${summarizeEvents(events, 20)}`,
+    logs ? `fly logs:\n${logs}` : "fly logs:\nnone",
+  ].join("\n\n");
 }
 
 async function notifyPreviewLeave(options: {
@@ -536,22 +774,53 @@ describe("Fly production-shaped reconcile + wake + auth", () => {
 
         process.env.FLY_STUDIO_IMAGE = desiredImage;
         const reconcileStartedAt = Date.now();
-        const { desiredImage: reconciledDesiredImage } =
-          await runWithFlyCapacityContext({
+        let reconciledDesiredImage: string;
+        try {
+          const reconcileResult = await runWithFlyCapacityContext({
             context: `warm reconciling stopped prod-shape machine ${organizationId}:${projectSlug}/v${version}`,
             run: () => provider.warmReconcileStudioMachine(machineId),
           });
+          reconciledDesiredImage = reconcileResult.desiredImage;
+        } catch (error) {
+          const reconcileDurationMs = Date.now() - reconcileStartedAt;
+          const diagnostics = await collectReconcileFailureDiagnostics({
+            machineId,
+            organizationId,
+            projectSlug,
+            version,
+            driftImage,
+            desiredImage,
+            reconcileDurationMs,
+            error,
+            provider,
+          });
+          throw new Error(
+            `[Fly prod-shape smoke] warm reconcile failed\n\n${diagnostics}`,
+          );
+        }
         const reconcileDurationMs = Date.now() - reconcileStartedAt;
 
         const afterReconcile = await getMachine(provider, machineId);
         latestEvents = await getMachineEvents(machineId);
 
-        expect(
-          afterReconcile.state,
-          `Expected reconciled machine to be suspended after warm reconcile.\nmachine=${machineId}\nevents:\n${summarizeEvents(
-            latestEvents,
-          )}`,
-        ).toBe("suspended");
+        if (afterReconcile.state !== "suspended") {
+          const diagnostics = await collectReconcileFailureDiagnostics({
+            machineId,
+            organizationId,
+            projectSlug,
+            version,
+            driftImage,
+            desiredImage: reconciledDesiredImage,
+            reconcileDurationMs,
+            error: new Error(
+              `Expected reconciled machine to be suspended after warm reconcile, got ${afterReconcile.state || "unknown"}`,
+            ),
+            provider,
+          });
+          throw new Error(
+            `[Fly prod-shape smoke] reconciled machine did not end suspended\n\n${diagnostics}`,
+          );
+        }
 
         const configuredImage = stripDigest(
           typeof afterReconcile.config?.image === "string"

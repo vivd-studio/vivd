@@ -23,9 +23,8 @@ certificate management.
 
 ## What belongs here
 
-- active install profile and routing shape
+- active install status and routing shape
 - main public host and HTTPS mode
-- advanced tenancy capability gates on `platform` deployments
 - default usage and project limits
 
 Related admin surfaces live nearby but are separate:
@@ -36,22 +35,15 @@ Related admin surfaces live nearby but are separate:
 
 ## General
 
-The `General` section shows the active install profile and routing shape:
+The `General` section shows the active install status and routing shape.
 
-- `Solo`: one host, lower admin overhead, instance-first defaults
-- `Platform`: multi-org SaaS-style surface with broader tenancy controls
-
-In `solo`, the product favors one main public host and the simpler self-host workflow.
-That self-host screen shows the resolved `solo` profile as status information, not as a
-UI-managed setting.
+For the public self-host path, Vivd favors one main public host and the simpler
+instance-first workflow. The screen shows the resolved self-host profile as
+status information, not as a UI-managed setting.
 
 The repo `LICENSE` Additional Use Grant covers `solo` and substantially similar
-single-tenant deployments. `platform` and other multi-org/shared-control-plane
+single-tenant deployments. Shared-control-plane and other multi-tenant SaaS
 setups require separate commercial licensing.
-
-In `platform`, the admin surface keeps the broader multi-organization controls enabled,
-but the page still treats the active profile as deployment state rather than something
-you switch casually in the UI.
 
 ## Network
 
@@ -121,23 +113,10 @@ In that case, the saved UI value acts as fallback state until the override is re
 
 ## Capabilities
 
-`Capabilities` lets a `platform` deployment bound the broader tenancy surface instead
-of leaving every multi-tenant feature available all the time.
-
-Current capability switches include:
-
-- `Multi-organization`
-- `Tenant hosts`
-- `Custom publish domains`
-- `Org limit overrides`
-- `Org plugin entitlements`
-- `Project plugin entitlements`
-- `Dedicated plugin host`
-
-On normal `solo` self-host installs, these platform-style tenancy controls stay fixed
-and are not exposed for editing in the main instance-settings UI.
-The main solo public host still acts as a publish target, and additional registered custom
-publish domains can still be used without turning on tenant-host routing.
+On normal `solo` self-host installs, advanced tenancy capability controls stay
+fixed and are not part of the public self-host workflow. The main public host
+still acts as a publish target, and additional registered custom publish
+domains can still be used without turning on tenant-host style routing.
 
 ## Instance Limits
 
@@ -198,6 +177,5 @@ which domain can actually be published or why a live domain is blocked.
 3. If the public host changed, continue on the new URL and sign in again there.
 4. Confirm the public site and `/vivd-studio` both resolve correctly.
 5. Configure `Email` if you want transactional email identity, support/footer details, or feedback webhooks.
-6. On `platform` deployments, adjust capability gates only if the default product surface is too broad.
-7. Set instance limits before onboarding more projects or users.
-8. Then move to [Domains & Publish Targets](/domains-and-publish-targets/), [Plugins Overview](/plugins/), and [Publish Your Site](/publish-your-site/).
+6. Set instance limits before onboarding more projects or users.
+7. Then move to [Domains & Publish Targets](/domains-and-publish-targets/), [Plugins Overview](/plugins/), and [Publish Your Site](/publish-your-site/).

@@ -24,12 +24,12 @@ You can start from scratch or import an existing website, then keep shaping it i
 
 Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, so the agent works inside real project files rather than a toy canvas. In Astro-backed projects that means a real Astro workspace with Astro primitives, not a locked black-box builder. That matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, wire plugins into the same project, and solve publishing as part of the same system instead of handing you off to another stack at the end.
 
-Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the same product can work as a hosted platform or as your own one-host deployment.
+Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the product works both as a hosted offering and as your own one-host deployment.
 
 ## Current Product Shape
 
-- Public docs and the `solo` self-host path are open today.
-- The hosted multi-org `platform` product is still invite-led / closed-beta rather than broadly open signup.
+- Public docs and the `solo` self-host path are publicly available today.
+- The hosted Vivd product is still invite-led / closed-beta rather than broadly open signup.
 - Astro and plain HTML are the current website project targets, with Astro content collections acting as the structured CMS source of truth where supported.
 - First-party plugin extraction is underway; Contact Form and Analytics already ship as extracted plugin packages behind generic host contracts.
 - A dedicated artifact-builder runtime exists behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but it remains dark-launched until the end-to-end path is production-verified.
@@ -122,7 +122,7 @@ For tests, prefer targeted runs in the areas you changed before reaching for the
 
 ## Self-Hosting
 
-The public self-host install/docs path currently focuses on `solo`. The hosted Vivd product itself runs the multi-org `platform` mode and is still invite-led rather than broadly open.
+The public self-host install/docs path currently covers `solo` only. The hosted Vivd product is still invite-led rather than broadly open.
 
 Vivd currently ships a first-party `solo` self-host path:
 
@@ -137,8 +137,6 @@ The current public install path is:
 ```bash
 curl -fsSL https://docs.vivd.studio/install.sh | bash
 ```
-
-If you need the SaaS-style multi-org host-based behavior instead, use the `platform` install profile explicitly.
 
 For operator-facing details, use the public docs for [Self-Hosting](https://docs.vivd.studio/self-hosting/), [How Vivd Works](https://docs.vivd.studio/how-vivd-works/), [Instance Settings](https://docs.vivd.studio/instance-settings/), and [Domains & Publish Targets](https://docs.vivd.studio/domains-and-publish-targets/).
 
