@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { isStudioIframeShellLoaded } from "./studioIframeReady";
+import {
+  isStudioIframePresented,
+  isStudioIframeShellLoaded,
+} from "./studioIframeReady";
 
 function createIframe(options: {
   pathname?: string;
@@ -64,5 +67,49 @@ describe("isStudioIframeShellLoaded", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("isStudioIframePresented", () => {
+  it("does not present the initial about:blank bootstrap shell", () => {
+    const frameDocument = document.implementation.createHTMLDocument("loading");
+    const iframe = document.createElement("iframe");
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get() {
+        return {
+          location: {
+            href: "about:blank",
+            pathname: "/_studio/runtime-123/vivd-studio",
+          },
+        };
+      },
+    });
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get() {
+        return frameDocument;
+      },
+    });
+
+    expect(isStudioIframePresented(iframe)).toBe(false);
+  });
+
+  it("treats cross-origin runtime documents as presented once navigation leaves about:blank", () => {
+    const iframe = document.createElement("iframe");
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get() {
+        return {
+          get location() {
+            throw new DOMException("Blocked", "SecurityError");
+          },
+        };
+      },
+    });
+
+    expect(isStudioIframePresented(iframe)).toBe(true);
   });
 });

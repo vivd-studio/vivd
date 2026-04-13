@@ -48,7 +48,7 @@ const {
     sessionsLoading: false,
     selectedSessionId: "sess-1" as string | null,
     setSelectedSessionId: vi.fn(),
-    selectedMessages: [],
+    selectedMessages: [] as any[],
     sessionStatusType: "busy",
     isSessionHydrating: false,
     isReverted: false,
@@ -137,6 +137,7 @@ describe("ChatProvider follow-up behavior", () => {
     latestContext = null;
 
     controllerState.selectedSessionId = "sess-1";
+    controllerState.selectedMessages = [];
     controllerState.sessionStatusType = "busy";
     controllerState.activeQuestionRequest = null;
     controllerState.activePermissionRequest = null;
@@ -532,6 +533,7 @@ describe("ChatProvider follow-up behavior", () => {
         label: "Pro",
       },
     ];
+    controllerState.selectedSessionId = null;
     window.localStorage.setItem(
       "vivd-selected-model",
       JSON.stringify({
@@ -554,6 +556,58 @@ describe("ChatProvider follow-up behavior", () => {
         provider: "openrouter",
         modelId: "openai/gpt-5.4",
         variant: "high",
+      });
+    });
+  });
+
+  it("uses the active session model instead of a saved browser preference", async () => {
+    availableModelsState.data = [
+      {
+        tier: "standard",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        label: "Standard",
+      },
+      {
+        tier: "pro",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+        label: "Pro",
+      },
+    ];
+    controllerState.selectedSessionId = "sess-1";
+    controllerState.selectedMessages = [
+      {
+        info: {
+          id: "msg-1",
+          role: "assistant",
+          providerID: "openrouter",
+          modelID: "openai/gpt-5.4",
+        },
+      },
+    ];
+    window.localStorage.setItem(
+      "vivd-selected-model",
+      JSON.stringify({
+        tier: "pro",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      }),
+    );
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(latestContext?.selectedModel).toMatchObject({
+        tier: "standard",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
       });
     });
   });

@@ -6,7 +6,10 @@ import {
   type ColorTheme,
   type Theme,
 } from "@vivd/shared/types";
-import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
+import {
+  isStudioIframePresented,
+  isStudioIframeShellLoaded,
+} from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import {
   canPostMessageToVivdStudio,
@@ -80,9 +83,11 @@ export function useStudioIframeLifecycle({
   onHardRestart,
   onTransportDegraded,
 }: UseStudioIframeLifecycleOptions) {
+  const [studioVisible, setStudioVisible] = useState(false);
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
+  const studioVisibleRef = useRef(false);
   const studioReadyRef = useRef(false);
   const attemptedEarlyRecoveryRef = useRef(false);
   const attemptedEarlyBlankReloadRef = useRef(false);
@@ -145,8 +150,16 @@ export function useStudioIframeLifecycle({
     setStudioLoadErrored(false);
   }, []);
 
+  const markStudioVisible = useCallback(() => {
+    studioVisibleRef.current = true;
+    setStudioVisible(true);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+  }, []);
+
   const handleStudioReady = useCallback(() => {
     const wasReady = studioReadyRef.current;
+    markStudioVisible();
     markStudioReady();
     ackStudioReady();
     syncThemeToStudio();
@@ -154,9 +167,27 @@ export function useStudioIframeLifecycle({
     if (!wasReady) {
       onReady?.();
     }
-  }, [ackStudioReady, markStudioReady, onReady, syncSidebarToStudio, syncThemeToStudio]);
+  }, [
+    ackStudioReady,
+    markStudioReady,
+    markStudioVisible,
+    onReady,
+    syncSidebarToStudio,
+    syncThemeToStudio,
+  ]);
+
+  const tryMarkStudioVisibleFromIframe = useCallback(() => {
+    if (!isStudioIframePresented(iframeRef.current)) {
+      return false;
+    }
+
+    markStudioVisible();
+    return true;
+  }, [iframeRef, markStudioVisible]);
 
   const tryMarkStudioReadyFromIframe = useCallback(() => {
+    void tryMarkStudioVisibleFromIframe();
+
     if (!isStudioIframeShellLoaded(iframeRef.current)) {
       requestStudioBridgeSync();
       return false;
@@ -164,21 +195,33 @@ export function useStudioIframeLifecycle({
 
     handleStudioReady();
     return true;
-  }, [handleStudioReady, iframeRef, requestStudioBridgeSync]);
+  }, [
+    handleStudioReady,
+    iframeRef,
+    requestStudioBridgeSync,
+    tryMarkStudioVisibleFromIframe,
+  ]);
 
   const handleStudioIframeLoad = useCallback(() => {
+    void tryMarkStudioVisibleFromIframe();
     requestStudioBridgeSync();
     void tryMarkStudioReadyFromIframe();
-  }, [requestStudioBridgeSync, tryMarkStudioReadyFromIframe]);
+  }, [
+    requestStudioBridgeSync,
+    tryMarkStudioReadyFromIframe,
+    tryMarkStudioVisibleFromIframe,
+  ]);
 
   const handleStudioIframeError = useCallback(() => {
     setStudioLoadErrored(true);
   }, []);
 
   const recheckStudioReadiness = useCallback(() => {
-    if (!studioBaseUrl || studioReadyRef.current) return;
+    if (!studioBaseUrl) return;
+    void tryMarkStudioVisibleFromIframe();
+    if (studioReadyRef.current) return;
     void tryMarkStudioReadyFromIframe();
-  }, [studioBaseUrl, tryMarkStudioReadyFromIframe]);
+  }, [studioBaseUrl, tryMarkStudioReadyFromIframe, tryMarkStudioVisibleFromIframe]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -215,6 +258,7 @@ export function useStudioIframeLifecycle({
       }
 
       if (message.type === "vivd:studio:theme") {
+        markStudioVisible();
         markStudioReady();
         ackStudioReady();
 
@@ -259,6 +303,7 @@ export function useStudioIframeLifecycle({
   }, [
     handleStudioReady,
     ackStudioReady,
+    markStudioVisible,
     markStudioReady,
     onClose,
     onFullscreen,
@@ -338,6 +383,8 @@ export function useStudioIframeLifecycle({
 
   useEffect(() => {
     if (!studioBaseUrl) {
+      studioVisibleRef.current = false;
+      setStudioVisible(false);
       studioReadyRef.current = false;
       setStudioReady(false);
       setStudioLoadTimedOut(false);
@@ -345,6 +392,8 @@ export function useStudioIframeLifecycle({
       return;
     }
 
+    studioVisibleRef.current = false;
+    setStudioVisible(false);
     studioReadyRef.current = false;
     setStudioReady(false);
     setStudioLoadTimedOut(false);
@@ -464,6 +513,7 @@ export function useStudioIframeLifecycle({
   }, [reloadStudioIframe, studioHostProbeBaseUrl, studioReady]);
 
   return {
+    studioVisible,
     studioReady,
     studioLoadTimedOut,
     studioLoadErrored,

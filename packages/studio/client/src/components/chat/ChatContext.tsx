@@ -40,6 +40,112 @@ import {
 import { useOpencodeChatController } from "@/features/opencodeChat";
 
 const ChatContext = createContext<ChatContextValue | null>(null);
+const SELECTED_MODEL_STORAGE_KEY = "vivd-selected-model";
+
+type StoredModelPreference = {
+  tier?: string;
+  provider?: string;
+  modelId?: string;
+  variant?: string;
+};
+
+function readModelString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveMatchingModel(
+  availableModels: ModelTier[],
+  preference: StoredModelPreference,
+): ModelTier | null {
+  const { tier, provider, modelId, variant } = preference;
+  if (!provider || !modelId) {
+    return null;
+  }
+
+  return (
+    availableModels.find(
+      (model) =>
+        typeof tier === "string" &&
+        model.tier === tier &&
+        model.provider === provider &&
+        model.modelId === modelId &&
+        (model.variant || undefined) === (variant || undefined),
+    ) ??
+    availableModels.find(
+      (model) =>
+        model.provider === provider &&
+        model.modelId === modelId &&
+        (model.variant || undefined) === (variant || undefined),
+    ) ??
+    availableModels.find(
+      (model) => model.provider === provider && model.modelId === modelId,
+    ) ??
+    null
+  );
+}
+
+function getStoredSelectedModelPreference(
+  availableModels: ModelTier[],
+): ModelTier | null {
+  const savedModel = localStorage.getItem(SELECTED_MODEL_STORAGE_KEY);
+  if (!savedModel) {
+    return null;
+  }
+
+  try {
+    return resolveMatchingModel(
+      availableModels,
+      JSON.parse(savedModel) as StoredModelPreference,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function getSelectedSessionModel(
+  selectedMessages: Array<{ info?: Record<string, unknown> }>,
+  availableModels: ModelTier[],
+): ModelTier | null {
+  for (let index = selectedMessages.length - 1; index >= 0; index -= 1) {
+    const info = selectedMessages[index]?.info;
+    if (info?.role !== "assistant") {
+      continue;
+    }
+
+    const nestedModel = (info.model as Record<string, unknown> | undefined) ?? {};
+    const provider = readModelString(
+      info.providerID,
+      info.providerId,
+      nestedModel.providerID,
+      nestedModel.providerId,
+    );
+    const modelId = readModelString(
+      info.modelID,
+      info.modelId,
+      nestedModel.modelID,
+      nestedModel.modelId,
+    );
+    const variant = readModelString(info.variant, nestedModel.variant);
+    const tier = readModelString(info.tier, nestedModel.tier);
+    const matchingModel = resolveMatchingModel(availableModels, {
+      tier,
+      provider,
+      modelId,
+      variant,
+    });
+    if (matchingModel) {
+      return matchingModel;
+    }
+  }
+
+  return null;
+}
 
 export function useChatContext() {
   const context = useContext(ChatContext);
@@ -132,6 +238,8 @@ export function ChatProvider({
     runtimeConfigData?.softContextLimitTokens ??
     DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS;
   const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(null);
+  const selectedModelSessionIdRef = useRef<string | null | undefined>(undefined);
+  const pendingSessionModelHydrationRef = useRef<string | null>(null);
   const [followupBehavior, setFollowupBehaviorState] =
     useState<FollowupBehavior>(getStoredFollowupBehavior);
   const nextQueuedFollowupIdRef = useRef(0);
@@ -147,7 +255,7 @@ export function ChatProvider({
 
   const persistSelectedModelPreference = useCallback((model: ModelTier) => {
     localStorage.setItem(
-      "vivd-selected-model",
+      SELECTED_MODEL_STORAGE_KEY,
       JSON.stringify({
         tier: model.tier,
         provider: model.provider,
@@ -170,56 +278,6 @@ export function ChatProvider({
     localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, behavior);
   }, []);
 
-  useEffect(() => {
-    if (availableModels.length === 0 || selectedModel) {
-      return;
-    }
-
-    if (pendingInitialGenerationDefaultModelRef.current) {
-      const defaultModel = availableModels[0];
-      if (defaultModel) {
-        setSelectedModelState(defaultModel);
-        persistSelectedModelPreference(defaultModel);
-      }
-      pendingInitialGenerationDefaultModelRef.current = false;
-      return;
-    }
-
-    const savedModel = localStorage.getItem("vivd-selected-model");
-    if (savedModel) {
-      try {
-        const { tier, provider, modelId, variant } = JSON.parse(savedModel);
-        const matchingModel =
-          availableModels.find(
-            (model) =>
-              typeof tier === "string" &&
-              model.tier === tier &&
-              model.provider === provider &&
-              model.modelId === modelId &&
-              (model.variant || undefined) === (variant || undefined),
-          ) ??
-          availableModels.find(
-            (model) =>
-              model.provider === provider &&
-              model.modelId === modelId &&
-              (model.variant || undefined) === (variant || undefined),
-          ) ??
-          availableModels.find(
-            (model) =>
-              model.provider === provider && model.modelId === modelId,
-          );
-        if (matchingModel) {
-          setSelectedModelState(matchingModel);
-          return;
-        }
-      } catch {
-        // Ignore invalid local preference.
-      }
-    }
-
-    setSelectedModelState(availableModels[0]);
-  }, [availableModels, persistSelectedModelPreference, selectedModel]);
-
   const resolveInitialGenerationModel = useCallback(() => {
     if (selectedModel) {
       return {
@@ -232,7 +290,6 @@ export function ChatProvider({
     const defaultModel = availableModels[0];
     if (defaultModel) {
       setSelectedModelState(defaultModel);
-      persistSelectedModelPreference(defaultModel);
       return {
         provider: defaultModel.provider,
         modelId: defaultModel.modelId,
@@ -242,7 +299,7 @@ export function ChatProvider({
 
     pendingInitialGenerationDefaultModelRef.current = true;
     return undefined;
-  }, [availableModels, persistSelectedModelPreference, selectedModel]);
+  }, [availableModels, selectedModel]);
 
   const {
     sessions,
@@ -289,6 +346,60 @@ export function ChatProvider({
     initialGenerationRequested,
     onTaskComplete,
   });
+
+  useEffect(() => {
+    if (selectedModelSessionIdRef.current === selectedSessionId) {
+      return;
+    }
+
+    selectedModelSessionIdRef.current = selectedSessionId;
+
+    if (!selectedSessionId) {
+      pendingSessionModelHydrationRef.current = null;
+      setSelectedModelState(null);
+      return;
+    }
+
+    const sessionModel = getSelectedSessionModel(selectedMessages, availableModels);
+    setSelectedModelState(sessionModel);
+    pendingSessionModelHydrationRef.current = sessionModel ? null : selectedSessionId;
+  }, [availableModels, selectedMessages, selectedSessionId]);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return;
+    }
+    if (availableModels.length === 0 || selectedModel) {
+      return;
+    }
+
+    if (pendingInitialGenerationDefaultModelRef.current) {
+      pendingInitialGenerationDefaultModelRef.current = false;
+      setSelectedModelState(availableModels[0] ?? null);
+      return;
+    }
+
+    setSelectedModelState(
+      getStoredSelectedModelPreference(availableModels) ?? availableModels[0],
+    );
+  }, [availableModels, selectedModel, selectedSessionId]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      return;
+    }
+    if (pendingSessionModelHydrationRef.current !== selectedSessionId) {
+      return;
+    }
+
+    const sessionModel = getSelectedSessionModel(selectedMessages, availableModels);
+    if (!sessionModel) {
+      return;
+    }
+
+    pendingSessionModelHydrationRef.current = null;
+    setSelectedModelState(sessionModel);
+  }, [availableModels, selectedMessages, selectedSessionId]);
 
   const startInitialGenerationMutation =
     trpc.agent.startInitialGeneration.useMutation();

@@ -1101,6 +1101,46 @@ describe("EmbeddedStudio", () => {
     }
   });
 
+  it("removes the startup overlay after a cross-origin studio load even if the ready handshake is missed", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    const postMessage = vi.fn();
+    const contentWindowMock = { postMessage };
+    Object.defineProperty(contentWindowMock, "location", {
+      configurable: true,
+      get() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+    });
+
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+      configurable: true,
+      get() {
+        return contentWindowMock;
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    fireEvent.load(iframe);
+
+    expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "vivd:host:ready-check" }),
+      "https://studio.example.com",
+    );
+  });
+
   it("auto-reloads the iframe when the initial studio document 503s but health becomes ready", async () => {
     vi.useFakeTimers();
 

@@ -494,6 +494,7 @@ export default function EmbeddedStudio() {
   };
 
   const {
+    studioVisible,
     studioReady,
     studioLoadTimedOut,
     studioLoadErrored,
@@ -649,7 +650,7 @@ export default function EmbeddedStudio() {
       startStudio.isPending ||
       hardRestartStudio.isPending ||
       isStudioRecovering ||
-      (livePreviewActive && (!studioIframeSrc || !studioReady));
+      (livePreviewActive && (!studioIframeSrc || !studioVisible));
     const projectActions = includeProjectActions ? (
       <>
         {showStudioStartupAction ? (
@@ -1008,7 +1009,7 @@ export default function EmbeddedStudio() {
               onError={handleStudioIframeError}
             />
 
-            {!studioReady ? (
+            {!studioVisible ? (
               <div className="absolute inset-0 z-10 bg-background">
                 {studioLoadTimedOut || studioLoadErrored ? (
                   <div className="flex h-full w-full items-center justify-center px-6">

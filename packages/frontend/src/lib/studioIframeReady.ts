@@ -18,6 +18,13 @@ function hasMountedStudioRoot(frameDocument: Document): boolean {
   );
 }
 
+function hasDocumentBodyContent(frameDocument: Document): boolean {
+  const body = frameDocument.body;
+  if (!body) return false;
+  if (body.childElementCount > 0) return true;
+  return Boolean(body.textContent?.trim());
+}
+
 export function isStudioIframeShellLoaded(
   iframe: HTMLIFrameElement | null,
 ): boolean {
@@ -28,7 +35,11 @@ export function isStudioIframeShellLoaded(
     const frameDocument = iframe.contentDocument;
 
     if (!frameWindow || !frameDocument) return false;
-    if (!frameWindow.location.pathname.includes(STUDIO_ROUTE_SEGMENT)) {
+    const pathname =
+      typeof frameWindow.location.pathname === "string"
+        ? frameWindow.location.pathname
+        : "";
+    if (!pathname.includes(STUDIO_ROUTE_SEGMENT)) {
       return false;
     }
     if (!frameDocument.getElementById("root")) {
@@ -38,5 +49,43 @@ export function isStudioIframeShellLoaded(
     return hasMountedStudioRoot(frameDocument) || hasStudioAssetReference(frameDocument);
   } catch {
     return false;
+  }
+}
+
+export function isStudioIframePresented(
+  iframe: HTMLIFrameElement | null,
+): boolean {
+  if (!iframe) return false;
+
+  try {
+    const frameWindow = iframe.contentWindow;
+    const frameDocument = iframe.contentDocument;
+
+    if (!frameWindow) return false;
+    if (frameWindow.location.href === "about:blank") {
+      return false;
+    }
+    if (!frameDocument) return false;
+    if (isStudioIframeShellLoaded(iframe)) {
+      return true;
+    }
+
+    const pathname =
+      typeof frameWindow.location.pathname === "string"
+        ? frameWindow.location.pathname
+        : "";
+    const isStudioRoute = pathname.includes(STUDIO_ROUTE_SEGMENT);
+    if (!isStudioRoute) return false;
+
+    return (
+      frameDocument.readyState !== "loading" &&
+      (Boolean(frameDocument.getElementById("root")) ||
+        hasStudioAssetReference(frameDocument) ||
+        hasDocumentBodyContent(frameDocument))
+    );
+  } catch {
+    // Cross-origin runtime documents are not readable here. If the frame is no longer
+    // accessible, it has at least navigated away from the initial about:blank shell.
+    return true;
   }
 }
