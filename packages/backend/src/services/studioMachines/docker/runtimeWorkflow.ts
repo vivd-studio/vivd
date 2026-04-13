@@ -305,6 +305,65 @@ export type WaitForReadyOptions = {
   timeoutMs: number;
 };
 
+function summarizeRecentLogs(logs: string | null | undefined): string | null {
+  const normalized = (logs || "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) return null;
+
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const maxLines = 40;
+  const maxChars = 4_000;
+  let summary = lines.slice(-maxLines).join("\n");
+  if (summary.length > maxChars) {
+    summary = summary.slice(summary.length - maxChars);
+  }
+  if (summary !== normalized) {
+    summary = `...\n${summary}`;
+  }
+  return summary;
+}
+
+async function buildReadinessFailureMessage(deps: {
+  getContainerLogs: (containerId: string, tail?: number) => Promise<string | null>;
+}, options: {
+  containerId: string;
+  container: DockerContainerInfo | null;
+  reason: "stopped" | "timeout";
+}): Promise<string> {
+  const state = options.container?.State?.Status || "unknown";
+  const exitCode = options.container?.State?.ExitCode;
+  const image =
+    options.container?.Config?.Image || options.container?.Image || "unknown";
+  const name = getContainerName(options.container || undefined) || options.containerId;
+
+  let message =
+    options.reason === "stopped"
+      ? `[DockerMachines] Container ${options.containerId} (${name}) stopped while waiting for readiness`
+      : `[DockerMachines] Timed out waiting for studio to become ready (${options.containerId}, name=${name}, state=${state}, image=${image})`;
+
+  if (typeof exitCode === "number") {
+    message += ` (exitCode=${exitCode})`;
+  }
+
+  try {
+    const logs = summarizeRecentLogs(
+      await deps.getContainerLogs(options.containerId, 120),
+    );
+    if (logs) {
+      message += `\nRecent container logs:\n${logs}`;
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    message += `\nRecent container logs unavailable: ${detail}`;
+  }
+
+  return message;
+}
+
 export function getDirectContainerBaseUrl(
   container: DockerContainerInfo | DockerContainerSummary,
 ): string | null {
@@ -316,15 +375,22 @@ export function getDirectContainerBaseUrl(
 export async function waitForReadyWorkflow(deps: {
   inspectContainer: (containerId: string) => Promise<DockerContainerInfo>;
   getInternalProxyUrlForRoutePath: (routePath: string) => string;
+  getContainerLogs: (containerId: string, tail?: number) => Promise<string | null>;
 }, options: WaitForReadyOptions): Promise<void> {
   const deadline = Date.now() + options.timeoutMs;
+  let lastContainer: DockerContainerInfo | null = null;
 
   while (Date.now() < deadline) {
     const container = await deps.inspectContainer(options.containerId).catch(() => null);
+    lastContainer = container;
     const state = container ? container.State?.Status || "unknown" : "unknown";
     if (state === "exited" || state === "dead") {
       throw new Error(
-        `[DockerMachines] Container ${options.containerId} stopped while waiting for readiness`,
+        await buildReadinessFailureMessage(deps, {
+          containerId: options.containerId,
+          container,
+          reason: "stopped",
+        }),
       );
     }
 
@@ -359,7 +425,11 @@ export async function waitForReadyWorkflow(deps: {
   }
 
   throw new Error(
-    `[DockerMachines] Timed out waiting for studio to become ready (${options.containerId})`,
+    await buildReadinessFailureMessage(deps, {
+      containerId: options.containerId,
+      container: lastContainer,
+      reason: "timeout",
+    }),
   );
 }
 

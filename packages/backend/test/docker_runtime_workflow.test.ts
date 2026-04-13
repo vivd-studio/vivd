@@ -49,6 +49,7 @@ describe("docker runtime workflow", () => {
           getInternalProxyUrlForRoutePath: vi
             .fn()
             .mockReturnValue("http://caddy/_studio/site-1-v1"),
+          getContainerLogs: vi.fn().mockResolvedValue(""),
         },
         {
           containerId: "container-1",
@@ -67,6 +68,96 @@ describe("docker runtime workflow", () => {
         redirect: "manual",
       }),
     );
+  });
+
+  it("includes recent container logs when the studio container exits during startup", async () => {
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Id: "container-2",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "vivd-studio:local",
+      },
+      State: {
+        Status: "exited",
+        ExitCode: 1,
+      },
+    });
+    const getContainerLogs = vi.fn().mockResolvedValue(`
+Starting studio...
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/app/node_modules/@vivd/installed-plugins/src/index.ts'
+`);
+
+    await expect(
+      waitForReadyWorkflow(
+        {
+          inspectContainer,
+          getInternalProxyUrlForRoutePath: vi
+            .fn()
+            .mockReturnValue("http://caddy/_studio/site-1-v1"),
+          getContainerLogs,
+        },
+        {
+          containerId: "container-2",
+          routePath: "/_studio/site-1-v1",
+          timeoutMs: 1_000,
+        },
+      ),
+    ).rejects.toThrow(
+      /ERR_MODULE_NOT_FOUND[\s\S]*@vivd\/installed-plugins\/src\/index\.ts/,
+    );
+    await expect(
+      waitForReadyWorkflow(
+        {
+          inspectContainer,
+          getInternalProxyUrlForRoutePath: vi
+            .fn()
+            .mockReturnValue("http://caddy/_studio/site-1-v1"),
+          getContainerLogs,
+        },
+        {
+          containerId: "container-2",
+          routePath: "/_studio/site-1-v1",
+          timeoutMs: 1_000,
+        },
+      ),
+    ).rejects.toThrow(/exitCode=1/);
+  });
+
+  it("includes recent container logs when readiness times out", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
+      new Error("connection refused"),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      waitForReadyWorkflow(
+        {
+          inspectContainer: vi.fn().mockResolvedValue({
+            Id: "container-3",
+            Name: "/studio-site-1-v1-a3f6fad7ba",
+            Config: {
+              Image: "vivd-studio:local",
+            },
+            State: {
+              Status: "running",
+            },
+          }),
+          getInternalProxyUrlForRoutePath: vi
+            .fn()
+            .mockReturnValue("http://caddy/_studio/site-1-v1"),
+          getContainerLogs: vi.fn().mockResolvedValue(`
+Hydrating source from S3...
+Starting studio...
+node:internal/modules/esm/resolve:275
+`),
+        },
+        {
+          containerId: "container-3",
+          routePath: "/_studio/site-1-v1",
+          timeoutMs: 5,
+        },
+      ),
+    ).rejects.toThrow(/Recent container logs:[\s\S]*Starting studio/);
   });
 
   it("returns a direct backend URL for Docker-managed studio runtimes", async () => {

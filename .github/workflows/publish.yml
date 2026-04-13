@@ -369,13 +369,16 @@ jobs:
             echo "- revert_smoke: ${SMOKE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  studio-fly-reconcile-smoke:
+  studio-fly-prod-shape-smoke:
     needs: [detect-changes, build-studio, deploy]
     if: needs.build-studio.result == 'success' && needs.deploy.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       FLY_STUDIO_PORT_START: 3100
+      FLY_STUDIO_CPU_KIND: performance
+      FLY_STUDIO_CPUS: 1
+      FLY_STUDIO_MEMORY_MB: 4096
     permissions:
       contents: read
     steps:
@@ -400,7 +403,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Validate Fly release smoke configuration
+      - name: Validate Fly prod-shape smoke configuration
         id: validate_config
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -419,105 +422,30 @@ jobs:
             exit 1
           fi
 
-      - name: Fly warm reconcile release smoke
-        id: fly_reconcile
+      - name: Fly prod-shape reconcile + wake + auth release smoke
+        id: fly_prod_shape
         env:
-          VIVD_RUN_FLY_RECONCILE_FLOW_TESTS: "1"
+          VIVD_RUN_FLY_PROD_SHAPE_SMOKE_TESTS: "1"
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
           VIVD_FLY_TEST_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
           VIVD_FLY_TEST_DRIFT_IMAGE: ${{ format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, vars.FLY_STUDIO_RECONCILE_BASELINE_TAG || 'v1.1.51-repro.2') }}
-          VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS: "6000"
-        run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
+          VIVD_FLY_PROD_SHAPE_WAKE_EXPECT_MAX_MS: "6000"
+        run: npm run test:integration -w @vivd/backend -- test/integration/fly_prod_shape_reconcile_wake_auth.test.ts
 
-      - name: Summarize Fly reconcile release smoke result
+      - name: Summarize Fly prod-shape smoke result
         if: always()
         env:
           CONFIG_OUTCOME: ${{ steps.validate_config.outcome }}
-          RECONCILE_OUTCOME: ${{ steps.fly_reconcile.outcome }}
+          PROD_SHAPE_OUTCOME: ${{ steps.fly_prod_shape.outcome }}
         shell: bash
         run: |
           set -euo pipefail
 
           {
-            echo "### Fly Studio reconcile release gate"
+            echo "### Fly Studio prod-shape release signal"
             echo "- config: ${CONFIG_OUTCOME:-skipped}"
-            echo "- reconcile: ${RECONCILE_OUTCOME:-skipped}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  studio-fly-warm-wake-auth-smoke:
-    needs: [detect-changes, build-studio, deploy]
-    if: needs.build-studio.result == 'success' && needs.deploy.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      FLY_STUDIO_PORT_START: 3600
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 23
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      - name: Validate Fly warm-wake auth smoke configuration
-        id: validate_config
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -z "${FLY_API_TOKEN}" ]; then
-            echo "::error::Missing FLY_API_TOKEN secret for Fly release validation."
-            exit 1
-          fi
-
-          if [ -z "${FLY_STUDIO_APP}" ]; then
-            echo "::error::Missing FLY_STUDIO_VALIDATE_APP repo variable/secret for Fly release validation."
-            exit 1
-          fi
-
-      - name: Fly warm wake auth release smoke
-        id: fly_wake_auth
-        env:
-          VIVD_RUN_FLY_WARM_WAKE_AUTH_TESTS: "1"
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
-          VIVD_FLY_TEST_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
-          VIVD_FLY_WAKE_EXPECT_MAX_MS: "6000"
-        run: npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
-
-      - name: Summarize Fly warm-wake auth release smoke result
-        if: always()
-        env:
-          CONFIG_OUTCOME: ${{ steps.validate_config.outcome }}
-          WAKE_OUTCOME: ${{ steps.fly_wake_auth.outcome }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          {
-            echo "### Fly Studio warm-wake auth post-deploy signal"
-            echo "- config: ${CONFIG_OUTCOME:-skipped}"
-            echo "- wake_auth: ${WAKE_OUTCOME:-skipped}"
+            echo "- prod_shape_smoke: ${PROD_SHAPE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-studio:

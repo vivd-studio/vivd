@@ -7,6 +7,7 @@ const DEFAULT_STALE_TEST_MACHINE_DELETE_LIMIT = 25;
 export const DEFAULT_FLY_TEST_PROJECT_SLUG_PREFIXES = [
   "warm-wake-",
   "reconcile-e2e-",
+  "prod-shape-",
   "studio-opencode-rehydrate-",
   "studio-shutdown-sync-",
   "studio-vertex-only-reply-",

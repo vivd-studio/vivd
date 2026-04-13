@@ -15,7 +15,7 @@
 ### 1. Re-establish the test matrix
 
 - [x] Re-run `fly_warm_wake_auth.test.ts` with a more production-like suspend-eligible config.
-- [ ] Re-run `fly_reconcile_flow.test.ts` with the same config.
+- [x] Re-run `fly_reconcile_flow.test.ts` with the same config.
 - [x] Compare `shared/1024`, `shared/2048`, and the closest safe production-like test shape that Fly suspend still supports.
 - [ ] Use `v1.1.92` as the known-good control without re-running it unless later evidence makes that necessary.
 
@@ -43,6 +43,8 @@
 - [ ] Check whether the reconcile smoke parks the drifted machine too soon after startup relative to production.
 - [x] Check whether warm-wake auth is still holding runtime/browser/session activity longer than the real product path.
 - [x] Decide whether any harness timing changes are warranted without weakening the real `suspended` contract.
+- [x] Check whether the GitHub workflow guest shape matches production.
+- [x] Add a production-shaped smoke that starts from a non-running drifted machine instead of asserting suspend on a just-created machine.
 
 ### 5. Review current hardening for cleanup candidates
 
@@ -55,9 +57,9 @@
 
 ### 6. Document the final learning
 
-- [ ] Update `.agents/skills/fly-studio-machines/SKILL.md` with the confirmed lessons.
-- [ ] Add the final outcome to `PROJECT_STATE.md`.
-- [ ] Summarize which signals distinguish a real Fly/platform suspend fallback from a Vivd test/runtime issue.
+- [x] Update `.agents/skills/fly-studio-machines/SKILL.md` with the confirmed lessons.
+- [x] Add the final outcome to `PROJECT_STATE.md`.
+- [x] Summarize which signals distinguish a real Fly/platform suspend fallback from a Vivd test/runtime issue.
 
 ## Evidence Log
 
@@ -81,6 +83,11 @@
 - Even after that retry fix, the real production-shaped warm-wake smoke on `vivd-studio-dev` still stopped twice in a row on `1.1.100`: the first park attempt fell back to `stop`, the provider restarted the same machine and retried park, and the second attempt also ended in `stop`.
 - The strongest control experiment so far is no longer Studio-specific: on April 9, 2026, a throwaway `nginx:alpine` machine created in the same `vivd-studio-dev` app, with the same `performance / 4096 MiB` guest shape and `autostop: "suspend"`, also turned a direct Fly `POST /suspend` into `stopping -> stopped`.
 - That means the current failure is not explained by Studio runtime auth, quiesce, OpenCode, or the provider's explicit stop fallback alone. At minimum it is app-level to the current Fly app surface; it may be broader Fly behavior, but that could not be isolated further from this machine because the available token is not authorized to create a fresh throwaway Fly app for a second control.
+- On April 13, 2026, the GitHub release workflow was still running the Fly smokes without `FLY_STUDIO_CPU_KIND` or `FLY_STUDIO_MEMORY_MB`, which means the provider defaulted to `shared / 1024 MiB` even though production machines are `performance / 4096 MiB`. That was a real test-shape mismatch in the workflow itself, independent of the runtime image.
+- A new production-shaped smoke now exists in `packages/backend/test/integration/fly_prod_shape_reconcile_wake_auth.test.ts`. It boots a drift image, explicitly stops that drifted machine, warm-reconciles it to the candidate image, requires the reconciled machine to end `suspended`, then wakes the same machine again and verifies runtime auth + bootstrap auth.
+- The publish workflow now points at that production-shaped smoke and sets `FLY_STUDIO_CPU_KIND=performance`, `FLY_STUDIO_CPUS=1`, and `FLY_STUDIO_MEMORY_MB=4096` so the release job matches the normal production guest shape instead of the old `shared / 1024 MiB` default.
+- Even with that better test shape and prod-like guest sizing, the new production-shaped smoke still fell back to `stopped` on `vivd-studio-dev` (`machine=e82620ec70e168`) during the final warm-reconcile park step. That means the remaining false-negative problem is no longer “fresh machine suspends too early”; it is now mostly the validate app behaving harsher than `vivd-studio-prod`.
+- Production `1.2.2` continues to show the same split as before: healthy machines such as `68372d2bd33518` record `update -> start -> suspending -> suspended`, while the persistent outliers such as `e2869e7dcd29d8` record `update -> start -> stop -> exit(requested_stop=true)`. So the current validate-app failure is still materially worse than the production picture.
 
 ### Production comparison set from the current machine overview screenshot
 
@@ -96,7 +103,17 @@
 ### Open questions
 
 - What production-relevant test shape, if any, behaves better locally than `shared / 1024 MB`, `shared / 2048 MB`, and `performance / 4096 MiB` on `vivd-studio-dev`?
+- Do we need a dedicated prod-clone validation app for release smoke coverage, instead of the current `vivd-studio-dev` target, now that the new prod-shaped smoke still fails there while `vivd-studio-prod` remains mostly healthy?
 - Are the production stopped outliers tied to a narrow class of machines rather than a general runtime regression?
 - Is the remaining skew primarily app-level (`vivd-studio-dev` / `vivd-studio-prod`) or broader Fly suspend behavior that changed after the earlier `v1.1.92` successes?
 - Why did some older `1.1.99` production machines appear as `suspended` in the April 9, 2026 screenshot if a same-app minimal control now also stops on direct `/suspend`?
 - Which of the new suspend hardening code paths are genuinely required once the test-vs-production mismatch is understood?
+
+## Signal Classification
+
+Use these signals before changing provider/runtime suspend code again:
+
+- Treat it as a likely Fly app or platform issue when a direct `POST /suspend` on a fully idled machine still records `stop -> exit(requested_stop=true)` with no `suspending` event, or when a same-app minimal-image control reproduces the same fallback.
+- Treat it as a likely harness issue when the release workflow is validating the wrong guest shape, when the smoke fails before the real warm-reconcile phase starts, or when the test is asking a just-created machine to suspend immediately after its own startup/bootstrap traffic.
+- Treat it as a likely validate-app parity issue when `vivd-studio-dev` consistently fails the prod-shaped smoke but `vivd-studio-prod` shows mostly healthy `suspended` machines on the same image and guest shape.
+- Treat it as a likely Vivd runtime issue when runtime cleanup never reaches `idle`, auth/bootstrap traffic remains active after the preview-leave step, or production and validation both regress on the same image through the same post-start cleanup/park path.

@@ -16,6 +16,36 @@ type DockerRequestOptions = {
   body?: unknown;
 };
 
+function decodeDockerRawStream(buffer: Buffer): string {
+  if (buffer.length === 0) return "";
+
+  let offset = 0;
+  const chunks: string[] = [];
+
+  while (offset + 8 <= buffer.length) {
+    const streamType = buffer[offset];
+    const payloadSize = buffer.readUInt32BE(offset + 4);
+    const payloadStart = offset + 8;
+    const payloadEnd = payloadStart + payloadSize;
+
+    if (
+      (streamType !== 1 && streamType !== 2 && streamType !== 3) ||
+      payloadEnd > buffer.length
+    ) {
+      return buffer.toString("utf8");
+    }
+
+    chunks.push(buffer.subarray(payloadStart, payloadEnd).toString("utf8"));
+    offset = payloadEnd;
+  }
+
+  if (offset === buffer.length && chunks.length > 0) {
+    return chunks.join("");
+  }
+
+  return buffer.toString("utf8");
+}
+
 export class DockerApiClient {
   private readonly options: {
     getSocketPath: () => string | null;
@@ -31,11 +61,11 @@ export class DockerApiClient {
     this.options = options;
   }
 
-  private async dockerRequest<T>(
+  private async dockerRequestRaw(
     method: string,
     path: string,
     options: DockerRequestOptions = {},
-  ): Promise<T> {
+  ): Promise<Buffer> {
     const apiPath = `/${this.options.getApiVersion()}${path}`;
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(options.query || {})) {
@@ -54,7 +84,7 @@ export class DockerApiClient {
       );
     }
 
-    return await new Promise<T>((resolve, reject) => {
+    return await new Promise<Buffer>((resolve, reject) => {
       const onResponse = (response: http.IncomingMessage) => {
         const chunks: Buffer[] = [];
         response.on("data", (chunk) => {
@@ -67,16 +97,7 @@ export class DockerApiClient {
             response.statusCode >= 200 &&
             response.statusCode < 300;
           if (ok) {
-            if (!text) {
-              resolve(undefined as T);
-              return;
-            }
-
-            try {
-              resolve(JSON.parse(text) as T);
-            } catch {
-              resolve(text as T);
-            }
+            resolve(Buffer.concat(chunks));
             return;
           }
 
@@ -127,6 +148,24 @@ export class DockerApiClient {
       if (body) request.write(body);
       request.end();
     });
+  }
+
+  private async dockerRequest<T>(
+    method: string,
+    path: string,
+    options: DockerRequestOptions = {},
+  ): Promise<T> {
+    const buffer = await this.dockerRequestRaw(method, path, options);
+    if (buffer.length === 0) {
+      return undefined as T;
+    }
+
+    const text = buffer.toString("utf8");
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as T;
+    }
   }
 
   async listContainers(): Promise<DockerContainerSummary[]> {
@@ -209,6 +248,28 @@ export class DockerApiClient {
 
   async startContainer(containerId: string): Promise<void> {
     await this.dockerRequest<void>("POST", `/containers/${containerId}/start`);
+  }
+
+  async getContainerLogs(
+    containerId: string,
+    options: {
+      stdout?: boolean;
+      stderr?: boolean;
+      tail?: number;
+    } = {},
+  ): Promise<string> {
+    const buffer = await this.dockerRequestRaw(
+      "GET",
+      `/containers/${containerId}/logs`,
+      {
+        query: {
+          stdout: options.stdout ?? true,
+          stderr: options.stderr ?? true,
+          tail: options.tail ?? 80,
+        },
+      },
+    );
+    return decodeDockerRawStream(buffer);
   }
 
   async stopContainer(

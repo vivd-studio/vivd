@@ -291,6 +291,9 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         inspectContainer: (containerId) => this.inspectContainer(containerId),
         getInternalProxyUrlForRoutePath: (routePath) =>
           this.config.getInternalProxyUrlForRoutePath(routePath),
+        getContainerLogs: async (containerId, tail) => {
+          return await this.apiClient.getContainerLogs(containerId, { tail });
+        },
       },
       options,
     );

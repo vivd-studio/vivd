@@ -290,6 +290,10 @@ export const studioProcedures = {
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to start studio";
+        console.error(
+          `[StudioMachine] Failed to start studio for ${organizationId}:${input.slug}/v${input.version}: ${message}`,
+        );
         return {
           success: false as const,
           url: null,
@@ -298,7 +302,7 @@ export const studioProcedures = {
           compatibilityUrl: null,
           bootstrapToken: null,
           userActionToken: null,
-          error: error instanceof Error ? error.message : "Failed to start studio",
+          error: message,
         };
       }
     }),
@@ -377,6 +381,10 @@ export const studioProcedures = {
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to restart studio";
+        console.error(
+          `[StudioMachine] Failed to restart studio for ${organizationId}:${input.slug}/v${input.version}: ${message}`,
+        );
         return {
           success: false as const,
           url: null,
@@ -385,7 +393,7 @@ export const studioProcedures = {
           compatibilityUrl: null,
           bootstrapToken: null,
           userActionToken: null,
-          error: error instanceof Error ? error.message : "Failed to restart studio",
+          error: message,
         };
       }
     }),

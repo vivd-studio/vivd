@@ -15,4 +15,10 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   splitting: true,
+  noExternal: [
+    /^@vivd\/installed-plugins(\/.*)?$/,
+    /^@vivd\/plugin-analytics(\/.*)?$/,
+    /^@vivd\/plugin-contact-form(\/.*)?$/,
+    /^@vivd\/plugin-newsletter(\/.*)?$/,
+  ],
 });
