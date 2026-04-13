@@ -2,7 +2,7 @@
 
 # vivd
 
-**Build & Publish Websites by Talking to AI**
+**Build & Host Websites by Talking to AI**
 
 An AI-powered website builder and agentic website workflow that turns a brief, a reference site, or a conversation into a live website. Fair-code and self-hostable, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
 
