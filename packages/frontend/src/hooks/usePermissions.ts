@@ -34,8 +34,10 @@ export function usePermissions() {
     isClientEditor,
 
     // Feature gates
-    canUseAgent: !isClientEditor,
-    canUseAiImages: !isClientEditor,
+    // Client editors stay project-scoped through route/backend guards, but can use
+    // the same AI editing surface inside that assigned project.
+    canUseAgent: true,
+    canUseAiImages: true,
     canManageProjects: !isClientEditor,
     canManageUsers: isAdmin,
     canAccessMaintenance: isSuperAdmin,

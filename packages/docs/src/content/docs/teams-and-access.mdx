@@ -34,6 +34,7 @@ In other words: for normal end users, think in terms of **Owner**, **Admin**, an
 | Owner | Highest-trust organization role. Keep this to one or two responsible people. | Everything an admin can do, plus protected organization-level ownership tasks such as renaming the organization. |
 | Admin | Day-to-day organization management. | Add and remove members, change member roles, reset another member's password, create and manage projects, and run organization-level maintenance tasks. |
 | User | Regular project contributor. | Work inside existing projects, use Studio, review content, and handle normal project work without managing the organization itself. |
+| Client Editor | Deliberate single-project handoff or client-review role. | Automatically lands in one assigned project, can use Studio and AI editing features there, but cannot roam across projects or manage organization settings. |
 | Super Admin | Install-wide operator role, not a normal project-team role. | Cross-organization and instance-wide administration such as instance settings and global user management. |
 
 ## What admins do in practice
@@ -65,8 +66,9 @@ day-to-day `Admin`.
 1. Keep `Owner` very limited.
 2. Use `Admin` for people who manage team access or organization operations.
 3. Use `User` for regular collaborators working inside existing projects.
-4. Re-check membership before launch, project handoff, or staffing changes.
+4. Use `Client Editor` only when you want that single-project handoff behavior.
+5. Re-check membership before launch, project handoff, or staffing changes.
 
-<Aside type="note" title="About older restricted roles">
-  Some installs may still show an older project-restricted role from an earlier access model. Prefer `Owner`, `Admin`, and `User` for new assignments unless you are deliberately maintaining legacy behavior.
+<Aside type="note" title="About Client Editor">
+  `Client Editor` remains a narrower, project-scoped role. Prefer `Owner`, `Admin`, and `User` for most team setups, and use `Client Editor` when you explicitly want one person routed into one assigned project without broader workspace access.
 </Aside>

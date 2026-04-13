@@ -302,6 +302,10 @@ yields `4096 MiB` by default instead of trying to claim nearly the whole box.
 The optional `DOCKER_STUDIO_MEMORY_AUTO_MIN_MB` floor is opt-in instead of
 being forced on smaller boxes by default.
 
+That also means the recommended `4 vCPU / 8 GiB` self-host baseline lands on a
+useful default split without extra env tuning: `2` vCPUs and `4096 MiB` RAM for
+the Studio runtime, with the remaining headroom left for the main app stack.
+
 Optional analytics geolocation:
 
 ```env

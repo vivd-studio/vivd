@@ -8,6 +8,15 @@
  * - Run reconciliation
  * - Verify the machine is warmed and ends up suspended again with updated image config
  *
+ * Signal note:
+ * - This is a strict warm-reconcile regression smoke, not the primary
+ *   prod-likeness release signal.
+ * - It still starts from a freshly created drift machine and asks that machine
+ *   to park before the real warm-reconcile phase, so it can fail even while
+ *   production mostly parks existing machines successfully.
+ * - Use `fly_prod_shape_reconcile_wake_auth.test.ts` for the more realistic
+ *   release signal.
+ *
  * Run with:
  *   npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
  *

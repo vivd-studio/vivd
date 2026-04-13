@@ -26,7 +26,7 @@ export function UserTable({
   const getGlobalRoleLabel = (role: User["role"]): string => {
     if (role === "super_admin") return "Super Admin";
     if (role === "admin") return "User (legacy admin)";
-    if (role === "client_editor") return "User (legacy client editor)";
+    if (role === "client_editor") return "User (client editor)";
     return "User";
   };
 
@@ -48,7 +48,7 @@ export function UserTable({
               Global Role
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Assigned Project (Legacy)
+              Assigned Project
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
               Created At

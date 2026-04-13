@@ -11,6 +11,15 @@
  * - verify auth surfaces again after the wake
  * - print machine-event timing summaries, with optional Fly log capture
  *
+ * Signal note:
+ * - This is a strict clean-path regression smoke, not the primary prod-likeness
+ *   release signal.
+ * - It starts from a freshly created machine and parks it immediately after its
+ *   own startup/auth traffic, so it can fail even while production is mostly
+ *   healthy.
+ * - Use `fly_prod_shape_reconcile_wake_auth.test.ts` for the more realistic
+ *   release signal.
+ *
  * Run with:
  *   npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
  *

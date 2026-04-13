@@ -3,5 +3,5 @@ export { PreviewProvider, usePreview, useOptionalPreview } from "./PreviewContex
 export { StudioToolbar } from "./toolbar";
 export { PreviewIframe } from "./PreviewIframe";
 export { MobileFrame } from "./MobileFrame";
-export { UnsavedChangesBar } from "./UnsavedChangesBar";
+export { PreviewEditToolbar } from "./PreviewEditToolbar";
 export type { DevicePreset } from "./types";

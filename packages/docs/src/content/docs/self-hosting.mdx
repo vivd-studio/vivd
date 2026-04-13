@@ -29,6 +29,35 @@ If you want Vivd to manage HTTPS certificates itself, use a real public hostname
 
 Self-hosting currently expects OpenRouter for OpenCode model access so one API key can cover multiple model tiers. Direct multi-provider self-host configuration is planned later.
 
+## Recommended server specs
+
+For a normal `solo` self-host install, start with:
+
+- a modern 64-bit Linux VPS or VM from a normal VPS provider
+- `4` vCPUs
+- `8 GiB` RAM
+- `80+ GiB` SSD/NVMe storage
+- one public IPv4 address and a real hostname if you want bundled HTTPS
+
+This is the recommended baseline for a small production-oriented install with low
+concurrency, not a high-density multi-user cluster.
+
+With Vivd's current Docker Studio auto-sizing defaults, a `4 vCPU / 8 GiB` host
+fits the product model well: the Studio runtime auto-sizes to `2` vCPUs and
+`4096 MiB` RAM by default, while the rest of the stack keeps the remaining CPU
+and memory headroom. That matches the default reserve-first sizing logic in the
+Docker Studio provider, so you do not need extra tuning just to reach that split.
+
+If the backend container itself is running under a tighter cgroup or platform
+memory limit, Vivd sizes Studio from that smaller detected budget instead of
+assuming the full host is available.
+
+Move up to `8` vCPUs and `16 GiB` RAM earlier if you expect:
+
+- multiple active Studio sessions at the same time
+- heavier Astro builds or imports
+- more headroom for scraping, image work, or larger projects
+
 ## Install command
 
 ```bash
