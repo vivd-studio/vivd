@@ -11,6 +11,18 @@ function formatInstructionLines(instructions: string[]): string[] {
   return instructions.map((instruction) => `- ${instruction}`);
 }
 
+function formatChecklistSummary(summary: {
+  passed: number;
+  failed: number;
+  warnings: number;
+  skipped: number;
+  fixed?: number;
+}): string {
+  return `${summary.passed} passed, ${summary.failed} failed, ${summary.warnings} warnings, ${summary.skipped} skipped${
+    summary.fixed != null ? `, ${summary.fixed} fixed` : ""
+  }`;
+}
+
 function formatPluginCommandHints(pluginId: string, plugin: {
   capabilities?: {
     supportsInfo?: boolean;
@@ -647,9 +659,7 @@ export function formatPublishChecklistReport(input: {
     `Publish checklist for ${input.checklist.projectSlug} v${input.checklist.version}`,
     `Run at: ${input.checklist.runAt}`,
     formatStatusLine("Snapshot commit", input.checklist.snapshotCommitHash ?? null),
-    `Summary: ${input.checklist.summary.passed} passed, ${input.checklist.summary.failed} failed, ${input.checklist.summary.warnings} warnings, ${input.checklist.summary.skipped} skipped${
-      input.checklist.summary.fixed != null ? `, ${input.checklist.summary.fixed} fixed` : ""
-    }`,
+    `Summary: ${formatChecklistSummary(input.checklist.summary)}`,
     "Items:",
     ...itemLines,
   ].join("\n");
@@ -707,8 +717,205 @@ export function formatPublishChecklistUpdateReport(input: {
     `Label: ${input.item.label}`,
     `Status: ${input.item.status}`,
     `Note: ${input.item.note || "n/a"}`,
-    `Summary: ${input.checklist.summary.passed} passed, ${input.checklist.summary.failed} failed, ${input.checklist.summary.warnings} warnings, ${input.checklist.summary.skipped} skipped${
-      input.checklist.summary.fixed != null ? `, ${input.checklist.summary.fixed} fixed` : ""
+    `Summary: ${formatChecklistSummary(input.checklist.summary)}`,
+  ].join("\n");
+}
+
+export function formatPublishStatusReport(input: {
+  projectSlug: string;
+  version: number;
+  status: {
+    isPublished: boolean;
+    domain: string | null;
+    commitHash: string | null;
+    publishedAt: string | null;
+    url: string | null;
+    projectVersion?: number | null;
+  };
+  state: {
+    storageEnabled: boolean;
+    readiness: string;
+    publishableCommitHash: string | null;
+    studioRunning: boolean;
+    studioStateAvailable: boolean;
+    studioHasUnsavedChanges: boolean;
+    studioHeadCommitHash: string | null;
+    studioWorkingCommitHash: string | null;
+  };
+  checklist: {
+    checklist: {
+      summary: {
+        passed: number;
+        failed: number;
+        warnings: number;
+        skipped: number;
+        fixed?: number;
+      };
+    } | null;
+    stale: boolean;
+    reason?: string | null;
+  };
+  targetCommitHash: string | null;
+  publishReady: boolean;
+  blockedReason: string | null;
+}): string {
+  const checklistStatus = input.checklist.checklist
+    ? `${formatChecklistSummary(input.checklist.checklist.summary)}${
+        input.checklist.stale ? " (stale)" : " (fresh)"
+      }`
+    : "none";
+
+  return [
+    `Publish status for ${input.projectSlug} v${input.version}`,
+    `Published: ${input.status.isPublished ? "yes" : "no"}`,
+    formatStatusLine("Domain", input.status.domain),
+    formatStatusLine("URL", input.status.url),
+    formatStatusLine("Published version", input.status.projectVersion ?? null),
+    formatStatusLine("Published commit", input.status.commitHash),
+    formatStatusLine("Published at", input.status.publishedAt),
+    `Readiness: ${input.state.readiness}`,
+    formatStatusLine("Prepared commit", input.state.publishableCommitHash),
+    formatStatusLine("Target commit", input.targetCommitHash),
+    `Ready to publish: ${input.publishReady ? "yes" : "no"}`,
+    input.blockedReason ? `Blocked: ${input.blockedReason}` : "",
+    `Studio: ${
+      input.state.studioRunning
+        ? input.state.studioStateAvailable
+          ? input.state.studioHasUnsavedChanges
+            ? "running with unsaved changes"
+            : "running"
+          : "running (state unavailable)"
+        : "not running"
     }`,
+    `Checklist: ${checklistStatus}`,
+    input.checklist.stale && input.checklist.reason
+      ? `Checklist stale reason: ${input.checklist.reason}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function formatPublishTargetsReport(input: {
+  projectSlug: string;
+  currentPublishedDomain: string | null;
+  recommendedDomain: string | null;
+  targets: Array<{
+    domain: string;
+    usage: "tenant_host" | "publish_target";
+    type: "managed_subdomain" | "custom_domain" | "implicit_primary_host";
+    status: "active" | "disabled" | "pending_verification" | "implicit";
+    current: boolean;
+    primaryHost: boolean;
+    available: boolean;
+    blockedReason?: string;
+    url: string;
+    recommended: boolean;
+  }>;
+}): string {
+  const availableTargets = input.targets.filter((target) => target.available);
+  const blockedTargets = input.targets.filter((target) => !target.available);
+
+  const formatTargetMeta = (target: {
+    usage: "tenant_host" | "publish_target";
+    type: "managed_subdomain" | "custom_domain" | "implicit_primary_host";
+    status: "active" | "disabled" | "pending_verification" | "implicit";
+    current: boolean;
+    primaryHost: boolean;
+    recommended: boolean;
+  }): string => {
+    const parts: string[] = [target.usage];
+    if (target.primaryHost || target.type === "implicit_primary_host") {
+      parts.push("instance-primary-host");
+    } else if (target.type === "managed_subdomain") {
+      parts.push("managed");
+    }
+    if (target.current) parts.push("current");
+    if (target.recommended) parts.push("recommended");
+    if (target.status !== "implicit" && target.status !== "active") {
+      parts.push(target.status);
+    }
+    return parts.join(" | ");
+  };
+
+  return [
+    `Publish targets for ${input.projectSlug}`,
+    formatStatusLine("Current published domain", input.currentPublishedDomain),
+    formatStatusLine("Recommended domain", input.recommendedDomain),
+    availableTargets.length > 0 ? "Available targets:" : "Available targets: none",
+    ...availableTargets.map(
+      (target) => `- ${target.domain} | ${formatTargetMeta(target)} | ${target.url}`,
+    ),
+    blockedTargets.length > 0 ? "Blocked targets:" : "",
+    ...blockedTargets.map(
+      (target) =>
+        `- ${target.domain} | ${formatTargetMeta(target)} | reason: ${target.blockedReason || "Unavailable"}`,
+    ),
+    "Publishing uses the current saved, prepared Studio snapshot. Run `vivd publish status` or `vivd publish prepare` before deploy if needed.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function formatPublishPrepareReport(input: {
+  projectSlug: string;
+  version: number;
+  action:
+    | "already_prepared"
+    | "saved_changes"
+    | "requested_artifact_prepare"
+    | "waiting_for_existing_prepare";
+  targetCommitHash: string | null;
+  preparedCommitHash: string | null;
+  readyToPublish: boolean;
+  saveMessage?: string | null;
+}): string {
+  const actionLabel =
+    input.action === "already_prepared"
+      ? "already prepared"
+      : input.action === "saved_changes"
+        ? "saved current changes and prepared artifacts"
+        : input.action === "requested_artifact_prepare"
+          ? "requested artifact preparation for the current saved snapshot"
+          : "waited for the current saved snapshot to finish preparing";
+
+  return [
+    `Publish prepare for ${input.projectSlug} v${input.version}`,
+    `Action: ${actionLabel}`,
+    formatStatusLine("Target commit", input.targetCommitHash),
+    formatStatusLine("Prepared commit", input.preparedCommitHash),
+    `Ready to publish: ${input.readyToPublish ? "yes" : "no"}`,
+    input.saveMessage ? `Save result: ${input.saveMessage}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function formatPublishDeployReport(input: {
+  domain: string;
+  url: string;
+  commitHash: string;
+  message: string;
+}): string {
+  return [
+    "Site published successfully.",
+    `Domain: ${input.domain}`,
+    `URL: ${input.url}`,
+    `Commit: ${input.commitHash}`,
+    `Message: ${input.message}`,
+  ].join("\n");
+}
+
+export function formatPublishUnpublishReport(input: {
+  alreadyUnpublished?: boolean;
+  domain?: string | null;
+  url?: string | null;
+  message: string;
+}): string {
+  return [
+    input.alreadyUnpublished ? "Site is already unpublished." : "Site unpublished.",
+    formatStatusLine("Domain", input.domain),
+    formatStatusLine("URL", input.url),
+    `Message: ${input.message}`,
   ].join("\n");
 }

@@ -3,8 +3,8 @@ title: Vivd Docs
 description: Public product documentation for Vivd users, agencies, and customers.
 tableOfContents: false
 hero:
-  title: Vivd Docs
-  tagline: Product docs for creating, refining, publishing, and operating websites in Vivd.
+  title: Vivd Docs for the full site lifecycle.
+  tagline: Clear product guidance for first prompt, Studio edits, plugins, domains, and solo self-hosting.
   actions:
     - text: Getting Started
       link: /getting-started/
@@ -20,6 +20,8 @@ hero:
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import AppCtas from "../../components/AppCtas.astro";
 import DocShot from "../../components/DocShot.astro";
+
+<p class="eyebrow">[ Start Here ]</p>
 
 ## Getting Started
 
@@ -63,17 +65,53 @@ import DocShot from "../../components/DocShot.astro";
   caption="Vivd can start from a brief, references, and brand assets instead of forcing you to begin from an existing website."
 />
 
+<p class="eyebrow">[ Suggested Path ]</p>
+
 ## Recommended first read
 
-If you are new to Vivd, start with [Getting Started](/getting-started/).
+<div class="docs-flow-grid">
+  <section class="docs-flow-card">
+    <span class="docs-flow-card__step">01 Understand the model</span>
+    <h3>Start with the product path, not the internals.</h3>
+    <p>Read the main concepts first so the Studio, publish, and self-hosting guides all make sense in the same workflow.</p>
+    <div class="docs-flow-card__links">
+      <a href="/getting-started/">Getting Started</a>
+      <a href="/how-vivd-works/">How Vivd Works</a>
+    </div>
+  </section>
+  <section class="docs-flow-card">
+    <span class="docs-flow-card__step">02 Choose a starting point</span>
+    <h3>Pick the path that matches the material you already have.</h3>
+    <p>Use the scratch flow when you have a brief and references, or import when you already have a live site to evolve.</p>
+    <div class="docs-flow-card__links">
+      <a href="/create-from-scratch/">Create from Scratch</a>
+      <a href="/import-existing-website/">Import an Existing Website</a>
+    </div>
+  </section>
+  <section class="docs-flow-card">
+    <span class="docs-flow-card__step">03 Refine in Studio</span>
+    <h3>Use the real project workspace to edit content, code, and assets.</h3>
+    <p>Studio is where the AI workflow, direct edits, screenshots, plugins, and previews come together.</p>
+    <div class="docs-flow-card__links">
+      <a href="/edit-in-studio/">Edit in Studio</a>
+      <a href="/plugins/">Plugins</a>
+    </div>
+  </section>
+  <section class="docs-flow-card">
+    <span class="docs-flow-card__step">04 Publish and operate</span>
+    <h3>Finish the launch path with domains, deploy checks, and self-host basics.</h3>
+    <p>Keep publish targets, instance settings, and solo self-host guidance close once you move from draft to live.</p>
+    <div class="docs-flow-card__links">
+      <a href="/publish-your-site/">Publish Your Site</a>
+      <a href="/self-hosting/">Self-Hosting</a>
+      <a href="/instance-settings/">Instance Settings</a>
+    </div>
+  </section>
+</div>
 
-From there, the usual path is:
+<p>If you are self-hosting, keep <a href="/self-hosting/">Self-Hosting</a> and <a href="/instance-settings/">Instance Settings</a> close by from the start.</p>
 
-1. choose the right starting point: [Create from Scratch](/create-from-scratch/) or [Import an Existing Website](/import-existing-website/)
-2. refine the project in [Edit in Studio](/edit-in-studio/)
-3. finish with [Publish Your Site](/publish-your-site/)
-
-If you are self-hosting, keep [Self-Hosting](/self-hosting/) and [Instance Settings](/instance-settings/) close by from the start.
+<p class="eyebrow">[ Explore ]</p>
 
 ## Browse by task
 

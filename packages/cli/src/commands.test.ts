@@ -283,6 +283,631 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("- a11y | warning | Accessibility | note: Review contrast");
   });
 
+  it("shows publish status from the local Studio surface", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                isPublished: true,
+                domain: "demo.example.com",
+                commitHash: "abc123",
+                publishedAt: "2026-03-29T09:00:00.000Z",
+                url: "https://demo.example.com",
+                projectVersion: 7,
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "abc123",
+                lastSyncedCommitHash: "abc123",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "abc123",
+                studioWorkingCommitHash: "abc123",
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                checklist: {
+                  projectSlug: "demo",
+                  version: 7,
+                  runAt: "2026-03-29T09:00:00.000Z",
+                  snapshotCommitHash: "abc123",
+                  items: [],
+                  summary: {
+                    passed: 1,
+                    failed: 0,
+                    warnings: 0,
+                    skipped: 0,
+                  },
+                },
+                stale: false,
+                reason: null,
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const result = await dispatchCli(["publish", "status"]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.publishStatus?input=%7B%22slug%22%3A%22demo%22%7D",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(result.human).toContain("Publish status for demo v7");
+      expect(result.human).toContain("Published: yes");
+      expect(result.human).toContain("Domain: demo.example.com");
+      expect(result.human).toContain("Checklist: 1 passed, 0 failed, 0 warnings, 0 skipped (fresh)");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("lists recommended publish targets from the local Studio surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        result: {
+          data: {
+            json: {
+              projectSlug: "demo",
+              currentPublishedDomain: null,
+              recommendedDomain: "tenant.vivd.studio",
+              targets: [
+                {
+                  domain: "tenant.vivd.studio",
+                  usage: "tenant_host",
+                  type: "managed_subdomain",
+                  status: "active",
+                  current: false,
+                  primaryHost: false,
+                  available: true,
+                  url: "https://tenant.vivd.studio",
+                  recommended: true,
+                },
+                {
+                  domain: "marketing.example.com",
+                  usage: "publish_target",
+                  type: "custom_domain",
+                  status: "active",
+                  current: false,
+                  primaryHost: false,
+                  available: false,
+                  blockedReason: "Domain is already in use",
+                  url: "https://marketing.example.com",
+                  recommended: false,
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const result = await dispatchCli(["publish", "targets"]);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.publishTargets?input=%7B%22slug%22%3A%22demo%22%7D",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(result.human).toContain("Publish targets for demo");
+      expect(result.human).toContain("Recommended domain: tenant.vivd.studio");
+      expect(result.human).toContain(
+        "- tenant.vivd.studio | tenant_host | managed | recommended | https://tenant.vivd.studio",
+      );
+      expect(result.human).toContain(
+        "- marketing.example.com | publish_target | reason: Domain is already in use",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("prepares the current saved snapshot before publish", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "abc123",
+                lastSyncedCommitHash: "abc123",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: true,
+                studioHeadCommitHash: "abc123",
+                studioWorkingCommitHash: "abc123",
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                success: true,
+                hash: "def456",
+                noChanges: false,
+                github: {
+                  attempted: false,
+                  success: true,
+                },
+                message: "Saved version with commit def456",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "def456",
+                lastSyncedCommitHash: "def456",
+                builtAt: "2026-03-29T08:59:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:58:30.000Z",
+                previewBuiltAt: "2026-03-29T08:59:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "def456",
+                studioWorkingCommitHash: "def456",
+                studioStateReportedAt: "2026-03-29T08:59:10.000Z",
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const result = await dispatchCli(["publish", "prepare"]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.gitSave",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            slug: "demo",
+            version: 7,
+            message: "Prepare publish artifacts",
+          }),
+        }),
+      );
+      expect(result.human).toContain("Publish prepare for demo v7");
+      expect(result.human).toContain("Action: saved current changes and prepared artifacts");
+      expect(result.human).toContain("Prepared commit: def456");
+      expect(result.human).toContain("Ready to publish: yes");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("deploys through the local Studio surface and validates the target domain", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                projectSlug: "demo",
+                currentPublishedDomain: null,
+                recommendedDomain: "launch.example.com",
+                targets: [
+                  {
+                    domain: "launch.example.com",
+                    usage: "publish_target",
+                    type: "custom_domain",
+                    status: "active",
+                    current: false,
+                    primaryHost: false,
+                    available: true,
+                    url: "https://launch.example.com",
+                    recommended: true,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "def456",
+                lastSyncedCommitHash: "def456",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "def456",
+                studioWorkingCommitHash: "def456",
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                available: true,
+                normalizedDomain: "launch.example.com",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                success: true,
+                domain: "launch.example.com",
+                commitHash: "def456",
+                url: "https://launch.example.com",
+                message: "Published successfully",
+              },
+            },
+          },
+        }),
+      });
+    const originalToken = process.env.STUDIO_ACCESS_TOKEN;
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    process.env.STUDIO_ACCESS_TOKEN = "token_1";
+
+    try {
+      const result = await dispatchCli([
+        "publish",
+        "deploy",
+        "--domain",
+        "Launch.Example.com",
+      ]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.publish",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            "x-vivd-studio-token": "token_1",
+          }),
+          body: JSON.stringify({
+            slug: "demo",
+            version: 7,
+            domain: "launch.example.com",
+            expectedCommitHash: "def456",
+          }),
+        }),
+      );
+      expect(result.human).toContain("Site published successfully.");
+      expect(result.human).toContain("Domain: launch.example.com");
+      expect(result.human).toContain("Commit: def456");
+    } finally {
+      if (originalToken == null) {
+        delete process.env.STUDIO_ACCESS_TOKEN;
+      } else {
+        process.env.STUDIO_ACCESS_TOKEN = originalToken;
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reuses the existing published domain when deploy runs without --domain", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                projectSlug: "demo",
+                currentPublishedDomain: "demo.example.com",
+                recommendedDomain: "demo.example.com",
+                targets: [
+                  {
+                    domain: "demo.example.com",
+                    usage: "publish_target",
+                    type: "custom_domain",
+                    status: "active",
+                    current: true,
+                    primaryHost: false,
+                    available: true,
+                    url: "https://demo.example.com",
+                    recommended: true,
+                  },
+                  {
+                    domain: "alt.example.com",
+                    usage: "publish_target",
+                    type: "custom_domain",
+                    status: "active",
+                    current: false,
+                    primaryHost: false,
+                    available: true,
+                    url: "https://alt.example.com",
+                    recommended: false,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "xyz789",
+                lastSyncedCommitHash: "xyz789",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: false,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: null,
+                studioWorkingCommitHash: null,
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                success: true,
+                domain: "demo.example.com",
+                commitHash: "xyz789",
+                url: "https://demo.example.com",
+                message: "Published successfully",
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      await dispatchCli(["publish", "deploy"]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.publish",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            slug: "demo",
+            version: 7,
+            domain: "demo.example.com",
+            expectedCommitHash: "xyz789",
+          }),
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("requires --domain when multiple first-publish targets are available", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                projectSlug: "demo",
+                currentPublishedDomain: null,
+                recommendedDomain: "tenant.vivd.studio",
+                targets: [
+                  {
+                    domain: "tenant.vivd.studio",
+                    usage: "tenant_host",
+                    type: "managed_subdomain",
+                    status: "active",
+                    current: false,
+                    primaryHost: false,
+                    available: true,
+                    url: "https://tenant.vivd.studio",
+                    recommended: true,
+                  },
+                  {
+                    domain: "marketing.example.com",
+                    usage: "publish_target",
+                    type: "custom_domain",
+                    status: "active",
+                    current: false,
+                    primaryHost: false,
+                    available: true,
+                    url: "https://marketing.example.com",
+                    recommended: false,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                storageEnabled: true,
+                readiness: "ready",
+                sourceKind: "preview",
+                framework: "astro",
+                publishableCommitHash: "def456",
+                lastSyncedCommitHash: "def456",
+                builtAt: "2026-03-29T08:58:00.000Z",
+                sourceBuiltAt: "2026-03-29T08:57:00.000Z",
+                previewBuiltAt: "2026-03-29T08:58:00.000Z",
+                error: null,
+                studioRunning: true,
+                studioStateAvailable: true,
+                studioHasUnsavedChanges: false,
+                studioHeadCommitHash: "def456",
+                studioWorkingCommitHash: "def456",
+                studioStateReportedAt: "2026-03-29T08:58:30.000Z",
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      await expect(dispatchCli(["publish", "deploy"])).rejects.toThrow(
+        "Multiple publish targets are available. Run `vivd publish targets` and pass --domain <domain>.",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("unpublishes through the local Studio surface", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                isPublished: true,
+                domain: "demo.example.com",
+                commitHash: "abc123",
+                publishedAt: "2026-03-29T09:00:00.000Z",
+                url: "https://demo.example.com",
+                projectVersion: 7,
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                success: true,
+                message: "Site unpublished successfully",
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const result = await dispatchCli(["publish", "unpublish"]);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/project.unpublish",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            slug: "demo",
+          }),
+        }),
+      );
+      expect(result.human).toContain("Site unpublished.");
+      expect(result.human).toContain("Domain: demo.example.com");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("suggests running the checklist when no saved checklist exists yet", async () => {
     runtime.client.query.mockResolvedValue({
       checklist: null,
@@ -1183,7 +1808,7 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("PREVIEW & DEBUGGING");
     expect(rootHelp.human).toContain("PLUGINS");
     expect(rootHelp.human).toContain("LOCAL CMS");
-    expect(rootHelp.human).toContain("PUBLISH CHECKLIST");
+    expect(rootHelp.human).toContain("PUBLISH");
     expect(rootHelp.human).toContain("SUPPORT");
     expect(rootHelp.human).toContain("GLOBAL FLAGS");
     expect(rootHelp.human).toContain("EXAMPLES");
@@ -1196,6 +1821,10 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN");
     expect(rootHelp.human).toContain("vivd cms help");
     expect(rootHelp.human).toContain("vivd publish help");
+    expect(rootHelp.human).toContain("vivd publish status");
+    expect(rootHelp.human).toContain("vivd publish targets");
+    expect(rootHelp.human).toContain("vivd publish prepare");
+    expect(rootHelp.human).toContain("vivd publish deploy [--domain <domain>]");
     expect(rootHelp.human).toContain("vivd support request <summary...>");
     expect(rootHelp.human).toContain("DISCOVER MORE");
     expect(cmsHelp.human).toContain("vivd cms helper install");
@@ -1210,10 +1839,17 @@ describe("dispatchCli", () => {
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
     expect(pluginsHelp.human).toContain("vivd plugins read <pluginId> <readId> [--file input.json]");
     expect(pluginsHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
+    expect(publishHelp.human).toContain("vivd publish status");
+    expect(publishHelp.human).toContain("vivd publish targets");
+    expect(publishHelp.human).toContain("vivd publish prepare");
+    expect(publishHelp.human).toContain("vivd publish deploy [--domain <domain>]");
+    expect(publishHelp.human).toContain("vivd publish unpublish");
     expect(publishHelp.human).toContain("vivd publish checklist run");
     expect(publishHelp.human).toContain("vivd publish checklist show");
-    expect(publishHelp.human).toContain("explicitly asks for a full checklist run");
+    expect(publishHelp.human).toContain("explicit approval");
     expect(publishHelp.human).toContain("inspect or continue checklist items one by one");
+    expect(publishHelp.human).toContain("current saved Studio snapshot");
+    expect(publishHelp.human).toContain("current saved, prepared snapshot");
     expect(supportHelp.human).toContain("vivd support request <summary...>");
     expect(supportHelp.human).toContain("Always ask the user for explicit permission");
     expect(contactHelp.human).toContain("vivd plugins contact info");
@@ -1293,6 +1929,8 @@ describe("cli args", () => {
       "--slug",
       "demo",
       "--version=4",
+      "--domain",
+      "demo.example.com",
       "--width",
       "1440",
       "--height=900",
@@ -1317,6 +1955,7 @@ describe("cli args", () => {
     expect(parsed.flags.json).toBe(true);
     expect(parsed.flags.slug).toBe("demo");
     expect(parsed.flags.version).toBe(4);
+    expect(parsed.flags.domain).toBe("demo.example.com");
     expect(parsed.flags.width).toBe(1440);
     expect(parsed.flags.height).toBe(900);
     expect(parsed.flags.scrollY).toBe(1200);

@@ -1,3 +1,6 @@
+import {
+  installedBackendPluginPackages,
+} from "@vivd/installed-plugins/backend";
 import { definePluginPackageDescriptors } from "@vivd/shared/types";
 import type {
   PluginModule as SharedPluginModule,
@@ -5,9 +8,6 @@ import type {
 } from "@vivd/shared/types";
 import type express from "express";
 import type { Multer } from "multer";
-import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
-import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
-import { newsletterPluginManifest } from "@vivd/plugin-newsletter/manifest";
 import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
 import { contactFormPluginBackendContribution } from "./contactForm/backendContribution";
 import { newsletterPluginBackendContribution } from "./newsletter/backendContribution";
@@ -99,33 +99,25 @@ export interface BackendPluginPackageDescriptor
   backend: BackendPluginContribution<string>;
 }
 
+type InstalledBackendPluginId =
+  (typeof installedBackendPluginPackages)[number]["pluginId"];
+
+const backendPluginContributionsById = {
+  contact_form: contactFormPluginBackendContribution,
+  analytics: analyticsPluginBackendContribution,
+  newsletter: newsletterPluginBackendContribution,
+} as const satisfies Record<
+  InstalledBackendPluginId,
+  BackendPluginContribution<string>
+>;
+
 export const backendPluginPackageDescriptors =
   definePluginPackageDescriptors([
-  {
-    ...contactFormPluginManifest,
-    backend: {
-      module: contactFormPluginBackendContribution.module,
-      publicRoutes: contactFormPluginBackendContribution.publicRoutes,
-      hooks: contactFormPluginBackendContribution.hooks,
-    } as BackendPluginContribution<"contact_form">,
-  },
-  {
-    ...analyticsPluginManifest,
-    backend: {
-      module: analyticsPluginBackendContribution.module,
-      publicRoutes: analyticsPluginBackendContribution.publicRoutes,
-      hooks: analyticsPluginBackendContribution.hooks,
-    } as BackendPluginContribution<"analytics">,
-  },
-  {
-    ...newsletterPluginManifest,
-    backend: {
-      module: newsletterPluginBackendContribution.module,
-      publicRoutes: newsletterPluginBackendContribution.publicRoutes,
-      hooks: newsletterPluginBackendContribution.hooks,
-    } as BackendPluginContribution<"newsletter">,
-  },
-] as const);
+    ...installedBackendPluginPackages.map((pluginPackage) => ({
+      ...pluginPackage,
+      backend: backendPluginContributionsById[pluginPackage.pluginId],
+    })),
+  ] as const satisfies readonly BackendPluginPackageDescriptor[]);
 
 export function listBackendPublicPluginRouteDefinitions(): BackendPublicPluginRouteDefinition[] {
   return backendPluginPackageDescriptors.flatMap<BackendPublicPluginRouteDefinition>(

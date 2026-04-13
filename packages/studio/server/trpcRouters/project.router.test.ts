@@ -164,6 +164,69 @@ describe("project router", () => {
     );
   });
 
+  it("proxies publish target discovery in connected mode", async () => {
+    isConnectedModeMock.mockReturnValue(true);
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        result: {
+          data: {
+            json: {
+              projectSlug: "site-1",
+              currentPublishedDomain: null,
+              recommendedDomain: "acme.vivd.studio",
+              targets: [
+                {
+                  domain: "acme.vivd.studio",
+                  usage: "tenant_host",
+                  type: "managed_subdomain",
+                  status: "active",
+                  current: false,
+                  primaryHost: false,
+                  available: true,
+                  url: "https://acme.vivd.studio",
+                  recommended: true,
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    const caller = projectRouter.createCaller(makeContext());
+
+    const result = await caller.publishTargets({ slug: "site-1" });
+
+    expect(result).toEqual({
+      projectSlug: "site-1",
+      currentPublishedDomain: null,
+      recommendedDomain: "acme.vivd.studio",
+      targets: [
+        {
+          domain: "acme.vivd.studio",
+          usage: "tenant_host",
+          type: "managed_subdomain",
+          status: "active",
+          current: false,
+          primaryHost: false,
+          available: true,
+          url: "https://acme.vivd.studio",
+          recommended: true,
+        },
+      ],
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/trpc/project.publishTargets?input="),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          "x-vivd-studio-user-action-token": "user-action-token-1",
+          "x-vivd-organization-id": "org-1",
+        }),
+      }),
+    );
+  });
+
   it("falls back to local preview path when connected status has no canonical URL", async () => {
     isConnectedModeMock.mockReturnValue(true);
     (globalThis.fetch as any).mockResolvedValueOnce({

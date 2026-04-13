@@ -970,6 +970,15 @@ export async function listQuestions(directory: string) {
   return result.data || [];
 }
 
+export async function listPermissions(directory: string) {
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  // @ts-ignore - SDK typings vary by version.
+  const result = await client.permission.list({ directory: opencodeDir });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data || [];
+}
+
 export async function createSession(directory: string) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
@@ -1106,6 +1115,25 @@ export async function rejectQuestion(requestId: string, directory: string) {
   // @ts-ignore - SDK typings vary by version.
   const result = await client.question.reject({
     requestID: requestId,
+    directory: opencodeDir,
+  });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return true;
+}
+
+export async function respondPermission(
+  requestId: string,
+  sessionId: string,
+  response: "once" | "always" | "reject",
+  directory: string,
+) {
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  // @ts-ignore - SDK typings vary by version.
+  const result = await client.permission.respond({
+    permissionID: requestId,
+    sessionID: sessionId,
+    response,
     directory: opencodeDir,
   });
   if (result.error) throw new Error(JSON.stringify(result.error));

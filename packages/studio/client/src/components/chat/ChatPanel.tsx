@@ -126,12 +126,17 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     setSelectedSessionId,
     handleDeleteSession,
     messageCount,
+    activeQuestionRequest,
+    activePermissionRequest,
     sessionDebugState,
     setSelectorMode,
   } = useChatContext();
   const sessionHistoryOpen = previewContext?.sessionHistoryOpen ?? false;
   const setSessionHistoryOpen =
     previewContext?.setSessionHistoryOpen ?? (() => undefined);
+  const showQuestionFocusOverlay = Boolean(
+    activeQuestionRequest || activePermissionRequest,
+  );
 
   // Wrap onClose to also exit selector mode
   const handleClose = () => {
@@ -177,7 +182,19 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
         <>
           <MessageList />
 
-          {messageCount > 0 && <ChatInputRegion />}
+          {showQuestionFocusOverlay ? (
+            <div
+              aria-hidden="true"
+              data-testid="chat-question-focus-overlay"
+              className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(to_top,rgba(0,0,0,0.36),rgba(0,0,0,0.22)_38%,rgba(0,0,0,0.08)_70%,rgba(0,0,0,0.02))] backdrop-blur-[1.5px]"
+            />
+          ) : null}
+
+          {messageCount > 0 ? (
+            <div className="relative z-20">
+              <ChatInputRegion />
+            </div>
+          ) : null}
 
           {/* Debug display for session state (admin only) */}
           <SessionDebugDisplay debug={sessionDebugState} />

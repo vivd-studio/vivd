@@ -23,6 +23,8 @@ const mockChatContext = vi.hoisted(() => ({
   handleDeleteSession: vi.fn(),
   handleNewSession: vi.fn(),
   messageCount: 1,
+  activeQuestionRequest: null as any,
+  activePermissionRequest: null as any,
   sessionDebugState: {
     selectedSessionId: "session-1",
     isStreaming: false,
@@ -72,6 +74,8 @@ describe("ChatPanelContent", () => {
     mockChatContext.setSelectedSessionId.mockReset();
     mockChatContext.handleNewSession.mockReset();
     mockChatContext.setSelectorMode.mockReset();
+    mockChatContext.activeQuestionRequest = null;
+    mockChatContext.activePermissionRequest = null;
     mockPreviewContext.setSessionHistoryOpen.mockReset();
     mockPreviewContext.sessionHistoryOpen = false;
   });
@@ -100,5 +104,43 @@ describe("ChatPanelContent", () => {
 
     expect(mockChatContext.setSelectedSessionId).toHaveBeenCalledWith("session-2");
     expect(mockPreviewContext.setSessionHistoryOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("shows a focus overlay while an agent question is active", () => {
+    mockChatContext.activeQuestionRequest = {
+      id: "question-1",
+      sessionID: "session-1",
+      questions: [{ header: "Pick one", question: "Which layout?", options: [] }],
+    };
+
+    render(<ChatPanelContent />);
+
+    expect(screen.getByTestId("chat-question-focus-overlay")).toBeInTheDocument();
+  });
+
+  it("keeps the overlay out of the way when there is no active question", () => {
+    mockChatContext.activeQuestionRequest = null;
+    mockChatContext.activePermissionRequest = null;
+
+    render(<ChatPanelContent />);
+
+    expect(
+      screen.queryByTestId("chat-question-focus-overlay"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a focus overlay while a permission approval is active", () => {
+    mockChatContext.activePermissionRequest = {
+      id: "perm-1",
+      sessionID: "session-1",
+      permission: "bash",
+      patterns: ["vivd publish deploy"],
+      always: ["vivd *"],
+      metadata: {},
+    };
+
+    render(<ChatPanelContent />);
+
+    expect(screen.getByTestId("chat-question-focus-overlay")).toBeInTheDocument();
   });
 });

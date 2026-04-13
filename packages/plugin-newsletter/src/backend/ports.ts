@@ -102,6 +102,21 @@ export interface NewsletterEmailDeliveryServicePort {
   }>;
 }
 
+export interface NewsletterEmailTemplatesPort {
+  buildConfirmationEmail(options: {
+    projectTitle: string;
+    recipientName?: string | null;
+    confirmUrl: string;
+    unsubscribeUrl: string;
+    expiresInSeconds: number;
+    mode: "newsletter" | "waitlist";
+  }): Promise<{
+    subject: string;
+    text: string;
+    html: string;
+  }>;
+}
+
 export interface NewsletterPluginServiceDeps {
   db: NewsletterPluginDatabase;
   tables: NewsletterPluginTables;
@@ -114,6 +129,12 @@ export interface NewsletterPluginServiceDeps {
   }): Promise<string[]>;
   hostUtils: NewsletterHostUtilsPort;
   emailDeliveryService: NewsletterEmailDeliveryServicePort;
+  emailTemplates: NewsletterEmailTemplatesPort;
+}
+
+export interface NewsletterPluginIntegrationHooksDeps {
+  db: NewsletterPluginDatabase;
+  tables: Pick<NewsletterPluginTables, "newsletterSubscriber">;
 }
 
 export interface NewsletterSubscribeInput {

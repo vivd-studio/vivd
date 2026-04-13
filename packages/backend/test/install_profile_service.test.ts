@@ -69,6 +69,13 @@ describe("InstallProfileService", () => {
     await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
 
     await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
+    await expect(installProfileService.resolvePolicy()).resolves.toMatchObject({
+      installProfile: "solo",
+      capabilities: {
+        customDomains: true,
+        tenantHosts: false,
+      },
+    });
   });
 
   it("uses explicit platform env when configured", async () => {

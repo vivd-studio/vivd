@@ -107,24 +107,25 @@ These are the most common reasons the dialog refuses to publish:
 - Studio has unsaved changes
 - Studio is currently viewing an older snapshot
 
-## Narrow installs and implicit hosts
+## Typical defaults
 
-Some narrower `solo` installs disable custom publish domains entirely.
-In that case, Vivd may still allow publishing to the install's implicit primary public
-host, but not to arbitrary extra custom domains.
+On `platform` installs, the most common default live domain is the organization's active
+tenant host such as `tenant-slug.vivd.studio`, as long as it is not already in use by
+another project. Organizations can also register additional custom publish domains.
 
-If the domain-management UI feels more limited than the docs examples, the install is
-likely running the narrower `solo` self-host profile. The broader multi-org/platform
-domain surface is not exposed on standard solo installs.
+On `solo` self-host installs, the main public host from `Instance Settings -> Network`
+is always a publish target for the local instance. Solo installs can also use additional
+registered custom publish domains, but tenant-host style routing stays off.
 
 ## Recommended launch workflow
 
 1. Decide which domain should be the live site.
-2. Register and verify it before launch day.
-3. Make sure its status is `active`.
-4. Save the latest Studio changes.
-5. Review the pre-publish checklist.
-6. Publish from the project.
+2. If you are unsure which domains are currently eligible, inspect the publish targets first.
+3. Register and verify it before launch day.
+4. Make sure its status is `active`.
+5. Save the latest Studio changes.
+6. Review the pre-publish checklist.
+7. Publish from the project.
 
 ## Related pages
 

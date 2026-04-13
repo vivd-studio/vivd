@@ -229,143 +229,145 @@ export function QuestionDock({
   }
 
   return (
-    <div className="px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0 mt-auto">
-      <div className="rounded-xl border bg-card px-4 py-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Agent Question
+    <div className="relative mt-auto px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="rounded-[1.4rem] border border-border/70 bg-background/95 px-4 py-4 shadow-2xl shadow-black/10 backdrop-blur-md supports-[backdrop-filter]:bg-background/82 dark:border-white/10 dark:shadow-black/45 md:px-5 md:py-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Agent Question
+              </div>
+              <div className="text-sm font-semibold text-foreground">{summary}</div>
+              <div className="text-xs text-muted-foreground">
+                Answer to let the run continue.
+              </div>
             </div>
-            <div className="text-sm font-semibold text-foreground">{summary}</div>
-            <div className="text-xs text-muted-foreground">
-              Answer to let the run continue.
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            {questions.map((item, index) => (
-              <button
-                key={`${request.id}-step-${index}`}
-                type="button"
-                disabled={submitting}
-                onClick={() => setStep(index)}
-                className={cn(
-                  "h-2.5 w-8 rounded-full transition-colors",
-                  index === step ? "bg-primary" : "bg-muted",
-                )}
-                aria-label={item.header || `Question ${index + 1}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          <div className="text-sm font-semibold text-foreground">
-            {question.header || `Question ${step + 1}`}
-          </div>
-          <div className="text-sm leading-relaxed text-foreground">
-            {question.question}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {multiple ? "Choose one or more answers." : "Choose one answer."}
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {options.map((option, index) => {
-            const picked = currentAnswers.includes(option.label);
-            return (
-              <button
-                key={`${request.id}-option-${index}`}
-                type="button"
-                disabled={submitting}
-                onClick={() => {
-                  if (multiple) {
-                    toggleMultiAnswer(option.label);
-                    return;
-                  }
-                  setSingleAnswer(option.label);
-                }}
-                className={cn(
-                  "w-full rounded-lg border px-3 py-3 text-left transition-colors",
-                  picked
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/40 hover:bg-muted/40",
-                )}
-              >
-                <div className="text-sm font-medium text-foreground">{option.label}</div>
-                {option.description && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {option.description}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-
-          {allowCustom && (
-            <div
-              className={cn(
-                "rounded-lg border px-3 py-3 transition-colors",
-                isCustomSelected
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-primary/40",
-              )}
-            >
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={toggleCustom}
-                className="flex w-full items-center justify-between gap-3 text-left"
-              >
-                <div>
-                  <div className="text-sm font-medium text-foreground">Custom answer</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Type your own response instead of choosing a preset option.
-                  </div>
-                </div>
-                <div
+            <div className="flex items-center gap-1">
+              {questions.map((item, index) => (
+                <button
+                  key={`${request.id}-step-${index}`}
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setStep(index)}
                   className={cn(
-                    "h-4 w-4 rounded-full border",
-                    isCustomSelected ? "border-primary bg-primary" : "border-muted-foreground/40",
+                    "h-2.5 w-8 rounded-full transition-colors",
+                    index === step ? "bg-primary" : "bg-muted",
                   )}
+                  aria-label={item.header || `Question ${index + 1}`}
                 />
-              </button>
-              <Input
-                value={currentCustomValue}
-                onChange={(event) => updateCustomValue(event.target.value)}
-                disabled={submitting || !isCustomSelected}
-                placeholder="Type your answer"
-                className="mt-3"
-              />
+              ))}
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleReject}
-            disabled={submitting}
-          >
-            Reject
-          </Button>
-          <div className="flex items-center gap-2">
+          <div className="mt-4 space-y-2">
+            <div className="text-sm font-semibold text-foreground">
+              {question.header || `Question ${step + 1}`}
+            </div>
+            <div className="text-sm leading-relaxed text-foreground">
+              {question.question}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {multiple ? "Choose one or more answers." : "Choose one answer."}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {options.map((option, index) => {
+              const picked = currentAnswers.includes(option.label);
+              return (
+                <button
+                  key={`${request.id}-option-${index}`}
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => {
+                    if (multiple) {
+                      toggleMultiAnswer(option.label);
+                      return;
+                    }
+                    setSingleAnswer(option.label);
+                  }}
+                  className={cn(
+                    "w-full rounded-xl border px-3 py-3 text-left transition-colors",
+                    picked
+                      ? "border-primary/60 bg-primary/10 shadow-sm"
+                      : "border-border/70 bg-background/55 hover:border-primary/40 hover:bg-muted/45",
+                  )}
+                >
+                  <div className="text-sm font-medium text-foreground">{option.label}</div>
+                  {option.description && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {option.description}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+
+            {allowCustom && (
+              <div
+                className={cn(
+                  "rounded-xl border px-3 py-3 transition-colors",
+                  isCustomSelected
+                    ? "border-primary/60 bg-primary/10"
+                    : "border-border/70 bg-background/55 hover:border-primary/40",
+                )}
+              >
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={toggleCustom}
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Custom answer</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Type your own response instead of choosing a preset option.
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "h-4 w-4 rounded-full border",
+                      isCustomSelected ? "border-primary bg-primary" : "border-muted-foreground/40",
+                    )}
+                  />
+                </button>
+                <Input
+                  value={currentCustomValue}
+                  onChange={(event) => updateCustomValue(event.target.value)}
+                  disabled={submitting || !isCustomSelected}
+                  placeholder="Type your answer"
+                  className="mt-3"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-2">
             <Button
               type="button"
-              variant="outline"
-              onClick={() => setStep((current) => Math.max(0, current - 1))}
-              disabled={submitting || step === 0}
+              variant="ghost"
+              onClick={handleReject}
+              disabled={submitting}
             >
-              Back
+              Reject
             </Button>
-            <Button
-              type="button"
-              onClick={() => void handleAdvance()}
-              disabled={submitting || !canAdvance}
-            >
-              {submitting ? "Sending..." : step === total - 1 ? "Reply" : "Next"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStep((current) => Math.max(0, current - 1))}
+                disabled={submitting || step === 0}
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleAdvance()}
+                disabled={submitting || !canAdvance}
+              >
+                {submitting ? "Sending..." : step === total - 1 ? "Reply" : "Next"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

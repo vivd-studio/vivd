@@ -37,6 +37,7 @@
     "@tanstack/react-query": "^5.90.12",
     "@trpc/client": "^11.7.2",
     "@trpc/react-query": "^11.7.2",
+    "@vivd/installed-plugins": "1.0.0",
     "@vivd/plugin-analytics": "1.0.0",
     "@vivd/plugin-contact-form": "1.0.0",
     "@vivd/plugin-newsletter": "1.0.0",

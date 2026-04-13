@@ -38,17 +38,34 @@ export {
 export type { PluginCatalogEntry, PluginDefinition, PluginId };
 
 const pluginModules = Object.fromEntries(
-  backendPluginPackageDescriptors.map((descriptor) => [
-    descriptor.pluginId,
-    descriptor.backend.module,
-  ]),
+  []
 ) as Record<PluginId, PluginModule>;
 
+let pluginModulesInitialized = false;
+
+function getPluginModulesRecord(): Record<PluginId, PluginModule> {
+  if (!pluginModulesInitialized) {
+    Object.assign(
+      pluginModules,
+      Object.fromEntries(
+        backendPluginPackageDescriptors.map((descriptor) => [
+          descriptor.pluginId,
+          descriptor.backend.module,
+        ]),
+      ),
+    );
+    pluginModulesInitialized = true;
+  }
+
+  return pluginModules;
+}
+
 export function listPluginModules(): PluginModule[] {
-  return listPluginDefinitions().map((plugin) => pluginModules[plugin.pluginId]);
+  const modules = getPluginModulesRecord();
+  return listPluginDefinitions().map((plugin) => modules[plugin.pluginId]);
 }
 
 export function getPluginModule(pluginId: PluginId): PluginModule {
-  return pluginModules[pluginId];
+  return getPluginModulesRecord()[pluginId];
 }
 export const getPluginManifest = getPluginDefinition;

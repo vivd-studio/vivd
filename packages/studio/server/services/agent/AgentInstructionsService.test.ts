@@ -86,6 +86,8 @@ describe("studio AgentInstructionsService fallback", () => {
       expect(prompt).toContain("USAGE");
       expect(prompt).toContain("DISCOVER MORE");
       expect(prompt).toContain("vivd plugins catalog");
+      expect(prompt).toContain("vivd publish targets");
+      expect(prompt).toContain("vivd publish prepare");
       expect(prompt).toContain("vivd publish checklist show");
       expect(prompt).toContain("vivd support request <summary...>");
       expect(prompt).toContain(

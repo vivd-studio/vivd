@@ -24,6 +24,7 @@ Vivd is in a mixed state:
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
+- installed plugin registry in `packages/installed-plugins`
 - backend host/plugin registry in `packages/backend`
 - frontend host/plugin registry in `packages/frontend`
 - CLI host/plugin registry in `packages/cli`
@@ -40,6 +41,12 @@ Start here when orienting:
   - `packages/shared/src/types/pluginCli.ts`
   - `packages/shared/src/types/pluginContracts.ts`
   - `packages/shared/src/types/pluginPackages.ts`
+- Installed plugin set:
+  - `packages/installed-plugins/src/index.ts`
+  - `packages/installed-plugins/src/backend.ts`
+  - `packages/installed-plugins/src/frontend.ts`
+  - `packages/installed-plugins/src/cli.ts`
+  - `packages/installed-plugins/src/studio.ts`
 - Backend plugin host:
   - `packages/backend/src/services/plugins/descriptors.ts`
   - `packages/backend/src/services/plugins/registry.ts`
@@ -185,6 +192,14 @@ Symptom patterns:
 - typecheck passes because of TS path aliases, but runtime resolution fails
 
 When you see that mismatch, inspect `package.json`, Dockerfiles, and compose watch rules before chasing app logic.
+
+## Snippet UX
+
+For public-facing plugin snippets:
+- prefer progressive enhancement over raw full-page form posts when inline success/error is practical
+- default to a small `fetch` submit path with inline status feedback for generated snippets
+- keep the non-JS fallback acceptable: if the browser leaves the page, land on a clear success/error page rather than a blank or low-context response
+- make sure snippet success handling matches local preview/runtime URL reality, not just the published-site happy path
 
 ## Validation
 

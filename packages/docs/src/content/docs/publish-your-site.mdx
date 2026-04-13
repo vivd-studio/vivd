@@ -10,6 +10,9 @@ Publishing is the handoff from draft work inside Studio to the domain your visit
 If your site is already live, the same flow is how you update it: make changes in Studio,
 then publish again so the live domain receives the newer version.
 
+If you trigger publishing-related actions from the Studio agent chat instead of the publish dialog, Vivd may pause for explicit approval before risky steps such as republishing, unpublishing, or starting a full checklist rerun.
+The CLI/agent flow mirrors the dialog: check `vivd publish status`, inspect `vivd publish targets`, then publish the latest saved Studio snapshot.
+
 ## How to update a live site
 
 1. Open the site in Studio and make your changes.

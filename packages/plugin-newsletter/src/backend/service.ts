@@ -168,6 +168,7 @@ function resolveDefaultSuccessRedirectTarget(options: {
       if (!options.deps.hostUtils.isHostAllowed(host, options.allowlist)) {
         continue;
       }
+      url.searchParams.set("newsletter", "success");
       url.searchParams.set("_vivd_newsletter", "success");
       return url.toString();
     } catch {
@@ -346,6 +347,7 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
     inferSourceHosts,
     hostUtils,
     emailDeliveryService,
+    emailTemplates,
   } = deps;
   const { newsletterSubscriber, newsletterActionToken, projectPluginInstance } =
     tables;
@@ -540,6 +542,8 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
     subscriberId: string;
     email: string;
     redirectTarget: string | null;
+    recipientName?: string | null;
+    mode: "newsletter" | "waitlist";
   }) {
     const [endpoints, projectTitle, tokens] = await Promise.all([
       resolvePublicEndpoints(),
@@ -559,21 +563,20 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
       `${endpoints.unsubscribeEndpoint}?token=${encodeURIComponent(tokens.unsubscribeToken)}`,
       options.redirectTarget,
     );
-
-    const subject = `Confirm your signup for ${projectTitle}`;
-    const text =
-      `Confirm your signup for ${projectTitle}:\n\n${confirmUrl}\n\n` +
-      `If this wasn't you, ignore this email or cancel here:\n${unsubscribeUrl}`;
-    const html =
-      `<p>Confirm your signup for <strong>${projectTitle}</strong>.</p>` +
-      `<p><a href="${confirmUrl}">Confirm signup</a></p>` +
-      `<p>If this wasn't you, you can ignore this email or <a href="${unsubscribeUrl}">cancel here</a>.</p>`;
+    const email = await emailTemplates.buildConfirmationEmail({
+      projectTitle,
+      recipientName: options.recipientName,
+      confirmUrl,
+      unsubscribeUrl,
+      expiresInSeconds: Math.floor(CONFIRM_TOKEN_TTL_MS / 1000),
+      mode: options.mode,
+    });
 
     const result = await emailDeliveryService.send({
       to: [options.email],
-      subject,
-      text,
-      html,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
       metadata: {
         category: "newsletter.confirmation",
         plugin: "newsletter",
@@ -857,6 +860,8 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
         subscriberId: subscriber.id,
         email,
         redirectTarget,
+        recipientName: subscriber.name ?? null,
+        mode: config.mode,
       });
 
       return {
@@ -1086,6 +1091,8 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
         subscriberId: subscriber.id,
         email: subscriber.email,
         redirectTarget: null,
+        recipientName: subscriber.name ?? null,
+        mode: subscriber.mode === "waitlist" ? "waitlist" : "newsletter",
       });
 
       return { email: options.email, status: "pending" };

@@ -28,6 +28,7 @@ FROM devbase AS deps
 # Install deps for backend (+ shared) and local studio spawning (dev)
 COPY package.json package-lock.json ./
 COPY packages/builder/package.json packages/builder/package.json
+COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -41,12 +42,13 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/builder -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/installed-plugins -w @vivd/builder -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
     && npm cache clean --force
 
 # Stage 2: Development (hot reload)
 FROM deps AS dev
 COPY packages/builder ./packages/builder
+COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
@@ -71,6 +73,7 @@ CMD ["npm", "run", "dev"]
 # Stage 3: Build (compile TypeScript)
 FROM deps AS builder
 COPY packages/builder ./packages/builder
+COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
@@ -98,6 +101,7 @@ LABEL org.opencontainers.image.revision=$VIVD_IMAGE_REVISION
 # Install production deps for the backend workspace (links shared as a workspace dep)
 COPY package.json package-lock.json ./
 COPY packages/builder/package.json packages/builder/package.json
+COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -108,7 +112,7 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend --omit=dev --include-workspace-root=false \
     && npm cache clean --force
 
 # Copy built outputs

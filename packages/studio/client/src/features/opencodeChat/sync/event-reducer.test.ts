@@ -55,6 +55,7 @@ describe("openCodeChatReducer", () => {
     );
     expect(next.questionRequestsBySessionId["sess-1"]?.map((request) => request.id))
       .toEqual(["que-1"]);
+    expect(next.permissionRequestsBySessionId).toEqual({});
   });
 
   it("applies canonical message and part events into the normalized store", () => {
@@ -726,6 +727,40 @@ describe("openCodeChatReducer", () => {
     });
 
     expect(replied.questionRequestsBySessionId["sess-1"]).toBeUndefined();
+  });
+
+  it("tracks permission request lifecycle events", () => {
+    const asked = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "event.received",
+      payload: {
+        type: "permission.asked",
+        properties: {
+          id: "perm-2",
+          sessionID: "sess-1",
+          permission: "bash",
+          patterns: ["vivd publish deploy"],
+          always: ["vivd *"],
+          metadata: {},
+        },
+      },
+    });
+
+    expect(
+      asked.permissionRequestsBySessionId["sess-1"]?.map((request) => request.id),
+    ).toEqual(["perm-2"]);
+
+    const replied = openCodeChatReducer(asked, {
+      type: "event.received",
+      payload: {
+        type: "permission.replied",
+        properties: {
+          sessionID: "sess-1",
+          requestID: "perm-2",
+        },
+      },
+    });
+
+    expect(replied.permissionRequestsBySessionId["sess-1"]).toBeUndefined();
   });
 
   it("cleans cached session state when a session is deleted", () => {

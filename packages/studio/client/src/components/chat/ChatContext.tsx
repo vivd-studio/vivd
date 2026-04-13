@@ -254,6 +254,7 @@ export function ChatProvider({
     isSessionHydrating,
     isReverted,
     activeQuestionRequest,
+    activePermissionRequest,
     usage,
     sessionError,
     clearSessionError,
@@ -269,6 +270,7 @@ export function ChatProvider({
     sendTask,
     replyQuestion,
     rejectQuestion,
+    respondPermission,
     deleteSession,
     revertToMessage,
     unrevertSession,
@@ -297,12 +299,15 @@ export function ChatProvider({
   const queuedFollowupSendingId = selectedSessionId
     ? queuedFollowupSendingBySessionId[selectedSessionId] ?? null
     : null;
+  const hasBlockingRequest = Boolean(
+    activeQuestionRequest || activePermissionRequest,
+  );
   const hasBusySessionTarget =
     Boolean(selectedSessionId) && (isThinking || runTaskPending);
   const showSteerButton =
     followupBehavior === "queue" &&
     hasBusySessionTarget &&
-    !activeQuestionRequest &&
+    !hasBlockingRequest &&
     !isUsageBlocked;
 
   const removeQueuedFollowup = useCallback((sessionId: string, id: string) => {
@@ -368,7 +373,7 @@ export function ChatProvider({
       const hasSessionTarget = Boolean(targetSessionId);
       const busySession = hasSessionTarget && (isThinking || runTaskPending);
 
-      if (activeQuestionRequest || (!hasSessionTarget && runTaskPending)) {
+      if (hasBlockingRequest || (!hasSessionTarget && runTaskPending)) {
         options?.onCompleted?.(false);
         options?.onSettled?.();
         return;
@@ -392,7 +397,7 @@ export function ChatProvider({
       });
     },
     [
-      activeQuestionRequest,
+      hasBlockingRequest,
       followupBehavior,
       isThinking,
       queueFollowup,
@@ -438,7 +443,7 @@ export function ChatProvider({
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
-    activeQuestionRequest,
+    hasBlockingRequest,
     clearSessionError,
     isPreparingSend,
     isThinking,
@@ -516,13 +521,13 @@ export function ChatProvider({
     if (selectedSessionId) return;
     if (sessionsLoading || isSessionHydrating) return;
     if (initialGenerationStarting || initialGenerationFailed) return;
-    if (runTaskPending || activeQuestionRequest) return;
+    if (runTaskPending || hasBlockingRequest) return;
     if (autoInitialGenerationAttemptedRef.current) return;
 
     autoInitialGenerationAttemptedRef.current = true;
     startInitialGeneration();
   }, [
-    activeQuestionRequest,
+    hasBlockingRequest,
     initialGenerationFailed,
     initialGenerationRequested,
     initialGenerationStarting,
@@ -548,7 +553,7 @@ export function ChatProvider({
           !attachedElement &&
           attachedImages.length === 0 &&
           attachedFiles.length === 0) ||
-        activeQuestionRequest ||
+        hasBlockingRequest ||
         isPreparingSendRef.current ||
         (!hasSessionTarget && runTaskPending)
       ) {
@@ -574,7 +579,7 @@ export function ChatProvider({
       }
     },
     [
-      activeQuestionRequest,
+      hasBlockingRequest,
       attachedElement,
       attachedFiles.length,
       attachedImages.length,
@@ -598,7 +603,7 @@ export function ChatProvider({
   const handleContinueSession = useCallback(() => {
     if (
       !selectedSessionId ||
-      activeQuestionRequest ||
+      hasBlockingRequest ||
       isThinking ||
       runTaskPending ||
       isPreparingSend ||
@@ -610,7 +615,7 @@ export function ChatProvider({
     sendTask("continue", selectedSessionId);
   }, [
     selectedSessionId,
-    activeQuestionRequest,
+    hasBlockingRequest,
     isThinking,
     isPreparingSend,
     runTaskPending,
@@ -630,6 +635,17 @@ export function ChatProvider({
       await rejectQuestion(requestId);
     },
     [rejectQuestion],
+  );
+
+  const handleRespondPermission = useCallback(
+    async (
+      requestId: string,
+      sessionId: string,
+      response: "once" | "always" | "reject",
+    ) => {
+      await respondPermission(requestId, sessionId, response);
+    },
+    [respondPermission],
   );
 
   const handleNewSession = useCallback(() => {
@@ -802,7 +818,7 @@ export function ChatProvider({
     if (queuedFollowupFailedBySessionId[selectedSessionId] === item.id) return;
     if (queuedFollowupPausedBySessionId[selectedSessionId]) return;
     if (
-      activeQuestionRequest ||
+      hasBlockingRequest ||
       isThinking ||
       runTaskPending ||
       isPreparingSend ||
@@ -838,7 +854,7 @@ export function ChatProvider({
       },
     });
   }, [
-    activeQuestionRequest,
+    hasBlockingRequest,
     isPreparingSend,
     isThinking,
     isUsageBlocked,
@@ -904,6 +920,7 @@ export function ChatProvider({
       isPreparingSend ||
       (!selectedSessionId && runTaskPending),
     activeQuestionRequest,
+    activePermissionRequest,
     sessionDebugState,
     sessionError,
     clearSessionError,
@@ -921,6 +938,7 @@ export function ChatProvider({
     handleSteerSend,
     handleReplyQuestion,
     handleRejectQuestion,
+    handleRespondPermission,
     handleContinueSession,
     handleNewSession,
     handleDeleteSession,

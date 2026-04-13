@@ -39,6 +39,7 @@ export function MessageList() {
     setInput,
     handleContinueSession,
     activeQuestionRequest,
+    activePermissionRequest,
     sessionError,
     clearSessionError,
     sessionDebugState,
@@ -51,6 +52,9 @@ export function MessageList() {
   } = useChatContext();
   const opencodeChat = useOpencodeChat();
   const selectedMessages = opencodeChat.selectedMessages;
+  const hasBlockingRequest = Boolean(
+    activeQuestionRequest || activePermissionRequest,
+  );
 
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
@@ -110,7 +114,7 @@ export function MessageList() {
     !initialGenerationFailed &&
     !selectedSessionId &&
     selectedMessages.length === 0 &&
-    !activeQuestionRequest;
+    !hasBlockingRequest;
   const {
     latestUserMessageId,
     historicalItems,
@@ -153,7 +157,7 @@ export function MessageList() {
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
   const shouldShowInterruptedContinue =
-    !activeQuestionRequest &&
+    !hasBlockingRequest &&
     shouldSuggestInterruptedContinueFromRecords({
       sessionStatus: sessionDebugState.sessionStatus,
       messages: selectedMessages,
@@ -292,7 +296,7 @@ export function MessageList() {
       {!shouldShowInterruptedContinue &&
         selectedMessages.length > 0 &&
         timeline.items[timeline.items.length - 1]?.kind === "agent" &&
-        !activeQuestionRequest &&
+        !hasBlockingRequest &&
         !isThinking &&
         !isLoading && (
           <div className="flex justify-end pt-1 pb-0.5">
@@ -308,7 +312,7 @@ export function MessageList() {
   );
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative z-0 flex-1 overflow-hidden">
       <div
         data-testid="session-context-indicator-overlay"
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-start px-3 pt-3 md:px-5 md:pt-2"

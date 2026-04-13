@@ -139,6 +139,24 @@ type ConnectedCheckDomainResult = {
   error?: string;
 };
 
+type ConnectedPublishTargetsResult = {
+  projectSlug: string;
+  currentPublishedDomain: string | null;
+  recommendedDomain: string | null;
+  targets: Array<{
+    domain: string;
+    usage: "tenant_host" | "publish_target";
+    type: "managed_subdomain" | "custom_domain" | "implicit_primary_host";
+    status: "active" | "disabled" | "pending_verification" | "implicit";
+    current: boolean;
+    primaryHost: boolean;
+    available: boolean;
+    blockedReason?: string;
+    url: string;
+    recommended: boolean;
+  }>;
+};
+
 async function callConnectedBackendQuery<T>(
   ctx: Context,
   procedure: string,
@@ -938,6 +956,31 @@ export const projectRouter = router({
         checklist: null,
         stale: true,
         reason: "missing" as const,
+      };
+    }),
+
+  publishTargets: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      if (isConnectedMode()) {
+        return await callConnectedBackendQuery<ConnectedPublishTargetsResult>(
+          ctx,
+          "project.publishTargets",
+          {
+            slug: input.slug,
+          },
+        );
+      }
+
+      return {
+        projectSlug: input.slug,
+        currentPublishedDomain: null,
+        recommendedDomain: null,
+        targets: [],
       };
     }),
 

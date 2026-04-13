@@ -75,6 +75,20 @@ export interface OpenCodeQuestionRequest {
   [key: string]: unknown;
 }
 
+export interface OpenCodePermissionRequest {
+  id: string;
+  sessionID: string;
+  permission: string;
+  patterns: string[];
+  always: string[];
+  metadata: Record<string, unknown>;
+  tool?: {
+    messageID: string;
+    callID: string;
+  };
+  [key: string]: unknown;
+}
+
 export interface CanonicalChatEvent {
   eventId?: string;
   type: string;
@@ -100,6 +114,7 @@ export interface OpenCodeChatBootstrap {
   statuses: Record<string, OpenCodeSessionStatus>;
   messages: OpenCodeSessionMessageRecord[];
   questions: OpenCodeQuestionRequest[];
+  permissions?: OpenCodePermissionRequest[];
 }
 
 export interface OpenCodeChatSessionViewMessage extends OpenCodeMessage {
@@ -129,6 +144,7 @@ export interface OpenCodeChatState {
   pendingPartDeltasByMessageId: Record<string, Record<string, Record<string, string>>>;
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
   questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
+  permissionRequestsBySessionId: Record<string, OpenCodePermissionRequest[]>;
   lastEventId: string | null;
   lastEventType: string | null;
   lastEventTime: number | null;
@@ -162,6 +178,7 @@ export const OPEN_CODE_CHAT_INITIAL_STATE: OpenCodeChatState = {
   pendingPartDeltasByMessageId: {},
   sessionStatusById: {},
   questionRequestsBySessionId: {},
+  permissionRequestsBySessionId: {},
   lastEventId: null,
   lastEventType: null,
   lastEventTime: null,

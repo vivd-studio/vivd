@@ -19,13 +19,17 @@ export {
   selectMostRecentActiveSessionId,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
-export { sessionQuestionRequest } from "./questions/requestTree";
+export {
+  sessionPermissionRequest,
+  sessionQuestionRequest,
+} from "./questions/requestTree";
 export type {
   CanonicalChatEvent,
   OpenCodeChatBootstrap,
   OpenCodeChatState,
   OpenCodeMessage,
   OpenCodePart,
+  OpenCodePermissionRequest,
   OpenCodeQuestionAnswer,
   OpenCodeQuestionInfo,
   OpenCodeQuestionOption,

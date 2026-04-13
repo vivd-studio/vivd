@@ -2,17 +2,42 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   ensurePublishDomainEnabledMock,
+  listOrganizationDomainsMock,
   isRunningMock,
   getRecentMock,
   publishMock,
+  getPublishedInfoMock,
+  isDomainAvailableMock,
+  isDevDomainMock,
+  resolvePolicyMock,
+  getResolvedSettingsMock,
   PublishConflictErrorMock,
   getPublishChecklistMock,
   upsertPublishChecklistMock,
 } = vi.hoisted(() => ({
   ensurePublishDomainEnabledMock: vi.fn(),
+  listOrganizationDomainsMock: vi.fn(),
   isRunningMock: vi.fn(),
   getRecentMock: vi.fn(),
   publishMock: vi.fn(),
+  getPublishedInfoMock: vi.fn(),
+  isDomainAvailableMock: vi.fn(),
+  isDevDomainMock: vi.fn(),
+  resolvePolicyMock: vi.fn(),
+  getResolvedSettingsMock: vi.fn(() => ({
+    publicHost: "solo.example.com",
+    publicOrigin: "https://solo.example.com",
+    tlsMode: "managed",
+    acmeEmail: null,
+    sources: {
+      publicHost: "settings",
+      tlsMode: "settings",
+      acmeEmail: "default",
+    },
+    deploymentManaged: {
+      publicHost: false,
+    },
+  })),
   getPublishChecklistMock: vi.fn(),
   upsertPublishChecklistMock: vi.fn(),
   PublishConflictErrorMock: class PublishConflictError extends Error {
@@ -32,6 +57,8 @@ const {
 vi.mock("../src/services/publish/DomainService", () => ({
   domainService: {
     ensurePublishDomainEnabled: ensurePublishDomainEnabledMock,
+    listOrganizationDomains: listOrganizationDomainsMock,
+    normalizeDomain: (value: string) => value.trim().toLowerCase(),
   },
 }));
 
@@ -51,11 +78,11 @@ vi.mock("../src/services/publish/PublishService", () => ({
   publishService: {
     publish: publishMock,
     unpublish: vi.fn(),
-    getPublishedInfo: vi.fn(),
-    isDevDomain: vi.fn(),
+    getPublishedInfo: getPublishedInfoMock,
+    isDevDomain: isDevDomainMock,
     normalizeDomain: vi.fn(),
     validateDomain: vi.fn(),
-    isDomainAvailable: vi.fn(),
+    isDomainAvailable: isDomainAvailableMock,
   },
   PublishConflictError: PublishConflictErrorMock,
 }));
@@ -65,6 +92,18 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
     getPublishChecklist: getPublishChecklistMock,
     upsertPublishChecklist: upsertPublishChecklistMock,
     getProjectVersion: vi.fn(),
+  },
+}));
+
+vi.mock("../src/services/system/InstallProfileService", () => ({
+  installProfileService: {
+    resolvePolicy: resolvePolicyMock,
+  },
+}));
+
+vi.mock("../src/services/system/InstanceNetworkSettingsService", () => ({
+  instanceNetworkSettingsService: {
+    getResolvedSettings: getResolvedSettingsMock,
   },
 }));
 
@@ -112,18 +151,26 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 describe("project publish router", () => {
   const publishRouter = router({
     publish: projectPublishProcedures.publish,
+    publishTargets: projectPublishProcedures.publishTargets,
     updatePublishChecklistItem: projectPublishProcedures.updatePublishChecklistItem,
   });
 
   beforeEach(() => {
     ensurePublishDomainEnabledMock.mockReset();
+    listOrganizationDomainsMock.mockReset();
     isRunningMock.mockReset();
     getRecentMock.mockReset();
     publishMock.mockReset();
+    getPublishedInfoMock.mockReset();
+    isDomainAvailableMock.mockReset();
+    isDevDomainMock.mockReset();
+    resolvePolicyMock.mockReset();
+    getResolvedSettingsMock.mockReset();
     getPublishChecklistMock.mockReset();
     upsertPublishChecklistMock.mockReset();
 
     ensurePublishDomainEnabledMock.mockResolvedValue({ enabled: true });
+    listOrganizationDomainsMock.mockResolvedValue([]);
     isRunningMock.mockResolvedValue(false);
     getRecentMock.mockReturnValue(null);
     publishMock.mockResolvedValue({
@@ -132,6 +179,40 @@ describe("project publish router", () => {
       commitHash: "abc123",
       url: "https://example.com",
       message: "Published",
+    });
+    getPublishedInfoMock.mockResolvedValue(null);
+    isDomainAvailableMock.mockResolvedValue(true);
+    isDevDomainMock.mockReturnValue(false);
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "platform",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: true,
+        tenantHosts: true,
+        customDomains: true,
+        orgLimitOverrides: true,
+        orgPluginEntitlements: true,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: true,
+      },
+      pluginDefaults: {},
+      limitDefaults: {},
+      controlPlane: { mode: "host_based" },
+      pluginRuntime: { mode: "dedicated_host" },
+    });
+    getResolvedSettingsMock.mockReturnValue({
+      publicHost: "solo.example.com",
+      publicOrigin: "https://solo.example.com",
+      tlsMode: "managed",
+      acmeEmail: null,
+      sources: {
+        publicHost: "settings",
+        tlsMode: "settings",
+        acmeEmail: "default",
+      },
+      deploymentManaged: {
+        publicHost: false,
+      },
     });
     getPublishChecklistMock.mockResolvedValue({
       projectSlug: "site-1",
@@ -154,6 +235,112 @@ describe("project publish router", () => {
       },
     });
     upsertPublishChecklistMock.mockResolvedValue(undefined);
+  });
+
+  it("lists recommended publish targets for platform projects", async () => {
+    listOrganizationDomainsMock.mockResolvedValueOnce([
+      {
+        id: "dom-tenant",
+        domain: "acme.vivd.studio",
+        organizationId: "org-1",
+        usage: "tenant_host",
+        type: "managed_subdomain",
+        status: "active",
+      },
+      {
+        id: "dom-custom",
+        domain: "marketing.example.com",
+        organizationId: "org-1",
+        usage: "publish_target",
+        type: "custom_domain",
+        status: "active",
+      },
+      {
+        id: "dom-pending",
+        domain: "pending.example.com",
+        organizationId: "org-1",
+        usage: "publish_target",
+        type: "custom_domain",
+        status: "pending_verification",
+      },
+    ]);
+    ensurePublishDomainEnabledMock.mockImplementation(async ({ domain }: { domain: string }) => {
+      if (domain === "pending.example.com") {
+        return {
+          enabled: false,
+          normalizedDomain: domain,
+          message: "This domain isn't verified yet. Verify it before publishing.",
+        };
+      }
+      return {
+        enabled: true,
+        normalizedDomain: domain,
+        usage: domain === "acme.vivd.studio" ? "tenant_host" : "publish_target",
+      };
+    });
+    isDomainAvailableMock.mockImplementation(async (domain: string) => domain !== "marketing.example.com");
+
+    const caller = publishRouter.createCaller(makeContext());
+    const result = await caller.publishTargets({ slug: "site-1" });
+
+    expect(result.currentPublishedDomain).toBeNull();
+    expect(result.recommendedDomain).toBe("acme.vivd.studio");
+    expect(result.targets).toEqual([
+      expect.objectContaining({
+        domain: "acme.vivd.studio",
+        usage: "tenant_host",
+        available: true,
+        recommended: true,
+      }),
+      expect.objectContaining({
+        domain: "marketing.example.com",
+        usage: "publish_target",
+        available: false,
+        blockedReason: "Domain is already in use",
+        recommended: false,
+      }),
+      expect.objectContaining({
+        domain: "pending.example.com",
+        usage: "publish_target",
+        available: false,
+        blockedReason: "This domain isn't verified yet. Verify it before publishing.",
+        recommended: false,
+      }),
+    ]);
+  });
+
+  it("includes the solo primary host as a publish target", async () => {
+    resolvePolicyMock.mockResolvedValueOnce({
+      installProfile: "solo",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: true,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {},
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+
+    const caller = publishRouter.createCaller(makeContext());
+    const result = await caller.publishTargets({ slug: "site-1" });
+
+    expect(result.recommendedDomain).toBe("solo.example.com");
+    expect(result.targets).toEqual([
+      expect.objectContaining({
+        domain: "solo.example.com",
+        type: "implicit_primary_host",
+        primaryHost: true,
+        available: true,
+        recommended: true,
+      }),
+    ]);
   });
 
   it("returns BAD_REQUEST when the domain is not allowlisted", async () => {

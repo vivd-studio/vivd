@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { sessionQuestionRequest } from "./requestTree";
-import type { OpenCodeQuestionRequest, OpenCodeSession } from "../types";
+import {
+  sessionPermissionRequest,
+  sessionQuestionRequest,
+} from "./requestTree";
+import type {
+  OpenCodePermissionRequest,
+  OpenCodeQuestionRequest,
+  OpenCodeSession,
+} from "../types";
 
 function createSession(input: { id: string; parentID?: string | null }): OpenCodeSession {
   return {
@@ -17,6 +24,20 @@ function createQuestion(
     id,
     sessionID,
     questions: [],
+  };
+}
+
+function createPermission(
+  id: string,
+  sessionID: string,
+): OpenCodePermissionRequest {
+  return {
+    id,
+    sessionID,
+    permission: "bash",
+    patterns: ["vivd publish deploy"],
+    always: ["vivd *"],
+    metadata: {},
   };
 }
 
@@ -45,5 +66,21 @@ describe("sessionQuestionRequest", () => {
     };
 
     expect(sessionQuestionRequest(sessions, requests, "root")?.id).toBe("q-grand");
+  });
+});
+
+describe("sessionPermissionRequest", () => {
+  it("returns a nested child permission request when the current session has none", () => {
+    const sessions = [
+      createSession({ id: "root" }),
+      createSession({ id: "child", parentID: "root" }),
+    ];
+    const requests = {
+      child: [createPermission("perm-child", "child")],
+    };
+
+    expect(sessionPermissionRequest(sessions, requests, "root")?.id).toBe(
+      "perm-child",
+    );
   });
 });

@@ -96,7 +96,7 @@ const PROFILE_DEFAULT_CAPABILITIES: Record<InstallProfile, InstanceCapabilityPol
   solo: {
     multiOrg: false,
     tenantHosts: false,
-    customDomains: false,
+    customDomains: true,
     orgLimitOverrides: false,
     orgPluginEntitlements: false,
     projectPluginEntitlements: false,

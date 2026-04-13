@@ -150,6 +150,35 @@ describe("newsletter public subscribe router", () => {
     );
   });
 
+  it("renders an HTML success page for browser submits without a redirect target", async () => {
+    subscribeMock.mockResolvedValueOnce({
+      redirectTarget: null,
+      result: {
+        email: "person@example.com",
+        status: "pending",
+      },
+    });
+
+    server = await startServer();
+
+    const response = await fetch(`${server.baseUrl}/plugins/newsletter/v1/subscribe`, {
+      method: "POST",
+      headers: {
+        Accept: "text/html",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: new URLSearchParams({
+        token: "newsletter-token",
+        email: "person@example.com",
+      }).toString(),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toContain(
+      "Please check your inbox to confirm your signup.",
+    );
+  });
+
   it("short-circuits honeypot submissions without touching the service", async () => {
     server = await startServer();
 

@@ -3,13 +3,15 @@ import {
   STUDIO_USER_ACTION_TOKEN_COOKIE,
   STUDIO_USER_ACTION_TOKEN_PARAM,
 } from "@vivd/shared/studio";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createStudioBootstrapHandler,
   createRequireStudioAuth,
+  getStudioUserActionToken,
   isStudioRequestAuthorized,
   resolveStudioBootstrapRedirectTarget,
+  setCachedStudioUserActionToken,
   STUDIO_AUTH_COOKIE,
   STUDIO_AUTH_HEADER,
   STUDIO_AUTH_QUERY,
@@ -81,6 +83,10 @@ function createMockResponse() {
 }
 
 describe("createRequireStudioAuth", () => {
+  beforeEach(() => {
+    setCachedStudioUserActionToken(null);
+  });
+
   it("rejects unauthenticated shell requests", () => {
     const middleware = createRequireStudioAuth({ STUDIO_ACCESS_TOKEN: "studio-token" } as any);
     const req = createMockRequest({ path: "/vivd-studio" });
@@ -204,6 +210,10 @@ describe("createRequireStudioAuth", () => {
 });
 
 describe("isStudioRequestAuthorized", () => {
+  beforeEach(() => {
+    setCachedStudioUserActionToken(null);
+  });
+
   it("accepts cookie auth for raw upgrade requests", () => {
     const result = isStudioRequestAuthorized(
       {
@@ -242,6 +252,10 @@ describe("isStudioRequestAuthorized", () => {
 });
 
 describe("resolveStudioBootstrapRedirectTarget", () => {
+  beforeEach(() => {
+    setCachedStudioUserActionToken(null);
+  });
+
   it("accepts same-origin clean studio targets", () => {
     const req = createMockRequest({
       secure: true,
@@ -364,6 +378,10 @@ describe("resolveStudioBootstrapRedirectTarget", () => {
 });
 
 describe("createStudioBootstrapHandler", () => {
+  beforeEach(() => {
+    setCachedStudioUserActionToken(null);
+  });
+
   it("sets the auth cookie and redirects to the clean target for valid bootstrap posts", () => {
     const bootstrapToken = createStudioBootstrapToken({
       accessToken: "studio-token",
@@ -415,6 +433,20 @@ describe("createStudioBootstrapHandler", () => {
         },
       },
     ]);
+    expect(getStudioUserActionToken(createMockRequest())).toBe("user-action-token-1");
+  });
+
+  it("prefers an explicit user-action header over the cached bootstrap token", () => {
+    setCachedStudioUserActionToken("cached-token");
+
+    const req = createMockRequest({
+      headers: {
+        "x-vivd-studio-user-action-token": "header-token",
+      },
+    });
+
+    expect(getStudioUserActionToken(req)).toBe("header-token");
+    expect(getStudioUserActionToken(createMockRequest())).toBe("header-token");
   });
 
   it("accepts tenant-hosted bootstrap posts routed through a Fly compatibility path", () => {

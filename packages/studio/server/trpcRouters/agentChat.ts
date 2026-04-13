@@ -3,10 +3,12 @@ import { z } from "zod";
 import {
   getSessionContent,
   getMessageDiff,
+  listPermissions,
   getSessionsStatus,
   listQuestions,
   listSessions,
   rejectQuestion,
+  respondPermission,
   replyQuestion,
 } from "../opencode/index.js";
 import { canonicalEventBridge } from "../opencode/events/canonicalEventBridge.js";
@@ -25,10 +27,11 @@ export const agentChatRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const directory = getWorkspaceDir(ctx);
-      const [sessions, statuses, questions, messages] = await Promise.all([
+      const [sessions, statuses, questions, permissions, messages] = await Promise.all([
         listSessions(directory),
         getSessionsStatus(directory),
         listQuestions(directory),
+        listPermissions(directory),
         input.sessionId
           ? getSessionContent(input.sessionId, directory)
           : Promise.resolve([]),
@@ -38,6 +41,7 @@ export const agentChatRouter = router({
         sessions,
         statuses,
         questions,
+        permissions,
         messages,
       };
     }),
@@ -68,6 +72,27 @@ export const agentChatRouter = router({
     .mutation(async ({ ctx, input }) => {
       const directory = getWorkspaceDir(ctx);
       await rejectQuestion(input.requestId, directory);
+      return true;
+    }),
+
+  respondPermission: publicProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+        requestId: z.string(),
+        sessionId: z.string(),
+        response: z.enum(["once", "always", "reject"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const directory = getWorkspaceDir(ctx);
+      await respondPermission(
+        input.requestId,
+        input.sessionId,
+        input.response,
+        directory,
+      );
       return true;
     }),
 

@@ -3,6 +3,7 @@ import type {
   OpenCodeChatAction,
   OpenCodeChatState,
   OpenCodeMessage,
+  OpenCodePermissionRequest,
   OpenCodePart,
   OpenCodeQuestionRequest,
   OpenCodeSession,
@@ -67,6 +68,12 @@ function sortQuestionRequests(
   questions: OpenCodeQuestionRequest[],
 ): OpenCodeQuestionRequest[] {
   return [...questions].sort((left, right) => compareStrings(left.id, right.id));
+}
+
+function sortPermissionRequests(
+  permissions: OpenCodePermissionRequest[],
+): OpenCodePermissionRequest[] {
+  return [...permissions].sort((left, right) => compareStrings(left.id, right.id));
 }
 
 function shouldPreserveExistingStringField(
@@ -146,7 +153,8 @@ function removeSessionCaches(
   if (
     messageIds.length === 0 &&
     !state.sessionStatusById[sessionId] &&
-    !state.questionRequestsBySessionId[sessionId]
+    !state.questionRequestsBySessionId[sessionId] &&
+    !state.permissionRequestsBySessionId[sessionId]
   ) {
     return state;
   }
@@ -168,6 +176,8 @@ function removeSessionCaches(
 
   const questionRequestsBySessionId = { ...state.questionRequestsBySessionId };
   delete questionRequestsBySessionId[sessionId];
+  const permissionRequestsBySessionId = { ...state.permissionRequestsBySessionId };
+  delete permissionRequestsBySessionId[sessionId];
 
   return {
     ...state,
@@ -177,6 +187,7 @@ function removeSessionCaches(
     pendingPartDeltasByMessageId,
     sessionStatusById,
     questionRequestsBySessionId,
+    permissionRequestsBySessionId,
   };
 }
 
@@ -362,6 +373,29 @@ function upsertQuestionRequest(
   };
 }
 
+function upsertPermissionRequest(
+  state: OpenCodeChatState,
+  permission: OpenCodePermissionRequest,
+): OpenCodeChatState {
+  const currentPermissions =
+    state.permissionRequestsBySessionId[permission.sessionID] ?? [];
+  const nextPermissions = currentPermissions.some(
+    (current) => current.id === permission.id,
+  )
+    ? currentPermissions.map((current) =>
+        current.id === permission.id ? { ...current, ...permission } : current,
+      )
+    : sortPermissionRequests([...currentPermissions, permission]);
+
+  return {
+    ...state,
+    permissionRequestsBySessionId: {
+      ...state.permissionRequestsBySessionId,
+      [permission.sessionID]: nextPermissions,
+    },
+  };
+}
+
 function removeQuestionRequest(
   state: OpenCodeChatState,
   sessionId: string,
@@ -385,6 +419,36 @@ function removeQuestionRequest(
   return {
     ...state,
     questionRequestsBySessionId,
+  };
+}
+
+function removePermissionRequest(
+  state: OpenCodeChatState,
+  sessionId: string,
+  requestId: string,
+): OpenCodeChatState {
+  const currentPermissions = state.permissionRequestsBySessionId[sessionId] ?? [];
+  if (currentPermissions.length === 0) return state;
+
+  const nextPermissions = currentPermissions.filter(
+    (permission) => permission.id !== requestId,
+  );
+  if (nextPermissions.length === currentPermissions.length) {
+    return state;
+  }
+
+  const permissionRequestsBySessionId = {
+    ...state.permissionRequestsBySessionId,
+  };
+  if (nextPermissions.length === 0) {
+    delete permissionRequestsBySessionId[sessionId];
+  } else {
+    permissionRequestsBySessionId[sessionId] = nextPermissions;
+  }
+
+  return {
+    ...state,
+    permissionRequestsBySessionId,
   };
 }
 
@@ -605,6 +669,21 @@ function applyCanonicalEvent(
       };
       if (!props.sessionID || !props.requestID) return nextState;
       return removeQuestionRequest(nextState, props.sessionID, props.requestID);
+    }
+
+    case "permission.asked": {
+      const permission = (event.properties ?? {}) as OpenCodePermissionRequest;
+      if (!permission?.id || !permission.sessionID) return nextState;
+      return upsertPermissionRequest(nextState, permission);
+    }
+
+    case "permission.replied": {
+      const props = (event.properties ?? {}) as {
+        sessionID?: string;
+        requestID?: string;
+      };
+      if (!props.sessionID || !props.requestID) return nextState;
+      return removePermissionRequest(nextState, props.sessionID, props.requestID);
     }
 
     default:

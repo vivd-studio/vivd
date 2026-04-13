@@ -13,6 +13,7 @@ const {
   unrevertMutateAsync,
   replyQuestionMutateAsync,
   rejectQuestionMutateAsync,
+  respondPermissionMutateAsync,
   mockOpencodeChat,
 } = vi.hoisted(() => ({
   mockToastInfo: vi.fn(),
@@ -25,6 +26,7 @@ const {
   unrevertMutateAsync: vi.fn(),
   replyQuestionMutateAsync: vi.fn(),
   rejectQuestionMutateAsync: vi.fn(),
+  respondPermissionMutateAsync: vi.fn(),
   mockOpencodeChat: {
     setSelectedSessionId: vi.fn(),
     state: {
@@ -35,6 +37,7 @@ const {
       lastEventId: null as string | null,
     },
     questionRequestsBySessionId: {},
+    permissionRequestsBySessionId: {},
     sessions: [] as any[],
     bootstrapLoading: false,
     selectedSessionId: null as string | null,
@@ -127,6 +130,12 @@ vi.mock("@/lib/trpc", () => ({
           isPending: false,
         }),
       },
+      respondPermission: {
+        useMutation: () => ({
+          mutateAsync: respondPermissionMutateAsync,
+          isPending: false,
+        }),
+      },
     },
   },
 }));
@@ -155,6 +164,7 @@ describe("useOpencodeChatController", () => {
     unrevertMutateAsync.mockReset();
     replyQuestionMutateAsync.mockReset();
     rejectQuestionMutateAsync.mockReset();
+    respondPermissionMutateAsync.mockReset();
     mockToastInfo.mockReset();
     mockToastError.mockReset();
 
@@ -169,6 +179,7 @@ describe("useOpencodeChatController", () => {
     mockOpencodeChat.selectedMessages = [];
     mockOpencodeChat.sessionStatus = null;
     mockOpencodeChat.questionRequestsBySessionId = {};
+    mockOpencodeChat.permissionRequestsBySessionId = {};
     mockOpencodeChat.state.sessionStatusById = {};
     mockOpencodeChat.state.connection = {
       state: "connected",
@@ -282,6 +293,28 @@ describe("useOpencodeChatController", () => {
       expect(mockOpencodeChat.setSelectedSessionId).toHaveBeenCalledWith(
         "sess-started",
       );
+    });
+  });
+
+  it("responds to permission requests with session context", async () => {
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.respondPermission("perm-1", "sess-1", "once");
+    });
+
+    expect(respondPermissionMutateAsync).toHaveBeenCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      requestId: "perm-1",
+      sessionId: "sess-1",
+      response: "once",
     });
   });
 

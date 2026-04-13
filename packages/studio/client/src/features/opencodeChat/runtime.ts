@@ -1,6 +1,7 @@
 import type {
   OpenCodeConnectionState,
   OpenCodeMessage,
+  OpenCodePermissionRequest,
   OpenCodeSessionActivitySummary,
   OpenCodeQuestionRequest,
   OpenCodeSession,
@@ -390,12 +391,16 @@ export function selectMostRecentAttentionSessionId(args: {
   sessions: OpenCodeSession[];
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
   questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
+  permissionRequestsBySessionId: Record<string, OpenCodePermissionRequest[]>;
 }): string | null {
   const sessionsNeedingAttention = args.sessions.filter((session) => {
     if (isActiveSessionStatus(args.sessionStatusById[session.id] ?? null)) {
       return true;
     }
-    return (args.questionRequestsBySessionId[session.id]?.length ?? 0) > 0;
+    return (
+      (args.questionRequestsBySessionId[session.id]?.length ?? 0) > 0 ||
+      (args.permissionRequestsBySessionId[session.id]?.length ?? 0) > 0
+    );
   });
 
   if (sessionsNeedingAttention.length === 0) {

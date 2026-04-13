@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import type {
+  OpenCodePermissionRequest,
   OpenCodeQuestionAnswer,
   OpenCodeQuestionRequest,
 } from "@/features/opencodeChat";
@@ -143,6 +144,7 @@ export interface ChatContextValue {
   isReverted: boolean;
   isLoading: boolean;
   activeQuestionRequest: OpenCodeQuestionRequest | null;
+  activePermissionRequest: OpenCodePermissionRequest | null;
   sessionDebugState: SessionDebugState;
   sessionError: SessionError | null;
   clearSessionError: () => void;
@@ -163,6 +165,11 @@ export interface ChatContextValue {
     answers: OpenCodeQuestionAnswer[],
   ) => Promise<void>;
   handleRejectQuestion: (requestId: string) => Promise<void>;
+  handleRespondPermission: (
+    requestId: string,
+    sessionId: string,
+    response: "once" | "always" | "reject",
+  ) => Promise<void>;
   handleContinueSession: () => void;
   handleNewSession: () => void;
   handleDeleteSession: (e: MouseEvent, sessionId: string) => void;

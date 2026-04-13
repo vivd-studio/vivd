@@ -60,6 +60,7 @@ const chatState = vi.hoisted(() => ({
   setInput: vi.fn(),
   handleContinueSession: vi.fn(),
   activeQuestionRequest: null,
+  activePermissionRequest: null,
   sessionError: null,
   clearSessionError: vi.fn(),
   sessionDebugState: {
@@ -156,6 +157,7 @@ describe("MessageList latest-user anchoring", () => {
     chatState.initialGenerationStarting = false;
     chatState.initialGenerationFailed = null;
     chatState.activeQuestionRequest = null;
+    chatState.activePermissionRequest = null;
     interruptedContinueState.value = false;
     anchorTopById["optimistic:client-1"] = 120;
     anchorTopById["user-1"] = 120;

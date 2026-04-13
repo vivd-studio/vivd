@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildContactSubmissionEmail,
+  buildNewsletterConfirmationEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
   formatDurationLabel,
@@ -81,6 +82,36 @@ describe("email templates", () => {
     expect(email.html).toContain("Set a new password");
     expect(email.html).not.toContain("https://vivd.studio/agb");
     expect(email.html).not.toContain("images/vivd_logo_transparent.png");
+  });
+
+  it("renders newsletter confirmation email with branded copy", async () => {
+    const email = await buildNewsletterConfirmationEmail(
+      {
+        projectTitle: "Horse Tinder",
+        recipientName: "Pat",
+        confirmUrl: "https://api.example.com/plugins/newsletter/v1/confirm?token=abc",
+        unsubscribeUrl:
+          "https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def",
+        expiresInSeconds: 172_800,
+        mode: "waitlist",
+      },
+      {
+        displayName: "Example Studio",
+        websiteUrl: "https://example.com",
+        supportEmail: "support@example.com",
+      },
+    );
+
+    expect(email.subject).toBe("Confirm your waitlist signup for Horse Tinder");
+    expect(email.text).toContain("Hello Pat");
+    expect(email.text).toContain("Please confirm your waitlist signup for Horse Tinder.");
+    expect(email.text).toContain("https://api.example.com/plugins/newsletter/v1/confirm?token=abc");
+    expect(email.text).toContain("https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def");
+    expect(email.text).toContain("This link expires in 2 days.");
+    expect(email.html).toContain("Confirm your waitlist signup");
+    expect(email.html).toContain("Confirm waitlist signup");
+    expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/confirm?token=abc");
+    expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def");
   });
 
   it("formats durations with practical units", () => {

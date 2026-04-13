@@ -9,6 +9,7 @@
     "./manifest": "./src/manifest.ts",
     "./backend/config": "./src/backend/config.ts",
     "./backend/contribution": "./src/backend/contribution.ts",
+    "./backend/integrationHooks": "./src/backend/integrationHooks.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/plugin": "./src/backend/plugin.ts",
     "./backend/ports": "./src/backend/ports.ts",

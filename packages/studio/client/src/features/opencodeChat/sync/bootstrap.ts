@@ -1,5 +1,6 @@
 import type {
   OpenCodeChatBootstrap,
+  OpenCodePermissionRequest,
   OpenCodeQuestionRequest,
   OpenCodeChatState,
   OpenCodeSessionMessageRecord,
@@ -32,6 +33,27 @@ function groupQuestionRequestsBySession(
   return grouped;
 }
 
+function groupPermissionRequestsBySession(
+  permissions: OpenCodePermissionRequest[],
+): Record<string, OpenCodePermissionRequest[]> {
+  const grouped: Record<string, OpenCodePermissionRequest[]> = {};
+
+  for (const permission of permissions) {
+    if (!permission?.id || !permission.sessionID) continue;
+    const current = grouped[permission.sessionID] ?? [];
+    current.push(permission);
+    grouped[permission.sessionID] = current;
+  }
+
+  for (const sessionId of Object.keys(grouped)) {
+    grouped[sessionId] = [...grouped[sessionId]].sort((left, right) =>
+      compareStrings(left.id, right.id),
+    );
+  }
+
+  return grouped;
+}
+
 export function createStateFromBootstrap(
   bootstrap: OpenCodeChatBootstrap,
 ): OpenCodeChatState {
@@ -45,6 +67,9 @@ export function createStateFromBootstrap(
     sessionStatusById: { ...bootstrap.statuses },
     questionRequestsBySessionId: groupQuestionRequestsBySession(
       bootstrap.questions,
+    ),
+    permissionRequestsBySessionId: groupPermissionRequestsBySession(
+      bootstrap.permissions ?? [],
     ),
     messagesById: {},
     messagesBySessionId: {},
@@ -211,11 +236,16 @@ function removeSessionCachesFromState(
     ...withoutSessionMessages.questionRequestsBySessionId,
   };
   delete questionRequestsBySessionId[sessionId];
+  const permissionRequestsBySessionId = {
+    ...withoutSessionMessages.permissionRequestsBySessionId,
+  };
+  delete permissionRequestsBySessionId[sessionId];
 
   return {
     ...withoutSessionMessages,
     sessionStatusById,
     questionRequestsBySessionId,
+    permissionRequestsBySessionId,
   };
 }
 
@@ -248,6 +278,9 @@ export function reconcileStateFromBootstrap(
     sessionStatusById: { ...bootstrap.statuses },
     questionRequestsBySessionId: groupQuestionRequestsBySession(
       bootstrap.questions,
+    ),
+    permissionRequestsBySessionId: groupPermissionRequestsBySession(
+      bootstrap.permissions ?? [],
     ),
   };
 

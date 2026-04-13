@@ -5,6 +5,7 @@ WORKDIR /app
 # Install deps for the frontend + backend types + shared/builder workspace packages via the root lockfile
 COPY package.json package-lock.json ./
 COPY packages/builder/package.json packages/builder/package.json
+COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -16,11 +17,12 @@ COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/builder -w @vivd/shared -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
+RUN npm ci -w @vivd/builder -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
 
 # Stage 2: Development
 FROM deps AS dev
 COPY packages/builder ./packages/builder
+COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
@@ -40,6 +42,7 @@ CMD ["npm", "run", "dev", "--", "--host"]
 # Stage 3: Build
 FROM deps AS build
 COPY packages/builder ./packages/builder
+COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics

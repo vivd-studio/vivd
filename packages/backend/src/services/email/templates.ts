@@ -401,10 +401,10 @@ export async function buildContactSubmissionEmail(
 
 export async function buildVerificationEmail(
   input: {
-  recipientName?: string | null;
-  verificationUrl: string;
-  expiresInSeconds: number;
-},
+    recipientName?: string | null;
+    verificationUrl: string;
+    expiresInSeconds: number;
+  },
   brandingOverride?: EmailTemplateBranding,
 ): Promise<EmailTemplate> {
   const branding = await resolveBrandingOverride(brandingOverride);
@@ -432,6 +432,74 @@ export async function buildVerificationEmail(
     actionUrl: input.verificationUrl,
     outroHtml:
       `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not create this account, you can safely ignore this email.</p>`,
+  });
+
+  return {
+    subject,
+    text,
+    html,
+  };
+}
+
+export async function buildNewsletterConfirmationEmail(
+  input: {
+    projectTitle: string;
+    recipientName?: string | null;
+    confirmUrl: string;
+    unsubscribeUrl: string;
+    expiresInSeconds: number;
+    mode: "newsletter" | "waitlist";
+  },
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplate> {
+  const branding = await resolveBrandingOverride(brandingOverride);
+  const projectTitle = sanitizeTextLine(input.projectTitle) || "your project";
+  const greetingName = toGreetingName(input.recipientName);
+  const expiresLabel = formatDurationLabel(input.expiresInSeconds);
+  const audienceLabel =
+    input.mode === "waitlist" ? "waitlist signup" : "newsletter signup";
+  const title =
+    input.mode === "waitlist"
+      ? "Confirm your waitlist signup"
+      : "Confirm your newsletter signup";
+  const actionLabel =
+    input.mode === "waitlist"
+      ? "Confirm waitlist signup"
+      : "Confirm newsletter signup";
+  const subject =
+    input.mode === "waitlist"
+      ? `Confirm your waitlist signup for ${projectTitle}`
+      : `Confirm your newsletter signup for ${projectTitle}`;
+
+  const text = joinNonEmptyTextBlocks([
+    `Hello ${greetingName},`,
+    `Please confirm your ${audienceLabel} for ${projectTitle}.`,
+    `Confirm signup: ${input.confirmUrl}`,
+    `This link expires in ${expiresLabel}.`,
+    `If you did not request this, you can ignore this email or cancel the signup here: ${input.unsubscribeUrl}`,
+    buildLegalTextFooter(branding),
+  ]);
+
+  const html = renderHtmlLayout({
+    branding,
+    preheader: `${title} for ${projectTitle}`,
+    title,
+    intro: `Hello ${greetingName}, please confirm your ${audienceLabel} for ${projectTitle}.`,
+    bodyHtml: [
+      `<div style="margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border:1px solid ${BRAND_COLORS.border};border-left:4px solid ${BRAND_COLORS.accent};border-radius:12px;font-size:14px;color:#334155;line-height:1.7;">`,
+      `<div><strong style="color:${BRAND_COLORS.text};">Project:</strong> ${escapeHtml(
+        projectTitle,
+      )}</div>`,
+      `<div><strong style="color:${BRAND_COLORS.text};">Link expires:</strong> ${escapeHtml(
+        expiresLabel,
+      )}</div>`,
+      `</div>`,
+      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request this, you can ignore this email or <a href="${escapeHtml(
+        input.unsubscribeUrl,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;font-weight:600;">cancel the signup</a>.</p>`,
+    ].join(""),
+    actionLabel,
+    actionUrl: input.confirmUrl,
   });
 
   return {

@@ -149,6 +149,7 @@ ${indentBlock(cliRootHelp, "     ")}
      \`\`\`
    - Use \`vivd <command> help\` to drill into the relevant area.
    - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
+   - For publish work, check \`vivd publish status\` and \`vivd publish targets\` first. Publishing requires the current saved Studio snapshot to be prepared; run \`vivd publish prepare\` when needed before \`vivd publish deploy\`.
    - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
 }
 

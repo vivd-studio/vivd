@@ -33,6 +33,11 @@ import {
   formatPublishChecklistReport,
   formatPublishChecklistRunReport,
   formatPublishChecklistUpdateReport,
+  formatPublishDeployReport,
+  formatPublishPrepareReport,
+  formatPublishStatusReport,
+  formatPublishTargetsReport,
+  formatPublishUnpublishReport,
   formatSupportRequestReport,
   formatWhoamiReport,
 } from "./format.js";
@@ -95,6 +100,8 @@ type PublishChecklist = {
 
 type PublishChecklistQueryResponse = {
   checklist: PublishChecklist | null;
+  stale?: boolean;
+  reason?: "missing" | "project_updated" | "hash_mismatch" | null;
 };
 
 type PublishChecklistUpdateResponse = {
@@ -106,6 +113,92 @@ type PublishChecklistRunResponse = {
   success: boolean;
   checklist: PublishChecklist;
   sessionId: string;
+};
+
+type PublishStatusResponse = {
+  isPublished: boolean;
+  domain: string | null;
+  commitHash: string | null;
+  publishedAt: string | null;
+  url: string | null;
+  projectVersion?: number | null;
+};
+
+type PublishStateResponse = {
+  storageEnabled: boolean;
+  readiness:
+    | "ready"
+    | "build_in_progress"
+    | "artifact_not_ready"
+    | "not_found"
+    | "unsupported"
+    | "storage_disabled";
+  sourceKind: string;
+  framework: string;
+  publishableCommitHash: string | null;
+  lastSyncedCommitHash: string | null;
+  builtAt: string | null;
+  sourceBuiltAt: string | null;
+  previewBuiltAt: string | null;
+  error: string | null;
+  studioRunning: boolean;
+  studioStateAvailable: boolean;
+  studioHasUnsavedChanges: boolean;
+  studioHeadCommitHash: string | null;
+  studioWorkingCommitHash: string | null;
+  studioStateReportedAt: string | null;
+};
+
+type CheckDomainResponse = {
+  available: boolean;
+  normalizedDomain: string;
+  error?: string;
+};
+
+type PublishTargetsResponse = {
+  projectSlug: string;
+  currentPublishedDomain: string | null;
+  recommendedDomain: string | null;
+  targets: Array<{
+    domain: string;
+    usage: "tenant_host" | "publish_target";
+    type: "managed_subdomain" | "custom_domain" | "implicit_primary_host";
+    status: "active" | "disabled" | "pending_verification" | "implicit";
+    current: boolean;
+    primaryHost: boolean;
+    available: boolean;
+    blockedReason?: string;
+    url: string;
+    recommended: boolean;
+  }>;
+};
+
+type PublishDeployResponse = {
+  success: boolean;
+  domain: string;
+  commitHash: string;
+  url: string;
+  message: string;
+  github?: unknown;
+};
+
+type GitSaveResponse = {
+  success: boolean;
+  hash: string;
+  noChanges: boolean;
+  github?: {
+    attempted: boolean;
+    success: boolean;
+    repo?: string;
+    remoteUrl?: string;
+    error?: string;
+  };
+  message: string;
+};
+
+type PublishUnpublishResponse = {
+  success: boolean;
+  message: string;
 };
 
 type PreviewScreenshotResponse = {
@@ -265,13 +358,24 @@ const GENERAL_HELP: Record<string, string> = {
     "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
   ].join("\n"),
   publish: [
+    "vivd publish status",
+    "vivd publish targets",
+    "vivd publish prepare",
+    "vivd publish deploy [--domain <domain>]",
+    "vivd publish unpublish",
     "vivd publish checklist run",
     "vivd publish checklist show",
     "vivd publish checklist update <item-id> --status <status> [--note ...]",
+    "Use `status` to inspect whether the current saved Studio snapshot is ready to publish, plus the prepared commit and checklist freshness.",
+    "Use `targets` to inspect recommended and eligible domains for the current project before deploying.",
+    "Use `prepare` to save current Studio changes if needed and wait until the current saved snapshot is prepared for publish.",
+    "Use `deploy` to publish the current saved, prepared snapshot. It does not auto-save. Pass --domain to choose a target; without it, deploy reuses the current published domain or the only available target.",
+    "Use `unpublish` to remove the site from its published domain.",
     "Use `run` only when the user explicitly asks for a full checklist run or rerun; it is slower and more expensive than normal checks.",
     "Use `show` and `update` to inspect or continue checklist items one by one without starting a new full run.",
+    "From Studio agent chat, `deploy`, `unpublish`, and `checklist run` require explicit approval before they execute.",
     "Allowed statuses: pass, fail, warning, skip, fixed",
-    "Use --slug and --version (or VIVD_PROJECT_SLUG / VIVD_PROJECT_VERSION).",
+    "Use --slug and --version (or VIVD_PROJECT_SLUG / VIVD_PROJECT_VERSION). Use --domain when you need to choose among multiple targets or switch domains.",
   ].join("\n"),
   support: [
     "vivd support request <summary...>",
@@ -284,6 +388,14 @@ const GENERAL_HELP: Record<string, string> = {
 
 function jsonResult(data: unknown, human: string, exitCode?: number): CommandResult {
   return { data, human, exitCode };
+}
+
+const PUBLISH_PREPARE_MESSAGE = "Prepare publish artifacts";
+const PUBLISH_PREPARE_TIMEOUT_MS = 90_000;
+const PUBLISH_PREPARE_POLL_INTERVAL_MS = 2_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function ensureConnectedRuntime(
@@ -471,22 +583,53 @@ function getLocalStudioTrpcBaseUrl(env: NodeJS.ProcessEnv = process.env): string
   return `http://127.0.0.1:${port}/vivd-studio/api/trpc`;
 }
 
+function buildLocalStudioHeaders(
+  env: NodeJS.ProcessEnv = process.env,
+  options?: { includeContentType?: boolean },
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (options?.includeContentType !== false) {
+    headers["Content-Type"] = "application/json";
+  }
+  const studioAccessToken = env.STUDIO_ACCESS_TOKEN?.trim();
+  if (studioAccessToken) {
+    headers["x-vivd-studio-token"] = studioAccessToken;
+  }
+  return headers;
+}
+
+async function callLocalStudioQuery<T>(
+  procedure: string,
+  input: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<T> {
+  const response = await fetch(
+    `${getLocalStudioTrpcBaseUrl(env)}/${procedure}?input=${encodeURIComponent(
+      JSON.stringify(input),
+    )}`,
+    {
+      method: "GET",
+      headers: buildLocalStudioHeaders(env, { includeContentType: false }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(`${procedure} failed (${response.status}): ${errorText}`);
+  }
+
+  const body = await response.json().catch(() => null);
+  return unwrapTrpcBody(body) as T;
+}
+
 async function callLocalStudioMutation<T>(
   procedure: string,
   input: Record<string, unknown>,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  const studioAccessToken = env.STUDIO_ACCESS_TOKEN?.trim();
-  if (studioAccessToken) {
-    headers["x-vivd-studio-token"] = studioAccessToken;
-  }
-
   const response = await fetch(`${getLocalStudioTrpcBaseUrl(env)}/${procedure}`, {
     method: "POST",
-    headers,
+    headers: buildLocalStudioHeaders(env),
     body: JSON.stringify(input),
   });
 
@@ -507,6 +650,95 @@ function isChecklistStatus(value: string | undefined): value is ChecklistStatus 
     value === "skip" ||
     value === "fixed"
   );
+}
+
+function derivePublishDeploymentState(state: PublishStateResponse) {
+  const studioStateUnknownWarning = Boolean(
+    state.studioRunning && state.studioStateAvailable === false,
+  );
+  const olderSnapshotInStudio = Boolean(
+    state.studioRunning &&
+      state.studioStateAvailable &&
+      state.studioWorkingCommitHash &&
+      state.studioHeadCommitHash &&
+      state.studioWorkingCommitHash !== state.studioHeadCommitHash,
+  );
+  const unsavedChangesInStudio = Boolean(
+    state.studioRunning &&
+      state.studioStateAvailable &&
+      state.studioHasUnsavedChanges,
+  );
+  const targetCommitHash =
+    state.studioRunning && state.studioStateAvailable && state.studioHeadCommitHash
+      ? state.studioHeadCommitHash
+      : state.publishableCommitHash ?? null;
+  const publishableCommitMatchesTarget = Boolean(
+    targetCommitHash &&
+      state.publishableCommitHash &&
+      state.publishableCommitHash === targetCommitHash,
+  );
+  const missingPublishableSnapshot = Boolean(
+    state.readiness === "ready" &&
+      !state.publishableCommitHash &&
+      !studioStateUnknownWarning &&
+      !olderSnapshotInStudio &&
+      !unsavedChangesInStudio,
+  );
+
+  return {
+    studioStateUnknownWarning,
+    olderSnapshotInStudio,
+    unsavedChangesInStudio,
+    targetCommitHash,
+    publishableCommitMatchesTarget,
+    missingPublishableSnapshot,
+    canPublishNow:
+      state.storageEnabled &&
+      state.readiness === "ready" &&
+      !studioStateUnknownWarning &&
+      !unsavedChangesInStudio &&
+      !olderSnapshotInStudio &&
+      publishableCommitMatchesTarget,
+  };
+}
+
+function getPublishDisabledReason(state: PublishStateResponse): string | null {
+  const derived = derivePublishDeploymentState(state);
+
+  if (!state.storageEnabled) {
+    return "Publishing isn't available right now.";
+  }
+
+  if (state.readiness !== "ready") {
+    if (state.readiness === "build_in_progress") {
+      return "Your latest build is still in progress.";
+    }
+    if (state.readiness === "artifact_not_ready") {
+      return "Your latest changes are still being prepared for publishing.";
+    }
+    if (state.readiness === "not_found") {
+      return "No prepared publish artifact exists for the current saved snapshot.";
+    }
+    return "Publishing is not ready for this project yet.";
+  }
+
+  if (derived.studioStateUnknownWarning) {
+    return "Studio is still loading. Please wait a little while.";
+  }
+  if (derived.olderSnapshotInStudio) {
+    return "You're viewing an older snapshot. Restore it before publishing.";
+  }
+  if (derived.unsavedChangesInStudio) {
+    return "You have unsaved changes. Save your changes before publishing.";
+  }
+  if (derived.missingPublishableSnapshot || !derived.targetCommitHash) {
+    return "No publishable version found.";
+  }
+  if (!derived.publishableCommitMatchesTarget) {
+    return "Your latest changes are still being prepared for publishing. Please wait a little while.";
+  }
+
+  return null;
 }
 
 async function withRuntime<T>(
@@ -1108,6 +1340,312 @@ async function runResolvedCliPluginAlias(
   }
 }
 
+async function runPublishStatus(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const version = requireResolvedProjectVersion(flags);
+  const [status, state, checklist] = await Promise.all([
+    callLocalStudioQuery<PublishStatusResponse>("project.publishStatus", { slug }),
+    callLocalStudioQuery<PublishStateResponse>("project.publishState", {
+      slug,
+      version,
+    }),
+    callLocalStudioQuery<PublishChecklistQueryResponse>("project.publishChecklist", {
+      slug,
+      version,
+    }),
+  ]);
+  const derived = derivePublishDeploymentState(state);
+  const normalizedChecklist: {
+    checklist: PublishChecklist | null;
+    stale: boolean;
+    reason?: "missing" | "project_updated" | "hash_mismatch" | null;
+  } = {
+    checklist: checklist.checklist,
+    stale: checklist.stale ?? false,
+    reason: checklist.reason,
+  };
+
+  return jsonResult(
+    {
+      projectSlug: slug,
+      version,
+      status,
+      state,
+      checklist: normalizedChecklist,
+      targetCommitHash: derived.targetCommitHash,
+      publishReady: derived.canPublishNow,
+      blockedReason: getPublishDisabledReason(state),
+    },
+    formatPublishStatusReport({
+      projectSlug: slug,
+      version,
+      status,
+      state,
+      checklist: normalizedChecklist,
+      targetCommitHash: derived.targetCommitHash,
+      publishReady: derived.canPublishNow,
+      blockedReason: getPublishDisabledReason(state),
+    }),
+  );
+}
+
+async function runPublishTargets(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const result = await callLocalStudioQuery<PublishTargetsResponse>(
+    "project.publishTargets",
+    { slug },
+  );
+
+  return jsonResult(
+    result,
+    formatPublishTargetsReport({
+      projectSlug: result.projectSlug,
+      currentPublishedDomain: result.currentPublishedDomain,
+      recommendedDomain: result.recommendedDomain,
+      targets: result.targets,
+    }),
+  );
+}
+
+async function runPublishPrepare(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const version = requireResolvedProjectVersion(flags);
+
+  let state = await callLocalStudioQuery<PublishStateResponse>("project.publishState", {
+    slug,
+    version,
+  });
+  let derived = derivePublishDeploymentState(state);
+
+  if (!state.storageEnabled) {
+    throw new Error("Publishing isn't available right now.");
+  }
+  if (derived.studioStateUnknownWarning) {
+    throw new Error("Studio is still loading. Please wait a little while.");
+  }
+  if (derived.olderSnapshotInStudio) {
+    throw new Error("You're viewing an older snapshot. Restore it before publishing.");
+  }
+
+  let action:
+    | "already_prepared"
+    | "saved_changes"
+    | "requested_artifact_prepare"
+    | "waiting_for_existing_prepare" = "already_prepared";
+  let saveResult: GitSaveResponse | null = null;
+
+  if (!derived.canPublishNow) {
+    const needsSave = derived.unsavedChangesInStudio;
+    const needsPrepareRequest =
+      !needsSave &&
+      (state.readiness === "artifact_not_ready" ||
+        state.readiness === "not_found" ||
+        derived.missingPublishableSnapshot);
+
+    if (needsSave || needsPrepareRequest) {
+      saveResult = await callLocalStudioMutation<GitSaveResponse>("project.gitSave", {
+        slug,
+        version,
+        message: PUBLISH_PREPARE_MESSAGE,
+      });
+      action = needsSave ? "saved_changes" : "requested_artifact_prepare";
+    } else {
+      action = "waiting_for_existing_prepare";
+    }
+
+    const deadline = Date.now() + PUBLISH_PREPARE_TIMEOUT_MS;
+    while (Date.now() <= deadline) {
+      state = await callLocalStudioQuery<PublishStateResponse>("project.publishState", {
+        slug,
+        version,
+      });
+      derived = derivePublishDeploymentState(state);
+
+      if (derived.canPublishNow) {
+        break;
+      }
+      if (!state.storageEnabled) {
+        throw new Error("Publishing isn't available right now.");
+      }
+      if (derived.studioStateUnknownWarning) {
+        await sleep(PUBLISH_PREPARE_POLL_INTERVAL_MS);
+        continue;
+      }
+      if (derived.olderSnapshotInStudio) {
+        throw new Error("You're viewing an older snapshot. Restore it before publishing.");
+      }
+      if (derived.unsavedChangesInStudio) {
+        if (action === "saved_changes") {
+          await sleep(PUBLISH_PREPARE_POLL_INTERVAL_MS);
+          continue;
+        }
+        throw new Error("You have unsaved changes. Save your changes before publishing.");
+      }
+
+      await sleep(PUBLISH_PREPARE_POLL_INTERVAL_MS);
+    }
+  }
+
+  if (!derived.canPublishNow) {
+    const reason = getPublishDisabledReason(state) || "Publishing is still not ready.";
+    const detail = state.error?.trim();
+    throw new Error(detail ? `${reason} (${detail})` : reason);
+  }
+
+  return jsonResult(
+    {
+      projectSlug: slug,
+      version,
+      action,
+      state,
+      targetCommitHash: derived.targetCommitHash,
+      publishReady: derived.canPublishNow,
+      saveResult,
+    },
+    formatPublishPrepareReport({
+      projectSlug: slug,
+      version,
+      action,
+      targetCommitHash: derived.targetCommitHash,
+      preparedCommitHash: state.publishableCommitHash,
+      readyToPublish: derived.canPublishNow,
+      saveMessage: saveResult?.message ?? null,
+    }),
+  );
+}
+
+async function runPublishDeploy(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const version = requireResolvedProjectVersion(flags);
+  const [targets, state] = await Promise.all([
+    callLocalStudioQuery<PublishTargetsResponse>("project.publishTargets", { slug }),
+    callLocalStudioQuery<PublishStateResponse>("project.publishState", {
+      slug,
+      version,
+    }),
+  ]);
+
+  const disabledReason = getPublishDisabledReason(state);
+  if (disabledReason) {
+    throw new Error(disabledReason);
+  }
+
+  const derived = derivePublishDeploymentState(state);
+  if (!derived.targetCommitHash) {
+    throw new Error("No publishable version found.");
+  }
+
+  let selectedDomain: string | null = null;
+
+  if ((flags.domain ?? "").trim()) {
+    const domainCheck = await callLocalStudioQuery<CheckDomainResponse>(
+      "project.checkDomain",
+      {
+        slug,
+        domain: flags.domain!.trim(),
+      },
+    );
+    if (!domainCheck.available) {
+      throw new Error(domainCheck.error || "Enter a valid domain.");
+    }
+
+    const matchingTarget = targets.targets.find(
+      (target) => target.domain === domainCheck.normalizedDomain,
+    );
+    if (matchingTarget && !matchingTarget.available) {
+      throw new Error(matchingTarget.blockedReason || "Domain is not available for publishing.");
+    }
+
+    selectedDomain = domainCheck.normalizedDomain;
+  } else if (targets.currentPublishedDomain) {
+    const currentTarget = targets.targets.find(
+      (target) => target.domain === targets.currentPublishedDomain,
+    );
+    if (!currentTarget) {
+      selectedDomain = targets.currentPublishedDomain;
+    } else if (currentTarget.available) {
+      selectedDomain = currentTarget.domain;
+    } else {
+      throw new Error(
+        currentTarget.blockedReason ||
+          "The current published domain is not available for publishing right now.",
+      );
+    }
+  }
+
+  if (!selectedDomain) {
+    const availableTargets = targets.targets.filter((target) => target.available);
+    if (availableTargets.length === 1) {
+      selectedDomain = availableTargets[0]!.domain;
+    } else if (availableTargets.length === 0) {
+      throw new Error(
+        "No publish target is currently available. Run `vivd publish targets` to inspect blocked domains and publishable options.",
+      );
+    } else {
+      throw new Error(
+        "Multiple publish targets are available. Run `vivd publish targets` and pass --domain <domain>.",
+      );
+    }
+  }
+
+  const result = await callLocalStudioMutation<PublishDeployResponse>(
+    "project.publish",
+    {
+      slug,
+      version,
+      domain: selectedDomain,
+      expectedCommitHash: derived.targetCommitHash,
+    },
+  );
+
+  return jsonResult(
+    result,
+    formatPublishDeployReport({
+      domain: result.domain,
+      url: result.url,
+      commitHash: result.commitHash,
+      message: result.message,
+    }),
+  );
+}
+
+async function runPublishUnpublish(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const status = await callLocalStudioQuery<PublishStatusResponse>(
+    "project.publishStatus",
+    { slug },
+  );
+
+  if (!status.isPublished) {
+    const result = {
+      success: true,
+      alreadyUnpublished: true,
+      message: "No published site exists for this project.",
+      domain: null,
+      url: null,
+    };
+    return jsonResult(result, formatPublishUnpublishReport(result));
+  }
+
+  const result = await callLocalStudioMutation<PublishUnpublishResponse>(
+    "project.unpublish",
+    { slug },
+  );
+
+  return jsonResult(
+    {
+      ...result,
+      domain: status.domain,
+      url: status.url,
+    },
+    formatPublishUnpublishReport({
+      message: result.message,
+      domain: status.domain,
+      url: status.url,
+    }),
+  );
+}
+
 async function runPublishChecklistShow(flags: CliFlags): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
@@ -1335,6 +1873,21 @@ export async function dispatchCli(
       }
       throw new Error("Unknown plugins command. Try `vivd plugins help`.");
     case "publish":
+      if (second === "status") {
+        return runPublishStatus(parsed.flags);
+      }
+      if (second === "targets") {
+        return runPublishTargets(parsed.flags);
+      }
+      if (second === "prepare") {
+        return runPublishPrepare(parsed.flags);
+      }
+      if (second === "deploy") {
+        return runPublishDeploy(parsed.flags);
+      }
+      if (second === "unpublish") {
+        return runPublishUnpublish(parsed.flags);
+      }
       if (second === "checklist" && third === "run") {
         return runPublishChecklistRun(parsed.flags);
       }

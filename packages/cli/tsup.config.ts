@@ -7,7 +7,9 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   noExternal: [
+    /^@vivd\/installed-plugins(\/.*)?$/,
     /^@vivd\/plugin-analytics(\/.*)?$/,
     /^@vivd\/plugin-contact-form(\/.*)?$/,
+    /^@vivd\/plugin-newsletter(\/.*)?$/,
   ],
 });

@@ -1,3 +1,4 @@
+import { PermissionDock } from "@/features/opencodeChat/permissions/PermissionDock";
 import { QuestionDock } from "@/features/opencodeChat/questions/QuestionDock";
 import { useChatContext } from "./ChatContext";
 import { ChatComposer } from "./ChatComposer";
@@ -10,12 +11,14 @@ interface ChatInputRegionProps {
 export function ChatInputRegion({ composerClassName }: ChatInputRegionProps) {
   const {
     activeQuestionRequest,
+    activePermissionRequest,
     queuedFollowups,
     queuedFollowupSendingId,
     handleSendQueuedFollowup,
     handleEditQueuedFollowup,
     handleReplyQuestion,
     handleRejectQuestion,
+    handleRespondPermission,
   } = useChatContext();
 
   if (activeQuestionRequest) {
@@ -24,6 +27,15 @@ export function ChatInputRegion({ composerClassName }: ChatInputRegionProps) {
         request={activeQuestionRequest}
         onReply={handleReplyQuestion}
         onReject={handleRejectQuestion}
+      />
+    );
+  }
+
+  if (activePermissionRequest) {
+    return (
+      <PermissionDock
+        request={activePermissionRequest}
+        onRespond={handleRespondPermission}
       />
     );
   }

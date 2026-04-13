@@ -1,9 +1,9 @@
-import { and, eq, gte, sql } from "drizzle-orm";
 import type { PluginModule } from "@vivd/shared/types";
 import type {
   NewsletterBackendRouteDefinition,
   NewsletterPluginServiceDeps,
 } from "./ports";
+import { createNewsletterPluginBackendHooks } from "./integrationHooks";
 import { createNewsletterPluginModule } from "./module";
 import {
   NewsletterConfirmationDeliveryError,
@@ -98,41 +98,12 @@ export function createNewsletterPluginBackendContribution(
         return null;
       },
     }),
-    hooks: {
-      async listProjectUsageCounts(options) {
-        const rows = await deps.db
-          .select({
-            organizationId: deps.tables.newsletterSubscriber.organizationId,
-            projectSlug: deps.tables.newsletterSubscriber.projectSlug,
-            count: sql<number>`count(*)`,
-          })
-          .from(deps.tables.newsletterSubscriber)
-          .where(
-            and(
-              gte(
-                deps.tables.newsletterSubscriber.lastSignupAt,
-                options.startedAt,
-              ),
-              options.organizationId
-                ? eq(
-                    deps.tables.newsletterSubscriber.organizationId,
-                    options.organizationId,
-                  )
-                : undefined,
-            ),
-          )
-          .groupBy(
-            deps.tables.newsletterSubscriber.organizationId,
-            deps.tables.newsletterSubscriber.projectSlug,
-          );
-
-        return rows.map((row: any) => ({
-          organizationId: row.organizationId,
-          projectSlug: row.projectSlug,
-          count: Number(row.count) || 0,
-        }));
+    hooks: createNewsletterPluginBackendHooks({
+      db: deps.db,
+      tables: {
+        newsletterSubscriber: deps.tables.newsletterSubscriber,
       },
-    },
+    }),
     publicRoutes: [
       {
         routeId: "newsletter.subscribe",

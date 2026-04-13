@@ -147,7 +147,27 @@ export function renderVivdCliRootHelp(
       },
     ]),
     "",
-    ...formatHelpSection("PUBLISH CHECKLIST", [
+    ...formatHelpSection("PUBLISH", [
+      {
+        command: "vivd publish status",
+        description: "Show publish readiness for the current saved snapshot, prepared commit, and checklist freshness",
+      },
+      {
+        command: "vivd publish targets",
+        description: "List recommended and eligible publish domains for the current project",
+      },
+      {
+        command: "vivd publish prepare",
+        description: "Save current Studio changes if needed and wait until the current snapshot is prepared for publish",
+      },
+      {
+        command: "vivd publish deploy [--domain <domain>]",
+        description: "Publish the current saved, prepared snapshot to a domain (approval-gated from Studio chat)",
+      },
+      {
+        command: "vivd publish unpublish",
+        description: "Remove the site from its current published domain (approval-gated from Studio chat)",
+      },
       {
         command: "vivd publish checklist show",
         description: "Inspect the current checklist state",
@@ -158,11 +178,11 @@ export function renderVivdCliRootHelp(
       },
       {
         command: "vivd publish checklist run",
-        description: "Start a full checklist pass when explicitly requested",
+        description: "Start a full checklist pass when explicitly requested (approval-gated from Studio chat)",
       },
       {
         command: "vivd publish help",
-        description: "Show checklist workflow details",
+        description: "Show publish and checklist workflow details",
       },
     ]),
     ...supportSection,
@@ -190,6 +210,9 @@ export function renderVivdCliRootHelp(
       "$ vivd doctor",
       "$ vivd preview status",
       "$ vivd plugins catalog",
+      "$ vivd publish status",
+      "$ vivd publish targets",
+      "$ vivd publish prepare",
       "$ vivd publish checklist show",
       ...supportExamples,
     ]),

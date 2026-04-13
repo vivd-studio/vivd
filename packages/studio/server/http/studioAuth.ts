@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import type express from "express";
 import {
+  STUDIO_USER_ACTION_TOKEN_HEADER,
   STUDIO_USER_ACTION_TOKEN_COOKIE,
   STUDIO_USER_ACTION_TOKEN_PARAM,
   verifyStudioBootstrapToken,
@@ -31,6 +32,21 @@ type StudioAuthRequestLike = {
   get?: (name: string) => string | undefined;
 };
 
+let cachedStudioUserActionToken: string | null = null;
+
+function normalizeStudioUserActionToken(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function setCachedStudioUserActionToken(token: string | null | undefined): void {
+  cachedStudioUserActionToken = normalizeStudioUserActionToken(token);
+}
+
+export function getCachedStudioUserActionToken(): string | null {
+  return cachedStudioUserActionToken;
+}
+
 function getCookieValue(
   req: Pick<StudioAuthRequestLike, "headers">,
   key: string,
@@ -55,9 +71,24 @@ function getCookieValue(
   return null;
 }
 
-export function getStudioUserActionToken(req: express.Request): string | null {
-  const value = getCookieValue(req, STUDIO_USER_ACTION_TOKEN_COOKIE);
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+export function getStudioUserActionToken(req: StudioAuthRequestLike): string | null {
+  const fromHeader = normalizeStudioUserActionToken(
+    getHeaderValue(req, STUDIO_USER_ACTION_TOKEN_HEADER),
+  );
+  if (fromHeader) {
+    setCachedStudioUserActionToken(fromHeader);
+    return fromHeader;
+  }
+
+  const fromCookie = normalizeStudioUserActionToken(
+    getCookieValue(req, STUDIO_USER_ACTION_TOKEN_COOKIE),
+  );
+  if (fromCookie) {
+    setCachedStudioUserActionToken(fromCookie);
+    return fromCookie;
+  }
+
+  return getCachedStudioUserActionToken();
 }
 
 function getFirstHeaderValue(value: string | string[] | undefined): string {
@@ -414,7 +445,9 @@ export function createStudioBootstrapHandler(
 
     setStudioAuthCookie(req, res, accessToken);
     if (typeof userActionToken === "string" && userActionToken.trim()) {
-      setStudioUserActionCookie(req, res, userActionToken.trim());
+      const normalizedUserActionToken = userActionToken.trim();
+      setCachedStudioUserActionToken(normalizedUserActionToken);
+      setStudioUserActionCookie(req, res, normalizedUserActionToken);
     }
     res.setHeader("cache-control", "no-store");
     return res.redirect(303, redirectTarget);

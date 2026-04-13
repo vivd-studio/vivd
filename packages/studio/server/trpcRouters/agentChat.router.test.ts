@@ -6,27 +6,33 @@ const {
   getSessionContentMock,
   getMessageDiffMock,
   getSessionsStatusMock,
+  listPermissionsMock,
   listQuestionsMock,
   replyQuestionMock,
   rejectQuestionMock,
+  respondPermissionMock,
 } = vi.hoisted(() => ({
   listSessionsMock: vi.fn(),
   getSessionContentMock: vi.fn(),
   getMessageDiffMock: vi.fn(),
   getSessionsStatusMock: vi.fn(),
+  listPermissionsMock: vi.fn(),
   listQuestionsMock: vi.fn(),
   replyQuestionMock: vi.fn(),
   rejectQuestionMock: vi.fn(),
+  respondPermissionMock: vi.fn(),
 }));
 
 vi.mock("../opencode/index.js", () => ({
   getSessionContent: getSessionContentMock,
   getMessageDiff: getMessageDiffMock,
   getSessionsStatus: getSessionsStatusMock,
+  listPermissions: listPermissionsMock,
   listQuestions: listQuestionsMock,
   listSessions: listSessionsMock,
   replyQuestion: replyQuestionMock,
   rejectQuestion: rejectQuestionMock,
+  respondPermission: respondPermissionMock,
 }));
 
 vi.mock("../opencode/events/canonicalEventBridge.js", () => ({
@@ -59,16 +65,20 @@ describe("agentChat router", () => {
     getSessionContentMock.mockReset();
     getMessageDiffMock.mockReset();
     getSessionsStatusMock.mockReset();
+    listPermissionsMock.mockReset();
     listQuestionsMock.mockReset();
     replyQuestionMock.mockReset();
     rejectQuestionMock.mockReset();
+    respondPermissionMock.mockReset();
     listSessionsMock.mockResolvedValue([]);
     getSessionContentMock.mockResolvedValue([]);
     getMessageDiffMock.mockResolvedValue([]);
     getSessionsStatusMock.mockResolvedValue({});
+    listPermissionsMock.mockResolvedValue([]);
     listQuestionsMock.mockResolvedValue([]);
     replyQuestionMock.mockResolvedValue(true);
     rejectQuestionMock.mockResolvedValue(true);
+    respondPermissionMock.mockResolvedValue(true);
   });
 
   it("returns bootstrap data for the workspace", async () => {
@@ -77,6 +87,7 @@ describe("agentChat router", () => {
       "sess-1": { type: "busy" },
     });
     listQuestionsMock.mockResolvedValueOnce([{ id: "que-1", sessionID: "sess-1" }]);
+    listPermissionsMock.mockResolvedValueOnce([{ id: "perm-1", sessionID: "sess-1", permission: "bash", patterns: ["vivd publish deploy --domain example.com"], always: ["vivd *"], metadata: {} }]);
     getSessionContentMock.mockResolvedValueOnce([{ id: "msg-1" }]);
 
     const caller = agentChatRouter.createCaller(makeContext());
@@ -89,11 +100,13 @@ describe("agentChat router", () => {
     expect(listSessionsMock).toHaveBeenCalledWith("/tmp/workspace");
     expect(getSessionsStatusMock).toHaveBeenCalledWith("/tmp/workspace");
     expect(listQuestionsMock).toHaveBeenCalledWith("/tmp/workspace");
+    expect(listPermissionsMock).toHaveBeenCalledWith("/tmp/workspace");
     expect(getSessionContentMock).toHaveBeenCalledWith("sess-1", "/tmp/workspace");
     expect(result).toEqual({
       sessions: [{ id: "sess-1", title: "A" }],
       statuses: { "sess-1": { type: "busy" } },
       questions: [{ id: "que-1", sessionID: "sess-1" }],
+      permissions: [{ id: "perm-1", sessionID: "sess-1", permission: "bash", patterns: ["vivd publish deploy --domain example.com"], always: ["vivd *"], metadata: {} }],
       messages: [{ id: "msg-1" }],
     });
   });
@@ -175,6 +188,26 @@ describe("agentChat router", () => {
         status: "modified",
       },
     ]);
+  });
+
+  it("responds to a permission request in the workspace", async () => {
+    const caller = agentChatRouter.createCaller(makeContext());
+
+    const result = await caller.respondPermission({
+      projectSlug: "site-1",
+      version: 1,
+      requestId: "perm-1",
+      sessionId: "sess-1",
+      response: "once",
+    });
+
+    expect(respondPermissionMock).toHaveBeenCalledWith(
+      "perm-1",
+      "sess-1",
+      "once",
+      "/tmp/workspace",
+    );
+    expect(result).toBe(true);
   });
 
   it("rejects calls when the workspace is not initialized", async () => {

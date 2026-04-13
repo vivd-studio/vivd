@@ -23,6 +23,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@studio/shared/*": ["../shared/*"],
+      "@vivd/installed-plugins": ["../../installed-plugins/src/index.ts"],
+      "@vivd/installed-plugins/*": ["../../installed-plugins/src/*"],
       "@vivd/plugin-analytics/*": ["../../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form/*": ["../../plugin-contact-form/src/*"],
       "@vivd/plugin-newsletter/*": ["../../plugin-newsletter/src/*"],

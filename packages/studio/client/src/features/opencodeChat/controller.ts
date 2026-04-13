@@ -15,7 +15,10 @@ import {
   PENDING_ASSISTANT_GRACE_MS,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
-import { sessionQuestionRequest } from "./questions/requestTree";
+import {
+  sessionPermissionRequest,
+  sessionQuestionRequest,
+} from "./questions/requestTree";
 import type { SanitizedSessionError } from "./sync/errorPolicy";
 
 type ControllerModel = {
@@ -53,6 +56,8 @@ export function useOpencodeChatController({
   const providerSetSelectedSessionId = opencodeChat.setSelectedSessionId;
   const sessionStatusById = opencodeChat.state.sessionStatusById;
   const questionRequestsBySessionId = opencodeChat.questionRequestsBySessionId;
+  const permissionRequestsBySessionId =
+    opencodeChat.permissionRequestsBySessionId;
   const connection = opencodeChat.state.connection;
   const [localSessionError, setLocalSessionError] =
     useState<SanitizedSessionError | null>(null);
@@ -108,8 +113,14 @@ export function useOpencodeChatController({
         sessions,
         sessionStatusById,
         questionRequestsBySessionId,
+        permissionRequestsBySessionId,
       }),
-    [questionRequestsBySessionId, sessionStatusById, sessions],
+    [
+      permissionRequestsBySessionId,
+      questionRequestsBySessionId,
+      sessionStatusById,
+      sessions,
+    ],
   );
   const activeQuestionRequest = useMemo(
     () =>
@@ -119,6 +130,23 @@ export function useOpencodeChatController({
         selectedSessionId ?? attentionSessionId,
       ) ?? null,
     [attentionSessionId, questionRequestsBySessionId, selectedSessionId, sessions],
+  );
+  const activePermissionRequest = useMemo(
+    () =>
+      sessionPermissionRequest(
+        sessions,
+        permissionRequestsBySessionId,
+        selectedSessionId ?? attentionSessionId,
+      ) ?? null,
+    [
+      attentionSessionId,
+      permissionRequestsBySessionId,
+      selectedSessionId,
+      sessions,
+    ],
+  );
+  const hasBlockingRequest = Boolean(
+    activeQuestionRequest || activePermissionRequest,
   );
   const isReverted = Boolean(selectedSession?.revert);
   const usage = useMemo(
@@ -226,6 +254,14 @@ export function useOpencodeChatController({
       toast.error("Question rejection failed", { description: error.message });
     },
   });
+  const respondPermissionMutation = trpc.agentChat.respondPermission.useMutation({
+    onSuccess: () => {
+      refetchSessions();
+    },
+    onError: (error) => {
+      toast.error("Permission response failed", { description: error.message });
+    },
+  });
 
   const dispatchTaskToSession = useCallback(
     async (task: string, targetSessionId: string) => {
@@ -288,8 +324,8 @@ export function useOpencodeChatController({
       targetSessionId: string | null,
       options?: { onCompleted?: (success: boolean) => void; onSettled?: () => void },
     ) => {
-      if (activeQuestionRequest) {
-        toast.info("Answer the pending question first");
+      if (hasBlockingRequest) {
+        toast.info("Resolve the pending approval first");
         options?.onCompleted?.(false);
         options?.onSettled?.();
         return;
@@ -387,7 +423,7 @@ export function useOpencodeChatController({
       })();
     },
     [
-      activeQuestionRequest,
+      hasBlockingRequest,
       createSessionMutation,
       deleteSessionMutation,
       dispatchTaskToSession,
@@ -491,6 +527,23 @@ export function useOpencodeChatController({
       });
     },
     [projectSlug, rejectQuestionMutation, version],
+  );
+
+  const respondPermission = useCallback(
+    async (
+      requestId: string,
+      sessionId: string,
+      response: "once" | "always" | "reject",
+    ) => {
+      await respondPermissionMutation.mutateAsync({
+        projectSlug,
+        version,
+        requestId,
+        sessionId,
+        response,
+      });
+    },
+    [projectSlug, respondPermissionMutation, version],
   );
 
   const derivedSessionError = useMemo(
@@ -823,6 +876,7 @@ export function useOpencodeChatController({
     isReverted,
     usage,
     activeQuestionRequest,
+    activePermissionRequest,
     sessionError,
     clearSessionError,
     runTaskPending:
@@ -842,6 +896,7 @@ export function useOpencodeChatController({
     sendTask,
     replyQuestion,
     rejectQuestion,
+    respondPermission,
     deleteSession,
     revertToMessage,
     unrevertSession,

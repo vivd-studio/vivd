@@ -553,18 +553,22 @@ export class DomainService {
 
     const normalizedDomain = validation.normalized;
     const routing = await this.getResolvedRoutingSettings(normalizedDomain);
-    if (!routing.instancePolicy.capabilities.customDomains) {
-      const implicitPrimaryHost = routing.controlPlaneHost
-        ? this.normalizeHost(routing.controlPlaneHost)
-        : null;
-      if (implicitPrimaryHost && normalizedDomain === implicitPrimaryHost) {
-        return {
-          enabled: true,
-          normalizedDomain,
-          usage: "publish_target",
-        };
-      }
+    const implicitPrimaryHost = routing.controlPlaneHost
+      ? this.normalizeHost(routing.controlPlaneHost)
+      : null;
+    if (
+      routing.instancePolicy.installProfile === "solo" &&
+      implicitPrimaryHost &&
+      normalizedDomain === implicitPrimaryHost
+    ) {
+      return {
+        enabled: true,
+        normalizedDomain,
+        usage: "publish_target",
+      };
+    }
 
+    if (!routing.instancePolicy.capabilities.customDomains) {
       return {
         enabled: false,
         normalizedDomain,

@@ -269,6 +269,35 @@ describe("opencodeChat runtime", () => {
       questionRequestsBySessionId: {
         "sess-2": [{ id: "que-1", sessionID: "sess-2", questions: [] }],
       },
+      permissionRequestsBySessionId: {},
+    });
+
+    expect(selected).toBe("sess-2");
+  });
+
+  it("selects the most recent session needing attention when a permission is pending", () => {
+    const selected = selectMostRecentAttentionSessionId({
+      sessions: [
+        { id: "sess-1", time: { updated: 10 } },
+        { id: "sess-2", time: { updated: 20 } },
+      ],
+      sessionStatusById: {
+        "sess-1": { type: "done" },
+        "sess-2": { type: "idle" },
+      },
+      questionRequestsBySessionId: {},
+      permissionRequestsBySessionId: {
+        "sess-2": [
+          {
+            id: "perm-1",
+            sessionID: "sess-2",
+            permission: "bash",
+            patterns: ["vivd publish deploy"],
+            always: ["vivd *"],
+            metadata: {},
+          },
+        ],
+      },
     });
 
     expect(selected).toBe("sess-2");

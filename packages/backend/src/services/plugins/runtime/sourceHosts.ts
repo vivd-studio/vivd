@@ -2,6 +2,22 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../../db";
 import { domain as domainTable, publishedSite } from "../../../db/schema";
 
+function extractHostCandidate(raw: string | null | undefined): string | null {
+  const candidate = (raw || "").trim();
+  if (!candidate) return null;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.host) return parsed.host;
+  } catch {}
+
+  try {
+    return new URL(`https://${candidate}`).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function inferProjectPluginSourceHosts(options: {
   organizationId: string;
   projectSlug: string;
@@ -36,6 +52,18 @@ export async function inferProjectPluginSourceHosts(options: {
     hosts.add("localhost");
     hosts.add("127.0.0.1");
     hosts.add("[::1]");
+    hosts.add("app.localhost");
+
+    for (const rawCandidate of [
+      process.env.VIVD_APP_URL,
+      process.env.BACKEND_URL,
+      process.env.BETTER_AUTH_URL,
+      process.env.DOMAIN,
+      process.env.CONTROL_PLANE_HOST,
+    ]) {
+      const host = extractHostCandidate(rawCandidate);
+      if (host) hosts.add(host);
+    }
   }
 
   // Include the Studio public host so public plugin features still work during dev previews.

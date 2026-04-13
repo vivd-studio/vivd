@@ -3,6 +3,7 @@ export interface CliFlags {
   help: boolean;
   slug?: string;
   version?: number;
+  domain?: string;
   file?: string;
   output?: string;
   width?: number;
@@ -97,6 +98,16 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     }
     if (token.startsWith("--version=") || token.startsWith("--project-version=")) {
       flags.version = parseNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--domain") {
+      flags.domain = takeNextValue(argv, index, token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--domain=")) {
+      flags.domain = readInlineValue(token) || undefined;
       continue;
     }
 

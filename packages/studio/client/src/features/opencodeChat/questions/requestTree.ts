@@ -1,4 +1,8 @@
-import type { OpenCodeQuestionRequest, OpenCodeSession } from "../types";
+import type {
+  OpenCodePermissionRequest,
+  OpenCodeQuestionRequest,
+  OpenCodeSession,
+} from "../types";
 
 function sessionTreeRequest<T>(
   sessions: OpenCodeSession[],
@@ -40,5 +44,14 @@ export function sessionQuestionRequest(
   sessionId?: string | null,
   include?: (item: OpenCodeQuestionRequest) => boolean,
 ): OpenCodeQuestionRequest | undefined {
+  return sessionTreeRequest(sessions, requests, sessionId, include);
+}
+
+export function sessionPermissionRequest(
+  sessions: OpenCodeSession[],
+  requests: Record<string, OpenCodePermissionRequest[] | undefined>,
+  sessionId?: string | null,
+  include?: (item: OpenCodePermissionRequest) => boolean,
+): OpenCodePermissionRequest | undefined {
   return sessionTreeRequest(sessions, requests, sessionId, include);
 }

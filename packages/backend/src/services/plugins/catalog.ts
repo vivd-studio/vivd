@@ -2,19 +2,14 @@ import {
   definePluginPackageDescriptors,
   extractPluginIds,
 } from "@vivd/shared/types";
+import { installedPluginManifests } from "@vivd/installed-plugins";
 import type {
   PluginCatalogEntry as SharedPluginCatalogEntry,
   PluginDefinition as SharedPluginDefinition,
 } from "@vivd/shared/types";
-import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
-import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
-import { newsletterPluginManifest } from "@vivd/plugin-newsletter/manifest";
 
-export const pluginPackageDescriptors = definePluginPackageDescriptors([
-  contactFormPluginManifest,
-  analyticsPluginManifest,
-  newsletterPluginManifest,
-] as const);
+export const pluginPackageDescriptors =
+  definePluginPackageDescriptors(installedPluginManifests);
 
 export const PLUGIN_IDS = extractPluginIds(pluginPackageDescriptors);
 export type PluginId = (typeof PLUGIN_IDS)[number];

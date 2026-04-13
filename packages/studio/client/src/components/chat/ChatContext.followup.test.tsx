@@ -53,6 +53,7 @@ const {
     isSessionHydrating: false,
     isReverted: false,
     activeQuestionRequest: null,
+    activePermissionRequest: null,
     usage: null,
     sessionError: null,
     clearSessionError: vi.fn(),
@@ -70,6 +71,7 @@ const {
     sendTask: vi.fn(),
     replyQuestion: vi.fn(async () => undefined),
     rejectQuestion: vi.fn(async () => undefined),
+    respondPermission: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
     revertToMessage: vi.fn(async () => undefined),
     unrevertSession: vi.fn(async () => undefined),
@@ -137,6 +139,7 @@ describe("ChatProvider follow-up behavior", () => {
     controllerState.selectedSessionId = "sess-1";
     controllerState.sessionStatusType = "busy";
     controllerState.activeQuestionRequest = null;
+    controllerState.activePermissionRequest = null;
     controllerState.runTaskPending = false;
     controllerState.isSending = false;
     controllerState.isStreaming = false;

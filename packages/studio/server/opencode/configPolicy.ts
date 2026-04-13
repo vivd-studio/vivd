@@ -1,5 +1,13 @@
 type JsonObject = Record<string, unknown>;
 
+const STUDIO_RISKY_BASH_PERMISSION_RULES: JsonObject = {
+  "*": "allow",
+  "vivd publish checklist run*": "ask",
+  "vivd publish deploy*": "ask",
+  "vivd publish unpublish*": "ask",
+  "vivd support request*": "ask",
+};
+
 export interface BuildStudioOpencodeConfigOptions {
   toolEnablement?: Record<string, boolean>;
 }
@@ -42,6 +50,18 @@ function parseOpencodeConfigContent(rawContent: string | undefined): JsonObject 
   return {};
 }
 
+function normalizePermissionConfigValue(value: unknown): JsonObject | undefined {
+  if (typeof value === "string") {
+    return { "*": value };
+  }
+
+  if (isPlainObject(value)) {
+    return value;
+  }
+
+  return undefined;
+}
+
 function mergePlainObjects(base: JsonObject, overrides: JsonObject): JsonObject {
   const result: JsonObject = { ...base };
 
@@ -59,8 +79,55 @@ function mergePlainObjects(base: JsonObject, overrides: JsonObject): JsonObject 
   return result;
 }
 
+function normalizePermissionConfigShape(config: JsonObject): JsonObject {
+  const normalizedPermission = normalizePermissionConfigValue(config.permission);
+  if (!normalizedPermission) {
+    return config;
+  }
+
+  return {
+    ...config,
+    permission: normalizedPermission,
+  };
+}
+
+function applyStudioBashPermissionPolicy(config: JsonObject): JsonObject {
+  const permission = normalizePermissionConfigValue(config.permission);
+  if (!permission) {
+    return config;
+  }
+
+  if (permission.bash !== undefined) {
+    return {
+      ...config,
+      permission,
+    };
+  }
+
+  const wildcard = typeof permission["*"] === "string" ? permission["*"] : undefined;
+  if (wildcard === "ask" || wildcard === "deny") {
+    return {
+      ...config,
+      permission,
+    };
+  }
+
+  return {
+    ...config,
+    permission: {
+      ...permission,
+      bash: STUDIO_RISKY_BASH_PERMISSION_RULES,
+    },
+  };
+}
+
 export function applyStudioOpencodeConfigPolicy(config: JsonObject): JsonObject {
-  return mergePlainObjects(config, STUDIO_OPENCODE_CONFIG_OVERRIDES);
+  return applyStudioBashPermissionPolicy(
+    mergePlainObjects(
+      normalizePermissionConfigShape(config),
+      STUDIO_OPENCODE_CONFIG_OVERRIDES,
+    ),
+  );
 }
 
 export function buildStudioOpencodeConfigContent(

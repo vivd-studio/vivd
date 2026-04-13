@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -125,6 +135,7 @@ export default function NewsletterProjectPage({
   >("all");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [unsubscribeEmail, setUnsubscribeEmail] = useState<string | null>(null);
   const limit = 100;
 
   const projectListQuery = trpc.project.list.useQuery(undefined, {
@@ -298,6 +309,21 @@ export default function NewsletterProjectPage({
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       })),
+    );
+  };
+
+  const confirmUnsubscribe = () => {
+    if (!unsubscribeEmail) return;
+    actionMutation.mutate(
+      {
+        slug: projectSlug,
+        pluginId: typedPluginId,
+        actionId: "unsubscribe",
+        args: [unsubscribeEmail],
+      },
+      {
+        onSettled: () => setUnsubscribeEmail(null),
+      },
     );
   };
 
@@ -508,14 +534,7 @@ export default function NewsletterProjectPage({
                                 size="sm"
                                 variant="outline"
                                 disabled={actionMutation.isPending}
-                                onClick={() =>
-                                  actionMutation.mutate({
-                                    slug: projectSlug,
-                                    pluginId: typedPluginId,
-                                    actionId: "unsubscribe",
-                                    args: [row.email],
-                                  })
-                                }
+                                onClick={() => setUnsubscribeEmail(row.email)}
                               >
                                 Unsubscribe
                               </Button>
@@ -684,6 +703,39 @@ export default function NewsletterProjectPage({
           </CardContent>
         </Card>
       </div>
+      <AlertDialog
+        open={Boolean(unsubscribeEmail)}
+        onOpenChange={(open) => {
+          if (!open && !actionMutation.isPending) {
+            setUnsubscribeEmail(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsubscribe subscriber?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unsubscribeEmail
+                ? `${unsubscribeEmail} will be marked as unsubscribed immediately. If they want back in, they will need to submit the signup form again and confirm from their email.`
+                : "This subscriber will be marked as unsubscribed immediately."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionMutation.isPending || !unsubscribeEmail}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmUnsubscribe();
+              }}
+            >
+              {actionMutation.isPending ? "Unsubscribing..." : "Unsubscribe"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsPageShell>
   );
 }

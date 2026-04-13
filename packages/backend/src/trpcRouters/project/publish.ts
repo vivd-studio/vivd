@@ -9,7 +9,14 @@ import { resolvePublishableArtifactState } from "../../services/project/ProjectA
 import { studioMachineProvider } from "../../services/studioMachines";
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../../services/project/StudioWorkspaceStateService";
-import { domainService } from "../../services/publish/DomainService";
+import {
+  domainService,
+  type DomainStatus,
+  type DomainType,
+  type DomainUsage,
+} from "../../services/publish/DomainService";
+import { installProfileService } from "../../services/system/InstallProfileService";
+import { instanceNetworkSettingsService } from "../../services/system/InstanceNetworkSettingsService";
 import type { ChecklistItem, ChecklistStatus } from "../../types/checklistTypes";
 
 function normalizeChecklistItemNote(note: string | null | undefined): string | undefined {
@@ -58,6 +65,50 @@ function summarizeChecklistItems(items: ChecklistItem[]): {
   }
 
   return { passed, failed, warnings, skipped };
+}
+
+type PublishTargetType = DomainType | "implicit_primary_host";
+type PublishTargetStatus = DomainStatus | "implicit";
+
+type ProjectPublishTarget = {
+  domain: string;
+  usage: DomainUsage;
+  type: PublishTargetType;
+  status: PublishTargetStatus;
+  current: boolean;
+  primaryHost: boolean;
+  available: boolean;
+  blockedReason?: string;
+  url: string;
+  recommended: boolean;
+};
+
+function buildPublishTargetUrl(domain: string): string {
+  const urlScheme = publishService.isDevDomain(domain) ? "http" : "https";
+  return `${urlScheme}://${domain}`;
+}
+
+function pickRecommendedPublishDomain(
+  targets: Array<Omit<ProjectPublishTarget, "recommended">>,
+  currentPublishedDomain: string | null,
+): string | null {
+  const availableTargets = targets.filter((target) => target.available);
+  if (currentPublishedDomain) {
+    const current = availableTargets.find((target) => target.domain === currentPublishedDomain);
+    if (current) return current.domain;
+  }
+
+  const preferredTenantHost = availableTargets.find((target) => target.usage === "tenant_host");
+  if (preferredTenantHost) return preferredTenantHost.domain;
+
+  const primaryHost = availableTargets.find((target) => target.primaryHost);
+  if (primaryHost) return primaryHost.domain;
+
+  if (availableTargets.length === 1) {
+    return availableTargets[0]!.domain;
+  }
+
+  return null;
 }
 
 export const projectPublishProcedures = {
@@ -203,6 +254,140 @@ export const projectPublishProcedures = {
         publishedAt: info.publishedAt.toISOString(),
         url: `${urlScheme}://${info.domain}`,
         projectVersion: info.projectVersion,
+      };
+    }),
+
+  publishTargets: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const [instancePolicy, publishedInfo, organizationDomains] = await Promise.all([
+        installProfileService.resolvePolicy(),
+        publishService.getPublishedInfo(organizationId, input.slug),
+        domainService.listOrganizationDomains(organizationId),
+      ]);
+
+      const primaryHost =
+        instancePolicy.installProfile === "solo"
+          ? domainService.normalizeDomain(
+              instanceNetworkSettingsService.getResolvedSettings().publicHost ?? "",
+            ) || null
+          : null;
+
+      const candidates = new Map<
+        string,
+        {
+          domain: string;
+          usage: DomainUsage;
+          type: PublishTargetType;
+          status: PublishTargetStatus;
+          current: boolean;
+          primaryHost: boolean;
+        }
+      >();
+
+      for (const row of organizationDomains) {
+        candidates.set(row.domain, {
+          domain: row.domain,
+          usage: row.usage as DomainUsage,
+          type: row.type as DomainType,
+          status: row.status as DomainStatus,
+          current: false,
+          primaryHost: false,
+        });
+      }
+
+      if (publishedInfo?.domain) {
+        const existing = candidates.get(publishedInfo.domain);
+        candidates.set(publishedInfo.domain, {
+          domain: publishedInfo.domain,
+          usage: existing?.usage ?? "publish_target",
+          type: existing?.type ?? "custom_domain",
+          status: existing?.status ?? "active",
+          current: true,
+          primaryHost: existing?.primaryHost ?? false,
+        });
+      }
+
+      if (primaryHost) {
+        const existing = candidates.get(primaryHost);
+        candidates.set(primaryHost, {
+          domain: primaryHost,
+          usage: "publish_target",
+          type: "implicit_primary_host",
+          status: "implicit",
+          current: existing?.current ?? publishedInfo?.domain === primaryHost,
+          primaryHost: true,
+        });
+      }
+
+      const targets = await Promise.all(
+        Array.from(candidates.values()).map(async (candidate) => {
+          const allowlist = await domainService.ensurePublishDomainEnabled({
+            organizationId,
+            domain: candidate.domain,
+          });
+          const available = allowlist.enabled
+            ? await publishService.isDomainAvailable(candidate.domain, {
+                organizationId,
+                projectSlug: input.slug,
+              })
+            : false;
+
+          return {
+            ...candidate,
+            available,
+            blockedReason: allowlist.enabled
+              ? available
+                ? undefined
+                : "Domain is already in use"
+              : allowlist.message || "Domain is not enabled for this organization",
+            url: buildPublishTargetUrl(candidate.domain),
+          } satisfies Omit<ProjectPublishTarget, "recommended">;
+        }),
+      );
+
+      const recommendedDomain = pickRecommendedPublishDomain(
+        targets,
+        publishedInfo?.domain ?? null,
+      );
+
+      return {
+        projectSlug: input.slug,
+        currentPublishedDomain: publishedInfo?.domain ?? null,
+        recommendedDomain,
+        targets: targets
+          .map((target) => ({
+            ...target,
+            recommended: target.domain === recommendedDomain,
+          }))
+          .sort((left, right) => {
+            const leftPriority = [
+              left.current ? 0 : 1,
+              left.recommended ? 0 : 1,
+              left.available ? 0 : 1,
+              left.usage === "tenant_host" ? 0 : 1,
+              left.primaryHost ? 0 : 1,
+            ];
+            const rightPriority = [
+              right.current ? 0 : 1,
+              right.recommended ? 0 : 1,
+              right.available ? 0 : 1,
+              right.usage === "tenant_host" ? 0 : 1,
+              right.primaryHost ? 0 : 1,
+            ];
+
+            for (let index = 0; index < leftPriority.length; index += 1) {
+              const difference = leftPriority[index]! - rightPriority[index]!;
+              if (difference !== 0) return difference;
+            }
+
+            return left.domain.localeCompare(right.domain);
+          }),
       };
     }),
 

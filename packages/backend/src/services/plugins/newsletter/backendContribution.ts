@@ -9,6 +9,7 @@ import {
   projectPluginInstance,
 } from "../../../db/schema";
 import { getEmailDeliveryService } from "../../integrations/EmailDeliveryService";
+import { buildNewsletterConfirmationEmail } from "../../email/templates";
 import { pluginEntitlementService } from "../PluginEntitlementService";
 import {
   ensureProjectPluginInstance,
@@ -22,8 +23,16 @@ import {
   normalizeHostCandidate,
 } from "../runtime/hostUtils";
 
-export const newsletterPluginBackendContribution =
-  newsletterBackendPluginPackage.backend.createContribution({
+type NewsletterBackendContribution = ReturnType<
+  typeof newsletterBackendPluginPackage.backend.createContribution
+>;
+
+let cachedNewsletterPluginBackendContribution:
+  | NewsletterBackendContribution
+  | null = null;
+
+function createNewsletterBackendContribution(): NewsletterBackendContribution {
+  return newsletterBackendPluginPackage.backend.createContribution({
     db,
     tables: {
       newsletterSubscriber,
@@ -74,9 +83,48 @@ export const newsletterPluginBackendContribution =
       normalizeHostCandidate,
     },
     emailDeliveryService: getEmailDeliveryService(),
+    emailTemplates: {
+      buildConfirmationEmail(options) {
+        return buildNewsletterConfirmationEmail(options);
+      },
+    },
   });
+}
 
-export const newsletterPluginService = newsletterPluginBackendContribution.service;
-export const newsletterPluginModule = newsletterPluginBackendContribution.module;
-export const newsletterPluginPublicRoutes =
-  newsletterPluginBackendContribution.publicRoutes;
+export function getNewsletterPluginBackendContribution(): NewsletterBackendContribution {
+  if (!cachedNewsletterPluginBackendContribution) {
+    cachedNewsletterPluginBackendContribution =
+      createNewsletterBackendContribution();
+  }
+
+  return cachedNewsletterPluginBackendContribution;
+}
+
+export const newsletterPluginBackendContribution = {} as NewsletterBackendContribution;
+
+Object.defineProperties(newsletterPluginBackendContribution, {
+  service: {
+    enumerable: true,
+    get() {
+      return getNewsletterPluginBackendContribution().service;
+    },
+  },
+  module: {
+    enumerable: true,
+    get() {
+      return getNewsletterPluginBackendContribution().module;
+    },
+  },
+  hooks: {
+    enumerable: true,
+    get() {
+      return getNewsletterPluginBackendContribution().hooks;
+    },
+  },
+  publicRoutes: {
+    enumerable: true,
+    get() {
+      return getNewsletterPluginBackendContribution().publicRoutes;
+    },
+  },
+});

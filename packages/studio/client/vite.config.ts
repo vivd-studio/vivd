@@ -12,6 +12,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@studio/shared": path.resolve(__dirname, "../shared"),
+      "@vivd/installed-plugins": path.resolve(
+        __dirname,
+        "../../installed-plugins/src",
+      ),
       "@vivd/plugin-analytics": path.resolve(
         __dirname,
         "../../plugin-analytics/src",
