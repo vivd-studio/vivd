@@ -26,6 +26,8 @@ export interface PluginPackageManifest<
   manifestVersion: 1;
 }
 
+export type PluginStopFn = () => void;
+
 export function definePluginPackageManifest<
   const T extends PluginPackageManifest,
 >(manifest: T): T {

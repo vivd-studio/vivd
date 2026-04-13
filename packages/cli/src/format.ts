@@ -618,6 +618,42 @@ export function formatGenericPluginReadReport(input: {
   ].join("\n");
 }
 
+export function formatPluginSnippetsReport(input: {
+  pluginId: string;
+  pluginName: string;
+  selectedSnippetName: string | null;
+  snippets: Record<string, unknown>;
+}): string {
+  const snippetEntries = Object.entries(input.snippets);
+  const availableSnippetNames = snippetEntries.map(([name]) => name);
+  const formatSnippetBody = (value: unknown): string =>
+    typeof value === "string" ? value : formatJson(value);
+
+  if (input.selectedSnippetName) {
+    const selectedValue = input.snippets[input.selectedSnippetName];
+    return [
+      `${input.pluginName} snippet`,
+      `Plugin ID: ${input.pluginId}`,
+      `Snippet: ${input.selectedSnippetName}`,
+      `Available snippets: ${availableSnippetNames.join(", ") || "none"}`,
+      "",
+      formatSnippetBody(selectedValue),
+    ].join("\n");
+  }
+
+  return [
+    `${input.pluginName} snippets`,
+    `Plugin ID: ${input.pluginId}`,
+    `Available snippets: ${availableSnippetNames.join(", ") || "none"}`,
+    "",
+    ...snippetEntries.flatMap(([name, value], index) => [
+      `[${name}]`,
+      formatSnippetBody(value),
+      ...(index < snippetEntries.length - 1 ? [""] : []),
+    ]),
+  ].join("\n");
+}
+
 export function formatPublishChecklistReport(input: {
   checklist: {
     projectSlug: string;

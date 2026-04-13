@@ -96,12 +96,14 @@ export const analyticsCliModule: PluginCliModule = {
     lines: [
       "Preferred generic equivalents:",
       "vivd plugins info analytics",
+      "vivd plugins snippets analytics [html|astro]",
       "vivd plugins config show analytics",
       "vivd plugins config template analytics",
       "vivd plugins config apply analytics --file config.json",
       "Compatibility alias:",
       "vivd plugins analytics info",
       "Analytics info shows the script endpoint, public token, and integration guidance.",
+      "Use `vivd plugins snippets analytics [html|astro]` to print the full install snippet.",
     ],
   },
   renderInfo(info) {

@@ -1,5 +1,7 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { contactFormPluginConfigSchema } from "./config";
+import { startContactSubmissionRetentionJob } from "./retention";
+import { startContactFormTurnstileSyncJob } from "./turnstile";
 import type { ContactFormAdminHooksDeps } from "./ports";
 
 type ContactFormIssueCode =
@@ -288,6 +290,66 @@ export function createContactFormPluginBackendHooks(
       if (!widgetId) return;
 
       await deps.turnstileService.deleteWidget(widgetId);
+    },
+
+    async renameProjectSlugData(options: {
+      tx: {
+        update(table: any): any;
+      };
+      organizationId: string;
+      oldSlug: string;
+      newSlug: string;
+    }): Promise<number> {
+      const updatedContactSubmissions = await options.tx
+        .update(deps.tables.contactFormSubmission)
+        .set({ projectSlug: options.newSlug })
+        .where(
+          and(
+            eq(
+              deps.tables.contactFormSubmission.organizationId,
+              options.organizationId,
+            ),
+            eq(deps.tables.contactFormSubmission.projectSlug, options.oldSlug),
+          ),
+        )
+        .returning({ id: deps.tables.contactFormSubmission.id });
+
+      const updatedRecipientVerifications = await options.tx
+        .update(deps.tables.contactFormRecipientVerification)
+        .set({ projectSlug: options.newSlug, updatedAt: new Date() })
+        .where(
+          and(
+            eq(
+              deps.tables.contactFormRecipientVerification.organizationId,
+              options.organizationId,
+            ),
+            eq(
+              deps.tables.contactFormRecipientVerification.projectSlug,
+              options.oldSlug,
+            ),
+          ),
+        )
+        .returning({ id: deps.tables.contactFormRecipientVerification.id });
+
+      return (
+        updatedContactSubmissions.length + updatedRecipientVerifications.length
+      );
+    },
+
+    startBackgroundJobs() {
+      const stopContactSubmissionRetention = startContactSubmissionRetentionJob({
+        db: deps.db,
+        tables: {
+          contactFormSubmission: deps.tables.contactFormSubmission,
+        },
+      });
+      const stopContactFormTurnstileSync =
+        startContactFormTurnstileSyncJob(deps.turnstileService);
+
+      return [
+        stopContactSubmissionRetention,
+        stopContactFormTurnstileSync,
+      ] as const;
     },
   };
 }

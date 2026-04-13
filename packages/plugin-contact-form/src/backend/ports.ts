@@ -305,6 +305,7 @@ export interface ContactFormRetentionDeps {
 
 export interface ContactFormAdminHooksDatabase {
   select(...args: any[]): any;
+  delete(table: any): any;
   query: {
     pluginEntitlement: {
       findMany(args: any): Promise<any[]>;
@@ -324,8 +325,11 @@ export interface ContactFormAdminHooksDeps {
   turnstileService: Pick<
     ContactFormTurnstileServicePort,
     | "getAutomationConfigurationIssue"
+    | "getSyncIntervalMs"
+    | "isAutomationConfigured"
     | "prepareProjectWidgetCredentials"
     | "deleteWidget"
+    | "syncAllProjectEntitlements"
   >;
 }
 

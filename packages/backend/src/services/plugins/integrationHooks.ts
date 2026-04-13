@@ -1,6 +1,8 @@
+import type { PluginStopFn } from "@vivd/shared/types";
 import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";
+import type { BackendPluginIntegrationHooks } from "./descriptors";
 import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
 import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
 import { newsletterPluginBackendHooks } from "./newsletter/backendHooks";
@@ -24,32 +26,7 @@ export interface BackendPluginProjectUsageCount {
 
 const backendPluginHooks = new Map<
   PluginId,
-  {
-    listProjectUsageCounts?: (options: {
-      organizationId?: string;
-      startedAt: Date;
-    }) => Promise<BackendPluginProjectUsageCount[]>;
-    buildOrganizationProjectSummaries?: (options: {
-      organizationId: string;
-      projectSlugs: string[];
-      instancesByProjectSlug: Map<
-        string,
-        OrganizationPluginInstanceSnapshot | null
-      >;
-    }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>;
-    prepareProjectEntitlementFields?: (options: {
-      organizationId: string;
-      projectSlug: string;
-      state: PluginEntitlementState;
-      turnstileEnabled: boolean;
-      existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
-    }) => Promise<PreparedPluginEntitlementFields>;
-    cleanupProjectEntitlementFields?: (options: {
-      state: PluginEntitlementState;
-      turnstileEnabled: boolean;
-      existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
-    }) => Promise<void>;
-  }
+  BackendPluginIntegrationHooks
 >([
   ["contact_form", contactFormPluginBackendHooks],
   ["analytics", analyticsPluginBackendHooks],
@@ -162,6 +139,28 @@ const superAdminEntitlementHooks = new Map<PluginId, SuperAdminEntitlementHook>(
   }),
 );
 
+const projectSlugRenameHooks = new Map<
+  PluginId,
+  NonNullable<BackendPluginIntegrationHooks["renameProjectSlugData"]>
+>(
+  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
+    hooks.renameProjectSlugData
+      ? [[pluginId, hooks.renameProjectSlugData] as const]
+      : [],
+  ),
+);
+
+const backgroundJobHooks = new Map<
+  PluginId,
+  NonNullable<BackendPluginIntegrationHooks["startBackgroundJobs"]>
+>(
+  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
+    hooks.startBackgroundJobs
+      ? [[pluginId, hooks.startBackgroundJobs] as const]
+      : [],
+  ),
+);
+
 export async function preparePluginProjectEntitlementFields(options: {
   pluginId: PluginId;
   organizationId: string;
@@ -192,4 +191,44 @@ export async function cleanupPluginProjectEntitlementFields(options: {
   const hook = superAdminEntitlementHooks.get(options.pluginId);
   if (!hook) return;
   await hook.cleanupProjectEntitlementFields(options);
+}
+
+export async function renamePluginProjectDataForSlugChange(options: {
+  tx: {
+    update(table: any): any;
+  };
+  organizationId: string;
+  oldSlug: string;
+  newSlug: string;
+}): Promise<number> {
+  let movedRows = 0;
+  for (const hook of projectSlugRenameHooks.values()) {
+    movedRows += await hook(options);
+  }
+  return movedRows;
+}
+
+function normalizePluginStopFns(
+  result: void | PluginStopFn | readonly PluginStopFn[],
+): PluginStopFn[] {
+  if (!result) return [];
+  if (Array.isArray(result)) {
+    return result.filter((stop): stop is PluginStopFn => typeof stop === "function");
+  }
+  return typeof result === "function" ? [result] : [];
+}
+
+export function startInstalledPluginBackgroundJobs(): PluginStopFn {
+  const stopFns = [...backgroundJobHooks.values()].flatMap((hook) =>
+    normalizePluginStopFns(hook()),
+  );
+  let stopped = false;
+
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    for (const stop of stopFns) {
+      stop();
+    }
+  };
 }

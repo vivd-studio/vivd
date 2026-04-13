@@ -16,8 +16,7 @@ import { domainService } from "./services/publish/DomainService";
 import { startStudioMachineReconciler } from "./services/studioMachines";
 import { createPublicPluginsRouter } from "./httpRoutes/plugins";
 import { createContactRecipientVerificationRouter } from "./httpRoutes/plugins/contactForm/recipientVerification";
-import { startContactSubmissionRetentionJob } from "./services/plugins/contactForm/retention";
-import { startContactFormTurnstileSyncJob } from "./services/plugins/contactForm/turnstile";
+import { startInstalledPluginBackgroundJobs } from "./services/plugins/integrationHooks";
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
 import { publishService } from "./services/publish/PublishService";
 import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
@@ -214,15 +213,13 @@ async function startServer() {
     console.log(`Server running on port ${PORT}`);
 
     startStudioMachineReconciler();
-    const stopContactSubmissionRetention = startContactSubmissionRetentionJob();
-    const stopContactFormTurnstileSync = startContactFormTurnstileSyncJob();
+    const stopPluginBackgroundJobs = startInstalledPluginBackgroundJobs();
     let hasShutdown = false;
 
     const cleanup = () => {
       if (hasShutdown) return;
       hasShutdown = true;
-      stopContactSubmissionRetention();
-      stopContactFormTurnstileSync();
+      stopPluginBackgroundJobs();
       console.log("[Server] Shutting down...");
     };
 

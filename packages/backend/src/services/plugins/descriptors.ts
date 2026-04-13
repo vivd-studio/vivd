@@ -5,6 +5,7 @@ import { definePluginPackageDescriptors } from "@vivd/shared/types";
 import type {
   PluginModule as SharedPluginModule,
   PluginPackageDescriptor,
+  PluginStopFn,
 } from "@vivd/shared/types";
 import type express from "express";
 import type { Multer } from "multer";
@@ -70,6 +71,18 @@ export interface BackendPluginIntegrationHooks {
       turnstileSecretKey: string | null;
     } | null;
   }) => Promise<void>;
+  renameProjectSlugData?: (options: {
+    tx: {
+      update(table: any): any;
+    };
+    organizationId: string;
+    oldSlug: string;
+    newSlug: string;
+  }) => Promise<number>;
+  startBackgroundJobs?: () =>
+    | void
+    | PluginStopFn
+    | readonly PluginStopFn[];
 }
 
 export type PublicPluginRouterDeps = {

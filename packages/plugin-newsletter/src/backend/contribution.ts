@@ -22,16 +22,7 @@ import { createNewsletterUnsubscribeRouter } from "./http/unsubscribe";
 export interface NewsletterPluginBackendContribution {
   service: NewsletterPluginService;
   module: PluginModule<"newsletter">;
-  hooks: {
-    listProjectUsageCounts(options: {
-      organizationId?: string;
-      startedAt: Date;
-    }): Promise<Array<{
-      organizationId: string;
-      projectSlug: string;
-      count: number;
-    }>>;
-  };
+  hooks: ReturnType<typeof createNewsletterPluginBackendHooks>;
   publicRoutes: ReadonlyArray<NewsletterBackendRouteDefinition>;
 }
 
@@ -102,6 +93,7 @@ export function createNewsletterPluginBackendContribution(
       db: deps.db,
       tables: {
         newsletterSubscriber: deps.tables.newsletterSubscriber,
+        newsletterActionToken: deps.tables.newsletterActionToken,
       },
     }),
     publicRoutes: [

@@ -45,5 +45,44 @@ export function createNewsletterPluginBackendHooks(
         count: Number(row.count) || 0,
       }));
     },
+
+    async renameProjectSlugData(options: {
+      tx: {
+        update(table: any): any;
+      };
+      organizationId: string;
+      oldSlug: string;
+      newSlug: string;
+    }): Promise<number> {
+      const updatedSubscribers = await options.tx
+        .update(deps.tables.newsletterSubscriber)
+        .set({ projectSlug: options.newSlug, updatedAt: new Date() })
+        .where(
+          and(
+            eq(
+              deps.tables.newsletterSubscriber.organizationId,
+              options.organizationId,
+            ),
+            eq(deps.tables.newsletterSubscriber.projectSlug, options.oldSlug),
+          ),
+        )
+        .returning({ id: deps.tables.newsletterSubscriber.id });
+
+      const updatedActionTokens = await options.tx
+        .update(deps.tables.newsletterActionToken)
+        .set({ projectSlug: options.newSlug })
+        .where(
+          and(
+            eq(
+              deps.tables.newsletterActionToken.organizationId,
+              options.organizationId,
+            ),
+            eq(deps.tables.newsletterActionToken.projectSlug, options.oldSlug),
+          ),
+        )
+        .returning({ id: deps.tables.newsletterActionToken.id });
+
+      return updatedSubscribers.length + updatedActionTokens.length;
+    },
   };
 }

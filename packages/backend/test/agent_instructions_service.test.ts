@@ -47,6 +47,7 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("vivd preview status");
     expect(result.instructions).toContain("vivd plugins catalog");
     expect(result.instructions).toContain("vivd plugins info <pluginId>");
+    expect(result.instructions).toContain("vivd plugins snippets <pluginId> [snippetName]");
     expect(result.instructions).toContain("vivd plugins config show <pluginId>");
     expect(result.instructions).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(result.instructions).toContain("vivd publish targets");
@@ -55,6 +56,9 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("Use `vivd <command> help` to drill into the relevant area.");
     expect(result.instructions).toContain(
       "If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.",
+    );
+    expect(result.instructions).toContain(
+      "When a plugin exposes install markup, use `vivd plugins snippets <pluginId> [snippetName]` to fetch the exact snippet instead of recreating it by hand.",
     );
     expect(result.instructions).toContain(
       "For publish work, check `vivd publish status` and `vivd publish targets` first. Publishing requires the current saved Studio snapshot to be prepared; run `vivd publish prepare` when needed before `vivd publish deploy`.",

@@ -106,6 +106,10 @@ export function renderVivdCliRootHelp(
         description: "Show plugin state, usage hints, and supported capabilities",
       },
       {
+        command: "vivd plugins snippets <pluginId> [snippetName]",
+        description: "Print full install snippets for a plugin, optionally selecting one variant such as html or astro",
+      },
+      {
         command: "vivd plugins read <pluginId> <readId> [--file <json>]",
         description: "Run a declared plugin read and print its JSON result",
       },
@@ -210,6 +214,7 @@ export function renderVivdCliRootHelp(
       "$ vivd doctor",
       "$ vivd preview status",
       "$ vivd plugins catalog",
+      "$ vivd plugins snippets newsletter html",
       "$ vivd publish status",
       "$ vivd publish targets",
       "$ vivd publish prepare",

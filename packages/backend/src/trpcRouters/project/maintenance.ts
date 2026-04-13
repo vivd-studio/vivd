@@ -27,11 +27,6 @@ import fs from "fs";
 import { publishService } from "../../services/publish/PublishService";
 import { db } from "../../db";
 import {
-  analyticsEvent,
-  contactFormRecipientVerification,
-  contactFormSubmission,
-  newsletterActionToken,
-  newsletterSubscriber,
   organization,
   pluginEntitlement,
   projectMember,
@@ -73,6 +68,7 @@ import { projectMetaService } from "../../services/project/ProjectMetaService";
 import { getProjectArtifactKeyPrefix } from "../../services/project/ProjectStoragePaths";
 import { rewriteProjectArtifactKeyForSlug } from "../../services/project/slugRename";
 import { projectStatusOverrideService } from "../../services/project/ProjectStatusOverrideService";
+import { renamePluginProjectDataForSlugChange } from "../../services/plugins/integrationHooks";
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -364,65 +360,12 @@ export const projectMaintenanceProcedures = {
             .returning({ id: projectPluginInstance.id });
           dbRowsMoved += updatedPlugins.length;
 
-          const updatedContactSubmissions = await tx
-            .update(contactFormSubmission)
-            .set({ projectSlug: newSlug })
-            .where(
-              and(
-                eq(contactFormSubmission.organizationId, organizationId),
-                eq(contactFormSubmission.projectSlug, oldSlug),
-              ),
-            )
-            .returning({ id: contactFormSubmission.id });
-          dbRowsMoved += updatedContactSubmissions.length;
-
-          const updatedRecipientVerifications = await tx
-            .update(contactFormRecipientVerification)
-            .set({ projectSlug: newSlug, updatedAt: new Date() })
-            .where(
-              and(
-                eq(contactFormRecipientVerification.organizationId, organizationId),
-                eq(contactFormRecipientVerification.projectSlug, oldSlug),
-              ),
-            )
-            .returning({ id: contactFormRecipientVerification.id });
-          dbRowsMoved += updatedRecipientVerifications.length;
-
-          const updatedAnalytics = await tx
-            .update(analyticsEvent)
-            .set({ projectSlug: newSlug })
-            .where(
-              and(
-                eq(analyticsEvent.organizationId, organizationId),
-                eq(analyticsEvent.projectSlug, oldSlug),
-              ),
-            )
-            .returning({ id: analyticsEvent.id });
-          dbRowsMoved += updatedAnalytics.length;
-
-          const updatedNewsletterSubscribers = await tx
-            .update(newsletterSubscriber)
-            .set({ projectSlug: newSlug, updatedAt: new Date() })
-            .where(
-              and(
-                eq(newsletterSubscriber.organizationId, organizationId),
-                eq(newsletterSubscriber.projectSlug, oldSlug),
-              ),
-            )
-            .returning({ id: newsletterSubscriber.id });
-          dbRowsMoved += updatedNewsletterSubscribers.length;
-
-          const updatedNewsletterTokens = await tx
-            .update(newsletterActionToken)
-            .set({ projectSlug: newSlug })
-            .where(
-              and(
-                eq(newsletterActionToken.organizationId, organizationId),
-                eq(newsletterActionToken.projectSlug, oldSlug),
-              ),
-            )
-            .returning({ id: newsletterActionToken.id });
-          dbRowsMoved += updatedNewsletterTokens.length;
+          dbRowsMoved += await renamePluginProjectDataForSlugChange({
+            tx,
+            organizationId,
+            oldSlug,
+            newSlug,
+          });
 
           const updatedMembers = await tx
             .update(projectMember)

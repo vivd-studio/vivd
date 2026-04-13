@@ -188,6 +188,7 @@ export const newsletterCliModule: PluginCliModule = {
       "",
       "Commands:",
       "  vivd plugins info newsletter",
+      "  vivd plugins snippets newsletter [html|astro]",
       "  vivd plugins config show newsletter",
       "  vivd plugins config template newsletter",
       "  vivd plugins config apply newsletter --file config.json",
@@ -196,6 +197,7 @@ export const newsletterCliModule: PluginCliModule = {
       "  vivd plugins action newsletter unsubscribe <email>",
       "  vivd plugins read newsletter summary --file input.json",
       "  vivd plugins read newsletter subscribers --file input.json",
+      "Use `vivd plugins snippets newsletter [html|astro]` to print the full install snippet.",
     ],
   },
   genericRendererModes: {

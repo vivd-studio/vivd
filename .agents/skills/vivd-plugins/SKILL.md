@@ -141,7 +141,7 @@ Use this sequence:
    - Support generic info/config/action flows when possible
    - Prefer a host adapter that binds backend runtime/services into a plugin-owned module factory
    - Keep plugin-specific router payloads thin, but keep compatibility tRPC routers in backend host adapters rather than making extracted plugin packages import `@vivd/backend/src/...`
-   - If organization overview or super-admin/plugin-entitlement flows need plugin-specific behavior, put that behavior in plugin-owned backend hooks and register it through `packages/backend/src/services/plugins/integrationHooks.ts`
+   - If organization overview, super-admin/plugin-entitlement flows, background jobs, or plugin-owned project-maintenance work need plugin-specific behavior, put that behavior in plugin-owned backend hooks and register it through `packages/backend/src/services/plugins/integrationHooks.ts`
 
 3. Wire shared UI metadata.
    - Keep the shared UI types/helpers in `packages/shared/src/types/plugins.ts`

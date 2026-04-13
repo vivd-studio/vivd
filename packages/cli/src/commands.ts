@@ -35,6 +35,7 @@ import {
   formatPublishChecklistUpdateReport,
   formatPublishDeployReport,
   formatPublishPrepareReport,
+  formatPluginSnippetsReport,
   formatPublishStatusReport,
   formatPublishTargetsReport,
   formatPublishUnpublishReport,
@@ -334,6 +335,7 @@ const GENERAL_HELP: Record<string, string> = {
   plugins: [
     "vivd plugins catalog",
     "vivd plugins info <pluginId>",
+    "vivd plugins snippets <pluginId> [snippetName]",
     "vivd plugins read <pluginId> <readId> [--file input.json]",
     "vivd plugins config show <pluginId>",
     "vivd plugins config template <pluginId>",
@@ -341,6 +343,7 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins action <pluginId> <actionId> [args...]",
     "Current first-party shortcut examples:",
     "vivd plugins contact info",
+    "vivd plugins snippets contact_form html",
     "vivd plugins contact config show",
     "vivd plugins contact config template",
     "vivd plugins contact config apply --file config.json",
@@ -1136,6 +1139,69 @@ async function getPluginInfoContract(
   })) as PluginCliInfoContractPayload;
 }
 
+function normalizeSnippetEntries(
+  snippets: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!snippets || typeof snippets !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(snippets).filter(([, value]) => value != null),
+  );
+}
+
+async function runPluginSnippetsGeneric(
+  pluginId: string,
+  snippetName: string | undefined,
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const info = await getPluginInfoContract(runtime, pluginId);
+    const snippets = normalizeSnippetEntries(info.snippets);
+    const availableSnippetNames = Object.keys(snippets);
+
+    if (availableSnippetNames.length === 0) {
+      throw new Error(
+        `Plugin ${pluginId} does not have install snippets available right now.`,
+      );
+    }
+
+    const requestedSnippetName =
+      (snippetName ?? flags.format ?? "").trim() || null;
+    if (requestedSnippetName && !(requestedSnippetName in snippets)) {
+      throw new Error(
+        `Unknown snippet "${requestedSnippetName}" for plugin ${pluginId}. Available snippets: ${availableSnippetNames.join(", ")}.`,
+      );
+    }
+
+    const data = requestedSnippetName
+      ? {
+          pluginId,
+          pluginName: info.catalog.name,
+          snippetName: requestedSnippetName,
+          snippet: snippets[requestedSnippetName],
+          availableSnippetNames,
+        }
+      : {
+          pluginId,
+          pluginName: info.catalog.name,
+          snippets,
+          availableSnippetNames,
+        };
+
+    return jsonResult(
+      data,
+      formatPluginSnippetsReport({
+        pluginId,
+        pluginName: info.catalog.name,
+        selectedSnippetName: requestedSnippetName,
+        snippets,
+      }),
+    );
+  });
+}
+
 async function runPluginsInfoGeneric(
   pluginId: string,
   flags: CliFlags,
@@ -1847,6 +1913,9 @@ export async function dispatchCli(
       if (second === "catalog") {
         return runPluginsCatalog(parsed.flags);
       }
+      if (second === "snippets" && third) {
+        return runPluginSnippetsGeneric(third, rest[0], parsed.flags);
+      }
       {
         const aliasResult = await runResolvedCliPluginAlias(tokens.slice(1), parsed.flags, cwd);
         if (aliasResult) {
@@ -1855,6 +1924,13 @@ export async function dispatchCli(
       }
       if (second === "info" && third) {
         return runPluginsInfoGeneric(third, parsed.flags);
+      }
+      if (
+        second === "read" &&
+        third &&
+        (rest[0] === "snippet" || rest[0] === "snippets")
+      ) {
+        return runPluginSnippetsGeneric(third, rest[1], parsed.flags);
       }
       if (second === "read" && third && rest[0]) {
         return runPluginReadGeneric(third, rest[0], parsed.flags, cwd);

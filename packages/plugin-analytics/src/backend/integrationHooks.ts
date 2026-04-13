@@ -38,5 +38,27 @@ export function createAnalyticsPluginBackendHooks(
         count: Number(row.count) || 0,
       }));
     },
+
+    async renameProjectSlugData(options: {
+      tx: {
+        update(table: any): any;
+      };
+      organizationId: string;
+      oldSlug: string;
+      newSlug: string;
+    }): Promise<number> {
+      const updatedAnalyticsEvents = await options.tx
+        .update(deps.tables.analyticsEvent)
+        .set({ projectSlug: options.newSlug })
+        .where(
+          and(
+            eq(deps.tables.analyticsEvent.organizationId, options.organizationId),
+            eq(deps.tables.analyticsEvent.projectSlug, options.oldSlug),
+          ),
+        )
+        .returning({ id: deps.tables.analyticsEvent.id });
+
+      return updatedAnalyticsEvents.length;
+    },
   };
 }

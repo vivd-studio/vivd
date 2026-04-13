@@ -294,6 +294,7 @@ export const contactFormCliModule: PluginCliModule = {
     lines: [
       "Preferred generic equivalents:",
       "vivd plugins info contact_form",
+      "vivd plugins snippets contact_form [html|astro]",
       "vivd plugins config show contact_form",
       "vivd plugins config template contact_form",
       "vivd plugins config apply contact_form --file config.json",
@@ -310,6 +311,7 @@ export const contactFormCliModule: PluginCliModule = {
       "vivd plugins contact recipients resend <email>",
       "Use --file - to read JSON config from stdin.",
       "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
+      "Use `vivd plugins snippets contact_form [html|astro]` to print the full install snippet.",
     ],
   },
   renderInfo(info) {

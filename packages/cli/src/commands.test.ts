@@ -1453,6 +1453,119 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("\"totalVisitors\": 123");
   });
 
+  it("prints full plugin snippets through the generic snippets command", async () => {
+    runtime.client.query.mockResolvedValue({
+      pluginId: "newsletter",
+      catalog: {
+        pluginId: "newsletter",
+        name: "Newsletter / Waitlist",
+        description: "Capture newsletter subscribers and waitlist signups.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+          reads: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_newsletter",
+      status: "enabled",
+      publicToken: "newsletter_public",
+      config: {
+        mode: "newsletter",
+      },
+      defaultConfig: {
+        mode: "newsletter",
+      },
+      snippets: {
+        html: "<form>newsletter-html</form>",
+        astro: "<NewsletterForm />",
+      },
+      usage: {
+        subscribeEndpoint: "https://api.example.test/plugins/newsletter/subscribe",
+      },
+      details: null,
+      instructions: ["Install the generated snippet."],
+    });
+
+    const result = await dispatchCli(["plugins", "snippets", "newsletter", "html"]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "newsletter",
+    });
+    expect(result.data).toEqual({
+      pluginId: "newsletter",
+      pluginName: "Newsletter / Waitlist",
+      snippetName: "html",
+      snippet: "<form>newsletter-html</form>",
+      availableSnippetNames: ["html", "astro"],
+    });
+    expect(result.human).toContain("Newsletter / Waitlist snippet");
+    expect(result.human).toContain("Snippet: html");
+    expect(result.human).toContain("<form>newsletter-html</form>");
+  });
+
+  it("treats legacy snippet reads as a compatibility path", async () => {
+    runtime.client.query.mockResolvedValue({
+      pluginId: "newsletter",
+      catalog: {
+        pluginId: "newsletter",
+        name: "Newsletter / Waitlist",
+        description: "Capture newsletter subscribers and waitlist signups.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+          reads: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_newsletter",
+      status: "enabled",
+      publicToken: "newsletter_public",
+      config: {
+        mode: "newsletter",
+      },
+      defaultConfig: {
+        mode: "newsletter",
+      },
+      snippets: {
+        html: "<form>newsletter-html</form>",
+        astro: "<NewsletterForm />",
+      },
+      usage: {
+        subscribeEndpoint: "https://api.example.test/plugins/newsletter/subscribe",
+      },
+      details: null,
+      instructions: ["Install the generated snippet."],
+    });
+
+    const result = await dispatchCli(["plugins", "read", "newsletter", "snippet"]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "newsletter",
+    });
+    expect(result.human).toContain("Newsletter / Waitlist snippets");
+    expect(result.human).toContain("[html]");
+    expect(result.human).toContain("[astro]");
+  });
+
   it("shows generic plugin config and template", async () => {
     runtime.client.query.mockResolvedValue({
       pluginId: "analytics",
@@ -1814,6 +1927,7 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("EXAMPLES");
     expect(rootHelp.human).toContain("vivd preview status");
     expect(rootHelp.human).toContain("vivd preview screenshot [path]");
+    expect(rootHelp.human).toContain("vivd plugins snippets <pluginId> [snippetName]");
     expect(rootHelp.human).toContain("vivd plugins read <pluginId> <readId> [--file <json>]");
     expect(rootHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(rootHelp.human).toContain("vivd plugins help");
@@ -1837,6 +1951,7 @@ describe("dispatchCli", () => {
     expect(previewHelp.human).toContain("vivd preview screenshot [path]");
     expect(previewHelp.human).toContain(".vivd/dropped-images/");
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
+    expect(pluginsHelp.human).toContain("vivd plugins snippets <pluginId> [snippetName]");
     expect(pluginsHelp.human).toContain("vivd plugins read <pluginId> <readId> [--file input.json]");
     expect(pluginsHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(publishHelp.human).toContain("vivd publish status");
@@ -1854,11 +1969,13 @@ describe("dispatchCli", () => {
     expect(supportHelp.human).toContain("Always ask the user for explicit permission");
     expect(contactHelp.human).toContain("vivd plugins contact info");
     expect(contactHelp.human).toContain("vivd plugins info contact_form");
+    expect(contactHelp.human).toContain("vivd plugins snippets contact_form [html|astro]");
     expect(contactHelp.human).toContain("vivd plugins contact config show");
     expect(contactHelp.human).toContain("vivd plugins contact recipients verify <email>");
     expect(contactHelp.human).toContain("vivd plugins contact recipients mark-verified <email>");
     expect(analyticsHelp.human).toContain("vivd plugins info analytics");
     expect(analyticsHelp.human).toContain("vivd plugins analytics info");
+    expect(analyticsHelp.human).toContain("vivd plugins snippets analytics [html|astro]");
   });
 
   it("hides support help from the root surface when no support email is configured", async () => {

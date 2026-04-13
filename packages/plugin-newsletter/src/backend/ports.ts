@@ -134,7 +134,10 @@ export interface NewsletterPluginServiceDeps {
 
 export interface NewsletterPluginIntegrationHooksDeps {
   db: NewsletterPluginDatabase;
-  tables: Pick<NewsletterPluginTables, "newsletterSubscriber">;
+  tables: Pick<
+    NewsletterPluginTables,
+    "newsletterSubscriber" | "newsletterActionToken"
+  >;
 }
 
 export interface NewsletterSubscribeInput {
