@@ -16,13 +16,13 @@ An AI-powered website builder and agentic website workflow that turns a brief, a
 
 ## What vivd is
 
-vivd is a website builder where AI is the interface. The practical goal is closer to "AI web agency in product form" than "chat on top of a toy editor": you create a project, describe what you want, and keep moving from first idea to the live site in one system.
+vivd is a website builder & hosting platform where AI is the interface. The practical goal is "AI web agency in product form": you create a project, describe what you want, and keep moving from first idea to the live site in one system.
 
-You can start from scratch or import an existing website, then keep shaping it in Studio with chat, direct edits, assets, preview, plugins, and publishing flows that all belong to the same project instead of a chain of separate tools.
+You can start from scratch or import an existing website (by scraping or uploading a ZIP), then keep shaping it in Studio with chat, direct edits, assets, preview, plugins, and publishing flows that all belong to the same project instead of a chain of separate tools.
 
 ![Vivd branded landing page shown beside the Studio chat workspace and embedded project preview](assets/new-screenshots/vivd-studio-vivd-dark.png)
 
-Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, so the agent works inside real project files rather than a toy canvas. In Astro-backed projects that means a real Astro workspace with Astro primitives, not a locked black-box builder. That matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, wire plugins into the same project, and solve publishing as part of the same system instead of handing you off to another stack at the end.
+Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, and builds on top of [Astro](https://astro.build), so the agent works with real project files and therefore has unlimited potential rather than being trapped in static templates. In Astro-backed projects that means a real Astro workspace with Astro primitives, not a locked black-box builder. That matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, wire plugins into the same project, and solve publishing as part of the same system instead of handing you off to another stack at the end. By adding in the CMS capabilities, the agent can also work with structured content, and the user can edit it over a structured form UI instead of a generic text editor.
 
 Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the product works both as a hosted offering and as your own one-host deployment.
 
