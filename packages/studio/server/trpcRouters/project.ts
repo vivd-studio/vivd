@@ -1,23 +1,6 @@
 import { router, publicProcedure } from "../trpc/trpc.js";
 import { z } from "zod";
 import { simpleGit } from "simple-git";
-import path from "path";
-import fs from "fs";
-import {
-  applyHtmlPatches,
-  type HtmlPatch,
-} from "../services/patching/HtmlPatchService.js";
-import {
-  applyAstroPatches,
-  hasAstroPatches,
-  type AstroPatch,
-} from "../services/patching/AstroPatchService.js";
-import {
-  applyI18nJsonPatches,
-  extractI18nPatches,
-  hasI18nPatches,
-  type I18nJsonPatch,
-} from "../services/patching/I18nJsonPatchService.js";
 import { devServerService } from "../services/project/DevServerService.js";
 import { detectProjectType } from "../services/project/projectType.js";
 import {
@@ -25,7 +8,6 @@ import {
   buildAndUploadPublished,
   syncSourceToBucket,
 } from "../services/sync/ArtifactSyncService.js";
-import { requestConnectedArtifactBuild } from "../services/sync/ConnectedArtifactBuildService.js";
 import {
   checkGitHubRepoExists,
   getGitHubSyncProjectInfo,
@@ -40,24 +22,13 @@ import { workspaceStateReporter } from "../services/reporting/WorkspaceStateRepo
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { Context } from "../trpc/context.js";
 import {
-  buildConnectedUserActionHeaders,
-  getConnectedUserActionAuthConfig,
-} from "../lib/connectedUserActionAuth.js";
-import {
   isConnectedMode,
 } from "@vivd/shared";
-
-// Dotfiles that are allowed in asset paths
-const ALLOWED_DOTFILES = [".vivd", ".gitignore", ".env.example"];
-
-function hasDotSegment(relativePath: string): boolean {
-  const normalized = relativePath.replace(/\\/g, "/");
-  const segments = normalized.split("/").filter(Boolean);
-  return segments.some(
-    (segment) =>
-      segment.startsWith(".") && !ALLOWED_DOTFILES.includes(segment)
-  );
-}
+import { previewProjectProcedures } from "./project.preview.js";
+import {
+  callConnectedBackendMutation,
+  callConnectedBackendQuery,
+} from "./project.shared.js";
 
 function readEnabledPluginsFromEnv(): string[] {
   const raw = (process.env.VIVD_ENABLED_PLUGINS || "").trim();
@@ -157,60 +128,6 @@ type ConnectedPublishTargetsResult = {
   }>;
 };
 
-async function callConnectedBackendQuery<T>(
-  ctx: Context,
-  procedure: string,
-  input: Record<string, unknown>,
-): Promise<T> {
-  const config = getConnectedUserActionAuthConfig(ctx.req);
-  if (!config) {
-    throw new Error("Connected Studio user action auth is not configured");
-  }
-
-  const response = await fetch(
-    `${config.backendUrl}/api/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`,
-    {
-      method: "GET",
-      headers: buildConnectedUserActionHeaders(config, {
-        includeContentType: false,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "Unknown error");
-    throw new Error(`${procedure} failed (${response.status}): ${text}`);
-  }
-
-  const body = (await response.json()) as any;
-  return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
-}
-
-async function callConnectedBackendMutation<T>(
-  ctx: Context,
-  procedure: string,
-  input: Record<string, unknown>,
-): Promise<T> {
-  const config = getConnectedUserActionAuthConfig(ctx.req);
-  if (!config) {
-    throw new Error("Connected Studio user action auth is not configured");
-  }
-
-  const response = await fetch(`${config.backendUrl}/api/trpc/${procedure}`, {
-    method: "POST",
-    headers: buildConnectedUserActionHeaders(config),
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "Unknown error");
-    throw new Error(`${procedure} failed (${response.status}): ${text}`);
-  }
-
-  const body = (await response.json()) as any;
-  return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
-}
-
 async function getGitHubSyncUiGate(
   ctx: Context,
 ): Promise<{ allowed: boolean; reason?: string }> {
@@ -302,336 +219,7 @@ export const projectRouter = router({
       ],
     };
   }),
-
-  getPreviewInfo: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-      }),
-    )
-    .query(async ({ ctx }) => {
-      if (!ctx.workspace.isInitialized()) {
-        return {
-          mode: "static" as const,
-          status: "starting" as const,
-          url: "/",
-          error: "Workspace not initialized",
-        };
-      }
-
-      const projectDir = ctx.workspace.getProjectPath();
-      const config = detectProjectType(projectDir);
-
-      if (config.mode === "static") {
-        return {
-          mode: "static" as const,
-          status: "ready" as const,
-          url: "/",
-        };
-      }
-
-      const result = await devServerService.getOrStartDevServer(projectDir, "/");
-
-      return {
-        mode: "devserver" as const,
-        status: result.status,
-        url: "/",
-        error: result.error,
-      };
-    }),
-
-  getShareablePreviewUrl: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-        origin: z.string().optional(),
-      }),
-    )
-    .query(async ({ input, ctx }) => {
-      if (isConnectedMode()) {
-        const status = await callConnectedBackendQuery<{
-          canonicalUrl?: string;
-        }>(ctx, "project.getExternalPreviewStatus", {
-          slug: input.slug,
-          version: input.version,
-        });
-
-        const url = status.canonicalUrl;
-        if (typeof url === "string" && url.length > 0) return { url };
-      }
-
-      const shareablePath = `/vivd-studio/api/preview/${input.slug}/v${input.version}/`;
-
-      const origin = (() => {
-        const candidate = input.origin?.trim();
-        if (!candidate) return null;
-        try {
-          return new URL(candidate).origin;
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!origin) {
-        return { url: shareablePath };
-      }
-
-      return { url: new URL(shareablePath, origin).toString() };
-    }),
-
-  keepAliveDevServer: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-      }),
-    )
-    .mutation(async ({ ctx }) => {
-      if (!ctx.workspace.isInitialized()) {
-        return { success: false };
-      }
-
-      devServerService.touch();
-      return { success: true };
-    }),
-
-  stopDevServer: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-      }),
-    )
-    .mutation(async ({ ctx }) => {
-      if (!ctx.workspace.isInitialized()) {
-        return { success: false };
-      }
-
-      await devServerService.stopDevServer({ reason: "api-stop" });
-      return { success: true };
-    }),
-
-  restartDevServer: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-        clean: z.boolean().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      if (!ctx.workspace.isInitialized()) {
-        return {
-          success: false,
-          status: "error" as const,
-          error: "Workspace not initialized",
-        };
-      }
-
-      const projectDir = ctx.workspace.getProjectPath();
-      const result = await devServerService.restartDevServer(projectDir, "/", {
-        clean: input.clean,
-        resetCaches: true,
-      });
-
-      return { success: true, status: result.status, error: result.error };
-    }),
-
-  applyHtmlPatches: publicProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-        filePath: z.string().default("index.html"),
-        patches: z
-          .array(
-            z.discriminatedUnion("type", [
-              z.object({
-                type: z.literal("setTextNode"),
-                selector: z.string().min(1),
-                index: z.number().int().min(1),
-                value: z.string(),
-              }),
-              z.object({
-                type: z.literal("setI18n"),
-                key: z.string().min(1),
-                lang: z.string().min(2),
-                value: z.string(),
-              }),
-              z.object({
-                type: z.literal("setAttr"),
-                selector: z.string().min(1),
-                name: z.literal("src"),
-                value: z.string(),
-              }),
-              z.object({
-                type: z.literal("setAstroText"),
-                sourceFile: z.string().min(1),
-                sourceLoc: z.string().optional(),
-                oldValue: z.string(),
-                newValue: z.string(),
-              }),
-              z.object({
-                type: z.literal("setAstroImage"),
-                sourceFile: z.string().min(1),
-                sourceLoc: z.string().optional(),
-                assetPath: z.string().min(1),
-                oldValue: z.string().optional(),
-              }),
-            ]),
-          )
-          .min(1, "At least one patch is required"),
-      }),
-    )
-    .mutation(async ({ input, ctx }) => {
-      if (!ctx.workspace.isInitialized()) {
-        throw new Error("Workspace not initialized");
-      }
-
-      if (hasDotSegment(input.filePath)) {
-        throw new Error("Invalid file path");
-      }
-
-      const projectDir = ctx.workspace.getProjectPath();
-      const targetPath = path.join(projectDir, input.filePath);
-
-      // Separate patches by type
-      const astroPatches: AstroPatch[] = [];
-      const htmlPatches: HtmlPatch[] = [];
-      for (const patch of input.patches) {
-        if (patch.type === "setAstroText") {
-          astroPatches.push({
-            type: "setAstroText",
-            sourceFile: patch.sourceFile,
-            sourceLoc: patch.sourceLoc,
-            oldValue: patch.oldValue,
-            newValue: patch.newValue,
-          });
-          continue;
-        }
-        if (patch.type === "setAstroImage") {
-          astroPatches.push({
-            type: "setAstroImage",
-            sourceFile: patch.sourceFile,
-            sourceLoc: patch.sourceLoc,
-            assetPath: patch.assetPath,
-            oldValue: patch.oldValue,
-          });
-          continue;
-        }
-        if (patch.type === "setTextNode") {
-          htmlPatches.push({
-            type: "setTextNode",
-            selector: patch.selector,
-            index: patch.index,
-            value: patch.value,
-          });
-          continue;
-        }
-        if (patch.type === "setAttr") {
-          htmlPatches.push({
-            type: "setAttr",
-            selector: patch.selector,
-            name: patch.name,
-            value: patch.value,
-          });
-        }
-      }
-      const i18nPatches = extractI18nPatches(input.patches).map(
-        (p): I18nJsonPatch => ({ key: p.key, lang: p.lang, value: p.value }),
-      );
-
-      let totalApplied = 0;
-      let totalSkipped = 0;
-      const allErrors: Array<{ selector: string; reason: string }> = [];
-
-      // Apply Astro patches
-      if (hasAstroPatches(input.patches)) {
-        const result = applyAstroPatches(projectDir, astroPatches);
-        totalApplied += result.applied;
-        totalSkipped += result.skipped;
-        allErrors.push(
-          ...result.errors.map((e) => ({ selector: e.file, reason: e.reason })),
-        );
-      }
-
-      // Apply i18n patches
-      if (hasI18nPatches(input.patches)) {
-        const result = applyI18nJsonPatches(projectDir, i18nPatches);
-        totalApplied += result.applied;
-        totalSkipped += result.skipped;
-        allErrors.push(
-          ...result.errors.map((e) => ({ selector: e.key, reason: e.reason })),
-        );
-      }
-
-      // Apply HTML patches
-      if (htmlPatches.length > 0) {
-        if (
-          !input.filePath.endsWith(".html") &&
-          !input.filePath.endsWith(".htm")
-        ) {
-          throw new Error("Only HTML files can be patched");
-        }
-
-        if (!fs.existsSync(targetPath)) {
-          throw new Error("File not found");
-        }
-
-        const original = fs.readFileSync(targetPath, "utf-8");
-        const result = applyHtmlPatches(original, htmlPatches);
-
-        if (result.html !== original) {
-          fs.writeFileSync(targetPath, result.html, "utf-8");
-        }
-
-        totalApplied += result.applied;
-        totalSkipped += result.skipped;
-        allErrors.push(...result.errors.map((e) => ({ selector: e.selector, reason: e.reason })));
-      }
-
-      const noChanges = totalApplied === 0;
-
-      if (!noChanges) {
-        projectTouchReporter.touch(input.slug);
-        requestBucketSync("project-html-patches", {
-          slug: input.slug,
-          version: input.version,
-          filePath: input.filePath,
-          applied: totalApplied,
-        });
-
-        // Keep bucket-backed source artifacts fresh after in-studio saves,
-        // even before an explicit snapshot commit.
-        void ctx.workspace
-          .getHeadCommit()
-          .then((head) =>
-            syncSourceToBucket({
-              projectDir,
-              slug: input.slug,
-              version: input.version,
-              commitHash: head?.hash,
-            }),
-          )
-          .then(() => {
-            thumbnailGenerationReporter.request(input.slug, input.version);
-          })
-          .catch((err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`[Artifacts] Source sync failed: ${msg}`);
-          });
-      }
-
-      return {
-        success: true,
-        noChanges,
-        applied: totalApplied,
-        skipped: totalSkipped,
-        errors: allErrors,
-      };
-    }),
+  ...previewProjectProcedures,
 
   getVersions: publicProcedure.query(async () => ({
     versions: [
@@ -747,33 +335,10 @@ export const projectRouter = router({
         });
 
         void (async () => {
-          let canRequestRemoteBuild = true;
           try {
             await sourceSyncPromise;
           } catch {
-            canRequestRemoteBuild = false;
-          }
-
-          if (canRequestRemoteBuild) {
-            try {
-              const requested = await requestConnectedArtifactBuild({
-                slug: input.slug,
-                version: input.version,
-                kind: "preview",
-                commitHash: effectiveCommitHash,
-              });
-              if (requested.requested) {
-                if (requested.status === "ready") {
-                  thumbnailGenerationReporter.request(input.slug, input.version);
-                }
-                return;
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(
-                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
-              );
-            }
+            return;
           }
 
           await buildAndUploadPreview({
@@ -1283,37 +848,13 @@ export const projectRouter = router({
           });
 
           if (config.framework === "astro") {
-            try {
-              const requested = await requestConnectedArtifactBuild({
-                slug: input.slug,
-                version: input.version,
-                kind: "preview",
-                commitHash: pull.headHash,
-              });
-              if (requested.requested) {
-                shouldTriggerThumbnail = requested.status === "ready";
-              } else {
-                await buildAndUploadPreview({
-                  projectDir,
-                  slug: input.slug,
-                  version: input.version,
-                  commitHash: pull.headHash,
-                });
-                shouldTriggerThumbnail = true;
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(
-                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
-              );
-              await buildAndUploadPreview({
-                projectDir,
-                slug: input.slug,
-                version: input.version,
-                commitHash: pull.headHash,
-              });
-              shouldTriggerThumbnail = true;
-            }
+            await buildAndUploadPreview({
+              projectDir,
+              slug: input.slug,
+              version: input.version,
+              commitHash: pull.headHash,
+            });
+            shouldTriggerThumbnail = true;
           }
 
           return pull;
@@ -1385,37 +926,13 @@ export const projectRouter = router({
           });
 
           if (config.framework === "astro") {
-            try {
-              const requested = await requestConnectedArtifactBuild({
-                slug: input.slug,
-                version: input.version,
-                kind: "preview",
-                commitHash: sync.headHash,
-              });
-              if (requested.requested) {
-                shouldTriggerThumbnail = requested.status === "ready";
-              } else {
-                await buildAndUploadPreview({
-                  projectDir,
-                  slug: input.slug,
-                  version: input.version,
-                  commitHash: sync.headHash,
-                });
-                shouldTriggerThumbnail = true;
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(
-                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
-              );
-              await buildAndUploadPreview({
-                projectDir,
-                slug: input.slug,
-                version: input.version,
-                commitHash: sync.headHash,
-              });
-              shouldTriggerThumbnail = true;
-            }
+            await buildAndUploadPreview({
+              projectDir,
+              slug: input.slug,
+              version: input.version,
+              commitHash: sync.headHash,
+            });
+            shouldTriggerThumbnail = true;
           }
 
           return sync;
@@ -1603,28 +1120,10 @@ export const projectRouter = router({
         });
         void sourceSyncPromise.catch(() => {});
         void (async () => {
-          let canRequestRemoteBuild = true;
           try {
             await sourceSyncPromise;
           } catch {
-            canRequestRemoteBuild = false;
-          }
-
-          if (canRequestRemoteBuild) {
-            try {
-              const requested = await requestConnectedArtifactBuild({
-                slug: input.slug,
-                version,
-                kind: "published",
-                commitHash,
-              });
-              if (requested.requested) return;
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(
-                `[Artifacts] Connected published build request failed, falling back to local build: ${msg}`,
-              );
-            }
+            return;
           }
 
           await buildAndUploadPublished({

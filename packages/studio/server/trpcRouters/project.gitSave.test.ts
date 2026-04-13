@@ -4,7 +4,6 @@ const {
   detectProjectTypeMock,
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
-  requestConnectedArtifactBuildMock,
   syncPushToGitHubMock,
   projectTouchMock,
   reportSoonMock,
@@ -12,7 +11,6 @@ const {
   detectProjectTypeMock: vi.fn(),
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
-  requestConnectedArtifactBuildMock: vi.fn(),
   syncPushToGitHubMock: vi.fn(),
   projectTouchMock: vi.fn(),
   reportSoonMock: vi.fn(),
@@ -26,10 +24,6 @@ vi.mock("../services/sync/ArtifactSyncService.js", () => ({
   syncSourceToBucket: syncSourceToBucketMock,
   buildAndUploadPreview: buildAndUploadPreviewMock,
   buildAndUploadPublished: vi.fn(),
-}));
-
-vi.mock("../services/sync/ConnectedArtifactBuildService.js", () => ({
-  requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
 }));
 
 vi.mock("../services/integrations/GitHubSyncService.js", () => ({
@@ -94,7 +88,6 @@ describe("project router gitSave", () => {
     detectProjectTypeMock.mockReset();
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
-    requestConnectedArtifactBuildMock.mockReset();
     syncPushToGitHubMock.mockReset();
     projectTouchMock.mockReset();
     reportSoonMock.mockReset();
@@ -102,10 +95,6 @@ describe("project router gitSave", () => {
     detectProjectTypeMock.mockReturnValue({ framework: "generic" });
     syncSourceToBucketMock.mockResolvedValue(undefined);
     buildAndUploadPreviewMock.mockResolvedValue(undefined);
-    requestConnectedArtifactBuildMock.mockResolvedValue({
-      requested: false,
-      reason: "disabled",
-    });
     syncPushToGitHubMock.mockResolvedValue({
       attempted: true,
       success: true,
@@ -151,13 +140,8 @@ describe("project router gitSave", () => {
     expect(reportSoonMock).not.toHaveBeenCalled();
   });
 
-  it("queues preview builds via the connected builder when that path is accepted", async () => {
+  it("builds preview artifacts locally for Astro projects after source sync", async () => {
     detectProjectTypeMock.mockReturnValue({ framework: "astro" });
-    requestConnectedArtifactBuildMock.mockResolvedValue({
-      requested: true,
-      deduped: false,
-      status: "queued",
-    });
 
     const caller = projectRouter.createCaller({
       workspace: {
@@ -182,12 +166,11 @@ describe("project router gitSave", () => {
       version: 3,
       commitHash: "head-1234567",
     });
-    expect(requestConnectedArtifactBuildMock).toHaveBeenCalledWith({
+    expect(buildAndUploadPreviewMock).toHaveBeenCalledWith({
+      projectDir: "/tmp/workspace",
       slug: "site-1",
       version: 3,
-      kind: "preview",
       commitHash: "head-1234567",
     });
-    expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
   });
 });

@@ -24,7 +24,6 @@ import {
   buildAndUploadPreview,
   syncSourceToBucket,
 } from "../sync/ArtifactSyncService.js";
-import { requestConnectedArtifactBuild } from "../sync/ConnectedArtifactBuildService.js";
 import { requestBucketSync } from "../sync/AgentTaskSyncService.js";
 import { saveInitialGenerationSnapshot } from "./InitialGenerationSnapshotService.js";
 import { thumbnailGenerationReporter } from "../reporting/ThumbnailGenerationReporter.js";
@@ -1158,48 +1157,16 @@ async function finalizeSessionCompletion(options: {
 
       const projectType = detectProjectType(options.workspaceDir);
       if (projectType.framework === "astro") {
-        try {
-          const requested = await requestConnectedArtifactBuild({
-            slug: options.projectSlug,
-            version: options.version,
-            kind: "preview",
-            commitHash,
-          });
-          if (requested.requested) {
-            if (requested.status === "ready") {
-              thumbnailGenerationReporter.request(
-                options.projectSlug,
-                options.version,
-              );
-            }
-          } else {
-            await buildAndUploadPreview({
-              projectDir: options.workspaceDir,
-              slug: options.projectSlug,
-              version: options.version,
-              commitHash,
-            });
-            thumbnailGenerationReporter.request(
-              options.projectSlug,
-              options.version,
-            );
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.warn(
-            `[InitialGeneration] Connected preview build request failed, falling back to local build for ${options.projectSlug}/v${options.version}: ${message}`,
-          );
-          await buildAndUploadPreview({
-            projectDir: options.workspaceDir,
-            slug: options.projectSlug,
-            version: options.version,
-            commitHash,
-          });
-          thumbnailGenerationReporter.request(
-            options.projectSlug,
-            options.version,
-          );
-        }
+        await buildAndUploadPreview({
+          projectDir: options.workspaceDir,
+          slug: options.projectSlug,
+          version: options.version,
+          commitHash,
+        });
+        thumbnailGenerationReporter.request(
+          options.projectSlug,
+          options.version,
+        );
       } else {
         thumbnailGenerationReporter.request(
           options.projectSlug,

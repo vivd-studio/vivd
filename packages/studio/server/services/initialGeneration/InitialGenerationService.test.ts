@@ -14,7 +14,6 @@ const {
   isSessionCompletedMock,
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
-  requestConnectedArtifactBuildMock,
   requestBucketSyncMock,
   saveInitialGenerationSnapshotMock,
   thumbnailRequestMock,
@@ -35,7 +34,6 @@ const {
   isSessionCompletedMock: vi.fn(),
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
-  requestConnectedArtifactBuildMock: vi.fn(),
   requestBucketSyncMock: vi.fn(),
   saveInitialGenerationSnapshotMock: vi.fn(),
   thumbnailRequestMock: vi.fn(),
@@ -63,10 +61,6 @@ vi.mock("../../opencode/index.js", () => ({
 vi.mock("../sync/ArtifactSyncService.js", () => ({
   syncSourceToBucket: syncSourceToBucketMock,
   buildAndUploadPreview: buildAndUploadPreviewMock,
-}));
-
-vi.mock("../sync/ConnectedArtifactBuildService.js", () => ({
-  requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
 }));
 
 vi.mock("../sync/AgentTaskSyncService.js", () => ({
@@ -197,7 +191,6 @@ describe("InitialGenerationService", () => {
     isSessionCompletedMock.mockReset();
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
-    requestConnectedArtifactBuildMock.mockReset();
     requestBucketSyncMock.mockReset();
     saveInitialGenerationSnapshotMock.mockReset();
     thumbnailRequestMock.mockReset();
@@ -222,10 +215,6 @@ describe("InitialGenerationService", () => {
     detectProjectTypeMock.mockReturnValue({ framework: "astro" });
     syncSourceToBucketMock.mockResolvedValue(undefined);
     buildAndUploadPreviewMock.mockResolvedValue(undefined);
-    requestConnectedArtifactBuildMock.mockResolvedValue({
-      requested: false,
-      reason: "disabled",
-    });
     requestBucketSyncMock.mockReturnValue(true);
     saveInitialGenerationSnapshotMock.mockResolvedValue({
       commitHash: "head-1234567",
@@ -353,13 +342,7 @@ describe("InitialGenerationService", () => {
     expect(completedManifest.sessionId).toBe("sess-1");
   });
 
-  it("queues the preview build via the connected builder when that path is accepted", async () => {
-    requestConnectedArtifactBuildMock.mockResolvedValue({
-      requested: true,
-      deduped: false,
-      status: "queued",
-    });
-
+  it("builds the preview artifact locally after source sync completes", async () => {
     await initialGenerationService.startInitialGeneration({
       projectSlug: "site-1",
       version: 1,
@@ -380,13 +363,12 @@ describe("InitialGenerationService", () => {
       version: 1,
       commitHash: "head-1234567",
     });
-    expect(requestConnectedArtifactBuildMock).toHaveBeenCalledWith({
+    expect(buildAndUploadPreviewMock).toHaveBeenCalledWith({
+      projectDir: tmpDir,
       slug: "site-1",
       version: 1,
-      kind: "preview",
       commitHash: "head-1234567",
     });
-    expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
   });
 
   it("continues finalization when the completion snapshot save fails", async () => {
