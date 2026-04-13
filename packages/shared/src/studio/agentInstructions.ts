@@ -127,7 +127,8 @@ function buildPlatformSurfaceSection(
     return `4. **Plugin-first features**:
    - Vivd supports first-party plugins such as Contact Form and Analytics.
    - Prefer plugin-backed solutions over custom implementations for those features.
-   - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
+   - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.
+   - Check plugin config before installing snippets when wording or behavior depends on mode, for example Newsletter \`waitlist\` vs \`newsletter\`.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
   }
 
   const cliRootHelp = renderVivdCliRootHelp({
@@ -151,6 +152,7 @@ ${indentBlock(cliRootHelp, "     ")}
    - Use \`vivd <command> help\` to drill into the relevant area.
    - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
    - When a plugin exposes install markup, use \`vivd plugins snippets <pluginId> [snippetName]\` to fetch the exact snippet instead of recreating it by hand.
+   - Check plugin config before installing snippets when wording or behavior depends on mode, for example Newsletter \`waitlist\` vs \`newsletter\`.
    - For publish work, check \`vivd publish status\` and \`vivd publish targets\` first. Publishing requires the current saved Studio snapshot to be prepared; run \`vivd publish prepare\` when needed before \`vivd publish deploy\`.
    - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.${supportLines.length > 0 ? `\n${supportLines.join("\n")}` : ""}`;
 }

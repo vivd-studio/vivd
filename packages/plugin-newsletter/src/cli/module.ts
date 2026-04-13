@@ -197,6 +197,7 @@ export const newsletterCliModule: PluginCliModule = {
       "  vivd plugins action newsletter unsubscribe <email>",
       "  vivd plugins read newsletter summary --file input.json",
       "  vivd plugins read newsletter subscribers --file input.json",
+      "Set `mode=waitlist` when the user asked for a waitlist; default is `newsletter`.",
       "Use `vivd plugins snippets newsletter [html|astro]` to print the full install snippet.",
     ],
   },

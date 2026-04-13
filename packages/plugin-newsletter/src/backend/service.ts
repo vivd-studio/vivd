@@ -530,6 +530,7 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
       },
       instructions: [
         "Newsletter signups always use double opt-in in this v1.",
+        "If the user asked for a waitlist, set `mode` to `waitlist` before generating snippets.",
         "Install the generated HTML or Astro snippet and keep the hidden token field unchanged.",
         "Export confirmed subscribers from the project page or with `vivd plugins read newsletter subscribers`.",
       ],
