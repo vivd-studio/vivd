@@ -28,7 +28,7 @@ Vivd is also meant to be something you can actually run yourself: fair-code, sel
 
 ## Current Product Shape
 
-- Public docs and the `solo` self-host path are publicly available today.
+- Self-host path is publicly available today.
 - The hosted Vivd product is still invite-led / closed-beta rather than broadly open signup.
 - Astro and plain HTML are the current website project targets, with Astro content collections acting as the structured CMS source of truth where supported.
 - First-party plugin extraction is underway; Contact Form and Analytics already ship as extracted plugin packages behind generic host contracts.
