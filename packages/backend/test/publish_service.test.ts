@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   ensurePublishDomainEnabledMock,
@@ -39,6 +42,8 @@ import {
 } from "../src/services/publish/PublishService";
 import { db } from "../src/db";
 
+const envSnapshot = { ...process.env };
+
 function makeArtifactState(overrides: Record<string, unknown> = {}) {
   return {
     storageEnabled: true,
@@ -62,6 +67,7 @@ describe("PublishService conflict behavior", () => {
   let service: PublishService;
 
   beforeEach(() => {
+    process.env = { ...envSnapshot };
     ensurePublishDomainEnabledMock.mockReset();
     normalizeDomainMock.mockReset();
     validateDomainForRegistryMock.mockReset();
@@ -80,6 +86,10 @@ describe("PublishService conflict behavior", () => {
 
     service = new PublishService();
     vi.spyOn(service, "isDomainAvailable").mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    process.env = { ...envSnapshot };
   });
 
   it("throws a build_in_progress conflict when preview build is running", async () => {
@@ -195,6 +205,9 @@ describe("PublishService conflict behavior", () => {
   });
 
   it("regenerates existing site configs from the current Caddy template on startup sync", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-publish-sync-"));
+    process.env.CADDY_SITES_DIR = tempDir;
+
     const fromMock = vi.fn().mockResolvedValue([
       {
         id: "pub-1",
@@ -225,6 +238,7 @@ describe("PublishService conflict behavior", () => {
     const generateCaddyConfigSpy = vi
       .spyOn(service as any, "generateCaddyConfig")
       .mockResolvedValue(undefined);
+    vi.spyOn(db.query.domain, "findMany").mockResolvedValue([]);
     const reloadCaddySpy = vi
       .spyOn(service as any, "reloadCaddy")
       .mockResolvedValue(undefined);
@@ -242,5 +256,36 @@ describe("PublishService conflict behavior", () => {
       redirectRules,
     );
     expect(reloadCaddySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates placeholder configs for active tenant hosts without a live publish", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-tenant-placeholder-"));
+    process.env.CADDY_SITES_DIR = tempDir;
+
+    vi.spyOn(db, "select").mockReturnValue({
+      from: vi.fn().mockResolvedValue([]),
+    } as any);
+    vi.spyOn(db.query.domain, "findMany").mockResolvedValue([
+      {
+        domain: "acme.example.com",
+      },
+    ] as any);
+    const reloadCaddySpy = vi
+      .spyOn(service as any, "reloadCaddy")
+      .mockResolvedValue(undefined);
+
+    const syncedCount = await service.syncGeneratedCaddyConfigs();
+
+    expect(syncedCount).toBe(0);
+    expect(reloadCaddySpy).toHaveBeenCalledTimes(1);
+    expect(
+      fs.readFileSync(path.join(tempDir, "acme-example-com.caddy"), "utf-8"),
+    ).toContain("/unpublished-site-placeholder.html");
+    expect(
+      fs.readFileSync(
+        path.join(tempDir, "_system", "unpublished-site-placeholder.html"),
+        "utf-8",
+      ),
+    ).toContain("Open /vivd-studio");
   });
 });

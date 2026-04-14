@@ -1,5 +1,5 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useOpencodeChatController } from "./controller";
 
 const {
@@ -203,6 +203,11 @@ describe("useOpencodeChatController", () => {
       version: 1,
     });
     deleteSessionMutateAsync.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
   });
 
   it("creates a new session before dispatching a new task", async () => {
@@ -585,6 +590,52 @@ describe("useOpencodeChatController", () => {
         1,
       );
     });
+  });
+
+  it("reconciles a terminal-looking session shortly after the transcript still shows a pending assistant shell", async () => {
+    vi.useFakeTimers();
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.sessionStatus = { type: "done" } as any;
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-user",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1 },
+        },
+        parts: [{ id: "part-user", messageID: "msg-user", type: "text", text: "Ship it" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: 2 },
+        },
+        parts: [{ id: "part-assistant", messageID: "msg-assistant", type: "text", text: "Done." }],
+      },
+    ];
+
+    renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    expect(mockOpencodeChat.refetchBootstrap).not.toHaveBeenCalled();
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+
+    expect(mockOpencodeChat.refetchBootstrap).toHaveBeenCalledTimes(1);
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it("reconciles a visible active session after event silence leaves it locally stuck in working state", async () => {

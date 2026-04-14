@@ -9,10 +9,8 @@ import {
   buildDerivedSessionError,
   deriveChatActivityState,
   findStaleRunningToolState,
-  getMostRecentPendingAssistantActivityAt,
   isActiveSessionStatus,
   isTerminalSessionStatusType,
-  PENDING_ASSISTANT_GRACE_MS,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
 import {
@@ -43,6 +41,7 @@ type PendingSessionStart = {
 };
 
 const STALE_ACTIVE_SESSION_RECONCILE_MS = 8_000;
+const TERMINAL_PENDING_ASSISTANT_RECONCILE_MS = 1_500;
 
 export function useOpencodeChatController({
   projectSlug,
@@ -65,7 +64,6 @@ export function useOpencodeChatController({
     string | null
   >(null);
   const [isSending, setIsSending] = useState(false);
-  const [activityNow, setActivityNow] = useState(() => Date.now());
   const [suppressedSessionId, setSuppressedSessionId] = useState<string | null>(
     null,
   );
@@ -75,6 +73,7 @@ export function useOpencodeChatController({
   const nextPendingSessionStartIdRef = useRef(0);
   const pendingSessionStartRef = useRef<PendingSessionStart | null>(null);
   const staleRunningToolHealRef = useRef<string | null>(null);
+  const terminalPendingAssistantHealRef = useRef<string | null>(null);
   const staleActiveSessionIdRef = useRef<string | null>(null);
   const staleActiveSessionObservedAtRef = useRef<number | null>(null);
   const staleActiveSessionHealAtRef = useRef<number | null>(null);
@@ -157,10 +156,33 @@ export function useOpencodeChatController({
     () => findStaleRunningToolState(selectedMessages),
     [selectedMessages],
   );
-  const mostRecentPendingAssistantActivityAt = useMemo(
-    () => getMostRecentPendingAssistantActivityAt(selectedMessages),
-    [selectedMessages],
-  );
+  const terminalPendingAssistantMessageId = useMemo(() => {
+    if (
+      !selectedSessionId ||
+      suppressedSessionId === selectedSessionId ||
+      !isTerminalSessionStatusType(sessionStatusType)
+    ) {
+      return null;
+    }
+
+    for (let index = selectedMessages.length - 1; index >= 0; index -= 1) {
+      const message = selectedMessages[index]?.info;
+      if (message?.role !== "assistant" || !message.id) {
+        continue;
+      }
+      if (typeof message.time?.completed === "number") {
+        continue;
+      }
+      return message.id;
+    }
+
+    return null;
+  }, [
+    selectedMessages,
+    selectedSessionId,
+    sessionStatusType,
+    suppressedSessionId,
+  ]);
 
   const buildRunTaskPayload = useCallback(
     (task: string, sessionId?: string | null) => ({
@@ -556,11 +578,9 @@ export function useOpencodeChatController({
         sessionStatus: currentSessionStatus,
         connectionState: connection.state,
         connectionMessage: connection.message,
-        now: activityNow,
         suppressPendingAssistant: suppressedSessionId === selectedSessionId,
       }),
     [
-      activityNow,
       selectedSessionId,
       selectedMessages,
       sessionMessagesIsError,
@@ -596,11 +616,9 @@ export function useOpencodeChatController({
           createSessionMutation.isPending ||
           runTaskMutation.isPending ||
           isSending,
-        now: activityNow,
         suppressPendingAssistant: suppressedSessionId === selectedSessionId,
       }),
     [
-      activityNow,
       selectedMessages,
       currentSessionStatus,
       hasOptimisticUserMessage,
@@ -611,10 +629,6 @@ export function useOpencodeChatController({
       suppressedSessionId,
     ],
   );
-
-  useEffect(() => {
-    setActivityNow(Date.now());
-  }, [currentSessionStatus, selectedMessages, selectedSessionId]);
 
   useEffect(() => {
     if (
@@ -631,33 +645,40 @@ export function useOpencodeChatController({
   useEffect(() => {
     if (
       !selectedSessionId ||
-      suppressedSessionId === selectedSessionId ||
-      isActiveSessionStatus(currentSessionStatus) ||
-      mostRecentPendingAssistantActivityAt == null
+      !terminalPendingAssistantMessageId ||
+      isSessionHydrating ||
+      connection.state !== "connected"
     ) {
+      if (!terminalPendingAssistantMessageId) {
+        terminalPendingAssistantHealRef.current = null;
+      }
       return;
     }
 
-    const expiryAt =
-      mostRecentPendingAssistantActivityAt + PENDING_ASSISTANT_GRACE_MS;
-    const delayMs = Math.max(0, expiryAt - Date.now());
-    let cancelled = false;
+    const healKey = [
+      selectedSessionId,
+      terminalPendingAssistantMessageId,
+      opencodeChat.state.lastEventId ?? "none",
+    ].join(":");
+    if (terminalPendingAssistantHealRef.current === healKey) {
+      return;
+    }
+
+    terminalPendingAssistantHealRef.current = healKey;
     const timer = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-      setActivityNow(Date.now());
-    }, delayMs + 10);
+      void refetchSelectedSessionSnapshot();
+    }, TERMINAL_PENDING_ASSISTANT_RECONCILE_MS);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [
-    currentSessionStatus,
-    mostRecentPendingAssistantActivityAt,
+    connection.state,
+    isSessionHydrating,
+    opencodeChat.state.lastEventId,
+    refetchSelectedSessionSnapshot,
     selectedSessionId,
-    suppressedSessionId,
+    terminalPendingAssistantMessageId,
   ]);
 
   useEffect(() => {

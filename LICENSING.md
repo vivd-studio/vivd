@@ -22,16 +22,16 @@ That means:
 ## What You Can Do Without A Separate Commercial License
 
 You can use Vivd in production without a separate commercial license when the
-deployment is isolated and dedicated to one company or one client.
+deployment is isolated and dedicated to one company or one corporate group
+under common control.
 
 Allowed examples:
 
 - A company self-hosts Vivd for its own internal work and public-facing sites.
 - You take the code, modify it for yourself, and run your own modified version
   in your company's single-tenant deployment.
-- An agency or consultant deploys one isolated Vivd instance per client.
-- An agency or consultant customizes the codebase for a client and runs that
-  modified version in that client's isolated deployment.
+- A contractor or service provider customizes or maintains a single-tenant
+  deployment on that entity's behalf.
 - You use the normal Vivd app surface inside that isolated deployment,
   including frontend, backend, admin, users, organizations, projects, domains,
   and plugin management.
@@ -64,6 +64,7 @@ Short version:
 
 - Single-tenant self-hosting for yourself: allowed.
 - Taking the code and modifying it for yourself: allowed.
-- One isolated deployment per client: allowed.
+- Using a contractor or service provider for your dedicated deployment:
+  allowed.
 - Shared hosted control plane for multiple unrelated customers: not allowed
   without a separate commercial license.

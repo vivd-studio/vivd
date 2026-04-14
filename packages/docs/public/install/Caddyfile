@@ -36,15 +36,19 @@ import /etc/caddy/sites.d/*.caddy
     }
 
     handle {
-        root * /srv/published
-        try_files {path} {path}/index.html =404
+        root * /etc/caddy/sites.d/_system
+        rewrite * /unpublished-site-placeholder.html
         file_server
     }
 
     handle_errors {
         @404 expression {err.status_code} == 404
         handle @404 {
-            respond "Not found" 404
+            root * /etc/caddy/sites.d/_system
+            rewrite * /default-404.html
+            file_server {
+                status {err.status_code}
+            }
         }
     }
 }

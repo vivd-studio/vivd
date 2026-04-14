@@ -322,6 +322,18 @@ injects a country header such as Cloudflare's `cf-ipcountry` or Vercel's
 `x-vercel-ip-country`. For provider-agnostic self-host installs, mount a
 GeoLite2 Country `.mmdb` file into the backend container at the configured path.
 
+Vivd now includes a helper script for the common self-host case:
+
+```bash
+MAXMIND_ACCOUNT_ID=...
+MAXMIND_LICENSE_KEY=...
+./scripts/install-analytics-geoip.sh
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+The script downloads `GeoLite2-Country.mmdb` into the default `./geoip/`
+directory that the published Compose bundle already mounts into the backend.
+
 ## Notes
 
 - This reference is intentionally scoped to the self-hosted `solo` bundle.

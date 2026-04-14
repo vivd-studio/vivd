@@ -211,17 +211,13 @@ export function deriveChatActivityState({
   sessionStatus,
   hasOptimisticUserMessage,
   isSubmitting,
-  now,
   suppressPendingAssistant = false,
 }: DeriveChatActivityStateArgs) {
   const sessionActive = isActiveSessionStatus(sessionStatus);
   const lastMessageRole = getLastMessageRole(messages);
   const hasPendingAssistant = suppressPendingAssistant
     ? false
-    : hasLivePendingAssistantMessage(messages, {
-        sessionStatus,
-        now,
-      });
+    : hasPendingAssistantMessage(messages);
   const isStreaming = hasPendingAssistant;
   const isWaiting =
     hasOptimisticUserMessage ||
@@ -247,7 +243,6 @@ export function buildDerivedSessionError({
   sessionStatus,
   connectionState,
   connectionMessage,
-  now,
   suppressPendingAssistant = false,
 }: BuildDerivedSessionErrorArgs): DerivedSessionError {
   if (selectedSessionId && sessionMessagesIsError && messages.length === 0) {
@@ -295,11 +290,7 @@ export function buildDerivedSessionError({
     selectedSessionId &&
     connectionState === "error" &&
     (isActiveSessionStatus(sessionStatus) ||
-      (!suppressPendingAssistant &&
-        hasLivePendingAssistantMessage(messages, {
-          sessionStatus,
-          now,
-        })))
+      (!suppressPendingAssistant && hasPendingAssistantMessage(messages)))
   ) {
     return {
       key: `stream:${selectedSessionId}:${connectionMessage ?? ""}`,

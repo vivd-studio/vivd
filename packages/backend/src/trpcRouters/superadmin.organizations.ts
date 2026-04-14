@@ -17,6 +17,7 @@ import {
   domainService,
   validateOrganizationSlug,
 } from "../services/publish/DomainService";
+import { publishService } from "../services/publish/PublishService";
 import { installProfileService } from "../services/system/InstallProfileService";
 import {
   organizationIdSchema,
@@ -185,6 +186,7 @@ export const organizationSuperAdminProcedures = {
         organizationId: input.slug,
         organizationSlug: input.slug,
       });
+      await publishService.syncGeneratedCaddyConfigs();
 
       return { success: true, organizationId: input.slug };
     }),
@@ -351,6 +353,7 @@ export const organizationSuperAdminProcedures = {
         status: input.status,
         createdById: ctx.session.user.id,
       });
+      await publishService.syncGeneratedCaddyConfigs();
 
       return {
         success: true,
@@ -369,6 +372,7 @@ export const organizationSuperAdminProcedures = {
     )
     .mutation(async ({ input }) => {
       await domainService.setDomainStatus(input.domainId, input.status);
+      await publishService.syncGeneratedCaddyConfigs();
       return { success: true };
     }),
 
@@ -381,6 +385,7 @@ export const organizationSuperAdminProcedures = {
     )
     .mutation(async ({ input }) => {
       await domainService.setDomainUsage(input.domainId, input.usage);
+      await publishService.syncGeneratedCaddyConfigs();
       return { success: true };
     }),
 
@@ -421,6 +426,7 @@ export const organizationSuperAdminProcedures = {
     )
     .mutation(async ({ input }) => {
       const result = await domainService.removeOrganizationDomain(input.domainId);
+      await publishService.syncGeneratedCaddyConfigs();
       return {
         success: true,
         removed: result.removed,

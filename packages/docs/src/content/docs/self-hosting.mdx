@@ -14,6 +14,9 @@ Vivd ships a **solo** self-host install path for one primary host:
 - Docker-based Studio machines by default
 - Local S3-compatible project storage by default
 
+Before the first live publish, the primary host shows a small placeholder page that
+points users to `/vivd-studio` instead of a bare not-found response.
+
 If you want the architectural picture behind those choices, read
 [How Vivd Works](/how-vivd-works/).
 
@@ -51,6 +54,13 @@ Docker Studio provider, so you do not need extra tuning just to reach that split
 If the backend container itself is running under a tighter cgroup or platform
 memory limit, Vivd sizes Studio from that smaller detected budget instead of
 assuming the full host is available.
+
+Vivd can also run on a smaller box such as `2` vCPUs and `4 GiB` RAM. On that
+shape, the Docker Studio defaults land around `1` vCPU and `2560 MiB` RAM for
+the Studio runtime. That is workable for lighter use, but it is noticeably
+tighter: Studio may feel slower, heavier builds can take longer, and larger
+projects are more likely to run into memory pressure or out-of-memory failures
+during build or preview work.
 
 Move up to `8` vCPUs and `16 GiB` RAM earlier if you expect:
 

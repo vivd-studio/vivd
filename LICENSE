@@ -9,28 +9,23 @@ Licensed Work.
 
 Additional Use Grant: You may make production use of the Licensed Work,
 including for commercial purposes and without purchasing a separate commercial
-license, in either of the following cases: (a) a single-tenant deployment
-dedicated to one business, organization, or corporate group under common
-control, for that entity's own internal business operations and public-facing
-websites or digital properties that it owns or operates; or (b) an isolated
-single-tenant deployment dedicated to one client, for that client's own
+license, only in a single-tenant deployment dedicated to one business,
+organization, or corporate group under common control, for that entity's own
 internal business operations and public-facing websites or digital properties
 that it owns or operates. This Additional Use Grant includes Vivd's solo
 install profile and substantially similar single-tenant deployments,
 including the normal frontend, backend, administration, user, organization,
 project, domain, and plugin-management surfaces within such a deployment.
-Contractors, agencies, consultants, and other service providers may install,
-customize, operate, support, or maintain such deployments for themselves or
-on behalf of customers, including as a paid professional service, provided
-that each deployment remains isolated and dedicated to one customer or one
-corporate group under common control. This Additional Use Grant does not
-permit (i) any multi-tenant or shared-control-plane deployment serving
-multiple unrelated customers or end users, (ii) providing the Licensed Work
-as a hosted or managed service to multiple unrelated customers from a shared
-deployment or shared administrative, routing, billing, or runtime control
-layer, or (iii) white-label, OEM, embedded, or other productized commercial
-distribution of the Licensed Work where the value derives substantially from
-Vivd functionality for multiple unrelated customers.
+Contractors and service providers may install, customize, operate, support,
+or maintain such a deployment on that entity's behalf. This Additional Use
+Grant does not permit (i) any multi-tenant or shared-control-plane deployment
+serving multiple unrelated customers or end users, (ii) providing the
+Licensed Work as a hosted or managed service to multiple unrelated customers
+from a shared deployment or shared administrative, routing, billing, or
+runtime control layer, or (iii) white-label, OEM, embedded, or other
+productized commercial distribution of the Licensed Work where the value
+derives substantially from Vivd functionality for multiple unrelated
+customers.
 
 Change Date: The fourth anniversary of the first publicly available
 distribution of each specific version of the Licensed Work.

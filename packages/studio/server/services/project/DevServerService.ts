@@ -544,11 +544,7 @@ export class DevServerService {
     status: DevServerInfo["status"];
     error?: string;
   }> {
-    if (
-      this.server &&
-      this.server.projectDir === projectDir &&
-      this.server.status !== "error"
-    ) {
+    if (this.server && this.server.projectDir === projectDir) {
       this.server.lastActivity = Date.now();
       return {
         url: this.server.status === "ready" ? this.server.url : null,

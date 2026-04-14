@@ -330,6 +330,36 @@ describe("opencode index session behavior", () => {
     });
   });
 
+  it("prefers explicit backend idle even when the local busy snapshot is still fresh", async () => {
+    const now = Date.now();
+
+    sessionListMock.mockResolvedValueOnce({
+      data: [{ id: "sess-1", directory: "/workspace/project/" }],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: {
+        "sess-1": { type: "idle" },
+      },
+      error: undefined,
+    });
+    getSessionStatusesMock.mockReturnValueOnce({
+      "sess-1": { type: "busy" },
+    });
+    getSessionStatusSnapshotsMock.mockReturnValueOnce({
+      "sess-1": {
+        status: { type: "busy" },
+        updatedAt: now,
+      },
+    });
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(result).toEqual({
+      "sess-1": { type: "idle" },
+    });
+  });
+
   it("defaults missing statuses to idle instead of stale emitter busy", async () => {
     sessionListMock.mockResolvedValueOnce({
       data: [

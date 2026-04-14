@@ -29,7 +29,7 @@ function createMessage(
 }
 
 describe("opencodeChat runtime", () => {
-  it("does not keep a stale pending assistant shell streaming once the session status is terminal and the grace window has expired", () => {
+  it("keeps streaming while a pending assistant shell still exists even if the session status looks terminal", () => {
     const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const state = deriveChatActivityState({
       messages: [
@@ -46,12 +46,12 @@ describe("opencodeChat runtime", () => {
       now,
     });
 
-    expect(state.isStreaming).toBe(false);
+    expect(state.isStreaming).toBe(true);
     expect(state.isWaiting).toBe(false);
-    expect(state.isThinking).toBe(false);
+    expect(state.isThinking).toBe(true);
   });
 
-  it("keeps streaming during the grace window when a pending assistant message is still fresh", () => {
+  it("keeps streaming when a pending assistant message is still fresh", () => {
     const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const state = deriveChatActivityState({
       messages: [
@@ -100,7 +100,7 @@ describe("opencodeChat runtime", () => {
     expect(error?.error.message).toContain("Live updates were interrupted");
   });
 
-  it("does not surface a stream error for a stale pending assistant shell after the session has already gone terminal", () => {
+  it("surfaces a stream error when a terminal-looking session still has a pending assistant shell", () => {
     const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const error = buildDerivedSessionError({
       selectedSessionId: "sess-1",
@@ -120,7 +120,7 @@ describe("opencodeChat runtime", () => {
       now,
     });
 
-    expect(error).toBeNull();
+    expect(error?.error.type).toBe("stream");
   });
 
   it("does not surface a load error when cached messages are already visible during a background refresh failure", () => {

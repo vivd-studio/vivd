@@ -8,6 +8,12 @@ import {
   SYSTEM_SETTING_KEYS,
 } from "./SystemSettingsService";
 import { installProfileService } from "./InstallProfileService";
+import {
+  DEFAULT_404_FILENAME,
+  ensureCaddyStaticPages,
+  getCaddySystemPagesDir,
+  UNPUBLISHED_SITE_PLACEHOLDER_FILENAME,
+} from "../publish/caddyStaticPages";
 
 export const instanceTlsModeSchema = z.enum(["managed", "external", "off"]);
 export type InstanceTlsMode = z.infer<typeof instanceTlsModeSchema>;
@@ -144,6 +150,9 @@ function normalizeStoredSettings(
 }
 
 function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): string {
+  const caddySitesDir =
+    process.env.CADDY_SITES_DIR?.trim() || soloSelfHostDefaults.caddySitesDir;
+  const systemPagesDir = getCaddySystemPagesDir(caddySitesDir);
   const globalOptions: string[] = ["{"];
   if (settings.tlsMode !== "managed") {
     globalOptions.push("    auto_https off");
@@ -158,7 +167,7 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
     "    }",
     "}",
     "",
-    `import ${soloSelfHostDefaults.caddySitesDir}/*.caddy`,
+    `import ${caddySitesDir}/*.caddy`,
     "",
   );
 
@@ -193,18 +202,22 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
         respond "OK" 200
     }
 
-    import ${soloSelfHostDefaults.caddySitesDir}/_primary/*.caddy
+    import ${caddySitesDir}/_primary/*.caddy
 
     handle {
-        root * ${soloSelfHostDefaults.publishedDir}
-        try_files {path} {path}/index.html =404
+        root * ${systemPagesDir}
+        rewrite * /${UNPUBLISHED_SITE_PLACEHOLDER_FILENAME}
         file_server
     }
 
     handle_errors {
         @404 expression {err.status_code} == 404
         handle @404 {
-            respond "Not found" 404
+            root * ${systemPagesDir}
+            rewrite * /${DEFAULT_404_FILENAME}
+            file_server {
+                status {err.status_code}
+            }
         }
     }
 }
@@ -298,8 +311,11 @@ class InstanceNetworkSettingsService {
     }
 
     const caddyfilePath = process.env.CADDY_MAIN_CONFIG_PATH?.trim() || "/etc/caddy/Caddyfile";
+    const caddySitesDir =
+      process.env.CADDY_SITES_DIR?.trim() || soloSelfHostDefaults.caddySitesDir;
     const resolved = this.getResolvedSettings();
     const content = buildSelfHostCaddyfile(resolved);
+    ensureCaddyStaticPages(caddySitesDir);
 
     try {
       const existing = fs.existsSync(caddyfilePath)

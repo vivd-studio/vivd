@@ -4,7 +4,7 @@ import * as os from "os";
 import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { isIP } from "node:net";
 import { db } from "../../db";
-import { publishedSite } from "../../db/schema";
+import { domain as domainTable, publishedSite } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
 import type { GitHubSyncResult } from "../integrations/GitService";
 import {
@@ -16,17 +16,19 @@ import {
 } from "../project/ProjectArtifactStateService";
 import type { PublishArtifactKind } from "../project/ProjectArtifactStateService";
 import { domainService } from "./DomainService";
+import {
+  DEFAULT_404_FILENAME,
+  ensureCaddyStaticPages,
+  getCaddySystemPagesDir,
+  UNPUBLISHED_SITE_PLACEHOLDER_FILENAME,
+} from "./caddyStaticPages";
 import { reloadCaddyConfig } from "../system/CaddyAdminService";
 import { instanceNetworkSettingsService } from "../system/InstanceNetworkSettingsService";
 import { installProfileService } from "../system/InstallProfileService";
 
-// Directory where published site files are stored (Caddy reads from here)
-const PUBLISHED_DIR = process.env.PUBLISHED_DIR || soloSelfHostDefaults.publishedDir;
-// Directory where Caddy site configs are stored
-const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || soloSelfHostDefaults.caddySitesDir;
-const PRIMARY_HOST_INLINE_SITE_DIR = path.join(CADDY_SITES_DIR, "_primary");
 const PRIMARY_HOST_INLINE_SITE_FILENAME = "published-site.caddy";
 const REDIRECTS_MANIFEST_FILENAME = "redirects.json";
+const TENANT_PLACEHOLDER_MANIFEST_FILENAME = "_tenant-placeholder-domains.json";
 const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
 type CaddyTlsMode = "managed" | "off";
 
@@ -36,6 +38,18 @@ type ProjectRedirectRule = {
   statusCode: 301 | 302 | 307 | 308;
   isPrefix: boolean;
 };
+
+function getPublishedDir(): string {
+  return process.env.PUBLISHED_DIR || soloSelfHostDefaults.publishedDir;
+}
+
+function getCaddySitesDir(): string {
+  return process.env.CADDY_SITES_DIR || soloSelfHostDefaults.caddySitesDir;
+}
+
+function getPrimaryHostInlineSiteDir(): string {
+  return path.join(getCaddySitesDir(), "_primary");
+}
 
 function parseCaddyTlsMode(value: string | undefined): CaddyTlsMode {
   return value?.trim().toLowerCase() === "managed" ? "managed" : "off";
@@ -284,7 +298,7 @@ export class PublishService {
         );
       }
 
-      const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
+      const publishedPath = path.join(getPublishedDir(), organizationId, projectSlug);
       const stagingDir = fs.mkdtempSync(
         path.join(os.tmpdir(), `vivd-publish-${projectSlug}-`),
       );
@@ -347,7 +361,11 @@ export class PublishService {
         .limit(1);
 
       if (existingRecord.length > 0 && existingRecord[0].domain !== normalizedDomain) {
-        this.removeCaddyConfig(existingRecord[0].domain);
+        if (await this.isActiveTenantHostDomain(existingRecord[0].domain)) {
+          this.generateUnpublishedTenantHostCaddyConfig(existingRecord[0].domain);
+        } else {
+          this.removeCaddyConfig(existingRecord[0].domain);
+        }
       }
 
       await this.generateCaddyConfig(
@@ -421,8 +439,11 @@ export class PublishService {
 
     const { domain } = existing[0];
 
-    // Remove Caddy config
-    this.removeCaddyConfig(domain);
+    if (await this.isActiveTenantHostDomain(domain)) {
+      this.generateUnpublishedTenantHostCaddyConfig(domain);
+    } else {
+      this.removeCaddyConfig(domain);
+    }
 
     // Reload Caddy
     await this.reloadCaddy();
@@ -432,7 +453,7 @@ export class PublishService {
 
     // Optionally delete published files
     if (deleteFiles) {
-      const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
+      const publishedPath = path.join(getPublishedDir(), organizationId, projectSlug);
       if (fs.existsSync(publishedPath)) {
         fs.rmSync(publishedPath, { recursive: true, force: true });
       }
@@ -518,11 +539,11 @@ export class PublishService {
   async syncGeneratedCaddyConfigs(): Promise<number> {
     const records = await db.select().from(publishedSite);
     this.clearPrimaryHostInlineConfigs();
-    if (records.length === 0) return 0;
+    this.ensureCaddyStaticPages();
 
     for (const record of records) {
       const publishedPath = path.join(
-        PUBLISHED_DIR,
+        getPublishedDir(),
         record.organizationId,
         record.projectSlug,
       );
@@ -545,6 +566,7 @@ export class PublishService {
       );
     }
 
+    await this.syncUnpublishedTenantHostConfigs(records.map((record) => record.domain));
     await this.reloadCaddy();
     return records.length;
   }
@@ -597,21 +619,111 @@ export class PublishService {
   }
 
   private ensureCaddySitesDirExists(): void {
-    if (!fs.existsSync(CADDY_SITES_DIR)) {
-      fs.mkdirSync(CADDY_SITES_DIR, { recursive: true });
+    const caddySitesDir = getCaddySitesDir();
+    if (!fs.existsSync(caddySitesDir)) {
+      fs.mkdirSync(caddySitesDir, { recursive: true });
     }
   }
 
   private getPrimaryHostInlineConfigPath(): string {
     return path.join(
-      PRIMARY_HOST_INLINE_SITE_DIR,
+      getPrimaryHostInlineSiteDir(),
       PRIMARY_HOST_INLINE_SITE_FILENAME,
     );
   }
 
   private getPublishedSiteConfigPath(domain: string): string {
     const filename = domain.replace(/\./g, "-") + ".caddy";
-    return path.join(CADDY_SITES_DIR, filename);
+    return path.join(getCaddySitesDir(), filename);
+  }
+
+  private getTenantPlaceholderManifestPath(): string {
+    return path.join(getCaddySitesDir(), TENANT_PLACEHOLDER_MANIFEST_FILENAME);
+  }
+
+  private ensureCaddyStaticPages(): void {
+    this.ensureCaddySitesDirExists();
+    ensureCaddyStaticPages(getCaddySitesDir());
+  }
+
+  private readTenantPlaceholderManifestDomains(): string[] {
+    const manifestPath = this.getTenantPlaceholderManifestPath();
+    if (!fs.existsSync(manifestPath)) return [];
+
+    try {
+      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((value): value is string => typeof value === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  private writeTenantPlaceholderManifestDomains(domains: string[]): void {
+    fs.writeFileSync(
+      this.getTenantPlaceholderManifestPath(),
+      JSON.stringify([...new Set(domains)].sort(), null, 2),
+      "utf-8",
+    );
+  }
+
+  private async syncUnpublishedTenantHostConfigs(
+    publishedDomains: string[],
+  ): Promise<void> {
+    const desiredDomains = await this.listActiveUnpublishedTenantHostDomains(
+      publishedDomains,
+    );
+    const desiredSet = new Set(desiredDomains);
+    const publishedSet = new Set(
+      publishedDomains.map((domain) => this.normalizeDomain(domain)),
+    );
+
+    for (const previousDomain of this.readTenantPlaceholderManifestDomains()) {
+      if (desiredSet.has(previousDomain) || publishedSet.has(previousDomain)) continue;
+      this.removePublishedSiteConfig(previousDomain);
+    }
+
+    for (const domain of desiredDomains) {
+      this.generateUnpublishedTenantHostCaddyConfig(domain);
+    }
+
+    this.writeTenantPlaceholderManifestDomains(desiredDomains);
+  }
+
+  private async listActiveUnpublishedTenantHostDomains(
+    publishedDomains: string[],
+  ): Promise<string[]> {
+    const rows = await db.query.domain.findMany({
+      where: and(
+        eq(domainTable.usage, "tenant_host"),
+        eq(domainTable.status, "active"),
+      ),
+      columns: {
+        domain: true,
+      },
+    });
+
+    const publishedSet = new Set(
+      publishedDomains.map((domain) => this.normalizeDomain(domain)),
+    );
+
+    return rows
+      .map((row) => this.normalizeDomain(row.domain))
+      .filter((domain) => !publishedSet.has(domain))
+      .sort();
+  }
+
+  private async isActiveTenantHostDomain(domain: string): Promise<boolean> {
+    const normalizedDomain = this.normalizeDomain(domain);
+    const row = await db.query.domain.findFirst({
+      where: and(
+        eq(domainTable.domain, normalizedDomain),
+        eq(domainTable.usage, "tenant_host"),
+        eq(domainTable.status, "active"),
+      ),
+      columns: { id: true },
+    });
+    return Boolean(row);
   }
 
   private getResolvedPrimaryHost(): string | null {
@@ -634,12 +746,61 @@ export class PublishService {
   }
 
   private clearPrimaryHostInlineConfigs(): void {
-    if (!fs.existsSync(PRIMARY_HOST_INLINE_SITE_DIR)) return;
+    const primaryHostInlineSiteDir = getPrimaryHostInlineSiteDir();
+    if (!fs.existsSync(primaryHostInlineSiteDir)) return;
 
-    for (const entry of fs.readdirSync(PRIMARY_HOST_INLINE_SITE_DIR)) {
+    for (const entry of fs.readdirSync(primaryHostInlineSiteDir)) {
       if (!entry.endsWith(".caddy")) continue;
-      fs.unlinkSync(path.join(PRIMARY_HOST_INLINE_SITE_DIR, entry));
+      fs.unlinkSync(path.join(primaryHostInlineSiteDir, entry));
     }
+  }
+
+  private generateUnpublishedTenantHostCaddyConfig(domain: string): void {
+    this.ensureCaddyStaticPages();
+
+    const isDev = this.isDevDomain(domain);
+    const domainSpec = buildPublishedSiteAddressSpec(domain, { isDev });
+    const frontendPort = process.env.NODE_ENV === "development" ? "5173" : "80";
+    const systemPagesDir = getCaddySystemPagesDir(getCaddySitesDir());
+
+    const config = `# Auto-generated by Vivd for unpublished tenant host ${domain}
+${domainSpec} {
+    # Matcher to exclude Vivd runtime routes
+    @notVivdRuntime not path /vivd-studio /vivd-studio/* /_studio /_studio/* /plugins /plugins/* /email/v1/feedback /email/v1/feedback/*
+
+    # Active studio runtime routes
+    import /etc/caddy/runtime.d/*.caddy
+
+    # Unpublished tenant host placeholder
+    handle @notVivdRuntime {
+        root * ${systemPagesDir}
+        rewrite * /${UNPUBLISHED_SITE_PLACEHOLDER_FILENAME}
+        file_server
+    }
+
+    # Studio API - proxy to backend
+    handle /vivd-studio/api/* {
+        reverse_proxy backend:3000
+    }
+
+    # Same-host plugin runtime
+    handle /plugins/* {
+        reverse_proxy backend:3000
+    }
+
+    # Same-host email feedback endpoints
+    handle /email/v1/feedback/* {
+        reverse_proxy backend:3000
+    }
+
+    # Studio frontend - proxy to frontend (handles /vivd-studio and /vivd-studio/*)
+    handle /vivd-studio* {
+        reverse_proxy frontend:${frontendPort}
+    }
+}
+`;
+
+    fs.writeFileSync(this.getPublishedSiteConfigPath(domain), config, "utf-8");
   }
 
   /**
@@ -900,7 +1061,7 @@ ${blocks.join("\n\n")}
     projectSlug: string,
     redirectRules: ProjectRedirectRule[] = [],
   ): Promise<void> {
-    this.ensureCaddySitesDirExists();
+    this.ensureCaddyStaticPages();
 
     const isDev = this.isDevDomain(domain);
     const domainSpec = buildPublishedSiteAddressSpec(domain, { isDev });
@@ -910,11 +1071,12 @@ ${blocks.join("\n\n")}
     // In production, frontend runs nginx on 80
     const frontendPort = process.env.NODE_ENV === "development" ? "5173" : "80";
 
-    const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
+    const publishedPath = path.join(getPublishedDir(), organizationId, projectSlug);
     const redirectRulesBlock = this.buildRedirectCaddyBlocks(redirectRules);
+    const systemPagesDir = getCaddySystemPagesDir(getCaddySitesDir());
 
     if (await this.shouldInlinePrimaryHostPublish(domain)) {
-      fs.mkdirSync(PRIMARY_HOST_INLINE_SITE_DIR, { recursive: true });
+      fs.mkdirSync(getPrimaryHostInlineSiteDir(), { recursive: true });
       this.removePublishedSiteConfig(domain);
 
       const primaryConfig = `    # Auto-generated by Vivd for the primary host ${domain}
@@ -963,8 +1125,8 @@ ${redirectRulesBlock}
     handle_errors {
         @404 expression {err.status_code} == 404
         handle @404 {
-            root * /srv/default
-            rewrite * /default-404.html
+            root * ${systemPagesDir}
+            rewrite * /${DEFAULT_404_FILENAME}
             file_server {
                 status {err.status_code}
             }

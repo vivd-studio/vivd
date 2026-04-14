@@ -452,6 +452,8 @@ function runCommand(options: {
       env: options.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    let stdout = "";
+    let stderr = "";
 
     const timeout = setTimeout(() => {
       try {
@@ -465,11 +467,17 @@ function runCommand(options: {
 
     proc.stdout?.on("data", (d) => {
       const text = d.toString().trim();
-      if (text) console.log(`[${options.label}] ${text}`);
+      if (text) {
+        stdout = stdout ? `${stdout}\n${text}` : text;
+        console.log(`[${options.label}] ${text}`);
+      }
     });
     proc.stderr?.on("data", (d) => {
       const text = d.toString().trim();
-      if (text) console.error(`[${options.label}] ${text}`);
+      if (text) {
+        stderr = stderr ? `${stderr}\n${text}` : text;
+        console.error(`[${options.label}] ${text}`);
+      }
     });
 
     proc.on("error", (err) => {
@@ -479,7 +487,8 @@ function runCommand(options: {
     proc.on("exit", (code) => {
       clearTimeout(timeout);
       if (code === 0) return resolve();
-      reject(new Error(`${options.label} failed (exit code ${code ?? 1})`));
+      const detail = stderr || stdout;
+      reject(new Error(detail || `${options.label} failed (exit code ${code ?? 1})`));
     });
   });
 }
@@ -570,6 +579,27 @@ function writeBuildMeta(distDir: string, meta: BuildMeta): void {
   fs.writeFileSync(path.join(dir, "build.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf-8");
 }
 
+async function uploadBuildMeta(options: {
+  bucket: string;
+  keyPrefix: string;
+  label: string;
+  meta: BuildMeta;
+}): Promise<void> {
+  const metaDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-build-meta-"));
+  try {
+    writeBuildMeta(metaDir, options.meta);
+    await syncDirectoryToBucket({
+      source: metaDir,
+      bucket: options.bucket,
+      keyPrefix: options.keyPrefix,
+      delete: false,
+      label: options.label,
+    });
+  } finally {
+    fs.rmSync(metaDir, { recursive: true, force: true });
+  }
+}
+
 export async function syncSourceToBucket(options: {
   projectDir: string;
   slug: string;
@@ -599,25 +629,17 @@ export async function syncSourceToBucket(options: {
     label: "SourceSync",
   });
 
-  // Source artifact metadata used by publish-state/readiness checks.
-  const metaDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-source-meta-"));
-  try {
-    writeBuildMeta(metaDir, {
+  await uploadBuildMeta({
+    bucket,
+    keyPrefix,
+    label: "SourceMetaUpload",
+    meta: {
       status: "ready",
       framework: "generic",
       commitHash: options.commitHash,
       completedAt: new Date().toISOString(),
-    });
-    await syncDirectoryToBucket({
-      source: metaDir,
-      bucket,
-      keyPrefix,
-      delete: false,
-      label: "SourceMetaUpload",
-    });
-  } finally {
-    fs.rmSync(metaDir, { recursive: true, force: true });
-  }
+    },
+  });
 }
 
 async function ensureAstroBuild(projectDir: string, commitHash?: string): Promise<string> {
@@ -675,9 +697,33 @@ export async function buildAndUploadPreview(options: {
   const config = detectProjectType(options.projectDir);
   if (config.framework !== "astro") return;
 
-  const distDir = await ensureAstroBuild(options.projectDir, options.commitHash);
-
   const keyPrefix = getKeyPrefix({ slug: options.slug, version: options.version, kind: "preview" });
+  const startedAt = new Date().toISOString();
+  let distDir: string;
+  try {
+    distDir = await ensureAstroBuild(options.projectDir, options.commitHash);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await uploadBuildMeta({
+        bucket,
+        keyPrefix,
+        label: "PreviewErrorMetaUpload",
+        meta: {
+          status: "error",
+          framework: "astro",
+          commitHash: options.commitHash,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          error: message,
+        },
+      });
+    } catch (metaError) {
+      const metaMessage = metaError instanceof Error ? metaError.message : String(metaError);
+      console.warn(`[PreviewErrorMetaUpload] Failed to persist build error: ${metaMessage}`);
+    }
+    throw error;
+  }
 
   await syncDirectoryToBucket({
     source: distDir,

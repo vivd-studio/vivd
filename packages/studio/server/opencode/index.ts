@@ -1163,7 +1163,7 @@ export async function getSessionsStatus(directory: string) {
   const normalizedStatuses = normalizeSessionStatuses(result.data, sessions);
   const emitterStatuses = agentEventEmitter.getSessionStatuses();
   const emitterStatusSnapshots = agentEventEmitter.getSessionStatusSnapshots();
-  const FRESH_BUSY_STATUS_MAX_AGE_MS = 15_000;
+  const FRESH_BUSY_STATUS_MAX_AGE_MS = 2_000;
   const now = Date.now();
 
   const statusMap: Record<string, SessionStatus> = {};
@@ -1178,15 +1178,11 @@ export async function getSessionsStatus(directory: string) {
       emitter?.type === "retry" || emitter?.type === "error";
 
     if (normalized) {
-      // Prefer OpenCode's current status over emitter snapshots so stale
-      // in-memory "busy" states don't pin the UI in Waiting after refresh.
-      if (
-        normalized.type === "idle" &&
-        emitter &&
-        (hasEmitterRetryOrError || hasFreshEmitterBusy)
-      ) {
-        // Keep retry (and very fresh busy right after prompt submit) visible when
-        // OpenCode briefly reports idle during status propagation.
+      // Prefer OpenCode's explicit current status over emitter snapshots so
+      // bootstrap refreshes do not resurrect a stale local busy state.
+      if (normalized.type === "idle" && emitter && hasEmitterRetryOrError) {
+        // Keep retry/error visibility when OpenCode collapses back to idle
+        // before the retry/error state is reflected in bootstrap status.
         statusMap[session.id] = emitter;
       } else {
         statusMap[session.id] = normalized;

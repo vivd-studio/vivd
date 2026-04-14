@@ -36,6 +36,7 @@ describe("instance network settings service", () => {
     delete process.env.VIVD_INSTALL_PROFILE;
     delete process.env.VIVD_SELFHOST_CADDY_UI_MANAGED;
     delete process.env.CADDY_MAIN_CONFIG_PATH;
+    delete process.env.CADDY_SITES_DIR;
   });
 
   afterEach(() => {
@@ -87,7 +88,9 @@ describe("instance network settings service", () => {
   it("writes self-host Caddy config by default for solo installs", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-caddy-"));
     const caddyfilePath = path.join(tempDir, "Caddyfile");
+    const caddySitesDir = path.join(tempDir, "sites.d");
     process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
+    process.env.CADDY_SITES_DIR = caddySitesDir;
     storedValue = {
       publicHost: "solo.example.com",
       tlsMode: "managed",
@@ -104,8 +107,17 @@ describe("instance network settings service", () => {
       "solo.example.com {",
     );
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
-      "import /etc/caddy/sites.d/_primary/*.caddy",
+      `import ${caddySitesDir}/_primary/*.caddy`,
     );
+    expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
+      "/unpublished-site-placeholder.html",
+    );
+    expect(
+      fs.readFileSync(
+        path.join(caddySitesDir, "_system", "unpublished-site-placeholder.html"),
+        "utf-8",
+      ),
+    ).toContain("Open /vivd-studio");
 
     await instanceNetworkSettingsService.updateStoredSettings({
       tlsMode: "off",

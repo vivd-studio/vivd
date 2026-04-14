@@ -146,7 +146,7 @@ vivd follows a fair-code, source-available licensing model.
 
 The binding legal terms are the Business Source License 1.1 (BUSL-1.1) with a Vivd-specific Additional Use Grant. This is not an OSI-approved open-source license.
 
-- Free without a separate commercial license: self-hosted `solo` deployments for your own organization, isolated single-tenant per-client deployments, and paid agency/consulting work around those deployments, as covered by the Additional Use Grant.
+- Free without a separate commercial license: self-hosted `solo` deployments and other single-tenant deployments dedicated to one entity under the Additional Use Grant, including contractor/service-provider work on that entity's behalf.
 - Separate commercial license required: `platform`, multi-tenant, shared-control-plane, hosted SaaS from a shared deployment/control layer, white-label, OEM, embedded, and other productized commercial uses outside that grant.
 - Generated website output created with vivd is not itself the Licensed Work.
 
