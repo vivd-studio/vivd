@@ -70,6 +70,9 @@ Start in these files:
 - Shared CMS adapter/parsing/writing:
   - `packages/shared/src/cms/index.ts`
   - `packages/shared/src/cms/astroCollections.ts`
+  - `packages/shared/src/cms/astroCollections/shared.ts`
+  - `packages/shared/src/cms/astroCollections/schema.ts`
+  - `packages/shared/src/cms/astroCollections/entries.ts`
 - Shared agent/platform guidance:
   - `packages/shared/src/studio/agentInstructions.ts`
   - `packages/shared/src/studio/cliHelp.ts`
@@ -139,4 +142,3 @@ Read:
 - `references/validation.md`
 
 Use the `testing` skill as a companion when the change crosses Studio/backend/shared boundaries.
-
