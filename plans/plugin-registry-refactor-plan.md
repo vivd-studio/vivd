@@ -6,7 +6,7 @@ Status: phase 1 landed; shared-contract and panel-extraction follow-ups remain
 
 This document turns the existing plugin-architecture review into a concrete refactor plan for the next step: making first-party plugins show up automatically in the main listing surfaces without duplicating plugin metadata and list wiring in multiple places.
 
-It complements [docs/plugin-system-design.md](./plugin-system-design.md), which describes the broader plugin platform. This plan is narrower: registry-driven discovery, summaries, and UI composition across the control plane.
+It complements [plans/plugin-system-design.md](./plugin-system-design.md), which describes the broader plugin platform. This plan is narrower: registry-driven discovery, summaries, and UI composition across the control plane.
 
 ## Problem Statement
 

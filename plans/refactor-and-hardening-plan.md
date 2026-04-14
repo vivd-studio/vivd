@@ -9,19 +9,19 @@ self-hosting/profile split work, and docs rollout into a cleaner and safer basel
 without losing shipped behavior.
 
 This is the umbrella cleanup plan. Keep more detailed subplans, especially
-`docs/opencode-chat-refactor-plan.md`, as the source of truth for area-specific
+`plans/opencode-chat-refactor-plan.md`, as the source of truth for area-specific
 implementation details.
 
 ## Related Docs
 
-- `docs/opencode-chat-refactor-plan.md`
-- `docs/opencode-chat-sync-analysis.md`
-- `docs/self-hosting-profile-split-plan.md`
-- `docs/old/refactoring-day-checklist.md`
+- `plans/opencode-chat-refactor-plan.md`
+- `plans/opencode-chat-sync-analysis.md`
+- `plans/self-hosting-profile-split-plan.md`
+- `plans/old/refactoring-day-checklist.md`
 
 ## Rules For Closing Items
 
-- [ ] Do not mark an item done until code, focused tests, and docs/config updates are in place.
+- [ ] Do not mark an item done until code, focused tests, and plans/config updates are in place.
 - [ ] Fix externally reachable auth or data-exposure problems before structural cleanup.
 - [ ] Prefer deleting duplicate paths over adding another compatibility layer.
 - [ ] When config/env behavior changes, update `.env.example`, shared compose files, the self-host install bundle, and relevant docs in the same change.
@@ -46,7 +46,7 @@ Current boundary: the Studio runtime shell and its private helper/API routes rem
 - [ ] Stop the new timeline/render layer from depending on legacy `components/chat` parsing helpers.
 - [ ] Replace `any`-heavy OpenCode payload handling with parsers or type guards at the transport edge.
 - [ ] Finish question, review/diff, and follow-up/session-action work against the canonical store instead of extending legacy state paths.
-- [ ] Delete the legacy chat modules listed in `docs/opencode-chat-refactor-plan.md` after cutover.
+- [ ] Delete the legacy chat modules listed in `plans/opencode-chat-refactor-plan.md` after cutover.
 
 ## Phase 2: Extract The Frontend Studio Host Shell
 

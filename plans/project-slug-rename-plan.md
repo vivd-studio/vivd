@@ -25,7 +25,7 @@ After a successful rename:
 
 ## Non-Goals (V1)
 
-- Cross-organization moves (handled separately by `docs/superadmin-project-transfer-plan.md`).
+- Cross-organization moves (handled separately by `plans/superadmin-project-transfer-plan.md`).
 - Renaming organization slugs.
 - Renaming while a project is actively published.
 - Background jobs/work queues for rename (v1 stays synchronous).

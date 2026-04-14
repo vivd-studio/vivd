@@ -17,7 +17,7 @@ For Astro-backed projects:
 - generated Astro starters should include an Astro-native `src/content.config.ts` from day one, not a Vivd YAML shadow schema
 - Vivd may keep an internal adapter layer for Studio/CLI, but that adapter must not become a second project-owned source of truth.
 
-This plan supersedes the earlier YAML-first CMS direction in `docs/file-based-cms-spec.md` for Astro-backed projects.
+This plan supersedes the earlier YAML-first CMS direction in `plans/file-based-cms-spec.md` for Astro-backed projects.
 
 ## Source Of Truth
 

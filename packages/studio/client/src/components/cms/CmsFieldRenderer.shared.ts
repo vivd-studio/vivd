@@ -21,7 +21,12 @@ export interface CmsFieldRendererProps {
   sidecarDrafts: Record<string, string>;
   canUseAiImages: boolean;
   readOnly?: boolean;
-  referenceOptions: Array<{ value: string; label: string }>;
+  referenceOptions: Array<{
+    value: string;
+    label: string;
+    modelKey: string;
+    entryKey: string;
+  }>;
   applyDraftValue: (fieldPath: CmsFieldSegment[], nextValue: unknown) => void;
   handleRichTextChange: (
     fieldPath: CmsFieldSegment[],

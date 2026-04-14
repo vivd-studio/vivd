@@ -21,7 +21,12 @@ interface CmsEntryEditorProps {
   locales: string[];
   sidecarDrafts: Record<string, string>;
   canUseAiImages: boolean;
-  referenceOptions: Array<{ value: string; label: string }>;
+  referenceOptions: Array<{
+    value: string;
+    label: string;
+    modelKey: string;
+    entryKey: string;
+  }>;
   reportErrors: string[];
   sourceKind: CmsSourceKind;
   readOnly: boolean;

@@ -7,8 +7,8 @@ Status: findings + proposed hardening (no implementation in this doc)
 This document captures a code-review of Vivd’s publishing flow and proposes a refactor + test plan to make it simpler and more robust.
 
 Related docs:
-- `docs/publishing-bucket-first-plan.md` (original consolidation plan; this doc is the follow-up hardening/refactor/test planning)
-- `docs/tenant-subdomain-domain-governance-plan.md` (domain registry + host routing governance)
+- `plans/publishing-bucket-first-plan.md` (original consolidation plan; this doc is the follow-up hardening/refactor/test planning)
+- `plans/tenant-subdomain-domain-governance-plan.md` (domain registry + host routing governance)
 
 ---
 

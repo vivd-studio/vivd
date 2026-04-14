@@ -1,0 +1,88 @@
+services:
+  backend:
+    environment:
+      - STUDIO_MACHINE_PROVIDER=local
+    develop:
+      watch:
+        # Local provider runs @vivd/studio inside the backend container.
+        # Rebuild backend on Studio changes so the child-process runtime is refreshed.
+        - action: rebuild
+          path: ./packages/studio
+
+  studio:
+    build:
+      context: .
+      dockerfile: packages/studio/Dockerfile
+      target: dev
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3100
+      - BRANCH=${STUDIO_BRANCH:-main}
+      - REPO_URL=${STUDIO_REPO_URL:-}
+      - GIT_TOKEN=${STUDIO_GIT_TOKEN:-}
+    volumes:
+      - opencode_data:/root/.local/share/opencode/storage
+    ports:
+      - "3100:3100"
+      - "3101:3101"
+    networks:
+      - vivd-network
+    develop:
+      watch:
+        - action: sync
+          path: ./packages/studio
+          target: /app/packages/studio
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/theme
+          target: /app/packages/theme
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./packages/shared
+          target: /app/packages/shared
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./packages/installed-plugins
+          target: /app/packages/installed-plugins
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-analytics
+          target: /app/packages/plugin-analytics
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-contact-form
+          target: /app/packages/plugin-contact-form
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-newsletter
+          target: /app/packages/plugin-newsletter
+          ignore:
+            - node_modules/
+            - dist/
+        - action: rebuild
+          path: ./packages/installed-plugins/package.json
+        - action: rebuild
+          path: ./packages/studio/package.json
+        - action: rebuild
+          path: ./packages/plugin-analytics/package.json
+        - action: rebuild
+          path: ./packages/plugin-contact-form/package.json
+        - action: rebuild
+          path: ./packages/plugin-newsletter/package.json
+        - action: rebuild
+          path: ./packages/theme/package.json
+        - action: rebuild
+          path: ./packages/shared/package.json
+    command: npm run dev

@@ -114,7 +114,7 @@ services:
       - VIVD_SES_FROM_EMAIL=${VIVD_SES_FROM_EMAIL:-}
       - VIVD_SES_REGION=${VIVD_SES_REGION:-}
       # Studio machines
-      - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-local}
+      - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-docker}
       - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-false}
       # Fly.io studio machines (when STUDIO_MACHINE_PROVIDER=fly)
       - FLY_API_TOKEN=${FLY_API_TOKEN:-}

@@ -620,7 +620,7 @@ export class SyncService {
 
 ## Referenzen
 
-- [Fly.io Machines Documentation](https://fly.io/docs/machines/)
-- [Fly.io Auto-stop/Auto-start](https://fly.io/docs/apps/autostart-stop/)
+- [Fly.io Machines Documentation](https://fly.io/plans/machines/)
+- [Fly.io Auto-stop/Auto-start](https://fly.io/plans/apps/autostart-stop/)
 - [Cloudflare R2 Pricing](https://developers.cloudflare.com/r2/pricing/)
 - [rclone R2 Setup](https://rclone.org/s3/#cloudflare-r2)

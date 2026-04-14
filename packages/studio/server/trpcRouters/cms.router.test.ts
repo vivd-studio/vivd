@@ -377,6 +377,120 @@ export const collections = {
     ).resolves.toContain("de: Neuer Beitrag");
   });
 
+  it("normalizes Astro reference updates to bare ids and validates missing targets", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "productGroups"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(projectDir, "src", "content", "products"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, reference, z } from "astro:content";
+
+export const collections = {
+  productGroups: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+  products: defineCollection({
+    schema: z.object({
+      title: z.string(),
+      productGroup: reference("productGroups").optional(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "productGroups", "chemistry.json"),
+      JSON.stringify({ title: "Chemistry" }, null, 2),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "products", "apollo.json"),
+      JSON.stringify(
+        {
+          title: "Apollo",
+          productGroup: "productGroups:chemistry",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+
+    const initialStatus = await caller.status();
+    expect(initialStatus.valid).toBe(true);
+
+    await caller.applyPreviewFieldUpdates({
+      slug: "demo-site",
+      version: 1,
+      updates: [
+        {
+          modelKey: "products",
+          entryKey: "apollo",
+          fieldPath: ["productGroup"],
+          value: "productGroups:chemistry",
+        },
+      ],
+    });
+
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "products", "apollo.json"), "utf8"),
+    ).resolves.toContain('"productGroup": "chemistry"');
+
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "products", "apollo.json"),
+      JSON.stringify(
+        {
+          title: "Apollo",
+          productGroup: "missing-group",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const invalidStatus = await caller.status();
+    expect(invalidStatus.valid).toBe(false);
+    expect(invalidStatus.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "src/content/products/apollo.json: field productGroup references missing entry productGroups:missing-group",
+        ),
+      ]),
+    );
+
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "products", "apollo.json"),
+      JSON.stringify(
+        {
+          title: "Apollo",
+          productGroup: "products:apollo",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const wrongCollectionStatus = await caller.status();
+    expect(wrongCollectionStatus.valid).toBe(false);
+    expect(wrongCollectionStatus.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "src/content/products/apollo.json: field productGroup must reference an entry in productGroups",
+        ),
+      ]),
+    );
+  });
+
   it("applies preview-owned CMS field updates back into Astro entry files", async () => {
     await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
     await fs.mkdir(path.join(projectDir, "src", "content", "media", "blog"), {

@@ -7,8 +7,19 @@ import {
   FolderOpen,
   ImagePlus,
   Loader2,
+  Trash2,
   Upload,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -46,6 +57,7 @@ interface CmsAssetPickerSheetProps {
   defaultFolderPath: string;
   canUseAiImages: boolean;
   onSelect: (storedReference: string) => void;
+  onDeleteCurrentAsset?: () => void;
 }
 
 function fieldAcceptsImages(field: CmsFieldDefinition, currentValue: string): boolean {
@@ -108,6 +120,7 @@ export function CmsAssetPickerSheet({
   defaultFolderPath,
   canUseAiImages,
   onSelect,
+  onDeleteCurrentAsset,
 }: CmsAssetPickerSheetProps) {
   const utils = trpc.useUtils();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -117,6 +130,8 @@ export function CmsAssetPickerSheet({
   const [createImageOpen, setCreateImageOpen] = useState(false);
   const [createImagePrompt, setCreateImagePrompt] = useState("");
   const [selectedReferenceImages, setSelectedReferenceImages] = useState<string[]>([]);
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<AssetItem | null>(null);
+  const deleteAssetMutation = trpc.assets.deleteAsset.useMutation();
 
   const accepts = field.accepts ?? [];
   const imageMode = fieldAcceptsImages(field, currentValue);
@@ -241,6 +256,38 @@ export function CmsAssetPickerSheet({
     [currentPath, entryRelativePath, onOpenChange, onSelect, projectSlug, utils.assets, version],
   );
 
+  const handleDeleteAsset = useCallback(async () => {
+    if (!pendingDeleteItem || pendingDeleteItem.type !== "file") {
+      return;
+    }
+
+    try {
+      await deleteAssetMutation.mutateAsync({
+        slug: projectSlug,
+        version,
+        relativePath: pendingDeleteItem.path,
+      });
+      await utils.assets.invalidate();
+      if (normalizePosix(pendingDeleteItem.path) === normalizePosix(currentValue)) {
+        onDeleteCurrentAsset?.();
+      }
+      toast.success("Asset deleted");
+      setPendingDeleteItem(null);
+    } catch (error) {
+      toast.error("Delete failed", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [
+    currentValue,
+    deleteAssetMutation,
+    onDeleteCurrentAsset,
+    pendingDeleteItem,
+    projectSlug,
+    utils.assets,
+    version,
+  ]);
+
   const handleDrop = useCallback(
     async (event: DragEvent<HTMLDivElement>) => {
       const isExternalFileDrop =
@@ -295,7 +342,8 @@ export function CmsAssetPickerSheet({
                     ? "/pdfs/products/example.pdf"
                     : "../../../media/products/example.pdf"}
                 </code>{" "}
-                into the entry YAML.
+                into the entry YAML. Use overwrite on the field card to keep the same path, or
+                delete older files here after relinking.
               </SheetDescription>
             </SheetHeader>
 
@@ -406,39 +454,67 @@ export function CmsAssetPickerSheet({
                           </div>
                         </button>
                       ) : (
-                        <ImageThumbnail
-                          key={item.path}
-                          item={item}
-                          imageUrls={getStudioImageUrlCandidates(projectSlug, version, item.path)}
-                          selected={currentValue === item.path}
-                          showSelection
-                          draggable={false}
-                          onClick={() => handleSelectAsset(item)}
-                        />
+                        <div key={item.path} className="relative">
+                          <ImageThumbnail
+                            item={item}
+                            imageUrls={getStudioImageUrlCandidates(projectSlug, version, item.path)}
+                            selected={currentValue === item.path}
+                            showSelection
+                            draggable={false}
+                            onClick={() => handleSelectAsset(item)}
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            className="absolute right-2 top-2 h-8 w-8 bg-background/90 text-destructive hover:bg-background hover:text-destructive"
+                            disabled={deleteAssetMutation.isPending}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setPendingDeleteItem(item);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       ),
                     )}
                   </div>
                 ) : (
                   <div className="space-y-2 p-4">
                     {availableItems.map((item) => (
-                      <button
-                        key={item.path}
-                        type="button"
-                        className="flex w-full items-center justify-between rounded-lg border border-border/60 px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-                        onClick={() => handleSelectAsset(item)}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          {item.type === "folder" ? (
-                            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <FileIcon className="h-4 w-4 text-muted-foreground" />
-                          )}
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{item.name}</p>
-                            <p className="truncate text-xs text-muted-foreground">{item.path}</p>
+                      <div key={item.path} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between rounded-lg border border-border/60 px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                          onClick={() => handleSelectAsset(item)}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            {item.type === "folder" ? (
+                              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <FileIcon className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{item.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{item.path}</p>
+                            </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                        {item.type === "file" ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 text-destructive hover:text-destructive"
+                            disabled={deleteAssetMutation.isPending}
+                            onClick={() => setPendingDeleteItem(item)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -474,6 +550,45 @@ export function CmsAssetPickerSheet({
           version={version}
         />
       ) : null}
+
+      <AlertDialog
+        open={Boolean(pendingDeleteItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteItem(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete file?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <code>{pendingDeleteItem?.name}</code> from this folder. If any entry still
+              links to this path, that link will break until it is updated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteAssetMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteAssetMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteAsset();
+              }}
+            >
+              {deleteAssetMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete file
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

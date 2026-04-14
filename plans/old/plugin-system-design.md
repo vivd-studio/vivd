@@ -83,7 +83,7 @@ vivd/                           # Main monorepo
 │   │       └── BookingsAdmin.tsx
 │   ├── newsletter/
 │   └── _template/              # Starter template for new plugins
-├── docs/
+├── plans/
 └── docker-compose.yml
 
 # External plugins (separate repos in vivd-studio org)

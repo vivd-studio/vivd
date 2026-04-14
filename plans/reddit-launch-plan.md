@@ -15,7 +15,7 @@ Launch Vivd publicly on Reddit in a way that:
 ## Current Launch Shape
 
 - Public marketing site: `https://vivd.studio`
-- Public docs/self-host path: `https://docs.vivd.studio`
+- Public plans/self-host path: `https://docs.vivd.studio`
 - Hosted product posture: invite/manual organization creation only
 - Open registration: intentionally off for now
 - Public story: self-host is available now; hosted access is limited/beta-style

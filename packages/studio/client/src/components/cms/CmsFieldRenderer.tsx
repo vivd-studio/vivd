@@ -33,6 +33,10 @@ export function CmsFieldRenderer(props: CmsFieldRendererProps) {
   const rawValue = draftValues ? getValueAtPath(draftValues, fieldPath) : undefined;
   const fieldId = fieldPath.map(String).join(".");
   const label = getFieldLabel(fieldKey, field);
+  const targetReferenceModelKey = field.referenceModelKey?.trim();
+  const filteredReferenceOptions = targetReferenceModelKey
+    ? referenceOptions.filter((option) => option.modelKey === targetReferenceModelKey)
+    : referenceOptions;
 
   const localizedField = CmsFieldRendererLocalized(props);
   if (localizedField) {
@@ -156,10 +160,10 @@ export function CmsFieldRenderer(props: CmsFieldRendererProps) {
       <div key={fieldId} className="space-y-2">
         <Label>{label}</Label>
         <Select
-          value={deriveReferenceValue(rawValue) || "__empty__"}
+          value={deriveReferenceValue(rawValue, targetReferenceModelKey) || "__empty__"}
           disabled={readOnly}
           onValueChange={(value) =>
-            applyDraftValue(fieldPath, value === "__empty__" ? "" : value)
+            applyDraftValue(fieldPath, value === "__empty__" ? undefined : value)
           }
         >
           <SelectTrigger disabled={readOnly}>
@@ -167,7 +171,7 @@ export function CmsFieldRenderer(props: CmsFieldRendererProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__empty__">No reference</SelectItem>
-            {referenceOptions.map((option) => (
+            {filteredReferenceOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>

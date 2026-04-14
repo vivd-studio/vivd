@@ -6,7 +6,7 @@ Vivd is an AI-powered website builder: generate a site, preview/edit it in Studi
 
 - See `PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
 - When plans change or work is completed, update `PROJECT_STATE.md` in the same change.
-- If `PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `docs/PROJECT_STATE_ARCHIVE.md`.
+- If `PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `PROJECT_STATE_ARCHIVE.md`.
 
 ## Repo Shape
 
@@ -50,7 +50,7 @@ For current plugin extraction details and common wiring pitfalls, use `.agents/s
 - Treat `.vivd/dropped-images/` as ephemeral working storage; move anything worth keeping into the project tree.
 - The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`.
 
-For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machines/SKILL.md` and the relevant docs under `docs/`.
+For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machines/SKILL.md` and the relevant docs under `plans/`.
 
 ## Generated Sites
 

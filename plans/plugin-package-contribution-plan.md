@@ -8,8 +8,8 @@ This document defines the next refactor step for the plugin architecture after t
 
 It complements:
 
-- [docs/plugin-system-design.md](./plugin-system-design.md) for overall product/plugin scope
-- [docs/plugin-registry-refactor-plan.md](./plugin-registry-refactor-plan.md) for registry-driven discovery/listing surfaces
+- [plans/plugin-system-design.md](./plugin-system-design.md) for overall product/plugin scope
+- [plans/plugin-registry-refactor-plan.md](./plugin-registry-refactor-plan.md) for registry-driven discovery/listing surfaces
 
 This plan is narrower than the full plugin system design and deeper than the registry refactor. Its focus is one problem:
 

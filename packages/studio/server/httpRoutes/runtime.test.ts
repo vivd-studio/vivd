@@ -386,6 +386,49 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     }
   });
 
+  it("supports overriding the destination filename for single-file uploads", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-upload-override-"),
+    );
+    const { app } = createTestRuntimeApp({ projectPath: projectDir });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const formData = new FormData();
+      formData.append(
+        "files",
+        new Blob(["updated"], { type: "application/pdf" }),
+        "different-name.pdf",
+      );
+
+      const response = await fetch(
+        `${baseUrl}/vivd-studio/api/upload/demo/1?path=${encodeURIComponent(
+          "public/pdfs/products/56",
+        )}&filename=${encodeURIComponent("kept-name.pdf")}`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      const payload = (await response.json()) as { uploaded?: string[] };
+
+      expect(response.status).toBe(200);
+      expect(payload.uploaded).toEqual(["public/pdfs/products/56/kept-name.pdf"]);
+      expect(
+        fs.readFileSync(
+          path.join(projectDir, "public/pdfs/products/56/kept-name.pdf"),
+          "utf-8",
+        ),
+      ).toBe("updated");
+      expect(
+        fs.existsSync(path.join(projectDir, "public/pdfs/products/56/different-name.pdf")),
+      ).toBe(false);
+    } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   it("registers auth before backend-compatible preview routes", () => {
     const { app, authMiddleware } = createTestRuntimeApp();
     const matchingLayers = app.router.stack.filter(

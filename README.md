@@ -34,7 +34,7 @@ Vivd is also meant to be something you can actually run yourself: fair-code, sel
 - First-party plugin extraction is underway; Contact Form and Analytics already ship as extracted plugin packages behind generic host contracts.
 - A dedicated artifact-builder runtime exists behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but it remains dark-launched until the end-to-end path is production-verified.
 
-Public product docs live in `packages/docs`. Internal planning and architecture notes live in `docs/`.
+Public product docs live in `packages/docs`. Internal planning and architecture notes live in `plans/`.
 
 ## Core Product Features
 
@@ -68,7 +68,7 @@ That is a core part of the product: Vivd ships platform capabilities the agent c
 - `packages/theme` contains shared design tokens and theme styles.
 - `packages/builder` is the dedicated artifact-builder runtime that is currently still dark-launched.
 - `packages/plugin-*` contains extracted first-party plugin packages such as Contact Form and Analytics.
-- `docs/` holds internal notes, planning, and architecture material.
+- `plans/` holds internal notes, planning, and architecture material.
 
 ## Development
 
@@ -89,7 +89,33 @@ cp .env.example .env
 docker compose watch
 ```
 
-`docker compose watch` is the normal day-to-day loop for this repo. `docker-compose.override.yml` already defines sync/rebuild rules for the main dev services, so you usually do not need to boot them separately on the host. If you only want to start the stack without live sync/rebuild, `docker compose up -d` still works.
+`docker compose watch` is the normal day-to-day loop for this repo. The default local Compose path now assumes `STUDIO_MACHINE_PROVIDER=docker`, and `docker-compose.override.yml` only watches the main app services for that workflow. If you only want to start the stack without live sync/rebuild, `docker compose up -d` still works.
+
+If you are iterating on the packaged Studio runtime itself, point the backend at a local Studio image in `.env`:
+
+```bash
+DOCKER_STUDIO_IMAGE=vivd-studio:local
+```
+
+Then use:
+
+```bash
+npm run studio:dev:refresh
+```
+
+That helper rebuilds `vivd-studio:local` and stops matching managed Docker-provider Studio runtimes so the next open/restart comes back on the rebuilt image.
+
+If you explicitly want the older local-provider child-process loop, start Compose with the extra override:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.override.yml \
+  -f docker-compose.local-provider.yml \
+  watch
+```
+
+That override flips the backend to `STUDIO_MACHINE_PROVIDER=local`, restores the standalone `studio` service, and adds the old backend rebuild-on-`packages/studio` watch rule.
 
 For the default Compose-based local setup, the backend container runs Drizzle migrations on startup. You usually do not need a separate host-side `npm run db:migrate` just to boot the stack.
 
@@ -111,6 +137,7 @@ If you stay inside `docker compose watch`, you can usually ignore these. They ar
 | Run a single workspace directly on the host | `npm run dev -w @vivd/<backend|frontend|studio|docs|scraper>` |
 | Run a targeted typecheck | `npm run typecheck -w @vivd/<backend|frontend|studio|docs|scraper>` |
 | Run targeted tests | `npm run test:run -w @vivd/<backend|frontend|studio|scraper>` |
+| Rebuild local Studio image and stop Docker-provider runtimes | `npm run studio:dev:refresh` |
 | Run backend integration tests | `npm run test:integration -w @vivd/backend -- <path-to-test>` |
 | Generate Drizzle migrations | `npm run db:generate` |
 | Apply Drizzle migrations | `npm run db:migrate` |

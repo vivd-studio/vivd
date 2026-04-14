@@ -2,9 +2,9 @@
 
 Archived.
 
-The earlier YAML-first CMS direction has been moved to [`docs/old/file-based-cms-spec.md`](./old/file-based-cms-spec.md).
+The earlier YAML-first CMS direction has been moved to [`plans/old/file-based-cms-spec.md`](./old/file-based-cms-spec.md).
 
-For Astro-backed projects, the active implementation plan is now [`docs/astro-content-collections-plan.md`](./astro-content-collections-plan.md):
+For Astro-backed projects, the active implementation plan is now [`plans/astro-content-collections-plan.md`](./astro-content-collections-plan.md):
 
 - `src/content.config.ts` is the canonical model/schema source of truth
 - real Astro collection entry files under `src/content/**` are the canonical entry source of truth

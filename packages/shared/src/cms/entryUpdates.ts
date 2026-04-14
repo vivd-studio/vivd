@@ -1,6 +1,6 @@
 import path from "path";
 import { stringify as stringifyYaml } from "yaml";
-import type { CmsFieldDefinition } from "./index.js";
+import type { CmsFieldDefinition, CmsSourceKind } from "./index.js";
 
 const NON_LOCAL_ASSET_REFERENCE_REGEX = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
@@ -171,7 +171,12 @@ export function normalizeUpdatedFieldValue(
   entryRelativePath: string,
   field: CmsFieldDefinition | null,
   value: unknown,
+  options?: { sourceKind?: CmsSourceKind },
 ): unknown {
+  if (field?.type === "reference") {
+    return normalizeReferenceFieldValue(field, value, options?.sourceKind);
+  }
+
   const fieldActsLikeAsset =
     field &&
     typeof value === "string" &&
@@ -206,4 +211,56 @@ export function normalizeUpdatedFieldValue(
   }
 
   return buildRelativeReferencePath(entryRelativePath, trimmed);
+}
+
+export function normalizeReferenceFieldValue(
+  field: CmsFieldDefinition | null,
+  value: unknown,
+  sourceKind?: CmsSourceKind,
+): unknown {
+  if (field?.type !== "reference") {
+    return value;
+  }
+
+  if (sourceKind !== "astro-collections") {
+    return value;
+  }
+
+  if (typeof value === "undefined" || value === null) {
+    return field.required ? "" : undefined;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return field.required ? "" : undefined;
+    }
+
+    const targetPrefix = field.referenceModelKey?.trim();
+    if (targetPrefix) {
+      const prefixedValue = `${targetPrefix}:`;
+      if (trimmed.startsWith(prefixedValue)) {
+        const entryKey = trimmed.slice(prefixedValue.length).trim();
+        return entryKey || (field.required ? "" : undefined);
+      }
+    }
+
+    return trimmed;
+  }
+
+  if (isRecord(value)) {
+    const modelKey = typeof value.model === "string" ? value.model.trim() : "";
+    const entryKey = typeof value.entry === "string" ? value.entry.trim() : "";
+    if (!entryKey) {
+      return field.required ? "" : undefined;
+    }
+
+    if (!modelKey || modelKey === field.referenceModelKey?.trim()) {
+      return entryKey;
+    }
+
+    return `${modelKey}:${entryKey}`;
+  }
+
+  return value;
 }

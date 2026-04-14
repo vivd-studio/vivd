@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   assetsInvalidateMock: vi.fn(),
   editImageMutateMock: vi.fn(),
   deleteAssetMutateAsyncMock: vi.fn(),
+  uploadFilesToStudioPathMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastInfoMock: vi.fn(),
@@ -60,6 +61,43 @@ vi.mock("sonner", () => ({
     error: mocks.toastErrorMock,
     info: mocks.toastInfoMock,
   },
+}));
+
+vi.mock("@/components/ui/alert-dialog", () => ({
+  AlertDialog: ({
+    open,
+    children,
+  }: {
+    open: boolean;
+    children: ReactNode;
+  }) => (open ? <div data-testid="alert-dialog">{children}</div> : null),
+  AlertDialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogCancel: ({
+    children,
+    onClick,
+  }: {
+    children: ReactNode;
+    onClick?: () => void;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
+  AlertDialogAction: ({
+    children,
+    onClick,
+  }: {
+    children: ReactNode;
+    onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/ui/context-menu", () => ({
@@ -131,6 +169,10 @@ vi.mock("@/components/asset-explorer/AIEditDialog", () => ({
     ) : null,
 }));
 
+vi.mock("@/components/asset-explorer/upload", () => ({
+  uploadFilesToStudioPath: (...args: unknown[]) => mocks.uploadFilesToStudioPathMock(...args),
+}));
+
 vi.mock("./CmsAssetPickerSheet", () => ({
   CmsAssetPickerSheet: (props: unknown) => {
     mocks.pickerPropsMock(props);
@@ -144,6 +186,8 @@ describe("CmsAssetField", () => {
     mocks.editImageMutateMock.mockReset();
     mocks.deleteAssetMutateAsyncMock.mockReset();
     mocks.deleteAssetMutateAsyncMock.mockResolvedValue(undefined);
+    mocks.uploadFilesToStudioPathMock.mockReset();
+    mocks.uploadFilesToStudioPathMock.mockResolvedValue([]);
     mocks.toastSuccessMock.mockReset();
     mocks.toastErrorMock.mockReset();
     mocks.toastInfoMock.mockReset();
@@ -270,6 +314,93 @@ describe("CmsAssetField", () => {
     expect(inlinePathInputs[0]).toBeVisible();
   });
 
+  it("overwrites the current file at the same path instead of relinking the field", async () => {
+    const onChange = vi.fn();
+    const file = new File(["new pdf"], "replacement.pdf", {
+      type: "application/pdf",
+    });
+    mocks.uploadFilesToStudioPathMock.mockResolvedValue([
+      "public/pdfs/products/apollo/safety-sheet.pdf",
+    ]);
+
+    const { container } = render(
+      <CmsAssetField
+        projectSlug="demo"
+        version={1}
+        fieldId="safety-sheet"
+        label="Safety Sheet"
+        field={{ type: "asset", accepts: [".pdf", "application/pdf"] }}
+        value="/pdfs/products/apollo/safety-sheet.pdf"
+        entryRelativePath="src/content/products/apollo.yaml"
+        storageKind="public"
+        assetRootPath="public/pdfs"
+        defaultFolderPath="public/pdfs/products/apollo"
+        canUseAiImages={false}
+        onChange={onChange}
+        onOpenAsset={vi.fn()}
+      />,
+    );
+
+    const replaceInput = container.querySelector(
+      "#safety-sheet-replace-upload",
+    ) as HTMLInputElement;
+    fireEvent.change(replaceInput, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(mocks.uploadFilesToStudioPathMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectSlug: "demo",
+          version: 1,
+          targetPath: "public/pdfs/products/apollo",
+          filename: "safety-sheet.pdf",
+        }),
+      );
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(mocks.toastSuccessMock).toHaveBeenCalledWith("File replaced");
+  });
+
+  it("deletes the current file and clears the linked field after confirmation", async () => {
+    const onChange = vi.fn();
+
+    render(
+      <CmsAssetField
+        projectSlug="demo"
+        version={1}
+        fieldId="safety-sheet"
+        label="Safety Sheet"
+        field={{ type: "asset", accepts: [".pdf", "application/pdf"] }}
+        value="/pdfs/products/apollo/safety-sheet.pdf"
+        entryRelativePath="src/content/products/apollo.yaml"
+        storageKind="public"
+        assetRootPath="public/pdfs"
+        defaultFolderPath="public/pdfs/products/apollo"
+        canUseAiImages={false}
+        onChange={onChange}
+        onOpenAsset={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete file" }));
+    expect(screen.getByTestId("alert-dialog")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete file" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(mocks.deleteAssetMutateAsyncMock).toHaveBeenCalledWith({
+        slug: "demo",
+        version: 1,
+        relativePath: "public/pdfs/products/apollo/safety-sheet.pdf",
+      });
+    });
+
+    expect(onChange).toHaveBeenCalledWith("");
+    expect(mocks.toastSuccessMock).toHaveBeenCalledWith("File deleted");
+  });
+
   it("routes public PDF fields through the public asset root and keeps site-root paths on replace", () => {
     const onChange = vi.fn();
 
@@ -291,7 +422,7 @@ describe("CmsAssetField", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose other" }));
 
     const latestPickerProps = mocks.pickerPropsMock.mock.calls.at(-1)?.[0] as {
       open: boolean;

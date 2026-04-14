@@ -1,7 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Download,
+  Loader2,
   MessageSquarePlus,
+  Trash2,
+  Upload,
   Wand2,
   X,
 } from "lucide-react";
@@ -9,6 +12,16 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,10 +38,12 @@ import {
   getStudioImageUrlCandidates,
 } from "@/components/asset-explorer/utils";
 import type { AssetItem } from "@/components/asset-explorer/types";
+import { uploadFilesToStudioPath } from "@/components/asset-explorer/upload";
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
 import { CmsAssetPickerSheet } from "./CmsAssetPickerSheet";
 import {
   buildStoredAssetReferencePath,
+  dirnamePosix,
   getAssetPathValue,
   isPathInsideRoot,
   resolveAssetReferencePath,
@@ -80,19 +95,25 @@ export function CmsAssetField({
 }: CmsAssetFieldProps) {
   const utils = trpc.useUtils();
   const chatContext = useOptionalChatContext();
+  const replaceFileInputRef = useRef<HTMLInputElement | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [aiEditOpen, setAiEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiCandidatePath, setAiCandidatePath] = useState<string | null>(null);
+  const [isReplacingFile, setIsReplacingFile] = useState(false);
 
   const assetPath = getAssetPathValue(value);
   const resolvedAssetPath = assetPath
     ? resolveAssetReferencePath(entryRelativePath, assetPath)
     : "";
   const hasAsset = assetPath.trim().length > 0;
-  const canPreviewAsset = Boolean(
+  const acceptAttribute =
+    (field.accepts ?? []).length > 0 ? (field.accepts ?? []).join(",") : undefined;
+  const canManageCurrentAsset = Boolean(
     resolvedAssetPath && isPathInsideRoot(resolvedAssetPath, assetRootPath),
   );
+  const canPreviewAsset = Boolean(canManageCurrentAsset);
   const imageMode = fieldAcceptsImages(field, assetPath);
   const currentIsImage =
     imageMode && /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(resolvedAssetPath);
@@ -153,6 +174,78 @@ export function CmsAssetField({
   const handleClear = useCallback(() => {
     onChange(setAssetPathValue(value, ""));
   }, [onChange, value]);
+
+  const handleOverwriteFile = useCallback(
+    async (files: FileList | File[]) => {
+      if (!canManageCurrentAsset || !resolvedAssetPath) {
+        return;
+      }
+
+      const normalizedFiles = Array.from(files);
+      if (normalizedFiles.length === 0) {
+        return;
+      }
+
+      const targetFilename = resolvedAssetPath.split("/").pop();
+      if (!targetFilename) {
+        toast.error("Replace failed", {
+          description: "Could not determine the current filename.",
+        });
+        return;
+      }
+
+      setIsReplacingFile(true);
+      try {
+        await uploadFilesToStudioPath({
+          projectSlug,
+          version,
+          targetPath: dirnamePosix(resolvedAssetPath),
+          filename: targetFilename,
+          files: normalizedFiles,
+        });
+        await utils.assets.invalidate();
+        toast.success("File replaced");
+      } catch (error) {
+        toast.error("Replace failed", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setIsReplacingFile(false);
+      }
+    },
+    [canManageCurrentAsset, projectSlug, resolvedAssetPath, utils.assets, version],
+  );
+
+  const handleDeleteCurrentFile = useCallback(async () => {
+    if (!canManageCurrentAsset || !resolvedAssetPath) {
+      return;
+    }
+
+    try {
+      await deleteAssetMutation.mutateAsync({
+        slug: projectSlug,
+        version,
+        relativePath: resolvedAssetPath,
+      });
+      await utils.assets.invalidate();
+      onChange(setAssetPathValue(value, ""));
+      setDeleteConfirmOpen(false);
+      toast.success("File deleted");
+    } catch (error) {
+      toast.error("Delete failed", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [
+    canManageCurrentAsset,
+    deleteAssetMutation,
+    onChange,
+    projectSlug,
+    resolvedAssetPath,
+    utils.assets,
+    value,
+    version,
+  ]);
 
   const discardAiCandidate = useCallback(
     async (options?: { closeDialog?: boolean; resetPrompt?: boolean; silent?: boolean }) => {
@@ -248,11 +341,31 @@ export function CmsAssetField({
     </Button>
   ) : null;
 
+  const openReplaceUploadPicker = useCallback(() => {
+    replaceFileInputRef.current?.click();
+  }, []);
+
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
       {!readOnly ? (
         <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-          {hasAsset ? "Replace" : imageMode ? "Choose image" : "Choose file"}
+          {hasAsset ? "Choose other" : imageMode ? "Choose image" : "Choose file"}
+        </Button>
+      ) : null}
+      {!readOnly && hasAsset && canManageCurrentAsset ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isReplacingFile || deleteAssetMutation.isPending}
+          onClick={openReplaceUploadPicker}
+        >
+          {isReplacingFile ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="mr-2 h-4 w-4" />
+          )}
+          Overwrite file
         </Button>
       ) : null}
       {!readOnly && currentIsImage && canPreviewAsset && canUseAiImages ? (
@@ -269,7 +382,20 @@ export function CmsAssetField({
       {!readOnly && hasAsset ? (
         <Button type="button" variant="ghost" size="sm" onClick={handleClear}>
           <X className="mr-2 h-4 w-4" />
-          Clear
+          Clear link
+        </Button>
+      ) : null}
+      {!readOnly && hasAsset && canManageCurrentAsset ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          disabled={deleteAssetMutation.isPending || isReplacingFile}
+          onClick={() => setDeleteConfirmOpen(true)}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete file
         </Button>
       ) : null}
     </div>
@@ -362,6 +488,12 @@ export function CmsAssetField({
               <Download className="mr-2 h-4 w-4" />
               Download
             </ContextMenuItem>
+            {!readOnly && hasAsset && canManageCurrentAsset ? (
+              <ContextMenuItem onClick={openReplaceUploadPicker}>
+                <Upload className="mr-2 h-4 w-4" />
+                Overwrite file
+              </ContextMenuItem>
+            ) : null}
             {chatContext ? (
               <ContextMenuItem onClick={handleAddToChat}>
                 <MessageSquarePlus className="mr-2 h-4 w-4" />
@@ -377,13 +509,24 @@ export function CmsAssetField({
             {!readOnly ? (
               <>
                 <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => setPickerOpen(true)}>Replace</ContextMenuItem>
+                <ContextMenuItem onClick={() => setPickerOpen(true)}>
+                  Choose other file
+                </ContextMenuItem>
+                {hasAsset && canManageCurrentAsset ? (
+                  <ContextMenuItem
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete file
+                  </ContextMenuItem>
+                ) : null}
                 <ContextMenuItem
                   onClick={handleClear}
                   className="text-destructive focus:text-destructive"
                 >
                   <X className="mr-2 h-4 w-4" />
-                  Clear
+                  Clear link
                 </ContextMenuItem>
               </>
             ) : null}
@@ -434,6 +577,21 @@ export function CmsAssetField({
           compact ? "p-3" : "p-4"
         }`}
       >
+        {!readOnly ? (
+          <input
+            ref={replaceFileInputRef}
+            id={`${fieldId}-replace-upload`}
+            type="file"
+            accept={acceptAttribute}
+            className="hidden"
+            onChange={(event) => {
+              if (event.target.files?.length) {
+                void handleOverwriteFile(event.target.files);
+              }
+              event.target.value = "";
+            }}
+          />
+        ) : null}
         <div className="space-y-1">
           <div>
             <Label htmlFor={fieldId}>{label}</Label>
@@ -469,6 +627,7 @@ export function CmsAssetField({
           defaultFolderPath={defaultFolderPath}
           canUseAiImages={canUseAiImages}
           onSelect={(storedReference) => onChange(setAssetPathValue(value, storedReference))}
+          onDeleteCurrentAsset={() => onChange(setAssetPathValue(value, ""))}
         />
       ) : null}
 
@@ -501,6 +660,38 @@ export function CmsAssetField({
           }}
         />
       ) : null}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete linked file?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes <code>{resolvedAssetPath}</code> from the project and clears this field.
+              If other entries link to the same path, they will lose the file too.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteAssetMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteAssetMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteCurrentFile();
+              }}
+            >
+              {deleteAssetMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete file
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

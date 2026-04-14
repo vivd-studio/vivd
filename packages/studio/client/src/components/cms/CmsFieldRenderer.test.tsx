@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import type { CmsModelRecord } from "@vivd/shared/cms";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CmsFieldRenderer } from "./CmsFieldRenderer";
@@ -12,6 +13,24 @@ vi.mock("./CmsAssetField", () => ({
     fieldId: string;
     label: string;
   }) => <div data-testid="cms-asset-field">{`${label}:${fieldId}`}</div>,
+}));
+
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SelectTrigger: ({ children }: { children: ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => (
+    <span>{placeholder ?? ""}</span>
+  ),
+  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SelectItem: ({
+    children,
+    value,
+  }: {
+    children: ReactNode;
+    value: string;
+  }) => <div data-testid="select-item" data-value={value}>{children}</div>,
 }));
 
 const selectedModel: CmsModelRecord = {
@@ -120,5 +139,40 @@ describe("CmsFieldRenderer", () => {
     expect(
       screen.getAllByTestId("cms-asset-field").map((element) => element.textContent),
     ).toEqual(expect.arrayContaining(["DE:hrefByLang.de", "EN:hrefByLang.en"]));
+  });
+
+  it("filters reference picker options to the target collection while accepting bare Astro ids", () => {
+    render(
+      <CmsFieldRenderer
+        {...baseProps}
+        fieldKey="productGroup"
+        field={{
+          type: "reference",
+          referenceModelKey: "productGroups",
+        }}
+        fieldPath={["productGroup"]}
+        draftValues={{ productGroup: "chemistry" }}
+        referenceOptions={[
+          {
+            value: "productGroups:chemistry",
+            label: "Product Groups / Chemistry",
+            modelKey: "productGroups",
+            entryKey: "chemistry",
+          },
+          {
+            value: "products:apollo",
+            label: "Products / Apollo",
+            modelKey: "products",
+            entryKey: "apollo",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("select-item").map((element) => element.getAttribute("data-value")),
+    ).toEqual(["__empty__", "productGroups:chemistry"]);
+    expect(screen.getByText("Product Groups / Chemistry")).toBeInTheDocument();
+    expect(screen.queryByText("Products / Apollo")).not.toBeInTheDocument();
   });
 });

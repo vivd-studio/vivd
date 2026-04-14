@@ -1272,6 +1272,134 @@ async function parseEntryValues(filePath: string): Promise<Record<string, unknow
     : {};
 }
 
+type AstroReferenceCheck = {
+  sourcePath: string;
+  fieldPath: string;
+  targetModelKey: string;
+  targetEntryKey: string;
+};
+
+function parseAstroReferenceTarget(
+  field: CmsFieldDefinition,
+  value: unknown,
+): { modelKey: string; entryKey: string } | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const separator = trimmed.indexOf(":");
+    if (separator > 0 && separator < trimmed.length - 1) {
+      return {
+        modelKey: trimmed.slice(0, separator),
+        entryKey: trimmed.slice(separator + 1),
+      };
+    }
+
+    const hintedModelKey = field.referenceModelKey?.trim();
+    if (hintedModelKey) {
+      return {
+        modelKey: hintedModelKey,
+        entryKey: trimmed,
+      };
+    }
+
+    return null;
+  }
+
+  if (isRecord(value)) {
+    const modelKey = typeof value.model === "string" ? value.model.trim() : "";
+    const entryKey = typeof value.entry === "string" ? value.entry.trim() : "";
+    if (modelKey && entryKey) {
+      return { modelKey, entryKey };
+    }
+  }
+
+  return null;
+}
+
+function collectAstroReferenceChecks(options: {
+  entry: Pick<CmsEntryRecord, "filePath" | "relativePath" | "values">;
+  fields: Record<string, CmsFieldDefinition>;
+  errors: string[];
+  referenceChecks: AstroReferenceCheck[];
+}): void {
+  const { entry, fields, errors, referenceChecks } = options;
+
+  function visitField(
+    fieldKey: string,
+    field: CmsFieldDefinition,
+    value: unknown,
+    pathPrefix = fieldKey,
+  ): void {
+    if (field.type === "reference") {
+      if (typeof value === "undefined" || value === null) {
+        if (field.required) {
+          errors.push(`${entry.relativePath}: field ${pathPrefix} is required`);
+        }
+        return;
+      }
+
+      if (typeof value === "string" && !value.trim()) {
+        if (field.required) {
+          errors.push(`${entry.relativePath}: field ${pathPrefix} is required`);
+        }
+        return;
+      }
+
+      const target = parseAstroReferenceTarget(field, value);
+      if (!target) {
+        errors.push(
+          `${entry.relativePath}: field ${pathPrefix} must be an entry id string or legacy "model:entry" reference`,
+        );
+        return;
+      }
+
+      const expectedModelKey = field.referenceModelKey?.trim();
+      if (expectedModelKey && target.modelKey !== expectedModelKey) {
+        errors.push(
+          `${entry.relativePath}: field ${pathPrefix} must reference an entry in ${expectedModelKey}`,
+        );
+        return;
+      }
+
+      referenceChecks.push({
+        sourcePath: entry.relativePath,
+        fieldPath: pathPrefix,
+        targetModelKey: target.modelKey,
+        targetEntryKey: target.entryKey,
+      });
+      return;
+    }
+
+    if (field.type === "object" && field.fields) {
+      if (!isRecord(value)) {
+        return;
+      }
+      for (const [nestedKey, nestedField] of Object.entries(field.fields)) {
+        visitField(
+          nestedKey,
+          nestedField,
+          value[nestedKey],
+          `${pathPrefix}.${nestedKey}`,
+        );
+      }
+      return;
+    }
+
+    if (field.type === "list" && field.item && Array.isArray(value)) {
+      value.forEach((item, index) => {
+        visitField(pathPrefix, field.item as CmsFieldDefinition, item, `${pathPrefix}[${index}]`);
+      });
+    }
+  }
+
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    visitField(fieldKey, field, entry.values[fieldKey]);
+  }
+}
+
 function collectAssetRefs(
   projectDir: string,
   entry: Pick<CmsEntryRecord, "key" | "filePath" | "relativePath" | "values">,
@@ -1461,8 +1589,9 @@ function buildDefaultAstroFieldValue(
     case "assetList":
       return [];
     case "asset":
-    case "reference":
       return "";
+    case "reference":
+      return field.required ? "" : undefined;
     default:
       return field.default ?? null;
   }
@@ -2169,6 +2298,30 @@ export async function inspectAstroCollectionsWorkspace(
 
   const localeConfig = await inspectAstroProjectLocales(projectDir);
   const models = await parseCollections(projectDir, configPath, sourceFile, localeConfig, errors);
+  const referenceChecks: AstroReferenceCheck[] = [];
+  for (const model of models) {
+    for (const entry of model.entries) {
+      collectAstroReferenceChecks({
+        entry,
+        fields: model.fields,
+        errors,
+        referenceChecks,
+      });
+    }
+  }
+
+  const existingEntries = new Set(
+    models.flatMap((model) => model.entries.map((entry) => `${model.key}:${entry.key}`)),
+  );
+  for (const reference of referenceChecks) {
+    const targetId = `${reference.targetModelKey}:${reference.targetEntryKey}`;
+    if (!existingEntries.has(targetId)) {
+      errors.push(
+        `${reference.sourcePath}: field ${reference.fieldPath} references missing entry ${targetId}`,
+      );
+    }
+  }
+
   const entryCount = models.reduce((total, model) => total + model.entries.length, 0);
   const assetCount = models.reduce(
     (total, model) =>

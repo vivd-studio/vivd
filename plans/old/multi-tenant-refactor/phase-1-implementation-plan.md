@@ -28,7 +28,7 @@ vivd/
 │               ├── auth.ts        # Shared auth types
 │               └── limits.ts      # Shared limits types
 │
-├── docs/
+├── plans/
 │   └── multi-tenant-refactor/     # Implementation artifacts
 │       ├── multi-tenant-saas-refactor-plan.md  (main plan)
 │       └── phase-1-implementation-plan.md      (this file)

@@ -1,11 +1,11 @@
 # File-Based CMS Spec
 
-> Note: this document captures the earlier YAML-first CMS direction. For Astro-backed projects, the current active direction has shifted to Astro-native Content Collections in [`docs/astro-content-collections-plan.md`](./astro-content-collections-plan.md).
+> Note: this document captures the earlier YAML-first CMS direction. For Astro-backed projects, the current active direction has shifted to Astro-native Content Collections in [`plans/astro-content-collections-plan.md`](./astro-content-collections-plan.md).
 
 Status: Draft  
 Last updated: 2026-04-07
 
-This document is a fresh planning pass for Vivd CMS and supersedes the earlier DB-first/CLI-first leaning in `docs/old/headless-cms-agent-plan.md`.
+This document is a fresh planning pass for Vivd CMS and supersedes the earlier DB-first/CLI-first leaning in `plans/old/headless-cms-agent-plan.md`.
 
 ## Summary
 

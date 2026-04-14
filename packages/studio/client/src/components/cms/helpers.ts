@@ -3,6 +3,7 @@ import type {
   CmsEntryRecord,
   CmsFieldDefinition,
   CmsModelRecord,
+  CmsSourceKind,
 } from "@vivd/shared/cms";
 import { stringify as stringifyYaml } from "yaml";
 
@@ -254,6 +255,110 @@ export function serializeCmsEntryValues(
     default:
       throw new Error(`Unsupported CMS entry format for ${filePath}`);
   }
+}
+
+function normalizeReferenceValueForSave(
+  field: CmsFieldDefinition,
+  value: unknown,
+  sourceKind?: CmsSourceKind,
+): unknown {
+  if (field.type !== "reference" || sourceKind !== "astro-collections") {
+    return value;
+  }
+
+  if (typeof value === "undefined" || value === null) {
+    return field.required ? "" : undefined;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return field.required ? "" : undefined;
+    }
+
+    const targetPrefix = field.referenceModelKey?.trim();
+    if (targetPrefix) {
+      const prefixedValue = `${targetPrefix}:`;
+      if (trimmed.startsWith(prefixedValue)) {
+        const entryKey = trimmed.slice(prefixedValue.length).trim();
+        return entryKey || (field.required ? "" : undefined);
+      }
+    }
+
+    return trimmed;
+  }
+
+  if (isRecord(value)) {
+    const modelKey = typeof value.model === "string" ? value.model.trim() : "";
+    const entryKey = typeof value.entry === "string" ? value.entry.trim() : "";
+    if (!entryKey) {
+      return field.required ? "" : undefined;
+    }
+
+    if (!modelKey || modelKey === field.referenceModelKey?.trim()) {
+      return entryKey;
+    }
+
+    return `${modelKey}:${entryKey}`;
+  }
+
+  return value;
+}
+
+function normalizeFieldValueForSave(
+  field: CmsFieldDefinition,
+  value: unknown,
+  sourceKind?: CmsSourceKind,
+): unknown {
+  if (field.type === "reference") {
+    return normalizeReferenceValueForSave(field, value, sourceKind);
+  }
+
+  if (field.type === "object" && isRecord(value) && field.fields) {
+    const nextValue: Record<string, unknown> = { ...value };
+    for (const [nestedKey, nestedField] of Object.entries(field.fields)) {
+      if (!(nestedKey in nextValue)) {
+        continue;
+      }
+      const normalized = normalizeFieldValueForSave(
+        nestedField,
+        nextValue[nestedKey],
+        sourceKind,
+      );
+      if (typeof normalized === "undefined") {
+        delete nextValue[nestedKey];
+      } else {
+        nextValue[nestedKey] = normalized;
+      }
+    }
+    return nextValue;
+  }
+
+  if (field.type === "list" && Array.isArray(value) && field.item) {
+    return value.map((item) => normalizeFieldValueForSave(field.item as CmsFieldDefinition, item, sourceKind));
+  }
+
+  return value;
+}
+
+export function normalizeCmsEntryValuesForSave(
+  fields: Record<string, CmsFieldDefinition>,
+  values: Record<string, unknown>,
+  sourceKind?: CmsSourceKind,
+): Record<string, unknown> {
+  const nextValues: Record<string, unknown> = { ...values };
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    if (!(fieldKey in nextValues)) {
+      continue;
+    }
+    const normalized = normalizeFieldValueForSave(field, nextValues[fieldKey], sourceKind);
+    if (typeof normalized === "undefined") {
+      delete nextValues[fieldKey];
+    } else {
+      nextValues[fieldKey] = normalized;
+    }
+  }
+  return nextValues;
 }
 
 export function isPathInsideRoot(candidatePath: string, rootPath: string): boolean {
@@ -842,9 +947,19 @@ export function collectRichTextSidecars(
   return results;
 }
 
-export function deriveReferenceValue(value: unknown): string {
+export function deriveReferenceValue(
+  value: unknown,
+  referenceModelKey?: string,
+): string {
   if (typeof value === "string") {
-    return value;
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+    if (trimmed.includes(":") || !referenceModelKey?.trim()) {
+      return trimmed;
+    }
+    return `${referenceModelKey.trim()}:${trimmed}`;
   }
   if (
     isRecord(value) &&

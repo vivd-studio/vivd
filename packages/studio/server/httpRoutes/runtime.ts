@@ -361,6 +361,8 @@ export function registerStudioRuntimeHttpRoutes(
 
         const relativePath =
           typeof req.query.path === "string" ? req.query.path : "";
+        const requestedFilename =
+          typeof req.query.filename === "string" ? req.query.filename.trim() : "";
 
         const projectPath = workspace.getProjectPath();
 
@@ -376,6 +378,11 @@ export function registerStudioRuntimeHttpRoutes(
         await fs.ensureDir(targetDir);
 
         const files = req.files as Express.Multer.File[];
+        if (requestedFilename && files.length !== 1) {
+          return res.status(400).json({
+            error: "Filename override requires exactly one uploaded file",
+          });
+        }
         let uploaded: string[] = [];
 
         for (const file of files) {
@@ -383,15 +390,21 @@ export function registerStudioRuntimeHttpRoutes(
             /[^a-zA-Z0-9._-]/g,
             "_",
           );
+          const sanitizedRequestedFilename = requestedFilename
+            ? requestedFilename.replace(/[^a-zA-Z0-9._-]/g, "_")
+            : "";
+          if (requestedFilename && !sanitizedRequestedFilename) {
+            return res.status(400).json({ error: "Invalid filename" });
+          }
           const preparedUpload = shouldNormalizeStudioWorkingImageUpload(
             relativePath,
           )
             ? await normalizeStudioWorkingImageUpload({
-                filename: sanitizedName,
+                filename: sanitizedRequestedFilename || sanitizedName,
                 buffer: file.buffer,
               })
             : {
-                filename: sanitizedName,
+                filename: sanitizedRequestedFilename || sanitizedName,
                 buffer: file.buffer,
               };
 

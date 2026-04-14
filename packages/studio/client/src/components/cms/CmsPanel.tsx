@@ -19,6 +19,7 @@ import {
 import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
 import {
   buildRichTextReference,
+  normalizeCmsEntryValuesForSave,
   deriveCmsLocales,
   getCmsEntryFileFormat,
   isWritableCmsEntryFile,
@@ -53,11 +54,13 @@ function getCmsPanelStateClassName(active: boolean): string {
 function buildReferenceOptions(
   models: CmsModelRecord[],
   defaultLocale: string,
-): Array<{ value: string; label: string }> {
+): Array<{ value: string; label: string; modelKey: string; entryKey: string }> {
   return models.flatMap((model) =>
     model.entries.map((entry) => ({
       value: `${model.key}:${entry.key}`,
       label: `${model.label} / ${getEntryTitle(entry, model, defaultLocale)}`,
+      modelKey: model.key,
+      entryKey: entry.key,
     })),
   );
 }
@@ -145,6 +148,14 @@ export function CmsPanel({
   const serializeEntryContent = useCallback(
     async (relativePath: string, nextValues: unknown) => {
       const format = getCmsEntryFileFormat(relativePath);
+      const normalizedValues =
+        selectedModel && nextValues && typeof nextValues === "object" && !Array.isArray(nextValues)
+          ? normalizeCmsEntryValuesForSave(
+              selectedModel.fields,
+              nextValues as Record<string, unknown>,
+              report?.sourceKind,
+            )
+          : nextValues;
       let currentContent = "";
       if (format === "markdown") {
         const response = await fetch(buildAssetFileUrl(projectSlug, version, relativePath));
@@ -153,9 +164,9 @@ export function CmsPanel({
         }
         currentContent = await response.text();
       }
-      return serializeCmsEntryValues(relativePath, nextValues, currentContent);
+      return serializeCmsEntryValues(relativePath, normalizedValues, currentContent);
     },
-    [projectSlug, version],
+    [projectSlug, report?.sourceKind, selectedModel, version],
   );
 
   useEffect(() => {

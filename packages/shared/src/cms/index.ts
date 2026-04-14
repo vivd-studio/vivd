@@ -8,6 +8,7 @@ import {
   updateAstroCollectionModel,
 } from "./astroCollections.js";
 import {
+  normalizeReferenceFieldValue,
   normalizeUpdatedFieldValue,
   resolveFieldDefinitionAtPath,
   serializeCmsEntryValues,
@@ -1110,6 +1111,13 @@ async function validateFieldValue(options: {
         );
         return;
       }
+      const expectedModelKey = field.referenceModelKey?.trim();
+      if (expectedModelKey && target.modelKey !== expectedModelKey) {
+        errors.push(
+          `${buildFieldLocation(entryLabel, fieldKey)} must reference an entry in ${expectedModelKey}`,
+        );
+        return;
+      }
       referenceChecks.push({
         sourcePath: entryLabel,
         modelKey,
@@ -2116,7 +2124,9 @@ export async function updateCmsEntryFields(
       nextValues = setValueAtPath(
         nextValues,
         update.fieldPath,
-        normalizeUpdatedFieldValue(entry.relativePath, fieldDefinition, update.value),
+        normalizeUpdatedFieldValue(entry.relativePath, fieldDefinition, update.value, {
+          sourceKind: report.sourceKind,
+        }),
       );
     }
 
@@ -2133,6 +2143,8 @@ export async function updateCmsEntryFields(
     paths: report.paths,
   };
 }
+
+export { normalizeReferenceFieldValue };
 
 export async function updateCmsModel(
   projectDir: string,

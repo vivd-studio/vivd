@@ -11,12 +11,14 @@ import {
   inferStringFieldAssetAccepts,
   isPathInsideRoot,
   isWritableCmsEntryFile,
+  normalizeCmsEntryValuesForSave,
   resolveAssetReferencePath,
   shouldRenderImageAssetField,
   shouldRenderImageAssetListField,
   resolveRelativePath,
   serializeCmsEntryValues,
   titleizeKey,
+  deriveReferenceValue,
 } from "./helpers";
 
 describe("cms helpers", () => {
@@ -240,6 +242,57 @@ Body content.
       en: "",
       de: "",
     });
+  });
+
+  it("normalizes Astro reference fields to bare target ids before saving", () => {
+    expect(
+      normalizeCmsEntryValuesForSave(
+        {
+          productGroup: {
+            type: "reference",
+            required: false,
+            referenceModelKey: "productGroups",
+          },
+        },
+        {
+          productGroup: "productGroups:chemistry",
+        },
+        "astro-collections",
+      ),
+    ).toEqual({
+      productGroup: "chemistry",
+    });
+  });
+
+  it("omits cleared optional Astro reference fields before saving", () => {
+    expect(
+      normalizeCmsEntryValuesForSave(
+        {
+          productGroup: {
+            type: "reference",
+            required: false,
+            referenceModelKey: "productGroups",
+          },
+          title: { type: "string", required: true },
+        },
+        {
+          productGroup: undefined,
+          title: "Apollo",
+        },
+        "astro-collections",
+      ),
+    ).toEqual({
+      title: "Apollo",
+    });
+  });
+
+  it("maps bare Astro reference ids back to the legacy picker value shape", () => {
+    expect(deriveReferenceValue("chemistry", "productGroups")).toBe(
+      "productGroups:chemistry",
+    );
+    expect(deriveReferenceValue("productGroups:chemistry", "productGroups")).toBe(
+      "productGroups:chemistry",
+    );
   });
 
   it("treats obvious string-list image fields as image asset lists in the Studio editor", () => {

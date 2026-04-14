@@ -37,9 +37,10 @@ export async function uploadFilesToStudioPath(options: {
   projectSlug: string;
   version: number;
   targetPath: string;
+  filename?: string;
   files: FileList | File[];
 }): Promise<string[]> {
-  const { projectSlug, version, targetPath, files } = options;
+  const { projectSlug, version, targetPath, filename, files } = options;
   const normalizedFiles = Array.from(files);
   if (normalizedFiles.length === 0) {
     return [];
@@ -56,9 +57,16 @@ export async function uploadFilesToStudioPath(options: {
     headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
   }
 
+  const searchParams = new URLSearchParams({
+    path: targetPath,
+  });
+  if (filename?.trim()) {
+    searchParams.set("filename", filename.trim());
+  }
+
   const response = await fetch(
     resolveStudioRuntimePath(
-      `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(targetPath)}`,
+      `/vivd-studio/api/upload/${projectSlug}/${version}?${searchParams.toString()}`,
     ),
     {
       method: "POST",
