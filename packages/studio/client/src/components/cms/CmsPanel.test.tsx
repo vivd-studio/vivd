@@ -103,4 +103,11 @@ describe("CmsPanel", () => {
     expect(openPanel).toHaveClass("pointer-events-auto");
     expect(openPanel).toHaveClass("visible");
   });
+
+  it("renders desktop resize handles for the left CMS panels", () => {
+    render(<CmsPanel projectSlug="demo" version={1} active onClose={vi.fn()} />);
+
+    expect(screen.getByLabelText("Resize collections panel")).toBeInTheDocument();
+    expect(screen.getByLabelText("Resize entries panel")).toBeInTheDocument();
+  });
 });

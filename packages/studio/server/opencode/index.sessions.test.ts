@@ -590,6 +590,23 @@ describe("opencode index session behavior", () => {
     expect(sessionPromptAsyncMock.mock.calls[0]?.[0]).not.toHaveProperty("system");
   });
 
+  it("appends a session-start prompt suffix for new sessions", async () => {
+    await runTask("start scratch build", "/workspace/project", undefined, undefined, {
+      sessionStartSystemPromptSuffix:
+        "Do not stop after proposing a plan. Build the site now.",
+    });
+
+    expect(getSystemPromptForSessionStartMock).toHaveBeenCalledTimes(1);
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "sess-new",
+        directory: "/workspace/project/",
+        system:
+          "system prompt\n\nDo not stop after proposing a plan. Build the site now.",
+      }),
+    );
+  });
+
   it("auto-compacts oversized sessions after the run finishes", async () => {
     const oversizedMessages = {
       data: [

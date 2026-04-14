@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { trpc } from "@/lib/trpc";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildAssetFileUrl } from "@/components/asset-explorer/utils";
+import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -109,6 +117,20 @@ export function CmsPanel({
   const [creatingEntry, setCreatingEntry] = useState(false);
   const [newEntryKey, setNewEntryKey] = useState("");
   const [editorMode, setEditorMode] = useState<"entry" | "model">("entry");
+  const collectionsPanel = useResizablePanel({
+    storageKey: "cmsPanel.collectionsWidth",
+    defaultWidth: 240,
+    minWidth: 180,
+    maxWidth: 360,
+    side: "left",
+  });
+  const entriesPanel = useResizablePanel({
+    storageKey: "cmsPanel.entriesWidth",
+    defaultWidth: 300,
+    minWidth: 220,
+    maxWidth: 440,
+    side: "left",
+  });
 
   const report = statusQuery.data;
   const panelStateClassName = getCmsPanelStateClassName(active);
@@ -667,6 +689,12 @@ export function CmsPanel({
   const description = isAstroCollectionsSource
     ? "Astro Content Collections inspected from `src/content.config.ts` and `src/content/**`."
     : "Schema-rendered collection editing for `src/content/`.";
+  const collectionsPanelStyle = {
+    "--cms-collections-width": `${collectionsPanel.width}px`,
+  } as CSSProperties;
+  const entriesPanelStyle = {
+    "--cms-entries-width": `${entriesPanel.width}px`,
+  } as CSSProperties;
 
   return (
     <div
@@ -828,42 +856,66 @@ export function CmsPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div
+            className="relative flex min-h-0 w-full flex-col overflow-hidden lg:min-w-[var(--cms-collections-width)] lg:w-[var(--cms-collections-width)]"
+            style={collectionsPanelStyle}
+          >
             <CmsCollectionsSidebar
               models={report.models}
               reportErrors={report.errors}
               selectedModelKey={selectedModelKey}
               allowCreateModel={allowCreateModel}
-            creatingModel={creatingModel}
-            newModelKey={newModelKey}
-            isScaffoldingModel={scaffoldModelMutation.isPending}
-            onToggleCreateModel={() => setCreatingModel((current) => !current)}
-            onNewModelKeyChange={setNewModelKey}
-            onCreateModel={() => void handleCreateModel()}
-            onCancelCreateModel={() => {
-              setCreatingModel(false);
-              setNewModelKey("");
-            }}
-            onSelectModel={setSelectedModelKey}
-          />
+              creatingModel={creatingModel}
+              newModelKey={newModelKey}
+              isScaffoldingModel={scaffoldModelMutation.isPending}
+              onToggleCreateModel={() => setCreatingModel((current) => !current)}
+              onNewModelKeyChange={setNewModelKey}
+              onCreateModel={() => void handleCreateModel()}
+              onCancelCreateModel={() => {
+                setCreatingModel(false);
+                setNewModelKey("");
+              }}
+              onSelectModel={setSelectedModelKey}
+            />
+            <div className="hidden lg:block">
+              <ResizeHandle
+                side="left"
+                onMouseDown={collectionsPanel.handleMouseDown}
+                ariaLabel="Resize collections panel"
+              />
+            </div>
+          </div>
 
-          <CmsEntriesSidebar
-            selectedModel={selectedModel}
-            selectedEntryKey={selectedEntryKey}
-            defaultLocale={defaultLocale}
-            reportErrors={report.errors}
-            allowCreateEntry={Boolean(selectedModel)}
-            creatingEntry={creatingEntry}
-            newEntryKey={newEntryKey}
-            isScaffoldingEntry={createEntryMutation.isPending}
-            onToggleCreateEntry={() => setCreatingEntry((current) => !current)}
-            onNewEntryKeyChange={setNewEntryKey}
-            onCreateEntry={() => void handleCreateEntry()}
-            onCancelCreateEntry={() => {
-              setCreatingEntry(false);
-              setNewEntryKey("");
-            }}
-            onSelectEntry={setSelectedEntryKey}
-          />
+          <div
+            className="relative flex min-h-0 w-full flex-col overflow-hidden lg:min-w-[var(--cms-entries-width)] lg:w-[var(--cms-entries-width)]"
+            style={entriesPanelStyle}
+          >
+            <CmsEntriesSidebar
+              selectedModel={selectedModel}
+              selectedEntryKey={selectedEntryKey}
+              defaultLocale={defaultLocale}
+              reportErrors={report.errors}
+              allowCreateEntry={Boolean(selectedModel)}
+              creatingEntry={creatingEntry}
+              newEntryKey={newEntryKey}
+              isScaffoldingEntry={createEntryMutation.isPending}
+              onToggleCreateEntry={() => setCreatingEntry((current) => !current)}
+              onNewEntryKeyChange={setNewEntryKey}
+              onCreateEntry={() => void handleCreateEntry()}
+              onCancelCreateEntry={() => {
+                setCreatingEntry(false);
+                setNewEntryKey("");
+              }}
+              onSelectEntry={setSelectedEntryKey}
+            />
+            <div className="hidden lg:block">
+              <ResizeHandle
+                side="left"
+                onMouseDown={entriesPanel.handleMouseDown}
+                ariaLabel="Resize entries panel"
+              />
+            </div>
+          </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {selectedModel ? (

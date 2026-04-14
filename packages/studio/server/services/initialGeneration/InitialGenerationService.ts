@@ -41,6 +41,14 @@ const TERMINAL_IDLE_GRACE_MS = 10_000;
 const DEFAULT_INITIAL_GENERATION_MANIFEST_WAIT_MS = 10_000;
 const INITIAL_GENERATION_MANIFEST_POLL_MS = 250;
 const INITIAL_GENERATION_RUNTIME_STARTED_AT_MS = Date.now();
+const INITIAL_GENERATION_SESSION_START_SYSTEM_PROMPT_SUFFIX = `## Scratch Initial Generation Mode
+
+- This session is for autonomous initial website generation, not collaborative planning.
+- Treat the initial generation request as already approved. Do not stop after outlining a plan or ask for approval in normal assistant text.
+- Do not ask questions like "Does this plan sound good?" or "Should I continue?".
+- Start implementing immediately and keep working until the first complete version of the site is materially built.
+- Use the question tool only for a real blocking ambiguity that prevents a production-ready first version. If a reasonable assumption is available, make it and continue.
+`;
 
 export type StartInitialGenerationOptions = {
   projectSlug: string;
@@ -1356,6 +1364,10 @@ async function startInitialGenerationInternal(
       options.workspaceDir,
       undefined,
       options.model,
+      {
+        sessionStartSystemPromptSuffix:
+          INITIAL_GENERATION_SESSION_START_SYSTEM_PROMPT_SUFFIX,
+      },
     );
 
     const sessionId = result.sessionId;

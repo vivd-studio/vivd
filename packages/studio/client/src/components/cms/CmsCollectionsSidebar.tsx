@@ -45,7 +45,7 @@ export function CmsCollectionsSidebar({
   onSelectModel,
 }: CmsCollectionsSidebarProps) {
   return (
-    <div className="flex min-h-0 max-h-[240px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:w-[220px] lg:min-w-[220px] lg:border-b-0 lg:border-r xl:w-[240px] xl:min-w-[240px]">
+    <div className="flex h-full min-h-0 max-h-[240px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:border-b-0 lg:border-r">
       <div className="flex items-start justify-between gap-2 px-3 py-3 sm:px-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Collections</h3>
@@ -77,8 +77,8 @@ export function CmsCollectionsSidebar({
           </div>
         </div>
       ) : null}
-      <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-1 p-2 pb-14">
           {models.map((model) => {
             const active = model.key === selectedModelKey;
             const errorCount = getModelErrorCount(reportErrors, model);

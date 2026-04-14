@@ -78,7 +78,7 @@ export function CmsEntriesSidebar({
   );
 
   return (
-    <div className="flex min-h-0 max-h-[320px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:w-[280px] lg:min-w-[280px] lg:border-b-0 lg:border-r xl:w-[300px] xl:min-w-[300px]">
+    <div className="flex h-full min-h-0 max-h-[320px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:border-b-0 lg:border-r">
       <div className="flex items-start justify-between gap-2 px-3 py-3 sm:px-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{selectedModel?.label ?? "Entries"}</h3>
@@ -143,8 +143,8 @@ export function CmsEntriesSidebar({
           </p>
         </div>
       ) : null}
-      <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-1 p-2 pb-14">
           {selectedModel ? (
             filteredEntries.length ? (
               <>

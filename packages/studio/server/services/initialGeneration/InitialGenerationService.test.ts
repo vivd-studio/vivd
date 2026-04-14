@@ -288,6 +288,11 @@ describe("InitialGenerationService", () => {
       tmpDir,
       undefined,
       { provider: "openai", modelId: "gpt-5.4", variant: "high" },
+      expect.objectContaining({
+        sessionStartSystemPromptSuffix: expect.stringContaining(
+          "autonomous initial website generation",
+        ),
+      }),
     );
     expect(requestBucketSyncMock).toHaveBeenCalledWith(
       "initial-generation-state",

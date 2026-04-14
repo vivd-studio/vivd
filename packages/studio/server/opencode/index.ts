@@ -586,6 +586,7 @@ export async function runTask(
   options?: {
     tools?: Record<string, boolean>;
     skipSessionStartSystemPrompt?: boolean;
+    sessionStartSystemPromptSuffix?: string;
   },
 ): Promise<{ sessionId: string }> {
   console.log(
@@ -835,7 +836,7 @@ export async function runTask(
   }
 
   try {
-    const systemPrompt =
+    const baseSystemPrompt =
       isNewSession && !options?.skipSessionStartSystemPrompt
       ? await agentInstructionsService.getSystemPromptForSessionStart({
           projectSlug: (process.env.VIVD_PROJECT_SLUG || "").trim() || undefined,
@@ -845,6 +846,12 @@ export async function runTask(
           ),
         })
       : undefined;
+    const promptSuffix = options?.sessionStartSystemPromptSuffix?.trim();
+    const systemPrompt = promptSuffix
+      ? baseSystemPrompt
+        ? `${baseSystemPrompt.trim()}\n\n${promptSuffix}`
+        : promptSuffix
+      : baseSystemPrompt;
     await sendPromptAsync(
       client,
       currentSessionId,

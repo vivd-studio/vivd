@@ -168,7 +168,7 @@ export function CmsEntryEditor({
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-5 px-4 py-5 sm:px-5">
+        <div className="space-y-5 px-4 pt-5 pb-14 sm:px-5">
           {loadingSidecars ? (
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
