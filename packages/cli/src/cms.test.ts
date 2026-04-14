@@ -282,6 +282,69 @@ galleryImages:
     expect(report.assetCount).toBe(3);
   });
 
+  it("adds file asset hints for Astro PDF fields and localized PDF objects without misclassifying filenames", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "products"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+const products = defineCollection({
+  schema: z.object({
+    safetySheet: z.string().optional(),
+    hrefByLang: z
+      .object({
+        de: z.string().optional(),
+        en: z.string().optional(),
+      })
+      .optional(),
+    fileNameByLang: z
+      .object({
+        de: z.string().optional(),
+        en: z.string().optional(),
+      })
+      .optional(),
+  }),
+});
+
+export const collections = { products };
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "products", "apollo.yaml"),
+      `safetySheet: /pdfs/products/apollo/safety-sheet.pdf
+hrefByLang:
+  de: /pdfs/products/apollo/safety-sheet-de.pdf
+  en: /pdfs/products/apollo/safety-sheet-en.pdf
+fileNameByLang:
+  de: safety-sheet-de.pdf
+  en: safety-sheet-en.pdf
+`,
+      "utf8",
+    );
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.valid).toBe(true);
+    expect(report.models[0]?.fields.safetySheet).toMatchObject({
+      type: "string",
+      accepts: [".pdf", "application/pdf"],
+    });
+    expect(report.models[0]?.fields.hrefByLang).toMatchObject({
+      type: "string",
+      localized: true,
+      accepts: [".pdf", "application/pdf"],
+    });
+    expect(report.models[0]?.fields.fileNameByLang).toMatchObject({
+      type: "object",
+    });
+  });
+
   it("reads Astro i18n locale settings instead of hardcoding english", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);

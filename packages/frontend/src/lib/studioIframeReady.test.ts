@@ -96,6 +96,32 @@ describe("isStudioIframePresented", () => {
     expect(isStudioIframePresented(iframe)).toBe(false);
   });
 
+  it("does not treat a same-origin studio error page as a loaded shell", () => {
+    const frameDocument = document.implementation.createHTMLDocument("error");
+    frameDocument.body.innerHTML = "<main><h1>502 Bad Gateway</h1></main>";
+
+    const iframe = document.createElement("iframe");
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get() {
+        return {
+          location: {
+            href: "http://app.localhost/_studio/runtime-123/vivd-studio",
+            pathname: "/_studio/runtime-123/vivd-studio",
+          },
+        };
+      },
+    });
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get() {
+        return frameDocument;
+      },
+    });
+
+    expect(isStudioIframePresented(iframe)).toBe(false);
+  });
+
   it("treats cross-origin runtime documents as presented once navigation leaves about:blank", () => {
     const iframe = document.createElement("iframe");
 

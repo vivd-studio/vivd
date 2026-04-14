@@ -1,4 +1,5 @@
 import type {
+  CmsValidationReport,
   CmsEntryRecord,
   CmsFieldDefinition,
   CmsModelRecord,
@@ -7,6 +8,7 @@ import { stringify as stringifyYaml } from "yaml";
 
 export type CmsFieldSegment = string | number;
 export type CmsEntryFileFormat = "yaml" | "json" | "markdown" | "unsupported";
+export type CmsAssetStorageKind = "content-media" | "public";
 
 export type RichTextSidecarSpec = {
   pathKey: string;
@@ -40,10 +42,16 @@ const IMAGE_LIST_FIELD_TOKENS = new Set([
   "icons",
 ]);
 const IMAGE_REFERENCE_EXTENSION_REGEX = /\.(avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i;
+const GENERIC_FILE_REFERENCE_EXTENSION_REGEX = /\.[a-z0-9]{1,8}(?:[?#].*)?$/i;
 const NON_LOCAL_ASSET_REFERENCE_REGEX = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+const LOCALE_KEY_REGEX = /^[a-z]{2}(?:-[a-z0-9]+)*$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function looksLikeLocaleKey(value: string): boolean {
+  return LOCALE_KEY_REGEX.test(value.trim());
 }
 
 export function titleizeKey(value: string): string {
@@ -123,6 +131,52 @@ export function resolveRelativePath(baseFilePath: string, rawPath: string): stri
     resolved.push(segment);
   }
   return resolved.join("/");
+}
+
+export function resolveAssetReferencePath(baseFilePath: string, rawPath: string): string {
+  const normalized = normalizePosix(rawPath).trim();
+  if (
+    normalized.startsWith("public/") &&
+    GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(normalized) &&
+    !NON_LOCAL_ASSET_REFERENCE_REGEX.test(normalized)
+  ) {
+    return normalized.replace(/^\/+/, "");
+  }
+
+  if (
+    normalized.startsWith("/") &&
+    GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(normalized) &&
+    !NON_LOCAL_ASSET_REFERENCE_REGEX.test(normalized)
+  ) {
+    return `public/${normalized.replace(/^\/+/, "")}`;
+  }
+
+  return resolveRelativePath(baseFilePath, rawPath);
+}
+
+export function buildStoredAssetReferencePath(
+  baseFilePath: string,
+  targetPath: string,
+): string {
+  const normalizedTarget = normalizePosix(targetPath).trim();
+  if (!normalizedTarget) {
+    return "";
+  }
+
+  if (normalizedTarget.startsWith("public/")) {
+    const publicPath = normalizedTarget.slice("public/".length).replace(/^\/+/, "");
+    return `/${publicPath}`;
+  }
+
+  if (
+    normalizedTarget.startsWith("/") &&
+    GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(normalizedTarget) &&
+    !NON_LOCAL_ASSET_REFERENCE_REGEX.test(normalizedTarget)
+  ) {
+    return normalizedTarget;
+  }
+
+  return buildRelativeReferencePath(baseFilePath, normalizedTarget);
 }
 
 export function buildRelativeReferencePath(
@@ -283,12 +337,206 @@ export function getAssetPathValue(value: unknown): string {
   return "";
 }
 
+function collectLocalAssetReferences(value: unknown): string[] {
+  const directValue = getAssetPathValue(value).trim();
+  if (
+    directValue.length > 0 &&
+    !NON_LOCAL_ASSET_REFERENCE_REGEX.test(directValue) &&
+    GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(directValue)
+  ) {
+    return [directValue];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectLocalAssetReferences(item));
+  }
+
+  if (isRecord(value)) {
+    return Object.values(value).flatMap((item) => collectLocalAssetReferences(item));
+  }
+
+  return [];
+}
+
+function normalizePublicAssetPath(assetPath: string): string | null {
+  const normalized = normalizePosix(assetPath).trim();
+  if (
+    !normalized ||
+    NON_LOCAL_ASSET_REFERENCE_REGEX.test(normalized) ||
+    !GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(normalized)
+  ) {
+    return null;
+  }
+
+  if (normalized.startsWith("public/")) {
+    return normalized.replace(/^\/+/, "");
+  }
+
+  if (normalized.startsWith("/")) {
+    return `public/${normalized.replace(/^\/+/, "")}`;
+  }
+
+  return null;
+}
+
+export function inferAssetStorageFromValue(value: unknown): {
+  storageKind: CmsAssetStorageKind;
+  assetRootPath: string;
+  defaultFolderPath: string;
+} | null {
+  const publicAssetPath = collectLocalAssetReferences(value)
+    .map((assetPath) => normalizePublicAssetPath(assetPath))
+    .find((assetPath): assetPath is string => Boolean(assetPath));
+
+  if (!publicAssetPath) {
+    return null;
+  }
+
+  const segments = publicAssetPath.split("/").filter(Boolean);
+  const tailSegments = segments[0] === "public" ? segments.slice(1) : segments;
+  const directorySegments = tailSegments.slice(0, -1);
+  const assetRootPath =
+    directorySegments.length > 0 ? `public/${directorySegments[0]}` : "public";
+  const defaultFolderPath =
+    directorySegments.length > 0 ? `public/${directorySegments.join("/")}` : assetRootPath;
+
+  return {
+    storageKind: "public",
+    assetRootPath,
+    defaultFolderPath,
+  };
+}
+
 export function looksLikeLocalImageAssetReference(value: unknown): boolean {
   const assetPath = getAssetPathValue(value).trim();
   if (!assetPath || !IMAGE_REFERENCE_EXTENSION_REGEX.test(assetPath)) {
     return false;
   }
   return !NON_LOCAL_ASSET_REFERENCE_REGEX.test(assetPath);
+}
+
+function looksLikeLocalFileAssetReference(value: unknown): boolean {
+  const assetPath = getAssetPathValue(value).trim();
+  if (
+    !assetPath ||
+    !GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(assetPath) ||
+    NON_LOCAL_ASSET_REFERENCE_REGEX.test(assetPath)
+  ) {
+    return false;
+  }
+
+  const normalized = normalizePosix(assetPath);
+  return (
+    normalized.startsWith("/") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("src/content/media/") ||
+    normalized.includes("/media/") ||
+    normalized.includes("/")
+  );
+}
+
+function addLocale(localeSet: Set<string>, value: string): void {
+  const normalized = value.trim();
+  if (!normalized || !looksLikeLocaleKey(normalized)) {
+    return;
+  }
+  localeSet.add(normalized);
+}
+
+function orderLocales(locales: Iterable<string>, defaultLocale: string): string[] {
+  const ordered = [...new Set([...locales].map((locale) => locale.trim()).filter(Boolean))];
+  if (ordered.length === 0) {
+    return defaultLocale.trim() ? [defaultLocale.trim()] : [];
+  }
+
+  const preferredDefault = defaultLocale.trim();
+  if (preferredDefault && ordered.includes(preferredDefault)) {
+    return [preferredDefault, ...ordered.filter((locale) => locale !== preferredDefault)];
+  }
+
+  return ordered;
+}
+
+function collectSchemaLocales(field: CmsFieldDefinition, localeSet: Set<string>): void {
+  if (field.type === "object" && field.fields) {
+    const fieldKeys = Object.keys(field.fields);
+    if (fieldKeys.length > 0 && fieldKeys.every((key) => looksLikeLocaleKey(key))) {
+      fieldKeys.forEach((key) => addLocale(localeSet, key));
+      return;
+    }
+
+    Object.values(field.fields).forEach((nestedField) =>
+      collectSchemaLocales(nestedField, localeSet),
+    );
+    return;
+  }
+
+  if (field.type === "list" && field.item) {
+    collectSchemaLocales(field.item, localeSet);
+  }
+}
+
+function collectValueLocales(
+  field: CmsFieldDefinition,
+  value: unknown,
+  localeSet: Set<string>,
+): void {
+  if (field.localized && isRecord(value)) {
+    Object.keys(value).forEach((key) => addLocale(localeSet, key));
+  }
+
+  if (field.type === "object" && field.fields && isRecord(value)) {
+    const fieldKeys = Object.keys(field.fields);
+    if (fieldKeys.length > 0 && fieldKeys.every((key) => looksLikeLocaleKey(key))) {
+      fieldKeys.forEach((key) => addLocale(localeSet, key));
+      Object.keys(value).forEach((key) => addLocale(localeSet, key));
+      return;
+    }
+
+    for (const [nestedKey, nestedField] of Object.entries(field.fields)) {
+      collectValueLocales(nestedField, value[nestedKey], localeSet);
+    }
+    return;
+  }
+
+  if (field.type === "list" && field.item && Array.isArray(value)) {
+    value.forEach((item) => collectValueLocales(field.item as CmsFieldDefinition, item, localeSet));
+  }
+}
+
+export function getLocalizedFieldLocales(
+  locales: string[],
+  defaultLocale: string,
+  value: unknown,
+): string[] {
+  const localeSet = new Set<string>();
+  locales.forEach((locale) => addLocale(localeSet, locale));
+  if (isRecord(value)) {
+    Object.keys(value).forEach((key) => addLocale(localeSet, key));
+  }
+  return orderLocales(localeSet, defaultLocale);
+}
+
+export function deriveCmsLocales(
+  report: Pick<CmsValidationReport, "locales" | "models"> | null | undefined,
+  defaultLocale: string,
+): string[] {
+  const localeSet = new Set<string>();
+  for (const locale of report?.locales ?? []) {
+    addLocale(localeSet, locale);
+  }
+
+  for (const model of report?.models ?? []) {
+    for (const [fieldKey, field] of Object.entries(model.fields)) {
+      collectSchemaLocales(field, localeSet);
+      for (const entry of model.entries) {
+        collectValueLocales(field, entry.values[fieldKey], localeSet);
+      }
+    }
+  }
+
+  return orderLocales(localeSet, defaultLocale);
 }
 
 export function setAssetPathValue(value: unknown, nextPath: string): unknown {
@@ -303,6 +551,89 @@ export function setAssetPathValue(value: unknown, nextPath: string): unknown {
 
 function fieldAcceptsImages(field: CmsFieldDefinition): boolean {
   return (field.accepts ?? []).some((accept) => accept.startsWith("image/"));
+}
+
+function inferAssetAcceptsFromPath(assetPath: string): string[] | null {
+  const normalized = normalizePosix(assetPath).trim();
+  if (looksLikeLocalImageAssetReference(normalized)) {
+    return ["image/*"];
+  }
+
+  if (!looksLikeLocalFileAssetReference(normalized)) {
+    return null;
+  }
+
+  const extension = normalized.replace(/[?#].*$/, "").match(/(\.[a-z0-9]{1,8})$/i)?.[1];
+  if (!extension) {
+    return null;
+  }
+
+  if (extension.toLowerCase() === ".pdf") {
+    return [".pdf", "application/pdf"];
+  }
+
+  return [extension.toLowerCase()];
+}
+
+export function inferAssetAcceptsForValues(values: unknown[]): string[] | null {
+  const nonEmptyPaths = values
+    .map((value) => getAssetPathValue(value).trim())
+    .filter((value) => value.length > 0);
+
+  if (nonEmptyPaths.length === 0) {
+    return null;
+  }
+
+  const inferredAccepts = nonEmptyPaths.map((value) => inferAssetAcceptsFromPath(value));
+  if (inferredAccepts.some((accepts) => !accepts)) {
+    return null;
+  }
+
+  return [...new Set(inferredAccepts.flatMap((accepts) => accepts ?? []))];
+}
+
+export function inferStringFieldAssetAccepts(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  value: unknown,
+): string[] | null {
+  if (field.type !== "string") {
+    return null;
+  }
+
+  if ((field.accepts ?? []).length > 0) {
+    return field.accepts ?? null;
+  }
+
+  const assetPath = getAssetPathValue(value).trim();
+  if (assetPath.length > 0) {
+    return inferAssetAcceptsFromPath(assetPath);
+  }
+
+  return looksLikeImageFieldName(fieldKey) ? ["image/*"] : null;
+}
+
+export function inferStringListFieldAssetAccepts(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  value: unknown,
+): string[] | null {
+  if (field.type !== "list" || field.item?.type !== "string") {
+    return null;
+  }
+
+  const explicitAccepts = [...new Set([...(field.accepts ?? []), ...(field.item.accepts ?? [])])];
+  if (explicitAccepts.length > 0) {
+    return explicitAccepts;
+  }
+
+  const items = Array.isArray(value) ? value : [];
+  const inferredAccepts = inferAssetAcceptsForValues(items);
+  if (inferredAccepts?.length) {
+    return inferredAccepts;
+  }
+
+  return looksLikeImageListFieldName(fieldKey) ? ["image/*"] : null;
 }
 
 export function shouldRenderImageAssetField(
@@ -355,14 +686,24 @@ export function buildDefaultFieldValue(
   fieldKey: string,
   field: CmsFieldDefinition,
   defaultLocale: string,
+  locales: string[] = [defaultLocale],
 ): unknown {
   if (field.localized) {
+    const localizedLocales = orderLocales(
+      locales.filter((locale) => looksLikeLocaleKey(locale)),
+      defaultLocale,
+    );
+    const effectiveLocales = localizedLocales.length ? localizedLocales : [defaultLocale];
+
     if (field.type === "richText" && field.storage === "sidecar-markdown") {
-      return {
-        [defaultLocale]: buildRichTextReference([fieldKey], defaultLocale),
-      };
+      return Object.fromEntries(
+        effectiveLocales.map((locale) => [
+          locale,
+          buildRichTextReference([fieldKey], locale),
+        ]),
+      );
     }
-    return { [defaultLocale]: "" };
+    return Object.fromEntries(effectiveLocales.map((locale) => [locale, ""]));
   }
 
   switch (field.type) {
@@ -386,6 +727,7 @@ export function buildDefaultFieldValue(
           nestedKey,
           nestedField,
           defaultLocale,
+          locales,
         );
       }
       return objectValue;

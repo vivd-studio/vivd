@@ -13,6 +13,10 @@ export function usePreviewWorkspaceSurface() {
   const [viewingImagePathState, setViewingImagePathState] = useState<string | null>(null);
   const [viewingPdfPathState, setViewingPdfPathState] = useState<string | null>(null);
   const [workspaceHistory, setWorkspaceHistory] = useState<WorkspaceSurface[]>([]);
+  const cmsMountedState = useMemo(
+    () => cmsOpenState || workspaceHistory.some((surface) => surface.kind === "cms"),
+    [cmsOpenState, workspaceHistory],
+  );
 
   const currentWorkspace = useMemo<WorkspaceSurface>(() => {
     if (editingTextFileState) {
@@ -176,6 +180,7 @@ export function usePreviewWorkspaceSurface() {
 
   return {
     cmsOpenState,
+    cmsMountedState,
     setCmsOpen,
     editingTextFileState,
     setEditingTextFile,

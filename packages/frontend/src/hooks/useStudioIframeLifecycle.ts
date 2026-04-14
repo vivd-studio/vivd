@@ -10,12 +10,13 @@ import {
   isStudioIframePresented,
   isStudioIframeShellLoaded,
 } from "@/lib/studioIframeReady";
-import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import {
   canPostMessageToVivdStudio,
   getVivdStudioBridgeOrigin,
   parseVivdStudioBridgeMessage,
 } from "@/lib/studioBridge";
+import { fetchStudioHealthReady } from "@/lib/studioRuntimeHealth";
+import { STUDIO_LOAD_TIMEOUT_MS } from "@/lib/studioStartupTimings";
 import { useStudioIframeReadyRetry } from "./useStudioIframeReadyRetry";
 import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery";
 
@@ -401,7 +402,7 @@ export function useStudioIframeLifecycle({
 
     const timeout = window.setTimeout(() => {
       setStudioLoadTimedOut(true);
-    }, 25_000);
+    }, STUDIO_LOAD_TIMEOUT_MS);
 
     return () => window.clearTimeout(timeout);
   }, [reloadNonce, studioBaseUrl]);
@@ -485,17 +486,14 @@ export function useStudioIframeLifecycle({
       }, EARLY_STALL_RECOVERY_TIMEOUT_MS);
 
       try {
-        const response = await fetch(
-          resolveStudioRuntimeUrl(studioHostProbeBaseUrl, "health"),
+        const healthy = await fetchStudioHealthReady(
+          studioHostProbeBaseUrl,
           {
-            method: "GET",
-            mode: "cors",
-            cache: "no-store",
             signal: controller.signal,
           },
         );
 
-        if (!cancelled && response.ok && !studioReady) {
+        if (!cancelled && healthy && !studioReady) {
           attemptedEarlyRecoveryRef.current = true;
           void reloadStudioIframe();
         }

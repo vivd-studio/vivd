@@ -6,6 +6,17 @@ type GuardHarnessProps = Parameters<typeof useStudioRuntimeGuard>[0];
 
 let latestValue: ReturnType<typeof useStudioRuntimeGuard> | null = null;
 
+function createHealthResponse(ready: boolean): Response {
+  return {
+    ok: true,
+    json: vi.fn().mockResolvedValue(
+      ready
+        ? { status: "ok", initialized: true }
+        : { status: "starting", initialized: false },
+    ),
+  } as unknown as Response;
+}
+
 function GuardHarness(props: GuardHarnessProps) {
   latestValue = useStudioRuntimeGuard(props);
   return null;
@@ -73,7 +84,7 @@ describe("useStudioRuntimeGuard", () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new Error("temporary failure"))
-      .mockResolvedValue({ ok: true });
+      .mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const ensureStudioRunning = vi.fn().mockResolvedValue({
@@ -104,7 +115,7 @@ describe("useStudioRuntimeGuard", () => {
   });
 
   it("does not rerun the immediate probe when callback props change", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const ensureStudioRunning = vi.fn();
@@ -150,7 +161,7 @@ describe("useStudioRuntimeGuard", () => {
   });
 
   it("rechecks and wakes the studio when the tab regains focus after the runtime went offline", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const touchStudio = vi.fn();
@@ -203,7 +214,7 @@ describe("useStudioRuntimeGuard", () => {
   });
 
   it("rechecks and wakes the studio when the page is restored", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const touchStudio = vi.fn();
@@ -256,7 +267,7 @@ describe("useStudioRuntimeGuard", () => {
   });
 
   it("runs an immediate retry-on-fail check when the studio iframe reports a transport failure", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const touchStudio = vi.fn();
@@ -329,7 +340,7 @@ describe("useStudioRuntimeGuard", () => {
         });
       }
 
-      return Promise.resolve({ ok: true });
+      return Promise.resolve(createHealthResponse(true));
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -384,7 +395,7 @@ describe("useStudioRuntimeGuard", () => {
   });
 
   it("keeps path-prefixed runtime URLs when probing health", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -410,6 +421,47 @@ describe("useStudioRuntimeGuard", () => {
         cache: "no-store",
       }),
     );
+  });
+
+  it("treats startup-stub health payloads as not ready", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createHealthResponse(false))
+      .mockResolvedValueOnce(createHealthResponse(false))
+      .mockResolvedValueOnce(createHealthResponse(false));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ensureStudioRunning = vi.fn().mockResolvedValue({
+      success: true as const,
+      url: "https://studio.example.com",
+      bootstrapToken: "token-4",
+    });
+    const onRecovered = vi.fn();
+
+    render(
+      <GuardHarness
+        enabled
+        studioProbeBaseUrl="https://studio.example.com"
+        touchStudio={vi.fn()}
+        ensureStudioRunning={ensureStudioRunning}
+        onRecovered={onRecovered}
+        timing={{ ...timing, heartbeatIntervalMs: 10, healthTimeoutMs: 100 }}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+
+    expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
+    expect(onRecovered).toHaveBeenCalledWith({
+      url: "https://studio.example.com",
+      browserUrl: null,
+      runtimeUrl: "https://studio.example.com",
+      compatibilityUrl: null,
+      bootstrapToken: "token-4",
+      userActionToken: null,
+    });
   });
 
   it("stays idle when no host-safe probe url is available", async () => {

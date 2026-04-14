@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
+import { fetchStudioHealthReady } from "@/lib/studioRuntimeHealth";
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 4_000;
@@ -33,16 +33,13 @@ export function useStudioIframeTimeoutRecovery({
       }, requestTimeoutMs);
 
       try {
-        const response = await fetch(
-          resolveStudioRuntimeUrl(studioProbeBaseUrl, "health"),
+        const healthy = await fetchStudioHealthReady(
+          studioProbeBaseUrl,
           {
-          method: "GET",
-          mode: "cors",
-          cache: "no-store",
-          signal: controller.signal,
+            signal: controller.signal,
           },
         );
-        if (!cancelled && response.ok) {
+        if (!cancelled && healthy) {
           onHealthyRuntimeDetected();
           return;
         }

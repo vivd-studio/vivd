@@ -57,6 +57,10 @@ describe("ArtifactSyncService", () => {
     detectProjectTypeMock.mockReset();
     hasNodeModulesMock.mockReset();
     restoreEnv();
+    detectProjectTypeMock.mockReturnValue({
+      framework: "generic",
+      packageManager: "npm",
+    });
   });
 
   afterEach(() => {

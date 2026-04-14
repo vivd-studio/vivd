@@ -496,6 +496,24 @@ const CMS_TOOLKIT_FILE_SPECS = [
   source: string;
 }>;
 
+const CMS_TOOLKIT_REFERENCE_ROOT = "src";
+const CMS_TOOLKIT_REFERENCE_EXTENSIONS = new Set([
+  ".astro",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".mts",
+  ".ts",
+  ".tsx",
+  ".md",
+  ".mdx",
+]);
+const CMS_TOOLKIT_REFERENCE_PATTERNS = [
+  "cmsBindings",
+  "CmsText.astro",
+  "CmsImage.astro",
+];
+
 function normalizeTextContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
@@ -1782,6 +1800,47 @@ async function findExistingCmsBindingHelperRelativePath(
   return null;
 }
 
+async function projectReferencesCmsToolkitInDir(dirPath: string): Promise<boolean> {
+  if (!(await pathExists(dirPath))) {
+    return false;
+  }
+
+  const dirents = await fs.readdir(dirPath, { withFileTypes: true });
+  for (const dirent of dirents) {
+    if (dirent.name.startsWith(".")) {
+      continue;
+    }
+
+    const fullPath = path.join(dirPath, dirent.name);
+    if (dirent.isDirectory()) {
+      if (await projectReferencesCmsToolkitInDir(fullPath)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (!dirent.isFile()) {
+      continue;
+    }
+
+    const extension = path.extname(dirent.name).toLowerCase();
+    if (!CMS_TOOLKIT_REFERENCE_EXTENSIONS.has(extension)) {
+      continue;
+    }
+
+    const content = await fs.readFile(fullPath, "utf8");
+    if (CMS_TOOLKIT_REFERENCE_PATTERNS.some((pattern) => content.includes(pattern))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export async function projectReferencesCmsToolkit(projectDir: string): Promise<boolean> {
+  return projectReferencesCmsToolkitInDir(path.join(projectDir, CMS_TOOLKIT_REFERENCE_ROOT));
+}
+
 export async function installCmsBindingHelper(projectDir: string): Promise<CmsScaffoldResult> {
   const paths = getCmsPaths(projectDir);
   const created: string[] = [];
@@ -1815,6 +1874,25 @@ export async function installCmsBindingHelper(projectDir: string): Promise<CmsSc
   }
 
   return { created, skipped, paths };
+}
+
+export async function ensureReferencedAstroCmsToolkit(
+  projectDir: string,
+): Promise<CmsScaffoldResult | null> {
+  if (!(await isAstroProject(projectDir))) {
+    return null;
+  }
+
+  const toolkit = await getCmsToolkitStatus(projectDir);
+  if (!toolkit.needsInstall) {
+    return null;
+  }
+
+  if (!(await projectReferencesCmsToolkit(projectDir))) {
+    return null;
+  }
+
+  return installCmsBindingHelper(projectDir);
 }
 
 export async function scaffoldCmsModel(

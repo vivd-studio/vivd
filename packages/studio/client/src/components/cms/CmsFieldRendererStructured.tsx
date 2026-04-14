@@ -24,6 +24,7 @@ export function CmsFieldRendererStructured({
     fieldPath,
     draftValues,
     defaultLocale,
+    locales,
     readOnly = false,
     applyDraftValue,
   } = props;
@@ -75,6 +76,7 @@ export function CmsFieldRendererStructured({
                   fieldKey,
                   field.item ?? { type: "string" },
                   defaultLocale,
+                  locales,
                 ),
               ])
             }

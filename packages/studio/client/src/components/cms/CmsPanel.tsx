@@ -19,6 +19,7 @@ import {
 import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
 import {
   buildRichTextReference,
+  deriveCmsLocales,
   getCmsEntryFileFormat,
   isWritableCmsEntryFile,
   type CmsFieldSegment,
@@ -26,6 +27,7 @@ import {
   collectRichTextSidecars,
   getEntryTitle,
   getValueAtPath,
+  resolveAssetReferencePath,
   resolveRelativePath,
   serializeCmsEntryValues,
   setValueAtPath,
@@ -38,7 +40,14 @@ import { CmsModelEditor } from "./CmsModelEditor";
 interface CmsPanelProps {
   projectSlug: string;
   version: number;
+  active?: boolean;
   onClose: () => void;
+}
+
+function getCmsPanelStateClassName(active: boolean): string {
+  return active
+    ? "pointer-events-auto visible opacity-100"
+    : "pointer-events-none invisible opacity-0";
 }
 
 function buildReferenceOptions(
@@ -57,7 +66,12 @@ function isImagePath(path: string): boolean {
   return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(path);
 }
 
-export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
+export function CmsPanel({
+  projectSlug,
+  version,
+  active = true,
+  onClose,
+}: CmsPanelProps) {
   const {
     handleRefresh,
     setAssetsOpen,
@@ -94,8 +108,12 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const [editorMode, setEditorMode] = useState<"entry" | "model">("entry");
 
   const report = statusQuery.data;
+  const panelStateClassName = getCmsPanelStateClassName(active);
   const defaultLocale = report?.defaultLocale ?? "en";
-  const locales = report?.locales.length ? report.locales : [defaultLocale];
+  const locales = useMemo(
+    () => deriveCmsLocales(report, defaultLocale),
+    [defaultLocale, report],
+  );
   const isAstroCollectionsSource = report?.sourceKind === "astro-collections";
   const isAstroMissingConfig = isAstroCollectionsSource && !report?.initialized;
   const allowCreateModel = Boolean(report?.initialized);
@@ -307,7 +325,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const openAssetReference = useCallback(
     (assetPath: string) => {
       if (!selectedEntry || !assetPath.trim()) return;
-      const resolvedPath = resolveRelativePath(selectedEntry.relativePath, assetPath);
+      const resolvedPath = resolveAssetReferencePath(selectedEntry.relativePath, assetPath);
       if (/\.pdf$/i.test(resolvedPath)) {
         setViewingPdfPath(resolvedPath);
         return;
@@ -587,7 +605,14 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
 
   if (statusQuery.isLoading) {
     return (
-      <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+      <div
+        aria-hidden={!active}
+        data-state={active ? "open" : "hidden"}
+        className={cn(
+          "absolute inset-0 z-20 flex items-center justify-center bg-background transition-opacity duration-150",
+          panelStateClassName,
+        )}
+      >
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           Loading CMS…
@@ -598,7 +623,14 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
 
   if (!report) {
     return (
-      <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+      <div
+        aria-hidden={!active}
+        data-state={active ? "open" : "hidden"}
+        className={cn(
+          "absolute inset-0 z-20 flex items-center justify-center bg-background transition-opacity duration-150",
+          panelStateClassName,
+        )}
+      >
         <div className="space-y-4 text-center">
           <p className="text-sm text-muted-foreground">
             CMS status could not be loaded.
@@ -626,7 +658,14 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     : "Schema-rendered collection editing for `src/content/`.";
 
   return (
-    <div className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background">
+    <div
+      aria-hidden={!active}
+      data-state={active ? "open" : "hidden"}
+      className={cn(
+        "absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background transition-opacity duration-150",
+        panelStateClassName,
+      )}
+    >
       <div className="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

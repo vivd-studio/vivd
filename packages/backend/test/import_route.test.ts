@@ -7,12 +7,15 @@ const {
   checkOrganizationAccessMock,
   getProjectMock,
   createProjectVersionMock,
+  deleteProjectVersionMock,
   initializeGitRepositoryMock,
   uploadProjectSourceToBucketMock,
   uploadProjectPreviewToBucketMock,
+  deleteProjectVersionArtifactsFromBucketMock,
   detectProjectTypeMock,
   buildSyncMock,
   getCurrentCommitMock,
+  ensureReferencedAstroCmsToolkitMock,
   ensureVivdInternalFilesDirMock,
   extractZipMock,
 } = vi.hoisted(() => ({
@@ -20,12 +23,15 @@ const {
   checkOrganizationAccessMock: vi.fn(),
   getProjectMock: vi.fn(),
   createProjectVersionMock: vi.fn(),
+  deleteProjectVersionMock: vi.fn(),
   initializeGitRepositoryMock: vi.fn(),
   uploadProjectSourceToBucketMock: vi.fn(),
   uploadProjectPreviewToBucketMock: vi.fn(),
+  deleteProjectVersionArtifactsFromBucketMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
   buildSyncMock: vi.fn(),
   getCurrentCommitMock: vi.fn(),
+  ensureReferencedAstroCmsToolkitMock: vi.fn(),
   ensureVivdInternalFilesDirMock: vi.fn(),
   extractZipMock: vi.fn(),
 }));
@@ -42,6 +48,7 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
   projectMetaService: {
     getProject: getProjectMock,
     createProjectVersion: createProjectVersionMock,
+    deleteProjectVersion: deleteProjectVersionMock,
   },
 }));
 
@@ -63,6 +70,8 @@ vi.mock("../src/generator/vivdPaths", () => ({
 vi.mock("../src/services/project/ProjectArtifactsService", () => ({
   uploadProjectSourceToBucket: uploadProjectSourceToBucketMock,
   uploadProjectPreviewToBucket: uploadProjectPreviewToBucketMock,
+  deleteProjectVersionArtifactsFromBucket:
+    deleteProjectVersionArtifactsFromBucketMock,
 }));
 
 vi.mock("../src/devserver/projectType", () => ({
@@ -79,6 +88,10 @@ vi.mock("../src/services/integrations/GitService", () => ({
   gitService: {
     getCurrentCommit: getCurrentCommitMock,
   },
+}));
+
+vi.mock("@vivd/shared/cms", () => ({
+  ensureReferencedAstroCmsToolkit: ensureReferencedAstroCmsToolkitMock,
 }));
 
 vi.mock("extract-zip", () => ({
@@ -109,7 +122,7 @@ function makeResponse(): TestResponse {
   };
 }
 
-function getImportHandler() {
+function getImportHandler(options?: { uploadError?: unknown; maxFileSizeMb?: number }) {
   const router = createImportRouter({
     auth: {
       api: {
@@ -117,8 +130,10 @@ function getImportHandler() {
       },
     },
     upload: {
-      single: () => (_req: any, _res: any, next: (err?: unknown) => void) => next(),
+      single: () => (_req: any, _res: any, next: (err?: unknown) => void) =>
+        next(options?.uploadError),
     } as any,
+    maxFileSizeMb: options?.maxFileSizeMb,
   });
 
   const routeLayer = (router as any).stack.find(
@@ -137,12 +152,15 @@ describe("import route safety checks", () => {
     checkOrganizationAccessMock.mockReset();
     getProjectMock.mockReset();
     createProjectVersionMock.mockReset();
+    deleteProjectVersionMock.mockReset();
     initializeGitRepositoryMock.mockReset();
     uploadProjectSourceToBucketMock.mockReset();
     uploadProjectPreviewToBucketMock.mockReset();
+    deleteProjectVersionArtifactsFromBucketMock.mockReset();
     detectProjectTypeMock.mockReset();
     buildSyncMock.mockReset();
     getCurrentCommitMock.mockReset();
+    ensureReferencedAstroCmsToolkitMock.mockReset();
     ensureVivdInternalFilesDirMock.mockReset();
     extractZipMock.mockReset();
 
@@ -166,8 +184,14 @@ describe("import route safety checks", () => {
       framework: "generic",
       packageManager: "npm",
     });
+    ensureReferencedAstroCmsToolkitMock.mockResolvedValue(null);
     getCurrentCommitMock.mockResolvedValue("commit-1");
     extractZipMock.mockResolvedValue(undefined);
+    deleteProjectVersionMock.mockResolvedValue(undefined);
+    deleteProjectVersionArtifactsFromBucketMock.mockResolvedValue({
+      deleted: false,
+      objectsDeleted: 0,
+    });
   });
 
   afterEach(() => {
@@ -262,5 +286,118 @@ describe("import route safety checks", () => {
     });
     expect(createProjectVersionMock).not.toHaveBeenCalled();
     expect(uploadProjectSourceToBucketMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a clear error when the ZIP exceeds the configured upload limit", async () => {
+    const handler = getImportHandler({
+      uploadError: { code: "LIMIT_FILE_SIZE" },
+      maxFileSizeMb: 100,
+    });
+    const req = {
+      query: {},
+      body: {},
+      headers: {},
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({
+      error: "ZIP file is too large. Maximum size is 100MB.",
+    });
+    expect(createContextMock).not.toHaveBeenCalled();
+  });
+
+  it("rolls back project metadata when artifact sync fails after the project row was created", async () => {
+    extractZipMock.mockImplementationOnce(
+      async (_zipPath: string, options: { dir: string }) => {
+        const siteDir = path.join(options.dir, "site");
+        fs.mkdirSync(siteDir, { recursive: true });
+        fs.writeFileSync(path.join(siteDir, "index.html"), "<html></html>", "utf-8");
+      },
+    );
+    uploadProjectSourceToBucketMock.mockRejectedValueOnce(new Error("bucket write failed"));
+
+    const handler = getImportHandler();
+    const req = {
+      query: {},
+      body: {},
+      headers: {},
+      file: {
+        originalname: "site.zip",
+        buffer: Buffer.from("fake-zip"),
+      },
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "Import failed" });
+    expect(createProjectVersionMock).toHaveBeenCalledOnce();
+    expect(deleteProjectVersionMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site",
+      version: 1,
+    });
+    expect(deleteProjectVersionArtifactsFromBucketMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site",
+      version: 1,
+    });
+  });
+
+  it("repairs referenced Astro CMS helpers before uploading imported Astro source", async () => {
+    extractZipMock.mockImplementationOnce(
+      async (_zipPath: string, options: { dir: string }) => {
+        const siteDir = path.join(options.dir, "site");
+        fs.mkdirSync(path.join(siteDir, "src", "pages"), { recursive: true });
+        fs.writeFileSync(
+          path.join(siteDir, "package.json"),
+          JSON.stringify({ name: "site", scripts: { dev: "astro dev" } }),
+          "utf-8",
+        );
+        fs.writeFileSync(path.join(siteDir, "astro.config.mjs"), "export default {};\n", "utf-8");
+        fs.writeFileSync(
+          path.join(siteDir, "src", "pages", "produkte.astro"),
+          "import CmsText from '../lib/cms/CmsText.astro';\n",
+          "utf-8",
+        );
+      },
+    );
+    detectProjectTypeMock.mockReturnValue({
+      framework: "astro",
+      packageManager: "npm",
+    });
+    ensureReferencedAstroCmsToolkitMock.mockResolvedValue({
+      created: ["src/lib/cmsBindings.ts"],
+      skipped: [],
+      paths: {} as any,
+    });
+    buildSyncMock.mockResolvedValue("/tmp/vivd-import-test/org-1/site/v1/dist");
+
+    const handler = getImportHandler();
+    const req = {
+      query: {},
+      body: {},
+      headers: {},
+      file: {
+        originalname: "site.zip",
+        buffer: Buffer.from("fake-zip"),
+      },
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(ensureReferencedAstroCmsToolkitMock).toHaveBeenCalledWith(
+      "/tmp/vivd-import-test/org-1/site/v1",
+    );
+    expect(uploadProjectSourceToBucketMock).toHaveBeenCalledOnce();
+    expect(
+      ensureReferencedAstroCmsToolkitMock.mock.invocationCallOrder[0],
+    ).toBeLessThan(uploadProjectSourceToBucketMock.mock.invocationCallOrder[0]!);
   });
 });

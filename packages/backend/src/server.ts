@@ -24,7 +24,7 @@ import { reloadCaddyConfig } from "./services/system/CaddyAdminService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 250;
+const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 100;
 const parsedZipImportMaxFileSizeMb = Number.parseInt(
   process.env.ZIP_IMPORT_MAX_FILE_SIZE_MB || "",
   10,
@@ -164,7 +164,14 @@ app.use(
 );
 
 // Import Projects endpoint(s)
-app.use("/vivd-studio/api", createImportRouter({ auth, upload: zipImportUpload }));
+app.use(
+  "/vivd-studio/api",
+  createImportRouter({
+    auth,
+    upload: zipImportUpload,
+    maxFileSizeMb: ZIP_IMPORT_MAX_FILE_SIZE_MB,
+  }),
+);
 
 // tRPC
 app.use(

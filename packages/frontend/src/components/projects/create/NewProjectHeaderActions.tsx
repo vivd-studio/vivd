@@ -240,7 +240,7 @@ export function NewProjectHeaderActions() {
                 disabled={isImporting}
               />
               <div className="text-xs text-muted-foreground">
-                Max 50MB. The imported project will be created as a new project.
+                Max 100MB. The imported project will be created as a new project.
               </div>
             </div>
 

@@ -78,7 +78,7 @@ export function ProjectsList() {
     useState<VersionDialogData | null>(null);
   const [deleteDialogSlug, setDeleteDialogSlug] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -115,8 +115,8 @@ export function ProjectsList() {
   }, [tagCatalogData?.tags]);
 
   useEffect(() => {
-    setSelectedTags((current) =>
-      current.filter((tag) => availableTags.includes(tag)),
+    setSelectedTag((current) =>
+      current && availableTags.includes(current) ? current : null,
     );
   }, [availableTags]);
 
@@ -125,11 +125,11 @@ export function ProjectsList() {
 
     let projects = [...projectsData.projects];
 
-    // Filter by selected tags (match all selected tags)
-    if (selectedTags.length > 0) {
+    // Filter by selected tag
+    if (selectedTag) {
       projects = projects.filter((project) => {
         const tags = project.tags ?? [];
-        return selectedTags.every((selected) => tags.includes(selected));
+        return tags.includes(selectedTag);
       });
     }
 
@@ -170,7 +170,7 @@ export function ProjectsList() {
     });
 
     return projects;
-  }, [projectsData?.projects, searchQuery, selectedTags, sortOption]);
+  }, [projectsData?.projects, searchQuery, selectedTag, sortOption]);
 
   const handleCreateNewClick = (slug: string, version?: number) => {
     // Find the project to get its URL and version info
@@ -292,19 +292,13 @@ export function ProjectsList() {
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground mr-0.5">Filter:</span>
               {availableTags.map((tag) => {
-                const active = selectedTags.includes(tag);
+                const active = selectedTag === tag;
                 const color = getTagColor(tag, tagColorMap);
                 return (
                   <button
                     key={tag}
                     type="button"
-                    onClick={() =>
-                      setSelectedTags((current) =>
-                        active
-                          ? current.filter((v) => v !== tag)
-                          : [...current, tag],
-                      )
-                    }
+                    onClick={() => setSelectedTag((current) => (current === tag ? null : tag))}
                     aria-label={`Filter by tag ${tag}`}
                     aria-pressed={active}
                     className="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 active:scale-[0.97]"
@@ -318,12 +312,12 @@ export function ProjectsList() {
                   </button>
                 );
               })}
-              {selectedTags.length > 0 && (
+              {selectedTag && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-xs"
-                  onClick={() => setSelectedTags([])}
+                  onClick={() => setSelectedTag(null)}
                 >
                   <X className="h-3.5 w-3.5 mr-1" />
                   Clear

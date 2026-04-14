@@ -55,6 +55,7 @@ interface PreviewContextValue {
   assetsOpen: boolean;
   setAssetsOpen: (open: boolean) => void;
   cmsOpen: boolean;
+  cmsMounted: boolean;
   setCmsOpen: (open: boolean) => void;
   sessionHistoryOpen: boolean;
   setSessionHistoryOpen: (open: boolean) => void;
@@ -203,6 +204,7 @@ export function PreviewProvider({
   const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const {
     cmsOpenState,
+    cmsMountedState,
     setCmsOpen,
     editingTextFileState,
     setEditingTextFile,
@@ -510,6 +512,7 @@ export function PreviewProvider({
     assetsOpen: assetsOpenState,
     setAssetsOpen,
     cmsOpen: cmsOpenState,
+    cmsMounted: cmsMountedState,
     setCmsOpen,
     sessionHistoryOpen: sessionHistoryOpenState,
     setSessionHistoryOpen,

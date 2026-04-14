@@ -309,10 +309,10 @@ the Studio runtime, with the remaining headroom left for the main app stack.
 Optional analytics geolocation:
 
 ```env
-# auto   = use proxy/CDN country headers when present, else try local GeoLite2 lookup
+# auto    = use proxy/CDN country headers when present, else try local MMDB lookup
 # headers = only use proxy/CDN country headers
-# maxmind = only use the local GeoLite2 database
-# off     = disable country detection
+# maxmind = only use the local country MMDB lookup
+# off     = disable country detection entirely
 VIVD_ANALYTICS_GEOLOCATION_MODE=auto
 VIVD_ANALYTICS_GEOIP_DB_PATH=/app/geoip/GeoLite2-Country.mmdb
 ```
@@ -320,19 +320,34 @@ VIVD_ANALYTICS_GEOIP_DB_PATH=/app/geoip/GeoLite2-Country.mmdb
 The Analytics country breakdown works automatically when your proxy already
 injects a country header such as Cloudflare's `cf-ipcountry` or Vercel's
 `x-vercel-ip-country`. For provider-agnostic self-host installs, mount a
-GeoLite2 Country `.mmdb` file into the backend container at the configured path.
+country `.mmdb` file into the backend container at the configured path.
 
-Vivd now includes a helper script for the common self-host case:
+Vivd now includes a helper script for the common self-host case. The default
+provider is the free [DB-IP Lite](https://db-ip.com/db/download/ip-to-country-lite)
+country database, which avoids Cloudflare or MaxMind account setup:
 
 ```bash
-MAXMIND_ACCOUNT_ID=...
-MAXMIND_LICENSE_KEY=...
 ./scripts/install-analytics-geoip.sh
 docker compose -f docker-compose.prod.yml up -d backend
 ```
 
-The script downloads `GeoLite2-Country.mmdb` into the default `./geoip/`
-directory that the published Compose bundle already mounts into the backend.
+The script resolves the latest DB-IP Lite MMDB download, installs it into the
+default `./geoip/GeoLite2-Country.mmdb` location that the published Compose
+bundle already mounts into the backend, and leaves the stable filename in place
+so the default `VIVD_ANALYTICS_GEOIP_DB_PATH` does not need to change.
+
+If you prefer MaxMind instead, the same helper supports it explicitly:
+
+```bash
+MAXMIND_ACCOUNT_ID=...
+MAXMIND_LICENSE_KEY=...
+./scripts/install-analytics-geoip.sh --provider=maxmind
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+If you use DB-IP Lite, keep the required attribution visible anywhere you
+display or use the resulting country data. Vivd's Analytics country section now
+includes a small `DB-IP` attribution link for that default path.
 
 ## Notes
 

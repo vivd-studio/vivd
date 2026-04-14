@@ -5,6 +5,7 @@ import path from "path";
 import * as net from "node:net";
 import treeKill from "tree-kill";
 import { detectProjectType, hasNodeModules, type ProjectConfig } from "./projectType.js";
+import { ensureAstroCmsToolkit } from "./astroCmsToolkit.js";
 
 interface DevServerInfo {
   url: string;
@@ -719,6 +720,10 @@ export class DevServerService {
     let syncPaused = false;
 
     try {
+      if (!isActive()) return;
+
+      await ensureAstroCmsToolkit(projectDir, config.framework);
+
       if (!isActive()) return;
 
       let installedDependencies = false;

@@ -76,6 +76,8 @@ const IMAGE_LIST_FIELD_TOKENS = new Set([
   "icons",
 ]);
 const IMAGE_REFERENCE_EXTENSION_REGEX = /\.(avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i;
+const GENERIC_FILE_REFERENCE_EXTENSION_REGEX = /\.[a-z0-9]{1,8}(?:[?#].*)?$/i;
+const NON_LOCAL_ASSET_REFERENCE_REGEX = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 type ParsedFieldResult = {
   field: CmsFieldDefinition;
@@ -355,6 +357,27 @@ function looksLikeManagedImageReference(value: string): boolean {
   );
 }
 
+function looksLikeManagedFileReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || !GENERIC_FILE_REFERENCE_EXTENSION_REGEX.test(trimmed)) {
+    return false;
+  }
+
+  if (NON_LOCAL_ASSET_REFERENCE_REGEX.test(trimmed)) {
+    return false;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  return (
+    normalized.startsWith("/") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("src/content/media/") ||
+    normalized.includes("/media/") ||
+    normalized.includes("/")
+  );
+}
+
 function collectNonEmptyStringValues(values: unknown[]): string[] {
   return values
     .filter((value): value is string => typeof value === "string")
@@ -366,39 +389,120 @@ function fieldAcceptsImages(field: CmsFieldDefinition): boolean {
   return (field.accepts ?? []).some((accept) => accept.startsWith("image/"));
 }
 
-function withImageAccepts(field: CmsFieldDefinition): CmsFieldDefinition {
-  if (fieldAcceptsImages(field)) {
+function withAssetAccepts(
+  field: CmsFieldDefinition,
+  accepts: string[],
+): CmsFieldDefinition {
+  const nextAccepts = [...new Set([...(field.accepts ?? []), ...accepts])];
+  if (nextAccepts.length === (field.accepts ?? []).length) {
     return field;
   }
   return {
     ...field,
-    accepts: [...(field.accepts ?? []), "image/*"],
+    accepts: nextAccepts,
   };
 }
 
-function shouldHintStringFieldAsImage(fieldKey: string, values: unknown[]): boolean {
-  const nonEmptyValues = collectNonEmptyStringValues(values);
-  const allLookManagedImageLike =
-    nonEmptyValues.length > 0 && nonEmptyValues.every(looksLikeManagedImageReference);
-
-  if (allLookManagedImageLike) {
-    return true;
+function inferAssetAcceptsFromReference(value: string): string[] | null {
+  if (looksLikeManagedImageReference(value)) {
+    return ["image/*"];
   }
 
-  return looksLikeImageFieldName(fieldKey) && nonEmptyValues.length === 0;
+  if (!looksLikeManagedFileReference(value)) {
+    return null;
+  }
+
+  const extension = path.posix.extname(value.replace(/[?#].*$/, "")).toLowerCase();
+  if (!extension) {
+    return null;
+  }
+
+  if (extension === ".pdf") {
+    return [".pdf", "application/pdf"];
+  }
+
+  return [extension];
 }
 
-function shouldHintStringListAsImage(fieldKey: string, values: unknown[]): boolean {
-  const flattenedItems = values.flatMap((value) => (Array.isArray(value) ? value : []));
-  const nonEmptyValues = collectNonEmptyStringValues(flattenedItems);
-  const allLookManagedImageLike =
-    nonEmptyValues.length > 0 && nonEmptyValues.every(looksLikeManagedImageReference);
-
-  if (allLookManagedImageLike) {
-    return true;
+function inferAssetAcceptsFromStringValues(values: string[]): string[] | null {
+  const inferredAccepts = values.map((value) => inferAssetAcceptsFromReference(value));
+  if (inferredAccepts.length === 0 || inferredAccepts.some((accepts) => !accepts)) {
+    return null;
   }
 
-  return looksLikeImageListFieldName(fieldKey) && nonEmptyValues.length === 0;
+  return [...new Set(inferredAccepts.flatMap((accepts) => accepts ?? []))];
+}
+
+function inferStringFieldAssetAccepts(fieldKey: string, values: unknown[]): string[] | null {
+  const nonEmptyValues = collectNonEmptyStringValues(values);
+  const inferredAccepts = inferAssetAcceptsFromStringValues(nonEmptyValues);
+  if (inferredAccepts?.length) {
+    return inferredAccepts;
+  }
+
+  if (looksLikeImageFieldName(fieldKey) && nonEmptyValues.length === 0) {
+    return ["image/*"];
+  }
+
+  return null;
+}
+
+function inferStringListFieldAssetAccepts(
+  fieldKey: string,
+  values: unknown[],
+): string[] | null {
+  const flattenedItems = values.flatMap((value) => (Array.isArray(value) ? value : []));
+  const nonEmptyValues = collectNonEmptyStringValues(flattenedItems);
+  const inferredAccepts = inferAssetAcceptsFromStringValues(nonEmptyValues);
+  if (inferredAccepts?.length) {
+    return inferredAccepts;
+  }
+
+  if (looksLikeImageListFieldName(fieldKey) && nonEmptyValues.length === 0) {
+    return ["image/*"];
+  }
+
+  return null;
+}
+
+function isLikelyLocaleKey(value: string): boolean {
+  return /^[a-z]{2}(?:-[a-z0-9]+)*$/i.test(value.trim());
+}
+
+function inferLocalizedAssetFieldFromObject(
+  field: CmsFieldDefinition,
+  nestedFields: Record<string, CmsFieldDefinition>,
+  values: unknown[],
+): CmsFieldDefinition | null {
+  const nestedEntries = Object.entries(nestedFields);
+  if (
+    nestedEntries.length === 0 ||
+    !nestedEntries.every(
+      ([nestedKey, nestedField]) =>
+        isLikelyLocaleKey(nestedKey) && nestedField.type === "string",
+    )
+  ) {
+    return null;
+  }
+
+  const localizedValues = values.flatMap((value) =>
+    isRecord(value) ? Object.values(value) : [],
+  );
+  const inferredAccepts = inferAssetAcceptsFromStringValues(
+    collectNonEmptyStringValues(localizedValues),
+  );
+  if (!inferredAccepts?.length) {
+    return null;
+  }
+
+  return {
+    type: "string",
+    label: field.label,
+    description: field.description,
+    required: field.required,
+    localized: true,
+    accepts: inferredAccepts,
+  };
 }
 
 function applyAstroFieldHints(
@@ -406,20 +510,22 @@ function applyAstroFieldHints(
   field: CmsFieldDefinition,
   values: unknown[],
 ): CmsFieldDefinition {
-  if (field.type === "string" && shouldHintStringFieldAsImage(fieldKey, values)) {
-    return withImageAccepts(field);
+  if (field.type === "string") {
+    const inferredAccepts = inferStringFieldAssetAccepts(fieldKey, values);
+    if (inferredAccepts?.length) {
+      return withAssetAccepts(field, inferredAccepts);
+    }
   }
 
-  if (
-    field.type === "list" &&
-    field.item?.type === "string" &&
-    shouldHintStringListAsImage(fieldKey, values)
-  ) {
-    return {
-      ...field,
-      accepts: [...new Set([...(field.accepts ?? []), "image/*"])],
-      item: withImageAccepts(field.item),
-    };
+  if (field.type === "list" && field.item?.type === "string") {
+    const inferredAccepts = inferStringListFieldAssetAccepts(fieldKey, values);
+    if (inferredAccepts?.length) {
+      return {
+        ...field,
+        accepts: [...new Set([...(field.accepts ?? []), ...inferredAccepts])],
+        item: withAssetAccepts(field.item, inferredAccepts),
+      };
+    }
   }
 
   if (field.type === "object" && field.fields) {
@@ -433,6 +539,14 @@ function applyAstroFieldHints(
         nestedField,
         nestedValues,
       );
+    }
+    const localizedAssetField = inferLocalizedAssetFieldFromObject(
+      field,
+      nextFields,
+      values,
+    );
+    if (localizedAssetField) {
+      return localizedAssetField;
     }
     return {
       ...field,

@@ -2,6 +2,8 @@
  * Shared import utilities for ZIP file uploads.
  */
 
+const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 100;
+
 export interface ImportResult {
   slug: string;
   version?: number;
@@ -36,13 +38,41 @@ export async function importProjectZip(
     credentials: "include",
   });
 
-  const payload = (await response.json().catch(() => null)) as {
+  const responseText = await response.text();
+  const payload = (() => {
+    if (!responseText.trim()) return null;
+    try {
+      const parsed = JSON.parse(responseText) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed as {
+        error?: string;
+        slug?: string;
+        version?: number;
+      };
+    } catch {
+      return null;
+    }
+  })() as {
     error?: string;
     slug?: string;
     version?: number;
   } | null;
 
   if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error(
+        `ZIP file is too large. Maximum size is ${DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB}MB.`,
+      );
+    }
+    if (payload?.error) {
+      throw new Error(payload.error);
+    }
+    const fallbackMessage = responseText.trim();
+    if (fallbackMessage && !fallbackMessage.startsWith("<")) {
+      throw new Error(fallbackMessage);
+    }
     throw new Error(payload?.error || "Import failed");
   }
 

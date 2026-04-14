@@ -84,4 +84,41 @@ describe("CmsFieldRenderer", () => {
       "Gallery Images 1:galleryImages.0",
     );
   });
+
+  it("renders rich file asset UI for string fields with PDF references", () => {
+    render(
+      <CmsFieldRenderer
+        {...baseProps}
+        fieldKey="safetySheet"
+        field={{ type: "string" }}
+        fieldPath={["safetySheet"]}
+        draftValues={{ safetySheet: "/pdfs/products/apollo/safety-sheet.pdf" }}
+      />,
+    );
+
+    expect(screen.getByTestId("cms-asset-field")).toHaveTextContent(
+      "Safety Sheet:safetySheet",
+    );
+  });
+
+  it("renders localized file asset UI for localized string fields with asset accepts", () => {
+    render(
+      <CmsFieldRenderer
+        {...baseProps}
+        fieldKey="hrefByLang"
+        field={{ type: "string", localized: true, accepts: [".pdf", "application/pdf"] }}
+        fieldPath={["hrefByLang"]}
+        draftValues={{
+          hrefByLang: {
+            de: "/pdfs/products/apollo/de.pdf",
+            en: "/pdfs/products/apollo/en.pdf",
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("cms-asset-field").map((element) => element.textContent),
+    ).toEqual(expect.arrayContaining(["DE:hrefByLang.de", "EN:hrefByLang.en"]));
+  });
 });

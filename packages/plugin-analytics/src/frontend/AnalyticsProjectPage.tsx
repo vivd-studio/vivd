@@ -812,63 +812,77 @@ export default function AnalyticsProjectPage() {
                         title="Country breakdown"
                         description="Where tracked pageviews and sessions originated."
                       >
-                        <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">#</th>
-                                <th className="px-3 py-2 font-medium">Country</th>
-                                <th className="px-3 py-2 font-medium">Pageviews</th>
-                                <th className="px-3 py-2 font-medium">Visitors</th>
-                                <th className="px-3 py-2 font-medium">Sessions</th>
-                                <th className="px-3 py-2 font-medium">Share</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {analyticsSummary.countries.length > 0 ? (
-                                analyticsSummary.countries.map((row, index) => (
-                                  <tr key={row.countryCode} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                      {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      <div className="flex items-center gap-2">
-                                        <span aria-hidden="true" className="text-base">
-                                          {formatCountryFlag(row.countryCode)}
-                                        </span>
-                                        <div className="min-w-0">
-                                          <div>{formatCountryName(row.countryCode)}</div>
-                                          <div className="text-xs text-muted-foreground">
-                                            {row.countryCode === "unknown"
-                                              ? "Unknown source"
-                                              : row.countryCode}
+                        <div className="space-y-3">
+                          <div className="overflow-x-auto rounded-md border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/30">
+                                <tr className="text-left">
+                                  <th className="w-12 px-3 py-2 font-medium">#</th>
+                                  <th className="px-3 py-2 font-medium">Country</th>
+                                  <th className="px-3 py-2 font-medium">Pageviews</th>
+                                  <th className="px-3 py-2 font-medium">Visitors</th>
+                                  <th className="px-3 py-2 font-medium">Sessions</th>
+                                  <th className="px-3 py-2 font-medium">Share</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {analyticsSummary.countries.length > 0 ? (
+                                  analyticsSummary.countries.map((row, index) => (
+                                    <tr key={row.countryCode} className="border-t">
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        {index + 1}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <span aria-hidden="true" className="text-base">
+                                            {formatCountryFlag(row.countryCode)}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <div>{formatCountryName(row.countryCode)}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                              {row.countryCode === "unknown"
+                                                ? "Unknown source"
+                                                : row.countryCode}
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.pageviews)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.uniqueVisitors)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.uniqueSessions)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatPercent(row.share)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.pageviews)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.uniqueVisitors)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.uniqueSessions)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatPercent(row.share)}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr className="border-t">
+                                    <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                      No country data in this range.
                                     </td>
                                   </tr>
-                                ))
-                              ) : (
-                                <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
-                                    No country data in this range.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Free DB-IP Lite self-host installs require attribution:{" "}
+                            <a
+                              href="https://db-ip.com"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2"
+                            >
+                              IP Geolocation by DB-IP
+                            </a>
+                            .
+                          </p>
                         </div>
                       </SectionCard>
 

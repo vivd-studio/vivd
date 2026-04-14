@@ -1,5 +1,10 @@
 import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
-import { type CmsFieldSegment, titleizeKey } from "./helpers";
+import {
+  inferAssetStorageFromValue,
+  type CmsAssetStorageKind,
+  type CmsFieldSegment,
+  titleizeKey,
+} from "./helpers";
 
 export interface CmsFieldRendererProps {
   projectSlug: string;
@@ -27,6 +32,12 @@ export interface CmsFieldRendererProps {
   openExplorer: () => void;
 }
 
+export interface CmsAssetFieldPaths {
+  storageKind: CmsAssetStorageKind;
+  assetRootPath: string;
+  defaultFolderPath: string;
+}
+
 export function getFieldLabel(fieldKey: string, field: CmsFieldDefinition) {
   return field.label?.trim() || titleizeKey(fieldKey);
 }
@@ -38,14 +49,21 @@ export function ensureArray(value: unknown): unknown[] {
 export function getAssetFieldPaths(
   selectedModel: CmsModelRecord | null,
   selectedEntryKey: string | null,
-) {
+  value?: unknown,
+): CmsAssetFieldPaths | null {
   if (!selectedModel || !selectedEntryKey) {
     return null;
   }
 
+  const inferredStorage = inferAssetStorageFromValue(value);
+  if (inferredStorage) {
+    return inferredStorage;
+  }
+
   const mediaRootPath = "src/content/media";
   return {
-    mediaRootPath,
+    storageKind: "content-media",
+    assetRootPath: mediaRootPath,
     defaultFolderPath: `${mediaRootPath}/${selectedModel.key}/${selectedEntryKey}`,
   };
 }

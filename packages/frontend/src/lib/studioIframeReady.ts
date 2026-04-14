@@ -18,13 +18,6 @@ function hasMountedStudioRoot(frameDocument: Document): boolean {
   );
 }
 
-function hasDocumentBodyContent(frameDocument: Document): boolean {
-  const body = frameDocument.body;
-  if (!body) return false;
-  if (body.childElementCount > 0) return true;
-  return Boolean(body.textContent?.trim());
-}
-
 export function isStudioIframeShellLoaded(
   iframe: HTMLIFrameElement | null,
 ): boolean {
@@ -80,8 +73,7 @@ export function isStudioIframePresented(
     return (
       frameDocument.readyState !== "loading" &&
       (Boolean(frameDocument.getElementById("root")) ||
-        hasStudioAssetReference(frameDocument) ||
-        hasDocumentBodyContent(frameDocument))
+        hasStudioAssetReference(frameDocument))
     );
   } catch {
     // Cross-origin runtime documents are not readable here. If the frame is no longer

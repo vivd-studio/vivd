@@ -374,6 +374,22 @@ export function getDirectContainerBaseUrl(
   return `http://${containerName}:${STUDIO_INTERNAL_PORT}`;
 }
 
+type StudioHealthPayload = {
+  status?: string;
+  initialized?: boolean;
+};
+
+async function isStudioHealthReadyResponse(response: Response): Promise<boolean> {
+  if (!response.ok) return false;
+
+  const body =
+    typeof response.json === "function"
+      ? ((await response.json().catch(() => null)) as StudioHealthPayload | null)
+      : null;
+
+  return body?.status === "ok" || body?.initialized === true;
+}
+
 export async function waitForReadyWorkflow(deps: {
   inspectContainer: (containerId: string) => Promise<DockerContainerInfo>;
   getInternalProxyUrlForRoutePath: (routePath: string) => string;
@@ -417,7 +433,7 @@ export async function waitForReadyWorkflow(deps: {
           cache: "no-store",
           redirect: "manual",
         });
-        if (response.ok) return;
+        if (await isStudioHealthReadyResponse(response)) return;
       } catch {
         // Retry until timeout.
       }

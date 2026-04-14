@@ -149,6 +149,7 @@ class ResizeObserverMock {
 function PreviewStateHarness() {
   const {
     cmsOpen,
+    cmsMounted,
     setCmsOpen,
     editingTextFile,
     setEditingTextFile,
@@ -194,6 +195,7 @@ function PreviewStateHarness() {
         close-pdf
       </button>
       <div data-testid="cms-state">{cmsOpen ? "open" : "closed"}</div>
+      <div data-testid="cms-mounted-state">{cmsMounted ? "mounted" : "unmounted"}</div>
       <div data-testid="text-state">{editingTextFile ?? ""}</div>
       <div data-testid="image-state">{viewingImagePath ?? ""}</div>
       <div data-testid="pdf-state">{viewingPdfPath ?? ""}</div>
@@ -243,6 +245,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "open-text" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("closed");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("text-state")).toHaveTextContent(
       "src/content/pages/home.md",
     );
@@ -250,6 +253,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "close-text" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("open");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("text-state")).toHaveTextContent("");
   });
 
@@ -260,6 +264,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "open-image" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("closed");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("image-state")).toHaveTextContent(
       "src/content/media/hero.webp",
     );
@@ -267,6 +272,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "close-image" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("open");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("image-state")).toHaveTextContent("");
   });
 
@@ -278,6 +284,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "open-pdf" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("closed");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("pdf-state")).toHaveTextContent(
       "src/content/docs/guide.pdf",
     );
@@ -285,6 +292,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "close-pdf" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("open");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("mounted");
     expect(screen.getByTestId("image-state")).toHaveTextContent("");
     expect(screen.getByTestId("pdf-state")).toHaveTextContent("");
   });
@@ -301,6 +309,7 @@ describe("PreviewProvider workspace surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "close-cms" }));
 
     expect(screen.getByTestId("cms-state")).toHaveTextContent("closed");
+    expect(screen.getByTestId("cms-mounted-state")).toHaveTextContent("unmounted");
     expect(screen.getByTestId("text-state")).toHaveTextContent("");
     expect(screen.getByTestId("image-state")).toHaveTextContent("");
     expect(screen.getByTestId("pdf-state")).toHaveTextContent("");

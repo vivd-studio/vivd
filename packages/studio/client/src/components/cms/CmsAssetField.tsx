@@ -28,11 +28,12 @@ import type { AssetItem } from "@/components/asset-explorer/types";
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
 import { CmsAssetPickerSheet } from "./CmsAssetPickerSheet";
 import {
-  buildRelativeReferencePath,
+  buildStoredAssetReferencePath,
   getAssetPathValue,
   isPathInsideRoot,
-  resolveRelativePath,
+  resolveAssetReferencePath,
   setAssetPathValue,
+  type CmsAssetStorageKind,
 } from "./helpers";
 
 interface CmsAssetFieldProps {
@@ -43,7 +44,8 @@ interface CmsAssetFieldProps {
   field: CmsFieldDefinition;
   value: unknown;
   entryRelativePath: string;
-  mediaRootPath: string;
+  storageKind: CmsAssetStorageKind;
+  assetRootPath: string;
   defaultFolderPath: string;
   canUseAiImages: boolean;
   readOnly?: boolean;
@@ -67,7 +69,8 @@ export function CmsAssetField({
   field,
   value,
   entryRelativePath,
-  mediaRootPath,
+  storageKind,
+  assetRootPath,
   defaultFolderPath,
   canUseAiImages,
   readOnly = false,
@@ -84,11 +87,11 @@ export function CmsAssetField({
 
   const assetPath = getAssetPathValue(value);
   const resolvedAssetPath = assetPath
-    ? resolveRelativePath(entryRelativePath, assetPath)
+    ? resolveAssetReferencePath(entryRelativePath, assetPath)
     : "";
   const hasAsset = assetPath.trim().length > 0;
   const canPreviewAsset = Boolean(
-    resolvedAssetPath && isPathInsideRoot(resolvedAssetPath, mediaRootPath),
+    resolvedAssetPath && isPathInsideRoot(resolvedAssetPath, assetRootPath),
   );
   const imageMode = fieldAcceptsImages(field, assetPath);
   const currentIsImage =
@@ -191,7 +194,7 @@ export function CmsAssetField({
     onChange(
       setAssetPathValue(
         value,
-        buildRelativeReferencePath(entryRelativePath, aiCandidatePath),
+        buildStoredAssetReferencePath(entryRelativePath, aiCandidatePath),
       ),
     );
     setAiCandidatePath(null);
@@ -280,7 +283,7 @@ export function CmsAssetField({
         </p>
         {hasAsset ? (
           <p className="truncate text-[11px] text-muted-foreground">
-            Relative media reference
+            {storageKind === "public" ? "Public site path" : "Relative media reference"}
           </p>
         ) : null}
       </div>
@@ -290,8 +293,12 @@ export function CmsAssetField({
         className={`${compact ? "h-8" : "h-9"} border-border/50 bg-background text-xs text-foreground/80`}
         placeholder={
           imageMode
-            ? "../../../media/products/item/hero.webp"
-            : "../../../media/files/brochure.pdf"
+            ? storageKind === "public"
+              ? "/images/products/item/hero.webp"
+              : "../../../media/products/item/hero.webp"
+            : storageKind === "public"
+              ? "/pdfs/products/item/brochure.pdf"
+              : "../../../media/files/brochure.pdf"
         }
         readOnly={readOnly}
         disabled={readOnly}
@@ -333,7 +340,9 @@ export function CmsAssetField({
                       <p className="truncate text-sm font-medium" title={assetFilename}>
                         {assetFilename}
                       </p>
-                      <p className="text-xs text-muted-foreground">Media library image</p>
+                      <p className="text-xs text-muted-foreground">
+                        {storageKind === "public" ? "Public image" : "Media library image"}
+                      </p>
                     </div>
                     {openPreviewButton}
                   </div>
@@ -387,7 +396,9 @@ export function CmsAssetField({
               <p className="truncate text-sm font-medium" title={assetFilename}>
                 {assetFilename}
               </p>
-              <p className="text-xs text-muted-foreground">Linked media asset</p>
+              <p className="text-xs text-muted-foreground">
+                {storageKind === "public" ? "Linked public asset" : "Linked media asset"}
+              </p>
             </div>
             {openPreviewButton}
           </div>
@@ -402,8 +413,12 @@ export function CmsAssetField({
     <div className="rounded-xl border border-dashed border-border/60 px-4 py-5 text-sm text-muted-foreground">
       <p>
         {imageMode
-          ? "Choose an image from the media library, upload one, or generate a new one."
-          : "Choose a file from the media library or upload a new one."}
+          ? storageKind === "public"
+            ? "Choose an image from the public files, upload one, or generate a new one."
+            : "Choose an image from the media library, upload one, or generate a new one."
+          : storageKind === "public"
+            ? "Choose a file from the public files or upload a new one."
+            : "Choose a file from the media library or upload a new one."}
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         {pathInput}
@@ -426,8 +441,12 @@ export function CmsAssetField({
               <p className="mt-1 text-xs text-muted-foreground">
                 {field.description?.trim() ||
                   (imageMode
-                    ? "Choose an image from the media library for this entry."
-                    : "Choose a file from the media library for this entry.")}
+                    ? storageKind === "public"
+                      ? "Choose an image from the public files for this entry."
+                      : "Choose an image from the media library for this entry."
+                    : storageKind === "public"
+                      ? "Choose a file from the public files for this entry."
+                      : "Choose a file from the media library for this entry.")}
               </p>
             ) : null}
           </div>
@@ -445,10 +464,11 @@ export function CmsAssetField({
           field={field}
           entryRelativePath={entryRelativePath}
           currentValue={resolvedAssetPath}
-          mediaRootPath={mediaRootPath}
+          storageKind={storageKind}
+          assetRootPath={assetRootPath}
           defaultFolderPath={defaultFolderPath}
           canUseAiImages={canUseAiImages}
-          onSelect={(relativePath) => onChange(setAssetPathValue(value, relativePath))}
+          onSelect={(storedReference) => onChange(setAssetPathValue(value, storedReference))}
         />
       ) : null}
 

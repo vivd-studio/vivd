@@ -25,11 +25,12 @@ import { getStudioImageUrlCandidates } from "@/components/asset-explorer/utils";
 import { uploadFilesToStudioPath } from "@/components/asset-explorer/upload";
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
 import {
-  buildRelativeReferencePath,
+  buildStoredAssetReferencePath,
   dirnamePosix,
   isPathInsideRoot,
   normalizePosix,
   titleizeKey,
+  type CmsAssetStorageKind,
 } from "./helpers";
 
 interface CmsAssetPickerSheetProps {
@@ -40,10 +41,11 @@ interface CmsAssetPickerSheetProps {
   field: CmsFieldDefinition;
   entryRelativePath: string;
   currentValue: string;
-  mediaRootPath: string;
+  storageKind: CmsAssetStorageKind;
+  assetRootPath: string;
   defaultFolderPath: string;
   canUseAiImages: boolean;
-  onSelect: (relativePath: string) => void;
+  onSelect: (storedReference: string) => void;
 }
 
 function fieldAcceptsImages(field: CmsFieldDefinition, currentValue: string): boolean {
@@ -75,9 +77,13 @@ function matchesAcceptPattern(item: AssetItem, accepts: string[]): boolean {
   });
 }
 
-function buildRelativeFolderLabel(rootPath: string, currentPath: string): string {
+function buildRelativeFolderLabel(
+  rootPath: string,
+  currentPath: string,
+  rootLabel: string,
+): string {
   if (currentPath === rootPath) {
-    return "media";
+    return rootLabel;
   }
 
   const normalizedRoot = normalizePosix(rootPath).replace(/\/+$/, "");
@@ -86,7 +92,7 @@ function buildRelativeFolderLabel(rootPath: string, currentPath: string): string
     ? normalizedCurrent.slice(normalizedRoot.length + 1)
     : normalizedCurrent;
 
-  return relative || "media";
+  return relative || rootLabel;
 }
 
 export function CmsAssetPickerSheet({
@@ -97,7 +103,8 @@ export function CmsAssetPickerSheet({
   field,
   entryRelativePath,
   currentValue,
-  mediaRootPath,
+  storageKind,
+  assetRootPath,
   defaultFolderPath,
   canUseAiImages,
   onSelect,
@@ -122,13 +129,13 @@ export function CmsAssetPickerSheet({
 
     const initialPath =
       currentValue &&
-      isPathInsideRoot(currentValue, mediaRootPath) &&
+      isPathInsideRoot(currentValue, assetRootPath) &&
       currentValue.trim().length > 0
         ? dirnamePosix(currentValue)
         : defaultFolderPath;
 
-    setCurrentPath(initialPath || mediaRootPath);
-  }, [currentValue, defaultFolderPath, mediaRootPath, open]);
+    setCurrentPath(initialPath || assetRootPath);
+  }, [assetRootPath, currentValue, defaultFolderPath, open]);
 
   const assetsQuery = trpc.assets.listAssets.useQuery(
     {
@@ -142,7 +149,7 @@ export function CmsAssetPickerSheet({
   const createImageMutation = trpc.assets.createImageWithAI.useMutation({
     onSuccess: async (data) => {
       await utils.assets.invalidate();
-      onSelect(buildRelativeReferencePath(entryRelativePath, data.path));
+      onSelect(buildStoredAssetReferencePath(entryRelativePath, data.path));
       toast.success("Image generated");
       setCreateImageOpen(false);
       setCreateImagePrompt("");
@@ -169,8 +176,14 @@ export function CmsAssetPickerSheet({
     [availableItems],
   );
 
-  const canNavigateUp = currentPath !== mediaRootPath;
-  const relativeFolderLabel = buildRelativeFolderLabel(mediaRootPath, currentPath);
+  const canNavigateUp = currentPath !== assetRootPath;
+  const relativeFolderLabel = buildRelativeFolderLabel(
+    assetRootPath,
+    currentPath,
+    storageKind === "public"
+      ? assetRootPath.slice("public/".length) || "public"
+      : "media",
+  );
 
   const handleSelectAsset = useCallback(
     (item: AssetItem) => {
@@ -179,7 +192,7 @@ export function CmsAssetPickerSheet({
         return;
       }
 
-      onSelect(buildRelativeReferencePath(entryRelativePath, item.path));
+      onSelect(buildStoredAssetReferencePath(entryRelativePath, item.path));
       onOpenChange(false);
     },
     [entryRelativePath, onOpenChange, onSelect],
@@ -190,9 +203,9 @@ export function CmsAssetPickerSheet({
       return;
     }
 
-    const parentPath = dirnamePosix(currentPath) || mediaRootPath;
-    setCurrentPath(isPathInsideRoot(parentPath, mediaRootPath) ? parentPath : mediaRootPath);
-  }, [canNavigateUp, currentPath, mediaRootPath]);
+    const parentPath = dirnamePosix(currentPath) || assetRootPath;
+    setCurrentPath(isPathInsideRoot(parentPath, assetRootPath) ? parentPath : assetRootPath);
+  }, [assetRootPath, canNavigateUp, currentPath]);
 
   const handleUpload = useCallback(
     async (files: FileList | File[]) => {
@@ -213,7 +226,7 @@ export function CmsAssetPickerSheet({
         await utils.assets.invalidate();
         const firstUploadedPath = uploadedPaths[0];
         if (firstUploadedPath) {
-          onSelect(buildRelativeReferencePath(entryRelativePath, firstUploadedPath));
+          onSelect(buildStoredAssetReferencePath(entryRelativePath, firstUploadedPath));
           toast.success("Asset uploaded");
           onOpenChange(false);
         }
@@ -273,8 +286,16 @@ export function CmsAssetPickerSheet({
             <SheetHeader className="space-y-1 pr-8">
               <SheetTitle>{imageMode ? "Choose image" : "Choose asset"}</SheetTitle>
               <SheetDescription>
-                Browse files under <code>src/content/media/</code>. Selecting a file writes a
-                relative reference into the entry YAML.
+                Browse files under <code>{`${assetRootPath}/`}</code>. Selecting a file writes{" "}
+                {storageKind === "public"
+                  ? "a site-root path like "
+                  : "a relative reference like "}
+                <code>
+                  {storageKind === "public"
+                    ? "/pdfs/products/example.pdf"
+                    : "../../../media/products/example.pdf"}
+                </code>{" "}
+                into the entry YAML.
               </SheetDescription>
             </SheetHeader>
 

@@ -90,7 +90,7 @@ describe("ProjectsList tags filter", () => {
     localStorage.clear();
   });
 
-  it("filters by selected tags with match-all semantics", () => {
+  it("keeps tag filtering single-select when switching between tags", () => {
     setTrpcProjects([
       {
         slug: "alpha",
@@ -136,8 +136,20 @@ describe("ProjectsList tags filter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filter by tag seo" }));
 
     expect(screen.getByText("alpha")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Filter by tag marketing" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Filter by tag seo" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("beta")).toBeNull();
     expect(screen.queryByText("gamma")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by tag internal" }));
+
+    expect(screen.queryByText("alpha")).toBeNull();
+    expect(screen.queryByText("beta")).toBeNull();
+    expect(screen.getByText("gamma")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
 
@@ -146,7 +158,7 @@ describe("ProjectsList tags filter", () => {
     expect(screen.getByText("gamma")).toBeTruthy();
   });
 
-  it("combines text search and selected tags", () => {
+  it("combines text search and the active tag", () => {
     setTrpcProjects([
       {
         slug: "alpha-site",

@@ -1,8 +1,9 @@
 import { useEffect } from "react";
+import { STUDIO_LOAD_TIMEOUT_MS } from "@/lib/studioStartupTimings";
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_LATE_POLL_INTERVAL_MS = 1_000;
-const DEFAULT_TIMEOUT_MS = 25_000;
+const DEFAULT_TIMEOUT_MS = STUDIO_LOAD_TIMEOUT_MS;
 
 type UseStudioIframeReadyRetryOptions = {
   enabled: boolean;

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STUDIO_LOAD_TIMEOUT_MS } from "@/lib/studioStartupTimings";
 
 const {
   useParamsMock,
@@ -167,6 +168,17 @@ vi.mock("@/lib/brand", () => ({
 
 import EmbeddedStudio from "./EmbeddedStudio";
 import { MemoryRouter } from "react-router-dom";
+
+function createHealthResponse(ready: boolean) {
+  return {
+    ok: true,
+    json: vi.fn().mockResolvedValue(
+      ready
+        ? { status: "ok", initialized: true }
+        : { status: "starting", initialized: false },
+    ),
+  };
+}
 
 function makeProject(slug = "site-1") {
   return {
@@ -1077,7 +1089,7 @@ describe("EmbeddedStudio", () => {
       fireEvent.load(iframe);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(25_100);
+        await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 100);
       });
 
       expect(
@@ -1148,10 +1160,12 @@ describe("EmbeddedStudio", () => {
       useLocationMock.mockReturnValue({
         search: "?view=studio&version=1",
       });
-      let resolveHealthFetch: ((value: { ok: boolean }) => void) | null = null;
+      let resolveHealthFetch:
+        | ((value: ReturnType<typeof createHealthResponse>) => void)
+        | null = null;
       const fetchMock = vi.fn().mockImplementation(
         () =>
-          new Promise<{ ok: boolean }>((resolve) => {
+          new Promise<ReturnType<typeof createHealthResponse>>((resolve) => {
             resolveHealthFetch = resolve;
           }),
       );
@@ -1199,7 +1213,7 @@ describe("EmbeddedStudio", () => {
       fireEvent.load(iframe);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(25_100);
+        await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 100);
       });
 
       expect(
@@ -1216,7 +1230,7 @@ describe("EmbeddedStudio", () => {
 
       currentDocument = shellDocument;
       await act(async () => {
-        resolveHealthFetch?.({ ok: true });
+        resolveHealthFetch?.(createHealthResponse(true));
         await Promise.resolve();
       });
 

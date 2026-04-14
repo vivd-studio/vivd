@@ -1256,7 +1256,7 @@ export function createAnalyticsPluginService(
         "Example: window.vivdAnalytics.track('custom', { eventName: 'contact_form_view', path: window.location.href })",
         "Example: window.vivdAnalytics.track('custom', { eventName: 'contact_form_start', path: window.location.href })",
         "UTM fields are captured from URL query params; include hidden form fields named utm_source/utm_medium/utm_campaign for submission attribution.",
-        "Country analytics use proxy/CDN country headers when available; on generic self-host installs, mount a GeoLite2 Country .mmdb file and set VIVD_ANALYTICS_GEOIP_DB_PATH for provider-agnostic country detection.",
+        "Country analytics use proxy/CDN country headers when available; on generic self-host installs, run ./scripts/install-analytics-geoip.sh for the default free DB-IP Lite MMDB or mount a compatible country .mmdb at VIVD_ANALYTICS_GEOIP_DB_PATH.",
         "Verify installation by loading a page once and checking network requests to /plugins/analytics/v1/track.",
       ],
     };

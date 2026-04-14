@@ -4,9 +4,10 @@ import { Label } from "@/components/ui/label";
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
 import { CmsAssetField } from "./CmsAssetField";
 import {
+  inferStringFieldAssetAccepts,
+  inferStringListFieldAssetAccepts,
   getValueAtPath,
-  shouldRenderImageAssetField,
-  shouldRenderImageAssetListField,
+  type CmsAssetStorageKind,
 } from "./helpers";
 import {
   ensureArray,
@@ -24,7 +25,8 @@ function CmsAssetListSection(props: {
   field: CmsFieldDefinition;
   fieldPath: CmsFieldRendererProps["fieldPath"];
   entryRelativePath: string;
-  mediaRootPath: string;
+  storageKind: CmsAssetStorageKind;
+  assetRootPath: string;
   defaultFolderPath: string;
   canUseAiImages: boolean;
   readOnly: boolean;
@@ -42,7 +44,8 @@ function CmsAssetListSection(props: {
     field,
     fieldPath,
     entryRelativePath,
-    mediaRootPath,
+    storageKind,
+    assetRootPath,
     defaultFolderPath,
     canUseAiImages,
     readOnly,
@@ -89,7 +92,8 @@ function CmsAssetListSection(props: {
               field={{ ...field, type: "asset" }}
               value={item}
               entryRelativePath={entryRelativePath}
-              mediaRootPath={mediaRootPath}
+              storageKind={storageKind}
+              assetRootPath={assetRootPath}
               defaultFolderPath={defaultFolderPath}
               canUseAiImages={canUseAiImages}
               readOnly={readOnly}
@@ -144,9 +148,19 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
   const rawValue = draftValues ? getValueAtPath(draftValues, fieldPath) : undefined;
   const fieldId = fieldPath.map(String).join(".");
   const label = getFieldLabel(fieldKey, field);
-  const assetPaths = getAssetFieldPaths(selectedModel, selectedEntryKey);
+  const assetPaths = getAssetFieldPaths(selectedModel, selectedEntryKey, rawValue);
+  const inferredStringAssetAccepts = inferStringFieldAssetAccepts(
+    fieldKey,
+    field,
+    rawValue,
+  );
+  const inferredStringListAssetAccepts = inferStringListFieldAssetAccepts(
+    fieldKey,
+    field,
+    rawValue,
+  );
 
-  if (shouldRenderImageAssetField(fieldKey, field, rawValue)) {
+  if (inferredStringAssetAccepts?.length) {
     if (!selectedEntryRelativePath || !assetPaths) {
       return null;
     }
@@ -161,11 +175,12 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
         field={{
           ...field,
           type: "asset",
-          accepts: field.accepts?.length ? field.accepts : ["image/*"],
+          accepts: inferredStringAssetAccepts,
         }}
         value={rawValue}
         entryRelativePath={selectedEntryRelativePath}
-        mediaRootPath={assetPaths.mediaRootPath}
+        storageKind={assetPaths.storageKind}
+        assetRootPath={assetPaths.assetRootPath}
         defaultFolderPath={assetPaths.defaultFolderPath}
         canUseAiImages={canUseAiImages}
         readOnly={readOnly}
@@ -190,7 +205,8 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
         field={field}
         value={rawValue}
         entryRelativePath={selectedEntryRelativePath}
-        mediaRootPath={assetPaths.mediaRootPath}
+        storageKind={assetPaths.storageKind}
+        assetRootPath={assetPaths.assetRootPath}
         defaultFolderPath={assetPaths.defaultFolderPath}
         canUseAiImages={canUseAiImages}
         readOnly={readOnly}
@@ -216,7 +232,8 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
         field={field}
         fieldPath={fieldPath}
         entryRelativePath={selectedEntryRelativePath}
-        mediaRootPath={assetPaths.mediaRootPath}
+        storageKind={assetPaths.storageKind}
+        assetRootPath={assetPaths.assetRootPath}
         defaultFolderPath={assetPaths.defaultFolderPath}
         canUseAiImages={canUseAiImages}
         readOnly={readOnly}
@@ -232,7 +249,7 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
     );
   }
 
-  if (shouldRenderImageAssetListField(fieldKey, field, rawValue)) {
+  if (inferredStringListAssetAccepts?.length) {
     if (!selectedEntryRelativePath || !assetPaths) {
       return null;
     }
@@ -248,12 +265,13 @@ export function CmsFieldRendererAssetFields(props: CmsFieldRendererProps) {
         field={{
           ...field,
           type: "assetList",
-          accepts: field.accepts?.length ? field.accepts : ["image/*"],
+          accepts: inferredStringListAssetAccepts,
           item: undefined,
         }}
         fieldPath={fieldPath}
         entryRelativePath={selectedEntryRelativePath}
-        mediaRootPath={assetPaths.mediaRootPath}
+        storageKind={assetPaths.storageKind}
+        assetRootPath={assetPaths.assetRootPath}
         defaultFolderPath={assetPaths.defaultFolderPath}
         canUseAiImages={canUseAiImages}
         readOnly={readOnly}

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { detectProjectType, hasNodeModules } from "../project/projectType.js";
+import { ensureAstroCmsToolkit } from "../project/astroCmsToolkit.js";
 
 type ArtifactKind = "source" | "preview" | "published";
 
@@ -610,6 +611,9 @@ export async function syncSourceToBucket(options: {
   const bucket = getBucket();
   if (!bucket) return;
 
+  const config = detectProjectType(options.projectDir);
+  await ensureAstroCmsToolkit(options.projectDir, config.framework);
+
   const keyPrefix = getKeyPrefix({ slug: options.slug, version: options.version, kind: "source" });
 
   await syncDirectoryToBucket({
@@ -647,6 +651,8 @@ async function ensureAstroBuild(projectDir: string, commitHash?: string): Promis
   if (config.framework !== "astro") {
     throw new Error("Not an Astro project");
   }
+
+  await ensureAstroCmsToolkit(projectDir, config.framework);
 
   if (!hasNodeModules(projectDir)) {
     const install = resolveInstallCommand(projectDir, config.packageManager);

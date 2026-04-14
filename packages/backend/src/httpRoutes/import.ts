@@ -4,6 +4,7 @@ import fs from "fs";
 import os from "os";
 import { randomUUID } from "crypto";
 import type { Multer } from "multer";
+import { ensureReferencedAstroCmsToolkit } from "@vivd/shared/cms";
 
 import { detectProjectType } from "../devserver/projectType";
 import { getProjectDir, getVersionDir } from "../generator/versionUtils";
@@ -12,6 +13,7 @@ import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
 import { buildService } from "../services/project/BuildService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import {
+  deleteProjectVersionArtifactsFromBucket,
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
 } from "../services/project/ProjectArtifactsService";
@@ -25,6 +27,42 @@ type AuthLike = {
     getSession: (args: { headers: any }) => Promise<unknown>;
   };
 };
+
+function getMulterLimitCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = error.code;
+  if (typeof code !== "string" || !code.startsWith("LIMIT_")) return null;
+  return code;
+}
+
+function getImportUploadError(
+  error: unknown,
+  maxFileSizeMb?: number,
+): { statusCode: number; message: string } | null {
+  const code = getMulterLimitCode(error);
+  if (!code) return null;
+
+  if (code === "LIMIT_FILE_SIZE") {
+    return {
+      statusCode: 413,
+      message: maxFileSizeMb
+        ? `ZIP file is too large. Maximum size is ${maxFileSizeMb}MB.`
+        : "ZIP file is too large.",
+    };
+  }
+
+  if (code === "LIMIT_UNEXPECTED_FILE") {
+    return {
+      statusCode: 400,
+      message: "Expected a ZIP file upload in the file field.",
+    };
+  }
+
+  return {
+    statusCode: 400,
+    message: "Failed to read ZIP upload.",
+  };
+}
 
 const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -236,6 +274,15 @@ async function syncImportedArtifacts(options: {
   const commitHash = await gitService.getCurrentCommit(options.versionDir);
   const completedAt = new Date().toISOString();
 
+  if (projectConfig.framework === "astro") {
+    const toolkitRepair = await ensureReferencedAstroCmsToolkit(options.versionDir);
+    if (toolkitRepair && toolkitRepair.created.length > 0) {
+      console.log(
+        `[Import] Ensured local CMS toolkit for ${options.versionDir}: ${toolkitRepair.created.join(", ")}`,
+      );
+    }
+  }
+
   await uploadProjectSourceToBucket({
     organizationId: options.organizationId,
     versionDir: options.versionDir,
@@ -270,15 +317,33 @@ async function syncImportedArtifacts(options: {
   });
 }
 
-export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
+export function createImportRouter(deps: {
+  auth: AuthLike;
+  upload: Multer;
+  maxFileSizeMb?: number;
+}) {
   const router = express.Router();
-  const { upload } = deps;
+  const { upload, maxFileSizeMb } = deps;
+  const uploadSingle = upload.single("file");
 
-  router.post("/import", upload.single("file"), async (req, res) => {
+  router.post("/import", async (req, res) => {
     let tmpDir: string | null = null;
     let createdProjectDir: string | null = null;
+    let createdProjectVersion:
+      | { organizationId: string; slug: string; version: number }
+      | null = null;
 
     try {
+      await new Promise<void>((resolve, reject) => {
+        uploadSingle(req, res, (error?: unknown) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+
       const requestContext = await createContext({ req, res } as any);
       const session = requestContext.session;
 
@@ -466,6 +531,7 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         status,
         createdAt: new Date(createdAt),
       });
+      createdProjectVersion = { organizationId, slug, version };
 
       try {
         await initializeGitRepository(versionDir, "Imported project");
@@ -486,7 +552,33 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         version,
       });
     } catch (error) {
+      const uploadError = getImportUploadError(error, maxFileSizeMb);
+      if (uploadError) {
+        return res.status(uploadError.statusCode).json({ error: uploadError.message });
+      }
+
       console.error("Import error:", error);
+      if (createdProjectVersion) {
+        try {
+          await projectMetaService.deleteProjectVersion({
+            organizationId: createdProjectVersion.organizationId,
+            slug: createdProjectVersion.slug,
+            version: createdProjectVersion.version,
+          });
+        } catch (cleanupError) {
+          console.warn("[Import] Failed to rollback project metadata:", cleanupError);
+        }
+
+        try {
+          await deleteProjectVersionArtifactsFromBucket({
+            organizationId: createdProjectVersion.organizationId,
+            slug: createdProjectVersion.slug,
+            version: createdProjectVersion.version,
+          });
+        } catch (cleanupError) {
+          console.warn("[Import] Failed to rollback project artifacts:", cleanupError);
+        }
+      }
       if (createdProjectDir && fs.existsSync(createdProjectDir)) {
         try {
           fs.rmSync(createdProjectDir, { recursive: true, force: true });

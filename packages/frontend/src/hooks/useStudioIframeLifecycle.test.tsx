@@ -1,11 +1,23 @@
 import { createRef } from "react";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STUDIO_LOAD_TIMEOUT_MS } from "@/lib/studioStartupTimings";
 import { useStudioIframeLifecycle } from "./useStudioIframeLifecycle";
 
 type LifecycleHarnessProps = Parameters<typeof useStudioIframeLifecycle>[0];
 
 let latestValue: ReturnType<typeof useStudioIframeLifecycle> | null = null;
+
+function createHealthResponse(ready: boolean): Response {
+  return {
+    ok: true,
+    json: vi.fn().mockResolvedValue(
+      ready
+        ? { status: "ok", initialized: true }
+        : { status: "starting", initialized: false },
+    ),
+  } as unknown as Response;
+}
 
 function LifecycleHarness(props: LifecycleHarnessProps) {
   latestValue = useStudioIframeLifecycle(props);
@@ -362,15 +374,15 @@ describe("useStudioIframeLifecycle", () => {
   it("polls runtime health after a load timeout and reloads once the runtime is healthy", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce(createHealthResponse(false))
+      .mockResolvedValueOnce(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const props = createLifecycleProps();
     render(<LifecycleHarness {...props} />);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS);
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -385,7 +397,7 @@ describe("useStudioIframeLifecycle", () => {
   });
 
   it("self-heals earlier when the runtime is healthy but the iframe never becomes ready", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     const props = createLifecycleProps();
@@ -412,6 +424,28 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
   });
 
+  it("does not treat startup-stub health payloads as an early-ready signal", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(false));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_200);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://app.example.com/_studio/route-1/health",
+      expect.objectContaining({
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+      }),
+    );
+    expect(props.reloadStudioIframe).not.toHaveBeenCalled();
+  });
+
   it("falls back to a one-shot iframe reload when the studio only exposes a cross-origin browser url", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -436,14 +470,14 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(26_000);
+      await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 1_000);
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(26_000);
+      await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 1_000);
     });
 
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);

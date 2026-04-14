@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   toastErrorMock: vi.fn(),
   toastInfoMock: vi.fn(),
   addAttachedFileMock: vi.fn(),
+  pickerPropsMock: vi.fn(),
 }));
 
 let editImageMutationOptions:
@@ -131,7 +132,10 @@ vi.mock("@/components/asset-explorer/AIEditDialog", () => ({
 }));
 
 vi.mock("./CmsAssetPickerSheet", () => ({
-  CmsAssetPickerSheet: () => null,
+  CmsAssetPickerSheet: (props: unknown) => {
+    mocks.pickerPropsMock(props);
+    return null;
+  },
 }));
 
 describe("CmsAssetField", () => {
@@ -144,6 +148,7 @@ describe("CmsAssetField", () => {
     mocks.toastErrorMock.mockReset();
     mocks.toastInfoMock.mockReset();
     mocks.addAttachedFileMock.mockReset();
+    mocks.pickerPropsMock.mockReset();
     editImageMutationOptions = undefined;
     chatContextState = null;
   });
@@ -164,7 +169,8 @@ describe("CmsAssetField", () => {
         field={{ type: "asset", accepts: ["image/*"] }}
         value="../media/horse/apollo/horse-1.webp"
         entryRelativePath="src/content/horse/apollo.yaml"
-        mediaRootPath="src/content/media"
+        storageKind="content-media"
+        assetRootPath="src/content/media"
         defaultFolderPath="src/content/media/horse/apollo"
         canUseAiImages
         onChange={onChange}
@@ -218,7 +224,8 @@ describe("CmsAssetField", () => {
         field={{ type: "asset", accepts: ["image/*"] }}
         value="../media/horse/apollo/horse-1.webp"
         entryRelativePath="src/content/horse/apollo.yaml"
-        mediaRootPath="src/content/media"
+        storageKind="content-media"
+        assetRootPath="src/content/media"
         defaultFolderPath="src/content/media/horse/apollo"
         canUseAiImages
         onChange={vi.fn()}
@@ -248,7 +255,8 @@ describe("CmsAssetField", () => {
         field={{ type: "asset", accepts: ["image/*"] }}
         value="../media/horse/apollo/horse-1.webp"
         entryRelativePath="src/content/horse/apollo.yaml"
-        mediaRootPath="src/content/media"
+        storageKind="content-media"
+        assetRootPath="src/content/media"
         defaultFolderPath="src/content/media/horse/apollo"
         canUseAiImages
         onChange={vi.fn()}
@@ -260,5 +268,50 @@ describe("CmsAssetField", () => {
     const inlinePathInputs = screen.getAllByDisplayValue("../media/horse/apollo/horse-1.webp");
     expect(inlinePathInputs).toHaveLength(1);
     expect(inlinePathInputs[0]).toBeVisible();
+  });
+
+  it("routes public PDF fields through the public asset root and keeps site-root paths on replace", () => {
+    const onChange = vi.fn();
+
+    render(
+      <CmsAssetField
+        projectSlug="demo"
+        version={1}
+        fieldId="safety-sheet"
+        label="Safety Sheet"
+        field={{ type: "asset", accepts: [".pdf", "application/pdf"] }}
+        value="/pdfs/products/apollo/safety-sheet.pdf"
+        entryRelativePath="src/content/products/apollo.yaml"
+        storageKind="public"
+        assetRootPath="public/pdfs"
+        defaultFolderPath="public/pdfs/products/apollo"
+        canUseAiImages={false}
+        onChange={onChange}
+        onOpenAsset={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+
+    const latestPickerProps = mocks.pickerPropsMock.mock.calls.at(-1)?.[0] as {
+      open: boolean;
+      storageKind: string;
+      assetRootPath: string;
+      defaultFolderPath: string;
+      currentValue: string;
+      onSelect: (value: string) => void;
+    };
+
+    expect(latestPickerProps.open).toBe(true);
+    expect(latestPickerProps.storageKind).toBe("public");
+    expect(latestPickerProps.assetRootPath).toBe("public/pdfs");
+    expect(latestPickerProps.defaultFolderPath).toBe("public/pdfs/products/apollo");
+    expect(latestPickerProps.currentValue).toBe("public/pdfs/products/apollo/safety-sheet.pdf");
+
+    act(() => {
+      latestPickerProps.onSelect("/pdfs/products/apollo/replacement.pdf");
+    });
+
+    expect(onChange).toHaveBeenCalledWith("/pdfs/products/apollo/replacement.pdf");
   });
 });

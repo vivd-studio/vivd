@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
+import { ensureReferencedAstroCmsToolkit } from "@vivd/shared/cms";
 import { detectProjectType, hasNodeModules } from "../../devserver/projectType";
 import { gitService } from "../integrations/GitService";
 import { thumbnailService } from "./ThumbnailService";
@@ -128,6 +129,13 @@ class BuildService {
       return versionDir;
     }
 
+    const toolkitRepair = await ensureReferencedAstroCmsToolkit(versionDir);
+    if (toolkitRepair && toolkitRepair.created.length > 0) {
+      console.log(
+        `[Build] Ensured local CMS toolkit for ${versionDir}: ${toolkitRepair.created.join(", ")}`,
+      );
+    }
+
     // Install dependencies if needed
     if (!hasNodeModules(versionDir)) {
       console.log(`[Build] Installing dependencies in ${versionDir}`);
@@ -197,6 +205,15 @@ class BuildService {
 
     try {
       const config = detectProjectType(versionDir);
+
+      if (config.framework === "astro") {
+        const toolkitRepair = await ensureReferencedAstroCmsToolkit(versionDir);
+        if (toolkitRepair && toolkitRepair.created.length > 0) {
+          console.log(
+            `[Build] Ensured local CMS toolkit for ${versionDir}: ${toolkitRepair.created.join(", ")}`,
+          );
+        }
+      }
 
       // Install dependencies if needed
       if (!hasNodeModules(versionDir)) {

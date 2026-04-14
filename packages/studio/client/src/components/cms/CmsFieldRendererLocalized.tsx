@@ -1,12 +1,16 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CmsAssetField } from "./CmsAssetField";
 import {
   buildRichTextReference,
+  getLocalizedFieldLocales,
+  inferAssetAcceptsForValues,
   getValueAtPath,
-  resolveRelativePath,
+  resolveAssetReferencePath,
 } from "./helpers";
 import {
+  getAssetFieldPaths,
   getFieldLabel,
   type CmsFieldRendererProps,
 } from "./CmsFieldRenderer.shared";
@@ -17,12 +21,17 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     field,
     fieldPath,
     draftValues,
+    defaultLocale,
     locales,
     selectedEntryRelativePath,
+    selectedEntryKey,
+    selectedModel,
     sidecarDrafts,
+    canUseAiImages,
     readOnly = false,
     applyDraftValue,
     handleRichTextChange,
+    openAssetReference,
   } = props;
 
   if (!field.localized) {
@@ -34,8 +43,19 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
       ? (rawValue as Record<string, unknown>)
       : {};
+  const localizedFieldLocales = getLocalizedFieldLocales(
+    locales,
+    defaultLocale,
+    localizedValue,
+  );
   const fieldId = fieldPath.map(String).join(".");
   const label = getFieldLabel(fieldKey, field);
+  const assetPaths = getAssetFieldPaths(selectedModel, selectedEntryKey, localizedValue);
+  const localizedAssetAccepts =
+    field.type === "string"
+      ? ((field.accepts?.length ? field.accepts : inferAssetAcceptsForValues(Object.values(localizedValue))) ??
+        null)
+      : null;
 
   if (field.type === "richText" && field.storage === "sidecar-markdown") {
     return (
@@ -47,16 +67,16 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
           </p>
         </div>
         <div className="grid gap-3 xl:grid-cols-2">
-          {locales.map((locale) => {
+          {localizedFieldLocales.map((locale) => {
             const relativeValue =
               typeof localizedValue[locale] === "string"
                 ? (localizedValue[locale] as string)
                 : "";
             const filePath =
               relativeValue && selectedEntryRelativePath
-                ? resolveRelativePath(selectedEntryRelativePath, relativeValue)
+                ? resolveAssetReferencePath(selectedEntryRelativePath, relativeValue)
                 : selectedEntryRelativePath
-                  ? resolveRelativePath(
+                  ? resolveAssetReferencePath(
                       selectedEntryRelativePath,
                       buildRichTextReference(fieldPath, locale),
                     )
@@ -82,6 +102,49 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     );
   }
 
+  if (localizedAssetAccepts?.length && selectedEntryRelativePath && assetPaths) {
+    return (
+      <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
+        <div>
+          <Label className="text-sm font-medium">{label}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Stored per locale as file references in the entry.
+          </p>
+        </div>
+        <div className="grid gap-3 xl:grid-cols-2">
+          {localizedFieldLocales.map((locale) => (
+            <CmsAssetField
+              key={`${fieldId}.${locale}`}
+              projectSlug={props.projectSlug}
+              version={props.version}
+              fieldId={`${fieldId}.${locale}`}
+              label={locale.toUpperCase()}
+              field={{
+                ...field,
+                type: "asset",
+                accepts: localizedAssetAccepts,
+              }}
+              value={localizedValue[locale]}
+              entryRelativePath={selectedEntryRelativePath}
+              storageKind={assetPaths.storageKind}
+              assetRootPath={assetPaths.assetRootPath}
+              defaultFolderPath={assetPaths.defaultFolderPath}
+              canUseAiImages={canUseAiImages}
+              readOnly={readOnly}
+              onChange={(nextValue) =>
+                applyDraftValue(fieldPath, {
+                  ...localizedValue,
+                  [locale]: nextValue,
+                })
+              }
+              onOpenAsset={openAssetReference}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
       <div>
@@ -91,7 +154,7 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
         </p>
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
-        {locales.map((locale) => (
+        {localizedFieldLocales.map((locale) => (
           <div key={`${fieldId}.${locale}`} className="space-y-2">
             <Label htmlFor={`${fieldId}.${locale}`}>{locale.toUpperCase()}</Label>
             {field.type === "text" ? (

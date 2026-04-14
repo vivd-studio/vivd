@@ -5,8 +5,21 @@ import {
   waitForReadyWorkflow,
 } from "../src/services/studioMachines/docker/runtimeWorkflow";
 
+function createHealthResponse(ready: boolean): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: vi.fn().mockResolvedValue(
+      ready
+        ? { status: "ok", initialized: true }
+        : { status: "starting", initialized: false },
+    ),
+  } as unknown as Response;
+}
+
 describe("docker runtime workflow", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -30,10 +43,7 @@ describe("docker runtime workflow", () => {
   });
 
   it("prefers the direct container health URL over the internal proxy route", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      status: 200,
-    } as Response);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(createHealthResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
@@ -68,6 +78,42 @@ describe("docker runtime workflow", () => {
         redirect: "manual",
       }),
     );
+  });
+
+  it("waits past startup-stub health responses until the workspace is initialized", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(createHealthResponse(false))
+      .mockResolvedValueOnce(createHealthResponse(true));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const waitPromise = waitForReadyWorkflow(
+      {
+        inspectContainer: vi.fn().mockResolvedValue({
+          Id: "container-1",
+          Name: "/studio-site-1-v1-a3f6fad7ba",
+          State: {
+            Status: "running",
+          },
+        }),
+        getInternalProxyUrlForRoutePath: vi
+          .fn()
+          .mockReturnValue("http://caddy/_studio/site-1-v1"),
+        getContainerLogs: vi.fn().mockResolvedValue(""),
+      },
+      {
+        containerId: "container-1",
+        routePath: "/_studio/site-1-v1",
+        timeoutMs: 3_000,
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(waitPromise).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("includes recent container logs when the studio container exits during startup", async () => {

@@ -1,9 +1,17 @@
+import type { CmsModelRecord } from "@vivd/shared/cms";
 import { describe, expect, it } from "vitest";
 import {
+  buildStoredAssetReferencePath,
   buildRelativeReferencePath,
+  deriveCmsLocales,
+  buildDefaultFieldValue,
   getCmsEntryFileFormat,
+  inferAssetAcceptsForValues,
+  inferAssetStorageFromValue,
+  inferStringFieldAssetAccepts,
   isPathInsideRoot,
   isWritableCmsEntryFile,
+  resolveAssetReferencePath,
   shouldRenderImageAssetField,
   shouldRenderImageAssetListField,
   resolveRelativePath,
@@ -27,6 +35,40 @@ describe("cms helpers", () => {
     const relativePath = buildRelativeReferencePath(entryPath, mediaPath);
 
     expect(resolveRelativePath(entryPath, relativePath)).toBe(mediaPath);
+  });
+
+  it("maps site-root file references to public files for Studio file access", () => {
+    expect(
+      resolveAssetReferencePath(
+        "src/content/products/apollo.yaml",
+        "/pdfs/products/apollo/safety-sheet.pdf",
+      ),
+    ).toBe("public/pdfs/products/apollo/safety-sheet.pdf");
+  });
+
+  it("keeps explicit public asset paths stable when resolving file references", () => {
+    expect(
+      resolveAssetReferencePath(
+        "src/content/products/apollo.yaml",
+        "public/pdfs/products/apollo/safety-sheet.pdf",
+      ),
+    ).toBe("public/pdfs/products/apollo/safety-sheet.pdf");
+  });
+
+  it("stores public assets as leading-slash site paths and content media as relative refs", () => {
+    expect(
+      buildStoredAssetReferencePath(
+        "src/content/products/apollo.yaml",
+        "public/pdfs/products/apollo/safety-sheet.pdf",
+      ),
+    ).toBe("/pdfs/products/apollo/safety-sheet.pdf");
+
+    expect(
+      buildStoredAssetReferencePath(
+        "src/content/collections/horse/apollo/index.yaml",
+        "src/content/media/horse/apollo/portrait.webp",
+      ),
+    ).toBe("../../../media/horse/apollo/portrait.webp");
   });
 
   it("checks whether a candidate path stays inside the CMS media root", () => {
@@ -88,6 +130,116 @@ Body content.
         "https://cdn.example.com/avatar.webp",
       ),
     ).toBe(false);
+  });
+
+  it("infers file asset accepts for local PDF references but not bare filenames", () => {
+    expect(
+      inferStringFieldAssetAccepts(
+        "safetySheet",
+        { type: "string" },
+        "/pdfs/products/apollo/safety-sheet.pdf",
+      ),
+    ).toEqual([".pdf", "application/pdf"]);
+    expect(
+      inferStringFieldAssetAccepts("fileName", { type: "string" }, "safety-sheet.pdf"),
+    ).toBeNull();
+  });
+
+  it("aggregates localized file references into shared asset accepts", () => {
+    expect(
+      inferAssetAcceptsForValues([
+        "/pdfs/products/apollo/de.pdf",
+        "/pdfs/products/apollo/en.pdf",
+      ]),
+    ).toEqual([".pdf", "application/pdf"]);
+  });
+
+  it("infers public asset storage roots from localized public download fields", () => {
+    expect(
+      inferAssetStorageFromValue({
+        de: "/pdfs/products/apollo/de.pdf",
+        en: "/pdfs/products/apollo/en.pdf",
+      }),
+    ).toEqual({
+      storageKind: "public",
+      assetRootPath: "public/pdfs",
+      defaultFolderPath: "public/pdfs/products/apollo",
+    });
+  });
+
+  it("derives CMS locales from locale-shaped schema fields and localized entry values", () => {
+    const model: CmsModelRecord = {
+      key: "products",
+      label: "Products",
+      schemaPath: "/tmp/src/content.config.ts",
+      relativeSchemaPath: "src/content.config.ts",
+      collectionRoot: "/tmp/src/content/products",
+      relativeCollectionRoot: "src/content/products",
+      entryFormat: "file",
+      entryFileExtension: ".yaml",
+      directoryIndexEntries: false,
+      sortField: null,
+      fields: {
+        hrefByLang: {
+          type: "string",
+          localized: true,
+          accepts: [".pdf", "application/pdf"],
+        },
+        titleByLang: {
+          type: "object",
+          fields: {
+            de: { type: "string" },
+            en: { type: "string" },
+          },
+        },
+      },
+      entries: [
+        {
+          key: "apollo",
+          filePath: "/tmp/src/content/products/apollo.yaml",
+          relativePath: "src/content/products/apollo.yaml",
+          deletePath: "/tmp/src/content/products/apollo.yaml",
+          values: {
+            hrefByLang: {
+              de: "/pdfs/products/apollo/de.pdf",
+              en: "/pdfs/products/apollo/en.pdf",
+            },
+            titleByLang: {
+              de: "Gebrauchsanweisung",
+              en: "Instructions for Use",
+            },
+          },
+          slug: null,
+          status: null,
+          sortOrder: null,
+          assetRefs: [],
+        },
+      ],
+    };
+
+    expect(
+      deriveCmsLocales(
+        {
+          locales: [],
+          models: [model],
+        },
+        "en",
+      ),
+    ).toEqual(["en", "de"]);
+  });
+
+  it("builds localized default values for all resolved locales", () => {
+    expect(
+      buildDefaultFieldValue(
+        "hrefByLang",
+        { type: "string", localized: true },
+        "en",
+        ["en", "de"],
+      ),
+    ).toEqual({
+      en: "",
+      de: "",
+    });
   });
 
   it("treats obvious string-list image fields as image asset lists in the Studio editor", () => {

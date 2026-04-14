@@ -17,9 +17,8 @@ import { PreviewIframe } from "./PreviewIframe";
 import { PreviewEditToolbar } from "./PreviewEditToolbar";
 import { TABLET_PRESET } from "./types";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { isTextFile } from "../asset-explorer/utils";
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
+import { PreviewDevServerErrorPanel } from "./PreviewDevServerErrorPanel";
 
 const ChatPanelContent = lazy(() =>
   import("../chat/ChatPanel").then((module) => ({
@@ -105,6 +105,7 @@ export function PreviewContent() {
     assetPanel,
     chatPanel,
     cmsOpen,
+    cmsMounted,
     setCmsOpen,
     iframeLoading,
     onIframeNavigateStart,
@@ -429,34 +430,17 @@ export function PreviewContent() {
                 }`}
               >
                 {isDevServerError ? (
-                  <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
-                    <AlertCircle className="h-8 w-8 text-destructive" />
-                    <span className="text-sm font-medium text-destructive">
-                      Dev server failed to start
-                    </span>
-                    {devServerError && (
-                      <span className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-xs text-muted-foreground">
-                        {devServerError}
-                      </span>
-                    )}
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => triggerDevServerRestart()}
-                        disabled={!projectSlug || restartDevServerMutation.isPending}
-                      >
-                        Restart dev server
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => triggerDevServerRestart({ clean: true })}
-                        disabled={!projectSlug || restartDevServerMutation.isPending}
-                      >
-                        Clean reinstall
-                      </Button>
-                    </div>
-                  </div>
+                  <PreviewDevServerErrorPanel
+                    projectSlug={projectSlug}
+                    version={selectedVersion}
+                    devServerError={devServerError}
+                    restartPending={restartDevServerMutation.isPending}
+                    setChatOpen={setChatOpen}
+                    onRestart={() => triggerDevServerRestart()}
+                    onCleanReinstall={() =>
+                      triggerDevServerRestart({ clean: true })
+                    }
+                  />
                 ) : (
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -517,11 +501,12 @@ export function PreviewContent() {
                 </DeferredPanel>
               )}
 
-              {projectSlug && cmsOpen && (
+              {projectSlug && cmsMounted && (
                 <DeferredPanel>
                   <CmsPanel
                     projectSlug={projectSlug}
                     version={selectedVersion}
+                    active={cmsOpen}
                     onClose={() => setCmsOpen(false)}
                   />
                 </DeferredPanel>
