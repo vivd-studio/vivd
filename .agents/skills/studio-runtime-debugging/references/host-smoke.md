@@ -46,6 +46,8 @@ Treat this as a harness/timing issue first:
 
 That is not a killed session. Keep the smoke strict, but only allow bounded extra time for genuinely active runs.
 
+If `recordedActions=0` but the UI is clearly still active, do not jump straight to a product conclusion either. In April 2026 the smoke also hit a false-negative shape where the stop button, session-history activity indicator, and busy status all showed a live run, but the bootstrap snapshot had not yet exposed countable assistant parts. Treat that as "active but not yet persisted enough for the smoke counter" and give it bounded extra settle time before calling it a real failure.
+
 ### Tenant reopen stuck on “Starting studio”
 
 Common clues:

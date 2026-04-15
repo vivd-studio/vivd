@@ -1253,9 +1253,13 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   while (true) {
     const elapsedMs = Date.now() - startedAt;
     if (elapsedMs >= settleTimeoutMs) {
+      const hasActiveRunEvidence =
+        lastProgressEvidenceCount > 0 ||
+        lastVisibleState === "stop" ||
+        lastVisibleState === "assistant-activity";
       const shouldExtendForActiveRun =
         !busyGraceApplied &&
-        lastRecordedActionCount > 0 &&
+        hasActiveRunEvidence &&
         lastRecordedActionCount < minRecordedActions &&
         (lastSessionStatus === "busy" ||
           lastSessionStatus === "retry" ||
@@ -1271,7 +1275,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
           settleTimeoutMs = extendedSettleTimeoutMs;
           busyGraceApplied = true;
           log(
-            `Initial generation is still active after ${elapsedMs}ms (recordedActions=${lastRecordedActionCount} status=${lastSessionStatus ?? "unknown"}); allowing ${extendedSettleTimeoutMs - baseSettleTimeoutMs}ms extra to reach ${minRecordedActions} recorded actions`,
+            `Initial generation is still active after ${elapsedMs}ms (recordedActions=${lastRecordedActionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"}); allowing ${extendedSettleTimeoutMs - baseSettleTimeoutMs}ms extra to reach ${minRecordedActions} recorded actions`,
           );
           continue;
         }
