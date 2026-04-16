@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { VivdHostBridgeMessage } from "@vivd/shared/studio";
 import {
-  isColorTheme,
   isTheme,
+  normalizeColorTheme,
   type ColorTheme,
   type Theme,
 } from "@vivd/shared/types";
@@ -264,7 +264,7 @@ export function useStudioIframeLifecycle({
         ackStudioReady();
 
         if (isTheme(message.theme)) setTheme(message.theme);
-        if (isColorTheme(message.colorTheme)) setColorTheme(message.colorTheme);
+        setColorTheme(normalizeColorTheme(message.colorTheme));
 
         return;
       }

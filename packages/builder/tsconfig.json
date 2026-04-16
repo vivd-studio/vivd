@@ -5,6 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
+      "@vivd/plugin-sdk": ["../../plugins/sdk/src/index.ts"],
+      "@vivd/plugin-sdk/*": ["../../plugins/sdk/src/*"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     },

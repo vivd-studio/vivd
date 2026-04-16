@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-  isColorTheme,
+  DEFAULT_COLOR_THEME,
   isTheme,
+  normalizeColorTheme,
   type ColorTheme,
   type Theme,
 } from "@vivd/shared/types";
@@ -24,7 +25,7 @@ type ThemeProviderState = {
 const initialState: ThemeProviderState = {
   theme: "system",
   setTheme: () => null,
-  colorTheme: "vivd-sharp",
+  colorTheme: DEFAULT_COLOR_THEME,
   setColorTheme: () => null,
 };
 
@@ -33,7 +34,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  defaultColorTheme = "vivd-sharp",
+  defaultColorTheme = DEFAULT_COLOR_THEME,
   storageKey = "vite-ui-theme",
   colorThemeStorageKey = "vite-ui-color-theme",
 }: ThemeProviderProps) {
@@ -46,7 +47,7 @@ export function ThemeProvider({
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(
     () => {
       const fromStorage = localStorage.getItem(colorThemeStorageKey);
-      return isColorTheme(fromStorage) ? fromStorage : defaultColorTheme;
+      return normalizeColorTheme(fromStorage, defaultColorTheme);
     }
   );
 
@@ -72,12 +73,7 @@ export function ThemeProvider({
   // Apply color theme
   useEffect(() => {
     const root = window.document.documentElement;
-
-    if (colorTheme === "clean") {
-      root.removeAttribute("data-color-theme");
-    } else {
-      root.setAttribute("data-color-theme", colorTheme);
-    }
+    root.setAttribute("data-color-theme", colorTheme);
   }, [colorTheme]);
 
   const value = {
@@ -88,8 +84,9 @@ export function ThemeProvider({
     },
     colorTheme,
     setColorTheme: (colorTheme: ColorTheme) => {
-      localStorage.setItem(colorThemeStorageKey, colorTheme);
-      setColorThemeState(colorTheme);
+      const nextColorTheme = normalizeColorTheme(colorTheme, defaultColorTheme);
+      localStorage.setItem(colorThemeStorageKey, nextColorTheme);
+      setColorThemeState(nextColorTheme);
     },
   };
 

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-  isColorTheme,
+  DEFAULT_COLOR_THEME,
   isTheme,
+  normalizeColorTheme,
   type ColorTheme,
   type Theme,
 } from "@vivd/shared/types";
@@ -19,7 +20,7 @@ function getThemeFromQuery(): Theme | null {
 
 function getColorThemeFromQuery(): ColorTheme | null {
   const value = new URLSearchParams(window.location.search).get("colorTheme");
-  return isColorTheme(value) ? value : null;
+  return value === null ? null : normalizeColorTheme(value);
 }
 
 function getSystemTheme(): ResolvedTheme {
@@ -48,7 +49,7 @@ const initialState: ThemeProviderState = {
   theme: "system",
   resolvedTheme: "light",
   setTheme: () => null,
-  colorTheme: "vivd-sharp",
+  colorTheme: DEFAULT_COLOR_THEME,
   setColorTheme: () => null,
 };
 
@@ -57,7 +58,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  defaultColorTheme = "vivd-sharp",
+  defaultColorTheme = DEFAULT_COLOR_THEME,
   storageKey = "vite-ui-theme",
   colorThemeStorageKey = "vite-ui-color-theme",
 }: ThemeProviderProps) {
@@ -72,7 +73,7 @@ export function ThemeProvider({
       const fromQuery = getColorThemeFromQuery();
       if (fromQuery) return fromQuery;
       const fromStorage = localStorage.getItem(colorThemeStorageKey);
-      return isColorTheme(fromStorage) ? fromStorage : defaultColorTheme;
+      return normalizeColorTheme(fromStorage, defaultColorTheme);
     }
   );
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
@@ -109,12 +110,7 @@ export function ThemeProvider({
   // Apply color theme
   useEffect(() => {
     const root = window.document.documentElement;
-
-    if (colorTheme === "clean") {
-      root.removeAttribute("data-color-theme");
-    } else {
-      root.setAttribute("data-color-theme", colorTheme);
-    }
+    root.setAttribute("data-color-theme", colorTheme);
   }, [colorTheme]);
 
   useEffect(() => {
@@ -132,11 +128,13 @@ export function ThemeProvider({
       if (isTheme(nextTheme)) {
         setThemeState((prev) => (prev === nextTheme ? prev : nextTheme));
       }
-      if (isColorTheme(nextColorTheme)) {
-        setColorThemeState((prev) =>
-          prev === nextColorTheme ? prev : nextColorTheme
+      setColorThemeState((prev) => {
+        const normalizedColorTheme = normalizeColorTheme(
+          nextColorTheme,
+          defaultColorTheme,
         );
-      }
+        return prev === normalizedColorTheme ? prev : normalizedColorTheme;
+      });
       setHostThemeInitialized(true);
     };
 
@@ -159,8 +157,9 @@ export function ThemeProvider({
     },
     colorTheme,
     setColorTheme: (colorTheme: ColorTheme) => {
-      localStorage.setItem(colorThemeStorageKey, colorTheme);
-      setColorThemeState(colorTheme);
+      const nextColorTheme = normalizeColorTheme(colorTheme, defaultColorTheme);
+      localStorage.setItem(colorThemeStorageKey, nextColorTheme);
+      setColorThemeState(nextColorTheme);
     },
   };
 

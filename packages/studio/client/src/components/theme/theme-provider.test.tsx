@@ -91,7 +91,7 @@ describe("ThemeProvider", () => {
     expect(document.documentElement).not.toHaveClass("light");
   });
 
-  it("accepts aurora as a valid color theme from the URL and applies it", () => {
+  it("normalizes deprecated color theme values from the URL back to vivd-sharp", () => {
     installMatchMedia(false);
     window.history.replaceState({}, "", "/?colorTheme=aurora");
 
@@ -101,8 +101,8 @@ describe("ThemeProvider", () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByTestId("color-theme")).toHaveTextContent("aurora");
-    expect(document.documentElement).toHaveAttribute("data-color-theme", "aurora");
-    expect(localStorage.getItem("vite-ui-color-theme")).toBe("aurora");
+    expect(screen.getByTestId("color-theme")).toHaveTextContent("vivd-sharp");
+    expect(document.documentElement).toHaveAttribute("data-color-theme", "vivd-sharp");
+    expect(localStorage.getItem("vite-ui-color-theme")).toBe("vivd-sharp");
   });
 });

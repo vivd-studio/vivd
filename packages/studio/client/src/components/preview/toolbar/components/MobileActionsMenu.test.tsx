@@ -102,14 +102,16 @@ describe("MobileActionsMenu", () => {
     cleanup();
   });
 
-  it("exposes color theme choices in the mobile menu and wires aurora selection", () => {
+  it("only exposes the vivd-sharp color theme in the mobile menu", () => {
     const props = createProps();
 
     render(<MobileActionsMenu {...props} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /aurora/i }));
+    expect(screen.queryByRole("button", { name: /aurora/i })).not.toBeInTheDocument();
 
-    expect(props.setColorTheme).toHaveBeenCalledWith("aurora");
+    fireEvent.click(screen.getByRole("button", { name: /vivd sharp/i }));
+
+    expect(props.setColorTheme).toHaveBeenCalledWith("vivd-sharp");
   });
 
   it("opens the shareable preview URL via the dedicated toolbar handler", () => {

@@ -109,14 +109,13 @@ describe("useStudioIframeLifecycle", () => {
     const props = createLifecycleProps();
     render(<LifecycleHarness {...props} />);
 
-    const iframe = screen.getByTitle("studio-frame");
+    const iframe = screen.getByTitle("studio-frame") as HTMLIFrameElement;
     const frameWindow = { location: { pathname: "/vivd-studio" } };
 
     Object.defineProperty(iframe, "contentWindow", {
       configurable: true,
       get: () => frameWindow,
     });
-
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent("message", {
@@ -128,6 +127,40 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     expect(props.onHardRestart).toHaveBeenCalledWith(7);
+  });
+
+  it("normalizes deprecated studio color themes back to vivd-sharp", async () => {
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame") as HTMLIFrameElement;
+    const frameWindow = {
+      location: { pathname: "/vivd-studio" },
+      postMessage: vi.fn(),
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+    const messageSource = iframe.contentWindow as unknown as MessageEventSource;
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "vivd:studio:theme",
+            theme: "dark",
+            colorTheme: "aurora",
+          },
+          origin: "https://app.example.com",
+          source: messageSource,
+        }),
+      );
+    });
+
+    expect(props.setTheme).toHaveBeenCalledWith("dark");
+    expect(props.setColorTheme).toHaveBeenCalledWith("vivd-sharp");
   });
 
   it("forwards sidebar peek lifecycle requests from the studio iframe", async () => {
