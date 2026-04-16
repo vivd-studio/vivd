@@ -9,6 +9,16 @@ export const analyticsPluginManifest = definePluginPackageManifest({
   kind: analyticsPluginDefinition.kind,
   definition: analyticsPluginDefinition,
   sharedProjectUi: analyticsSharedProjectUi,
+  controlPlane: {
+    projectPanel: "custom",
+    usageLabel: "Events",
+    limitPrompt:
+      "Set monthly analytics event limit.\nLeave empty for unlimited.",
+    supportsMonthlyLimit: true,
+    supportsHardStop: true,
+    supportsTurnstile: false,
+    dashboardPath: "/analytics",
+  },
   setup: {
     summary:
       "Enable the plugin, review tracking settings, and install the generated analytics snippet.",

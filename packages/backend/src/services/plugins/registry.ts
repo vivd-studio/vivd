@@ -15,12 +15,17 @@ import {
 import {
   PLUGIN_IDS,
   getPluginCatalogEntry,
+  getPluginControlPlaneCatalogEntry,
   getPluginDefinition,
+  getPluginManifest,
   listPluginCatalogEntries,
+  listPluginControlPlaneCatalogEntries,
   listPluginDefinitions,
+  type PluginControlPlaneCatalogEntry,
   type PluginCatalogEntry,
   type PluginDefinition,
   type PluginId,
+  type PluginPackageManifest,
 } from "./catalog";
 
 export type PluginModule = SharedPluginModule<PluginId>;
@@ -31,11 +36,20 @@ export type { AnalyticsPluginConfig };
 export {
   PLUGIN_IDS,
   getPluginCatalogEntry,
+  getPluginControlPlaneCatalogEntry,
   getPluginDefinition,
+  getPluginManifest,
   listPluginCatalogEntries,
+  listPluginControlPlaneCatalogEntries,
   listPluginDefinitions,
 };
-export type { PluginCatalogEntry, PluginDefinition, PluginId };
+export type {
+  PluginCatalogEntry,
+  PluginControlPlaneCatalogEntry,
+  PluginDefinition,
+  PluginId,
+  PluginPackageManifest,
+};
 
 const pluginModules = Object.fromEntries(
   []
@@ -68,4 +82,3 @@ export function listPluginModules(): PluginModule[] {
 export function getPluginModule(pluginId: PluginId): PluginModule {
   return getPluginModulesRecord()[pluginId];
 }
-export const getPluginManifest = getPluginDefinition;

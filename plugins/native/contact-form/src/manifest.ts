@@ -9,6 +9,16 @@ export const contactFormPluginManifest = definePluginPackageManifest({
   kind: contactFormPluginDefinition.kind,
   definition: contactFormPluginDefinition,
   sharedProjectUi: contactFormSharedProjectUi,
+  controlPlane: {
+    projectPanel: "custom",
+    usageLabel: "Submissions",
+    limitPrompt:
+      "Set monthly contact form submission limit.\nLeave empty for unlimited.",
+    supportsMonthlyLimit: true,
+    supportsHardStop: true,
+    supportsTurnstile: true,
+    dashboardPath: null,
+  },
   setup: {
     summary:
       "Enable the plugin, configure recipient emails, and install the generated contact form snippet.",

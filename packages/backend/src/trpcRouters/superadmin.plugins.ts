@@ -9,7 +9,7 @@ import {
 import {
   PLUGIN_IDS,
   type PluginId,
-  listPluginCatalogEntries,
+  listPluginControlPlaneCatalogEntries,
 } from "../services/plugins/registry";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
 
@@ -43,10 +43,10 @@ export const pluginsSuperAdminProcedures = {
       const payload = input ?? {};
       const selectedCatalog = (
         payload.pluginId
-          ? listPluginCatalogEntries().filter(
+          ? listPluginControlPlaneCatalogEntries().filter(
               (plugin) => plugin.pluginId === payload.pluginId,
             )
-          : listPluginCatalogEntries()
+          : listPluginControlPlaneCatalogEntries()
       ).sort((left, right) => left.sortOrder - right.sortOrder);
 
       const accessByPlugin = await Promise.all(

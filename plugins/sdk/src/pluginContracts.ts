@@ -48,7 +48,6 @@ export interface PluginCapabilityDefinition {
 
 export type PluginKind = "native" | "external_embed" | "connected";
 export type PluginCategory = "forms" | "marketing" | "commerce" | "utility";
-export type PluginProjectPanelKind = "custom" | "generic";
 export type PluginSetupAutomation = "none" | "partial" | "full";
 export type PluginPreviewMode = "native" | "limited" | "none";
 export type PluginPublishCheckSeverity = "warning" | "error";
@@ -72,16 +71,6 @@ export interface PluginPublishCheckDefinition {
   description: string;
 }
 
-export interface PluginListUiDefinition {
-  projectPanel: PluginProjectPanelKind;
-  usageLabel: string;
-  limitPrompt: string;
-  supportsMonthlyLimit: boolean;
-  supportsHardStop: boolean;
-  supportsTurnstile: boolean;
-  dashboardPath: string | null;
-}
-
 export interface PluginDefinition<TPluginId extends string = string> {
   pluginId: TPluginId;
   kind: PluginKind;
@@ -94,7 +83,6 @@ export interface PluginDefinition<TPluginId extends string = string> {
   configSchema: unknown;
   defaultConfig: Record<string, unknown>;
   capabilities: PluginCapabilityDefinition;
-  listUi: PluginListUiDefinition;
 }
 
 export interface PluginCatalogEntry<TPluginId extends string = string> {
@@ -106,13 +94,6 @@ export interface PluginCatalogEntry<TPluginId extends string = string> {
   version: number;
   sortOrder: number;
   capabilities: PluginCapabilityDefinition;
-  projectPanel: PluginProjectPanelKind;
-  usageLabel: string;
-  limitPrompt: string;
-  supportsMonthlyLimit: boolean;
-  supportsHardStop: boolean;
-  supportsTurnstile: boolean;
-  dashboardPath: string | null;
 }
 
 export interface ProjectPluginInfoContractPayload<

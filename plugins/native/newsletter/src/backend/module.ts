@@ -154,15 +154,6 @@ export const newsletterPluginDefinition = {
       newsletterCampaignsReadDefinition,
     ],
   },
-  listUi: {
-    projectPanel: "custom",
-    usageLabel: "Signups",
-    limitPrompt: "Set monthly signup limit.\nLeave empty for unlimited.",
-    supportsMonthlyLimit: true,
-    supportsHardStop: true,
-    supportsTurnstile: false,
-    dashboardPath: null,
-  },
 } satisfies PluginDefinition<"newsletter">;
 
 export interface NewsletterPluginInfoSource {

@@ -84,16 +84,6 @@ export const contactFormPluginDefinition = {
       },
     ],
   },
-  listUi: {
-    projectPanel: "custom",
-    usageLabel: "Submissions",
-    limitPrompt:
-      "Set monthly contact form submission limit.\nLeave empty for unlimited.",
-    supportsMonthlyLimit: true,
-    supportsHardStop: true,
-    supportsTurnstile: true,
-    dashboardPath: null,
-  },
 } satisfies PluginDefinition<"contact_form">;
 
 export interface ContactRecipientOption {

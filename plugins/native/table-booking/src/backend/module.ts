@@ -104,15 +104,6 @@ export const tableBookingPluginDefinition = {
       tableBookingAgendaReadDefinition,
     ],
   },
-  listUi: {
-    projectPanel: "custom",
-    usageLabel: "Bookings",
-    limitPrompt: "Set monthly booking limit.\nLeave empty for unlimited.",
-    supportsMonthlyLimit: true,
-    supportsHardStop: true,
-    supportsTurnstile: false,
-    dashboardPath: null,
-  },
 } satisfies PluginDefinition<"table_booking">;
 
 export interface TableBookingPluginInfoSource {

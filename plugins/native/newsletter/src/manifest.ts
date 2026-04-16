@@ -9,6 +9,15 @@ export const newsletterPluginManifest = definePluginPackageManifest({
   kind: newsletterPluginDefinition.kind,
   definition: newsletterPluginDefinition,
   sharedProjectUi: newsletterSharedProjectUi,
+  controlPlane: {
+    projectPanel: "custom",
+    usageLabel: "Signups",
+    limitPrompt: "Set monthly signup limit.\nLeave empty for unlimited.",
+    supportsMonthlyLimit: true,
+    supportsHardStop: true,
+    supportsTurnstile: false,
+    dashboardPath: null,
+  },
   setup: {
     summary:
       "Enable the plugin, choose newsletter or waitlist mode, and install the generated signup snippet.",

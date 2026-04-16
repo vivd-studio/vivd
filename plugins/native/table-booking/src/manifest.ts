@@ -9,6 +9,15 @@ export const tableBookingPluginManifest = definePluginPackageManifest({
   kind: tableBookingPluginDefinition.kind,
   definition: tableBookingPluginDefinition,
   sharedProjectUi: tableBookingSharedProjectUi,
+  controlPlane: {
+    projectPanel: "custom",
+    usageLabel: "Bookings",
+    limitPrompt: "Set monthly booking limit.\nLeave empty for unlimited.",
+    supportsMonthlyLimit: true,
+    supportsHardStop: true,
+    supportsTurnstile: false,
+    dashboardPath: null,
+  },
   setup: {
     summary:
       "Enable the plugin, configure schedule and notification recipients, and install the booking widget snippet.",

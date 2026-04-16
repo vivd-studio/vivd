@@ -3,7 +3,11 @@ import type {
   PluginEntitlementScope,
   PluginEntitlementState,
 } from "./PluginEntitlementService";
-import type { PluginCatalogEntry, PluginId } from "./catalog";
+import type {
+  PluginCatalogEntry,
+  PluginControlPlaneCatalogEntry,
+  PluginId,
+} from "./catalog";
 
 export type PluginInstallState = "disabled" | "available" | "enabled" | "suspended";
 export type PluginIssueSeverity = "warning" | "info";
@@ -47,7 +51,7 @@ export interface OrganizationProjectPluginsOverviewRow {
 
 export interface SuperAdminProjectPluginAccessItem {
   pluginId: PluginId;
-  catalog: PluginCatalogEntry;
+  catalog: PluginControlPlaneCatalogEntry;
   effectiveScope: PluginEntitlementScope;
   state: PluginEntitlementState;
   managedBy: PluginEntitlementManagedBy;

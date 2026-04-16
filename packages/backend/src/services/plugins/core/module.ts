@@ -39,13 +39,6 @@ export function toPluginCatalogEntry<TPluginId extends string>(
     version: definition.version,
     sortOrder: definition.sortOrder,
     capabilities: definition.capabilities,
-    projectPanel: definition.listUi.projectPanel,
-    usageLabel: definition.listUi.usageLabel,
-    limitPrompt: definition.listUi.limitPrompt,
-    supportsMonthlyLimit: definition.listUi.supportsMonthlyLimit,
-    supportsHardStop: definition.listUi.supportsHardStop,
-    supportsTurnstile: definition.listUi.supportsTurnstile,
-    dashboardPath: definition.listUi.dashboardPath,
   };
 }
 

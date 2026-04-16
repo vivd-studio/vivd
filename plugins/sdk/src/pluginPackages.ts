@@ -11,6 +11,18 @@ import type {
   SharedProjectPluginUiDefinition,
 } from "./plugins.js";
 
+export type PluginProjectPanelKind = "custom" | "generic";
+
+export interface PluginControlPlanePresentation {
+  projectPanel: PluginProjectPanelKind;
+  usageLabel: string;
+  limitPrompt: string;
+  supportsMonthlyLimit: boolean;
+  supportsHardStop: boolean;
+  supportsTurnstile: boolean;
+  dashboardPath: string | null;
+}
+
 export interface PluginPackageDescriptor<
   TPluginId extends string = string,
   TFrontend = unknown,
@@ -31,6 +43,7 @@ export interface PluginPackageManifest<
 > extends PluginPackageDescriptor<TPluginId, TFrontend, TBackend> {
   manifestVersion: 2;
   kind: PluginKind;
+  controlPlane: PluginControlPlanePresentation;
   setup?: PluginSetupGuide;
   previewSupport?: PluginPreviewSupport;
   publishChecks?: readonly PluginPublishCheckDefinition[];

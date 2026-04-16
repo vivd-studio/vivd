@@ -3,7 +3,7 @@ import { z } from "zod";
 import { superAdminProcedure } from "../trpc";
 import {
   PLUGIN_IDS,
-  listPluginCatalogEntries,
+  listPluginControlPlaneCatalogEntries,
 } from "../services/plugins/registry";
 import {
   installProfileSchema,
@@ -53,7 +53,7 @@ async function buildInstanceSettingsPayload() {
         },
       ]),
     ),
-    pluginCatalog: listPluginCatalogEntries(),
+    pluginCatalog: listPluginControlPlaneCatalogEntries(),
     limitDefaults: policy.limitDefaults,
     controlPlane: policy.controlPlane,
     pluginRuntime: policy.pluginRuntime,

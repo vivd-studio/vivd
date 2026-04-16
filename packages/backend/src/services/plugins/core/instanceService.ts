@@ -32,7 +32,7 @@ class ProjectPluginInstanceService {
     const manifest = getPluginManifest(options.pluginId);
     return ensureProjectPluginInstance({
       ...options,
-      defaultConfig: manifest.defaultConfig,
+      defaultConfig: manifest.definition.defaultConfig,
     });
   }
 

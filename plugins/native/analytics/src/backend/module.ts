@@ -39,16 +39,6 @@ export const analyticsPluginDefinition = {
     actions: [],
     reads: [analyticsSummaryReadDefinition],
   },
-  listUi: {
-    projectPanel: "custom",
-    usageLabel: "Events",
-    limitPrompt:
-      "Set monthly analytics event limit.\nLeave empty for unlimited.",
-    supportsMonthlyLimit: true,
-    supportsHardStop: true,
-    supportsTurnstile: false,
-    dashboardPath: "/analytics",
-  },
 } satisfies PluginDefinition<"analytics">;
 
 export interface AnalyticsPluginInfoSource {
