@@ -350,7 +350,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     return result;
   }
 
-  private getLastSuspendFallbackReason(machineId: string): string | null {
+  getLastSuspendFallbackReason(machineId: string): string | null {
     return this.suspendFallbackReasons.get(machineId) || null;
   }
 
