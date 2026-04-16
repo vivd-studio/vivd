@@ -5,6 +5,7 @@
 ## Current Snapshot
 
 - Hosted `platform` mode is the product focus; `solo` stays internal or experimental.
+- Product decisions should favor the hosted SaaS path over `solo` parity; keep `solo` mostly as a compatibility or local Docker-provider testing lane.
 - The backend/control-plane, Studio runtime, and plugin package boundaries are established enough for product work; current cleanup is about simplification, not another boundary rewrite.
 - Preview and publish still run through the existing Studio/local build path while preview architecture and Studio lifecycle hardening continue.
 - Scratch-to-Studio handoff is much better, but still needs repeatable attach/build validation across local, CI, and hosted flows.
@@ -28,6 +29,8 @@
 
 Keep entries short: one sentence on the change, plus a brief validation note when it matters.
 
+- 2026-04-17: Frontend release validation now catches Vite-config typing drift earlier by typing the installed-plugin registry helper import, making frontend `typecheck` run `tsc -b`, and building the frontend before Docker host smoke in publish/validate flows. Validation: `npm run typecheck -w @vivd/frontend` and `npm run build -w @vivd/frontend` both pass.
+- 2026-04-17: `AGENTS.md` now states the platform/SaaS path as the default decision rule and keeps `solo` framed as a narrow compatibility and local Docker-provider testing path.
 - 2026-04-17: Fixed the `publish.sh`-blocking Fly provider typecheck by exposing the suspend-fallback diagnostic accessor that the prod-shaped reconcile smoke already reads via `any`. Validation: `npm run typecheck -w @vivd/backend` and `npm run typecheck -w @vivd/frontend` both pass.
 - 2026-04-17: Polished the Table Booking calendar/setup pass with quieter day-cell copy, clearer open/override states, a sticky selected-day context panel on larger screens, and a 2x3 weekly-hours editor layout that fixes the obvious cramped-field malformation in setup. Focused validation is green for `npm run test:run -w @vivd/frontend -- src/plugins/table-booking/TableBookingProjectPage.test.tsx`, `npm run typecheck -w @vivd/plugin-table-booking`, and `npx vite build` from `packages/frontend`.
 - 2026-04-17: Frontend Tailwind scanning now includes plugin workspaces, which fixed missing utility classes on plugin-owned pages such as the Table Booking calendar view. Validation: `npm run build -w @vivd/frontend` queued.

@@ -66,7 +66,9 @@ For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machine
 - Install dependencies at repo root.
 - Avoid per-package lockfiles.
 - Run scripts via workspaces, for example `npm run build -w @vivd/backend`.
-- The hosted `platform` posture is the intended supported product shape for now. Treat `solo`, public self-hosting, and operator-only flows as experimental/internal paths unless a task explicitly targets them.
+- The clear product direction is the hosted `platform` path aimed at the SaaS product. Prefer decisions that simplify, harden, or clarify the hosted control plane and customer-facing platform workflows first.
+- Treat `solo`, public self-hosting, and operator-only flows as experimental/internal compatibility paths unless a task explicitly targets them.
+- `solo` can still matter as a narrow compatibility and local-testing lane, especially for Docker-provider or self-host-style verification, but it is not a primary product investment area.
 - Keep public docs and default product copy end-user-focused and platform-first. Operator/self-host guides should stay behind `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES=true`.
 - If a task explicitly touches the experimental self-host install path, the install bundle source of truth remains `packages/docs/public/install/docker-compose.yml`.
 - Add optional config knobs to `.env.example`.

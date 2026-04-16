@@ -187,6 +187,7 @@ run_release_preflight() {
   run_step "Build shared" npm run build --workspace=@vivd/shared
   run_step "Build builder" npm run build --workspace=@vivd/builder
   run_step "Build backend" npm run build --workspace=@vivd/backend
+  run_step "Build frontend" npm run build --workspace=@vivd/frontend
   run_step "Build studio" npm run build --workspace=@vivd/studio
   run_step "Build scraper" npm run build --workspace=@vivd/scraper
   run_step \

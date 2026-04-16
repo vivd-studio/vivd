@@ -42,6 +42,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build frontend
+        run: npm run build -w @vivd/frontend
+
   targeted-regressions:
     name: ${{ matrix.label }}
     runs-on: ubuntu-latest
