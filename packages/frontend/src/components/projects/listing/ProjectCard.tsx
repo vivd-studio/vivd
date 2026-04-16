@@ -42,6 +42,7 @@ import {
   EyeOff,
   Image,
   Pencil,
+  RefreshCw,
   Tags,
   Type,
 } from "lucide-react";
@@ -748,6 +749,17 @@ export function ProjectCard({
             <DropdownMenuSeparator />
 
             {/* ── Project management ── */}
+            <DropdownMenuItem
+              onClick={() => onRegenerate(project.slug, selectedVersion)}
+              disabled={isProcessing || isRegenerating}
+            >
+              {isRegenerating ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              {isRegenerating ? "Preparing regeneration..." : "Regenerate site"}
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setShowVersionManagement(true)}
             >
