@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const NEWSLETTER_SUMMARY_READ_ID = "summary";
 export const NEWSLETTER_SUBSCRIBERS_READ_ID = "subscribers";
+export const NEWSLETTER_CAMPAIGNS_READ_ID = "campaigns";
 
 export const newsletterSummaryRangeSchema = z.union([
   z.literal(7),
@@ -22,10 +23,31 @@ export const newsletterSubscriberStatusSchema = z.enum([
   "complained",
 ]);
 
+export const newsletterCampaignStatusSchema = z.enum([
+  "all",
+  "draft",
+  "queued",
+  "sending",
+  "sent",
+  "failed",
+  "canceled",
+]);
+
+export const newsletterCampaignAudienceSchema = z.enum([
+  "all_confirmed",
+  "mode_confirmed",
+]);
+
 export const newsletterSubscribersReadInputSchema = z.object({
   status: newsletterSubscriberStatusSchema.default("all"),
   search: z.string().trim().max(160).default(""),
   limit: z.number().int().min(1).max(200).default(50),
+  offset: z.number().int().min(0).default(0),
+});
+
+export const newsletterCampaignsReadInputSchema = z.object({
+  status: newsletterCampaignStatusSchema.default("all"),
+  limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
 });
 
@@ -40,6 +62,15 @@ export type NewsletterSubscribersReadInput = z.infer<
 >;
 export type NewsletterSubscriberFilterStatus = z.infer<
   typeof newsletterSubscriberStatusSchema
+>;
+export type NewsletterCampaignsReadInput = z.infer<
+  typeof newsletterCampaignsReadInputSchema
+>;
+export type NewsletterCampaignFilterStatus = z.infer<
+  typeof newsletterCampaignStatusSchema
+>;
+export type NewsletterCampaignAudience = z.infer<
+  typeof newsletterCampaignAudienceSchema
 >;
 
 export const newsletterSummaryReadDefinition = {
@@ -104,6 +135,45 @@ export const newsletterSubscribersReadDefinition = {
   ],
 } satisfies PluginReadDefinition;
 
+export const newsletterCampaignsReadDefinition = {
+  readId: NEWSLETTER_CAMPAIGNS_READ_ID,
+  title: "Campaigns",
+  description:
+    "List newsletter campaign drafts and other broadcast campaign records for this project.",
+  arguments: [
+    {
+      name: "status",
+      type: "string",
+      required: false,
+      description: "Filter by campaign status.",
+      allowedValues: [
+        "all",
+        "draft",
+        "queued",
+        "sending",
+        "sent",
+        "failed",
+        "canceled",
+      ],
+      defaultValue: "all",
+    },
+    {
+      name: "limit",
+      type: "integer",
+      required: false,
+      description: "Maximum rows to return.",
+      defaultValue: 20,
+    },
+    {
+      name: "offset",
+      type: "integer",
+      required: false,
+      description: "Pagination offset.",
+      defaultValue: 0,
+    },
+  ],
+} satisfies PluginReadDefinition;
+
 export interface NewsletterSummaryPayload {
   pluginId: "newsletter";
   enabled: boolean;
@@ -150,4 +220,31 @@ export interface NewsletterSubscribersPayload {
   limit: number;
   offset: number;
   rows: NewsletterSubscriberRecord[];
+}
+
+export interface NewsletterCampaignRecord {
+  id: string;
+  subject: string;
+  body: string;
+  status: Exclude<NewsletterCampaignFilterStatus, "all">;
+  audience: NewsletterCampaignAudience;
+  mode: "newsletter" | "waitlist";
+  estimatedRecipientCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewsletterCampaignsPayload {
+  pluginId: "newsletter";
+  enabled: boolean;
+  status: NewsletterCampaignFilterStatus;
+  total: number;
+  limit: number;
+  offset: number;
+  currentMode: "newsletter" | "waitlist";
+  audienceOptions: {
+    allConfirmed: number;
+    modeConfirmed: number;
+  };
+  rows: NewsletterCampaignRecord[];
 }

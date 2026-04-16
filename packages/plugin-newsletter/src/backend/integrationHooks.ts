@@ -82,7 +82,25 @@ export function createNewsletterPluginBackendHooks(
         )
         .returning({ id: deps.tables.newsletterActionToken.id });
 
-      return updatedSubscribers.length + updatedActionTokens.length;
+      const updatedCampaigns = await options.tx
+        .update(deps.tables.newsletterCampaign)
+        .set({ projectSlug: options.newSlug, updatedAt: new Date() })
+        .where(
+          and(
+            eq(
+              deps.tables.newsletterCampaign.organizationId,
+              options.organizationId,
+            ),
+            eq(deps.tables.newsletterCampaign.projectSlug, options.oldSlug),
+          ),
+        )
+        .returning({ id: deps.tables.newsletterCampaign.id });
+
+      return (
+        updatedSubscribers.length +
+        updatedActionTokens.length +
+        updatedCampaigns.length
+      );
     },
   };
 }

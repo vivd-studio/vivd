@@ -140,6 +140,14 @@ Targets:
 - self-host install asset generation
 - self-host-only routing affordances that are not needed for the hosted product
 
+Current progress:
+
+- the remaining backend host/origin resolver is now separated from parked self-host admin writes
+- `InstanceNetworkSettingsService` is back to platform-critical effective-origin resolution only
+- stored self-host network mutations and Caddy sync now live in a dedicated `InstanceSelfHostAdminService`
+- the main instance settings mutation no longer accepts hidden self-host network changes
+- explicit experimental procedures now own the parked self-host admin actions instead of leaving them mixed into the general instance settings path
+
 Near-term rule:
 
 - internal compatibility is acceptable
@@ -163,6 +171,14 @@ Public docs should stop focusing on:
 - operator-heavy configuration matrices
 
 If self-host documentation is still needed internally, move it to internal repo docs or plans rather than leaving it in the public docs information architecture.
+
+Current progress:
+
+- operator guides are now hidden from the default docs nav and landing pages
+- self-host asset sync is skipped in ordinary docs builds unless the operator flag is enabled
+- the docs workspace now prepares a generated docs source tree and marks operator pages `draft: true` when `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES` is off
+- the default docs build therefore drops those operator routes entirely instead of only hiding them from search/navigation
+- the remaining end-user docs now avoid linking to operator/self-host pages unless the same flag is enabled
 
 ### Phase 5: Reduce test and release surface
 

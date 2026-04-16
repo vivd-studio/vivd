@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
@@ -16,18 +15,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import {
   isExperimentalSoloInstall as isExperimentalSoloInstallEnabled,
   showSelfHostAdminFeatures,
 } from "@/lib/featureFlags";
+import { InstanceRuntimeAdminSection } from "./InstanceRuntimeAdminSection";
 
 const CAPABILITY_META = [
   {
@@ -357,7 +350,18 @@ export function InstanceSettingsTab() {
     },
   });
 
-  const startSoftwareUpdate = trpc.superadmin.startInstanceSoftwareUpdate.useMutation({
+  const updateSelfHostNetworkSettings =
+    trpc.superadmin.updateSelfHostNetworkSettings.useMutation({
+      onSuccess: async () => {
+        await Promise.all([
+          utils.superadmin.getInstanceSettings.invalidate(),
+          utils.config.getAppConfig.invalidate(),
+        ]);
+      },
+    });
+
+  const startSelfHostManagedUpdate =
+    trpc.superadmin.startSelfHostManagedUpdate.useMutation({
     onSuccess: (result) => {
       if (!result.started) {
         toast.error("Update not started", {
@@ -396,7 +400,9 @@ export function InstanceSettingsTab() {
   }, [settings]);
 
   const networkFieldsDisabled =
-    updateSettings.isPending || settingsQuery.isLoading || !selfHostAdminFeaturesVisible;
+    updateSelfHostNetworkSettings.isPending ||
+    settingsQuery.isLoading ||
+    !selfHostAdminFeaturesVisible;
   const currentSoftwareLabel =
     software?.currentVersion || software?.currentImageTag || "Unknown";
   const latestSoftwareLabel =
@@ -463,13 +469,11 @@ export function InstanceSettingsTab() {
       return;
     }
 
-    updateSettings.mutate(
+    updateSelfHostNetworkSettings.mutate(
       {
-        network: {
-          publicHost: publicHost.trim() || null,
-          tlsMode,
-          acmeEmail: acmeEmail.trim() || null,
-        },
+        publicHost: publicHost.trim() || null,
+        tlsMode,
+        acmeEmail: acmeEmail.trim() || null,
       },
       {
         onSuccess: () => {
@@ -562,235 +566,36 @@ export function InstanceSettingsTab() {
         </CardContent>
       </Card>
 
-      <Card
-        id="instance-software"
-        className="scroll-mt-6 border-border/70 shadow-sm"
-      >
-        <CardHeader>
-          <CardTitle>Software</CardTitle>
-          <CardDescription>
-            {isExperimentalSoloInstall
-              ? selfHostAdminFeaturesVisible
-                ? "Review the running experimental self-host bundle version and apply newer releases when the managed updater is configured."
-                : "Review the running experimental self-host bundle version while operator update controls stay parked behind a feature flag."
-              : "Review the running deployment version. Platform updates stay deployment-managed for now."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Current release</Label>
-              <div className="rounded-md border bg-muted/20 px-3 py-2">
-                <div className="font-medium">{currentSoftwareLabel}</div>
-                <p className="text-sm text-muted-foreground">
-                  {software?.currentImageTag
-                    ? `Configured image tag: ${software.currentImageTag}`
-                    : "The running image does not expose a release tag yet."}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Latest known release</Label>
-              <div className="rounded-md border bg-muted/20 px-3 py-2">
-                <div className="font-medium">
-                  {softwareQuery.isLoading ? "Loading..." : latestSoftwareLabel}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {software?.releaseStatus === "available"
-                    ? "A newer release is available."
-                    : software?.releaseStatus === "current"
-                      ? "This install is already on the latest known release."
-                      : "Latest release metadata is available, but the running version could not be compared reliably."}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {software?.releaseStatus === "available" ? (
-              <Badge variant="secondary">Update available</Badge>
-            ) : null}
-            {software?.releaseStatus === "current" ? (
-              <Badge variant="secondary">Up to date</Badge>
-            ) : null}
-            {software?.releaseStatus === "unknown" ? (
-              <Badge variant="outline">Version comparison unavailable</Badge>
-            ) : null}
-            {shortRevision ? <Badge variant="outline">rev {shortRevision}</Badge> : null}
-            {software?.currentImage ? (
-              <Badge variant="outline">{software.currentImage}</Badge>
-            ) : null}
-          </div>
-
-          {software?.releaseError ? (
-            <p className="text-sm text-muted-foreground">
-              Latest release lookup failed: {software.releaseError}
-            </p>
-          ) : null}
-
-          {selfHostAdminFeaturesVisible && software?.managedUpdate.reason ? (
-            <p className="text-sm text-muted-foreground">{software.managedUpdate.reason}</p>
-          ) : null}
-
-          {waitingForUpdate ? (
-            <p className="text-sm text-muted-foreground">
-              Update to {waitingTargetLabel} is running. This page will stay locked until the
-              backend reports the new version after restart.
-            </p>
-          ) : null}
-
-          {isPlatformInstall ? (
-            <p className="text-sm text-muted-foreground">
-              This page shows the current platform version only. Applying updates remains a
-              deployment-level operation for now.
-            </p>
-          ) : null}
-          {isSoloInstall && !selfHostAdminFeaturesVisible ? (
-            <p className="text-sm text-muted-foreground">
-              Managed self-host update controls are intentionally hidden for now. Re-enable
-              them only when you are actively working on the parked operator path.
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                void softwareQuery.refetch();
-              }}
-              disabled={softwareQuery.isFetching || startSoftwareUpdate.isPending || waitingForUpdate}
-            >
-              {softwareQuery.isFetching ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Refreshing
-                </>
-              ) : (
-                <>
-                  <RefreshCcw className="h-4 w-4" />
-                  Check again
-                </>
-              )}
-            </Button>
-
-            {canTriggerManagedUpdate ? (
-              <Button
-                onClick={() => startSoftwareUpdate.mutate()}
-                disabled={startSoftwareUpdate.isPending || waitingForUpdate}
-              >
-                {startSoftwareUpdate.isPending || waitingForUpdate ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {startSoftwareUpdate.isPending ? "Starting update" : `Updating to ${waitingTargetLabel}`}
-                  </>
-                ) : (
-                  <>
-                    <HardDriveDownload className="h-4 w-4" />
-                    {updateButtonLabel}
-                  </>
-                )}
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-
-      {selfHostAdminFeaturesVisible ? (
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader>
-            <CardTitle>Network</CardTitle>
-            <CardDescription>
-              Configure the main public host and how HTTPS is handled for this instance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="instance-network-public-host">Public host</Label>
-                <Input
-                  id="instance-network-public-host"
-                  value={publicHost}
-                  placeholder="example.com or 203.0.113.10"
-                  onChange={(event) => setPublicHost(event.target.value)}
-                  disabled={networkFieldsDisabled}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Enter the host only. Do not include `http://` or `https://`.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="instance-network-acme-email">ACME email</Label>
-                <Input
-                  id="instance-network-acme-email"
-                  value={acmeEmail}
-                  placeholder="admin@example.com"
-                  onChange={(event) => setAcmeEmail(event.target.value)}
-                  disabled={networkFieldsDisabled || tlsMode !== "managed"}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Used only when bundled Caddy manages HTTPS certificates directly.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>HTTPS handled by</Label>
-              <Select
-                value={tlsMode}
-                onValueChange={(value) => setTlsMode(value as NetworkTlsMode)}
-                disabled={networkFieldsDisabled}
-              >
-                <SelectTrigger className="max-w-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="managed">Bundled Caddy</SelectItem>
-                  <SelectItem value="external">External proxy</SelectItem>
-                  <SelectItem value="off">Plain HTTP</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-muted-foreground">
-                Use `Bundled Caddy` on a VPS that should obtain certificates itself.
-                Use `External proxy` for Dokploy, Traefik, or another upstream TLS
-                terminator.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {settings?.network.publicOrigin ? (
-                <Badge variant="secondary">{settings.network.publicOrigin}</Badge>
-              ) : null}
-              {settings?.network.sources.publicHost === "settings" ? (
-                <Badge variant="secondary">Host from Instance Settings</Badge>
-              ) : null}
-              {settings?.network.sources.publicHost === "bootstrap_env" ? (
-                <Badge variant="secondary">Host from bootstrap env</Badge>
-              ) : null}
-              {settings?.network.deploymentManaged.publicHost ? (
-                <Badge variant="outline">Deployment-managed host override active</Badge>
-              ) : null}
-            </div>
-
-            {settings?.network.deploymentManaged.publicHost ? (
-              <p className="text-sm text-muted-foreground">
-                A deployment-level host override is active, so the saved UI value is treated
-                as fallback state until that override is removed.
-              </p>
-            ) : null}
-
-            <div className="flex justify-end">
-              <Button
-                onClick={handleSaveNetwork}
-                disabled={networkFieldsDisabled}
-              >
-                Save network
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      <InstanceRuntimeAdminSection
+        isExperimentalSoloInstall={isExperimentalSoloInstall}
+        isPlatformInstall={isPlatformInstall}
+        isSoloInstall={isSoloInstall}
+        selfHostAdminFeaturesVisible={selfHostAdminFeaturesVisible}
+        software={software}
+        softwareIsLoading={softwareQuery.isLoading}
+        softwareIsFetching={softwareQuery.isFetching}
+        waitingForUpdate={waitingForUpdate}
+        waitingTargetLabel={waitingTargetLabel}
+        currentSoftwareLabel={currentSoftwareLabel}
+        latestSoftwareLabel={latestSoftwareLabel}
+        shortRevision={shortRevision}
+        canTriggerManagedUpdate={canTriggerManagedUpdate}
+        updateButtonLabel={updateButtonLabel}
+        startSoftwareUpdatePending={startSelfHostManagedUpdate.isPending}
+        onRefetchSoftware={() => {
+          void softwareQuery.refetch();
+        }}
+        onStartSoftwareUpdate={() => startSelfHostManagedUpdate.mutate()}
+        network={settings?.network}
+        publicHost={publicHost}
+        tlsMode={tlsMode}
+        acmeEmail={acmeEmail}
+        networkFieldsDisabled={networkFieldsDisabled}
+        onPublicHostChange={setPublicHost}
+        onTlsModeChange={setTlsMode}
+        onAcmeEmailChange={setAcmeEmail}
+        onSaveNetwork={handleSaveNetwork}
+      />
 
       {isPlatformInstall ? (
         <Card className="border-border/70 shadow-sm">

@@ -693,6 +693,49 @@ export const newsletterActionToken = pgTable(
   ],
 );
 
+export const newsletterCampaign = pgTable(
+  "newsletter_campaign",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    mode: text("mode").notNull().default("newsletter"),
+    status: text("status").notNull().default("draft"),
+    audience: text("audience").notNull().default("all_confirmed"),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    estimatedRecipientCount: integer("estimated_recipient_count")
+      .notNull()
+      .default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("newsletter_campaign_org_project_status_updated_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.status,
+      table.updatedAt,
+    ),
+    index("newsletter_campaign_plugin_updated_idx").on(
+      table.pluginInstanceId,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
@@ -702,6 +745,7 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   analyticsEvents: many(analyticsEvent),
   newsletterSubscribers: many(newsletterSubscriber),
   newsletterActionTokens: many(newsletterActionToken),
+  newsletterCampaigns: many(newsletterCampaign),
 }));
 
 export const projectTagRelations = relations(projectTag, ({ one }) => ({
@@ -777,6 +821,7 @@ export const projectPluginInstanceRelations = relations(
     contactFormRecipientVerifications: many(contactFormRecipientVerification),
     analyticsEvents: many(analyticsEvent),
     newsletterSubscribers: many(newsletterSubscriber),
+    newsletterCampaigns: many(newsletterCampaign),
   }),
 );
 
@@ -854,6 +899,20 @@ export const newsletterActionTokenRelations = relations(
     subscriber: one(newsletterSubscriber, {
       fields: [newsletterActionToken.subscriberId],
       references: [newsletterSubscriber.id],
+    }),
+  }),
+);
+
+export const newsletterCampaignRelations = relations(
+  newsletterCampaign,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [newsletterCampaign.organizationId, newsletterCampaign.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [newsletterCampaign.pluginInstanceId],
+      references: [projectPluginInstance.id],
     }),
   }),
 );

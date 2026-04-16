@@ -1,6 +1,8 @@
 import type express from "express";
 import type { Multer } from "multer";
 import type {
+  NewsletterCampaignAudience,
+  NewsletterCampaignsPayload,
   NewsletterSubscribersPayload,
   NewsletterSummaryPayload,
 } from "../shared/summary";
@@ -38,6 +40,7 @@ export interface NewsletterPluginDatabase {
 export interface NewsletterPluginTables {
   newsletterSubscriber: any;
   newsletterActionToken: any;
+  newsletterCampaign: any;
   projectMeta: any;
   projectPluginInstance: any;
 }
@@ -136,7 +139,7 @@ export interface NewsletterPluginIntegrationHooksDeps {
   db: NewsletterPluginDatabase;
   tables: Pick<
     NewsletterPluginTables,
-    "newsletterSubscriber" | "newsletterActionToken"
+    "newsletterSubscriber" | "newsletterActionToken" | "newsletterCampaign"
   >;
 }
 
@@ -237,6 +240,33 @@ export interface NewsletterPluginServicePort {
     projectSlug: string;
     rangeDays: 7 | 30;
   }): Promise<NewsletterSummaryPayload>;
+  listCampaigns(options: {
+    organizationId: string;
+    projectSlug: string;
+    status: "all" | "draft" | "queued" | "sending" | "sent" | "failed" | "canceled";
+    limit?: number;
+    offset?: number;
+  }): Promise<NewsletterCampaignsPayload>;
+  saveCampaignDraft(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId?: string | null;
+    subject: string;
+    body: string;
+    audience: NewsletterCampaignAudience;
+  }): Promise<{
+    campaignId: string;
+    status: "draft";
+    estimatedRecipientCount: number;
+  }>;
+  deleteCampaignDraft(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "deleted";
+  }>;
   listSubscribers(options: {
     organizationId: string;
     projectSlug: string;

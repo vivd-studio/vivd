@@ -20,12 +20,18 @@ import {
   type NewsletterPluginConfig,
 } from "./config";
 import {
+  NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
+  newsletterCampaignAudienceSchema,
+  newsletterCampaignsReadDefinition,
+  newsletterCampaignsReadInputSchema,
   newsletterSubscribersReadDefinition,
   newsletterSubscribersReadInputSchema,
   newsletterSummaryReadDefinition,
   newsletterSummaryReadInputSchema,
+  type NewsletterCampaignAudience,
+  type NewsletterCampaignsPayload,
   type NewsletterSubscribersPayload,
   type NewsletterSummaryPayload,
 } from "../shared/summary";
@@ -95,10 +101,56 @@ export const newsletterPluginDefinition = {
           },
         ],
       },
+      {
+        actionId: "save_campaign_draft",
+        title: "Save campaign draft",
+        description:
+          "Create or update a broadcast campaign draft for confirmed subscribers.",
+        arguments: [
+          {
+            name: "campaignIdOrNew",
+            type: "string",
+            required: true,
+            description: 'Existing campaign id, or use "new" to create a draft.',
+          },
+          {
+            name: "subject",
+            type: "string",
+            required: true,
+            description: "Draft subject line.",
+          },
+          {
+            name: "body",
+            type: "string",
+            required: true,
+            description: "Draft body content.",
+          },
+          {
+            name: "audience",
+            type: "string",
+            required: true,
+            description: 'Audience filter: "all_confirmed" or "mode_confirmed".',
+          },
+        ],
+      },
+      {
+        actionId: "delete_campaign_draft",
+        title: "Delete campaign draft",
+        description: "Delete an existing campaign draft.",
+        arguments: [
+          {
+            name: "campaignId",
+            type: "string",
+            required: true,
+            description: "Campaign draft id to delete.",
+          },
+        ],
+      },
     ],
     reads: [
       newsletterSummaryReadDefinition,
       newsletterSubscribersReadDefinition,
+      newsletterCampaignsReadDefinition,
     ],
   },
   listUi: {
@@ -185,6 +237,33 @@ export interface NewsletterPluginBackendRuntime {
     limit?: number;
     offset?: number;
   }): Promise<NewsletterSubscribersPayload>;
+  readCampaigns(options: {
+    organizationId: string;
+    projectSlug: string;
+    status: "all" | "draft" | "queued" | "sending" | "sent" | "failed" | "canceled";
+    limit?: number;
+    offset?: number;
+  }): Promise<NewsletterCampaignsPayload>;
+  saveCampaignDraft(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId?: string | null;
+    subject: string;
+    body: string;
+    audience: NewsletterCampaignAudience;
+  }): Promise<{
+    campaignId: string;
+    status: "draft";
+    estimatedRecipientCount: number;
+  }>;
+  deleteCampaignDraft(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "deleted";
+  }>;
   mapPublicError?(
     context: PluginPublicErrorContext,
   ): { code: "BAD_REQUEST" | "UNAUTHORIZED" | "INTERNAL_SERVER_ERROR"; message: string } | null;
@@ -215,9 +294,69 @@ async function runNewsletterAction(
   if (
     options.actionId !== "resend_confirmation" &&
     options.actionId !== "mark_confirmed" &&
-    options.actionId !== "unsubscribe"
+    options.actionId !== "unsubscribe" &&
+    options.actionId !== "save_campaign_draft" &&
+    options.actionId !== "delete_campaign_draft"
   ) {
     throw new UnsupportedPluginActionError("newsletter", options.actionId);
+  }
+
+  if (options.actionId === "save_campaign_draft") {
+    const campaignIdOrNew = options.args[0]?.trim() || "new";
+    const subject = options.args[1]?.trim() || "";
+    const body = options.args[2]?.trim() || "";
+    const audienceRaw = options.args[3]?.trim() || "";
+    if (!subject || !body || !audienceRaw) {
+      throw new PluginActionArgumentError(
+        'Plugin action "save_campaign_draft" requires campaignIdOrNew, subject, body, and audience arguments.',
+      );
+    }
+
+    const audience = newsletterCampaignAudienceSchema.safeParse(audienceRaw);
+    if (!audience.success) {
+      throw new PluginActionArgumentError(
+        'Campaign audience must be "all_confirmed" or "mode_confirmed".',
+      );
+    }
+
+    const result = await runtime.saveCampaignDraft({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      campaignId:
+        campaignIdOrNew === "new" || campaignIdOrNew === "" ? null : campaignIdOrNew,
+      subject,
+      body,
+      audience: audience.data,
+    });
+
+    return {
+      pluginId: "newsletter",
+      actionId: options.actionId,
+      summary: "Saved campaign draft.",
+      result,
+    };
+  }
+
+  if (options.actionId === "delete_campaign_draft") {
+    const campaignId = options.args[0]?.trim();
+    if (!campaignId) {
+      throw new PluginActionArgumentError(
+        'Plugin action "delete_campaign_draft" requires a campaignId argument.',
+      );
+    }
+
+    const result = await runtime.deleteCampaignDraft({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      campaignId,
+    });
+
+    return {
+      pluginId: "newsletter",
+      actionId: options.actionId,
+      summary: "Deleted campaign draft.",
+      result,
+    };
   }
 
   const email = options.args[0]?.trim();
@@ -286,6 +425,21 @@ async function runNewsletterRead(
         projectSlug: options.projectSlug,
         status: input.status,
         search: input.search,
+        limit: input.limit,
+        offset: input.offset,
+      }),
+    };
+  }
+
+  if (options.readId === NEWSLETTER_CAMPAIGNS_READ_ID) {
+    const input = newsletterCampaignsReadInputSchema.parse(options.input);
+    return {
+      pluginId: "newsletter",
+      readId: options.readId,
+      result: await runtime.readCampaigns({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        status: input.status,
         limit: input.limit,
         offset: input.offset,
       }),

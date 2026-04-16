@@ -1,7 +1,7 @@
 # Newsletter / Waitlist Plugin Plan (MVP-First)
 
-Status: Initial v1 implemented  
-Last updated: 2026-04-13
+Status: Initial v1 implemented; phase-2 draft foundation started  
+Last updated: 2026-04-16
 
 ## Implementation Note
 
@@ -12,6 +12,18 @@ The initial shipped scope matches the core audience-capture plan:
 - double opt-in confirmation and one-click unsubscribe
 - project operator UI for list/search/export and small manual actions
 - generic CLI/backend/frontend/Studio plugin integration
+
+The next broadcasting slice has now started with campaign-draft foundations:
+
+- draft campaign storage for newsletter broadcasts
+- campaign read/action surface through the generic plugin APIs
+- project-page UI for drafting subject/body/audience and sizing the current confirmed audience
+
+Still intentionally not shipped in this slice:
+
+- real batched outbound send execution
+- test-send delivery
+- per-recipient delivery rows and send-state processing
 
 One planned abuse-control item is intentionally deferred from this first cut:
 
@@ -479,6 +491,103 @@ Exit criteria:
 
 - the plugin is safe enough to expose on public launch pages without obvious spam or compliance gaps
 
+## Proposed Phase 2: Outbound Sending
+
+Treat sending as a narrow follow-up phase, not a jump to “full ESP”.
+
+### Goal
+
+Let project operators send one-off broadcast emails to confirmed subscribers from inside Vivd, while keeping the product surface operationally simple and deliverability-safe.
+
+### What Phase 2 should include
+
+- one-off broadcasts to `confirmed` subscribers only
+- a draft -> review -> send flow
+- test-send to operator email before the real send
+- batch/background delivery instead of sending inline from an HTTP request
+- per-campaign counts for queued, sent, failed, bounced, complained, unsubscribed
+- automatic unsubscribe link/footer on every campaign
+- suppression of `unsubscribed`, `bounced`, and `complained` recipients
+- provider-neutral delivery through the existing backend `EmailDeliveryService`
+
+### What Phase 2 should still exclude
+
+- drip/automation builders
+- visual email builders
+- segmentation beyond small explicit filters
+- A/B testing
+- send-time optimization or scheduling systems
+- external ESP sync as a required dependency
+
+### Proposed minimal data model
+
+Add a `newsletter_campaign` table:
+
+- `id text primary key`
+- `organization_id text not null`
+- `project_slug text not null`
+- `plugin_instance_id text not null`
+- `mode text not null` (`newsletter | waitlist`)
+- `status text not null` (`draft | queued | sending | sent | failed | canceled`)
+- `subject text not null`
+- `body_json jsonb not null`
+- `body_html text null`
+- `body_text text null`
+- `recipient_filter jsonb not null`
+- `recipient_count integer not null default 0`
+- `queued_at timestamp null`
+- `started_at timestamp null`
+- `completed_at timestamp null`
+- `created_by_user_id text null`
+- `created_at timestamp not null default now()`
+- `updated_at timestamp not null default now()`
+
+Add a `newsletter_campaign_delivery` table:
+
+- `id text primary key`
+- `campaign_id text not null`
+- `subscriber_id text not null`
+- `organization_id text not null`
+- `project_slug text not null`
+- `status text not null` (`queued | sent | failed | bounced | complained | skipped`)
+- `provider_message_id text null`
+- `failure_reason text null`
+- `sent_at timestamp null`
+- `updated_at timestamp not null default now()`
+- unique `(campaign_id, subscriber_id)`
+
+### Backend plan
+
+- add plugin-owned campaign create/list/get/send/cancel service methods
+- reuse the existing email template/footer system so branding and unsubscribe behavior stay consistent
+- enqueue delivery rows when a campaign is sent, then process them in batches from a plugin-owned background job
+- send only to a frozen recipient snapshot for that campaign, not to the live list mid-send
+- stop sending to recipients who become suppressed before their batch is processed
+- feed bounce/complaint signals back into both deliverability state and subscriber suppression
+
+### Frontend / operator plan
+
+Add a `Campaigns` section to the existing Newsletter project page:
+
+- campaign list with status and counts
+- new draft form with subject + body
+- small audience selector:
+  - all confirmed subscribers
+  - confirmed subscribers for the current `mode`
+- test-send action
+- send confirmation step showing final recipient count
+- delivery detail view with failure counts/reasons
+
+### CLI / agent plan
+
+Keep the same generic plugin surface:
+
+- `vivd plugins read newsletter campaigns`
+- `vivd plugins action newsletter send_campaign <campaignId>`
+- `vivd plugins action newsletter cancel_campaign <campaignId>`
+
+The agent should only generate/send campaigns after confirming the user actually wants Vivd to own outbound sending instead of exporting to an external tool.
+
 ## Testing Plan
 
 Backend:
@@ -512,4 +621,4 @@ Integration:
 - list segmentation/tags
 - basic acquisition reporting and analytics integration
 - waitlist rank/invite flows
-- actual campaign sending, if Vivd decides to own that product surface
+- richer sending features after the broadcast-first phase 2 (scheduling, automation, templates, A/B tests)

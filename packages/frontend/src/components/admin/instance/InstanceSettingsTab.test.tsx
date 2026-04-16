@@ -9,8 +9,10 @@ const {
   getInstanceSoftwareUseQueryMock,
   updateInstanceSettingsUseMutationMock,
   updateInstanceSettingsMutateMock,
-  startInstanceSoftwareUpdateUseMutationMock,
-  startInstanceSoftwareUpdateMutateMock,
+  updateSelfHostNetworkSettingsUseMutationMock,
+  updateSelfHostNetworkSettingsMutateMock,
+  startSelfHostManagedUpdateUseMutationMock,
+  startSelfHostManagedUpdateMutateMock,
 } = vi.hoisted(() => ({
   useAppConfigMock: vi.fn(),
   useUtilsMock: vi.fn(),
@@ -18,8 +20,10 @@ const {
   getInstanceSoftwareUseQueryMock: vi.fn(),
   updateInstanceSettingsUseMutationMock: vi.fn(),
   updateInstanceSettingsMutateMock: vi.fn(),
-  startInstanceSoftwareUpdateUseMutationMock: vi.fn(),
-  startInstanceSoftwareUpdateMutateMock: vi.fn(),
+  updateSelfHostNetworkSettingsUseMutationMock: vi.fn(),
+  updateSelfHostNetworkSettingsMutateMock: vi.fn(),
+  startSelfHostManagedUpdateUseMutationMock: vi.fn(),
+  startSelfHostManagedUpdateMutateMock: vi.fn(),
 }));
 
 vi.mock("@/lib/AppConfigContext", () => ({
@@ -39,8 +43,11 @@ vi.mock("@/lib/trpc", () => ({
       updateInstanceSettings: {
         useMutation: updateInstanceSettingsUseMutationMock,
       },
-      startInstanceSoftwareUpdate: {
-        useMutation: startInstanceSoftwareUpdateUseMutationMock,
+      updateSelfHostNetworkSettings: {
+        useMutation: updateSelfHostNetworkSettingsUseMutationMock,
+      },
+      startSelfHostManagedUpdate: {
+        useMutation: startSelfHostManagedUpdateUseMutationMock,
       },
     },
   },
@@ -75,8 +82,10 @@ describe("InstanceSettingsTab", () => {
     getInstanceSoftwareUseQueryMock.mockReset();
     updateInstanceSettingsUseMutationMock.mockReset();
     updateInstanceSettingsMutateMock.mockReset();
-    startInstanceSoftwareUpdateUseMutationMock.mockReset();
-    startInstanceSoftwareUpdateMutateMock.mockReset();
+    updateSelfHostNetworkSettingsUseMutationMock.mockReset();
+    updateSelfHostNetworkSettingsMutateMock.mockReset();
+    startSelfHostManagedUpdateUseMutationMock.mockReset();
+    startSelfHostManagedUpdateMutateMock.mockReset();
     scrollIntoViewMock.mockReset();
     softwareRefetchMock.mockReset();
     window.sessionStorage.clear();
@@ -183,9 +192,14 @@ describe("InstanceSettingsTab", () => {
       mutate: updateInstanceSettingsMutateMock,
     });
 
-    startInstanceSoftwareUpdateUseMutationMock.mockReturnValue({
+    updateSelfHostNetworkSettingsUseMutationMock.mockReturnValue({
       isPending: false,
-      mutate: startInstanceSoftwareUpdateMutateMock,
+      mutate: updateSelfHostNetworkSettingsMutateMock,
+    });
+
+    startSelfHostManagedUpdateUseMutationMock.mockReturnValue({
+      isPending: false,
+      mutate: startSelfHostManagedUpdateMutateMock,
     });
   });
 
@@ -383,7 +397,7 @@ describe("InstanceSettingsTab", () => {
       refetch: softwareRefetchMock.mockResolvedValue({}),
     });
 
-    startInstanceSoftwareUpdateUseMutationMock.mockImplementation((options) => ({
+    startSelfHostManagedUpdateUseMutationMock.mockImplementation((options) => ({
       isPending: false,
       mutate: () => {
         options.onSuccess?.({

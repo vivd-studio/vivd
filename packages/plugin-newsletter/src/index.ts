@@ -31,8 +31,10 @@ export { default as NewsletterProjectPage } from "./frontend/NewsletterProjectPa
 export { newsletterPluginManifest } from "./manifest";
 export { newsletterSharedProjectUi } from "./shared/projectUi";
 export {
+  NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
+  newsletterCampaignsReadDefinition,
   newsletterSubscribersReadDefinition,
   newsletterSummaryReadDefinition,
 } from "./shared/summary";

@@ -162,6 +162,13 @@
       "when": 1776067036445,
       "tag": "0022_wonderful_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1776342114688,
+      "tag": "0023_certain_medusa",
+      "breakpoints": true
     }
   ]
 }

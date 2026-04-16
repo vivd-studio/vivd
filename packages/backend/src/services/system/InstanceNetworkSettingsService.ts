@@ -1,19 +1,9 @@
-import * as fs from "fs";
-import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { z } from "zod";
 import { inferSchemeForHost } from "../../lib/publicOrigin";
 import {
   getSystemSettingJsonValue,
-  setSystemSettingJsonValue,
   SYSTEM_SETTING_KEYS,
 } from "./SystemSettingsService";
-import { installProfileService } from "./InstallProfileService";
-import {
-  DEFAULT_404_FILENAME,
-  ensureCaddyStaticPages,
-  getCaddySystemPagesDir,
-  UNPUBLISHED_SITE_PLACEHOLDER_FILENAME,
-} from "../publish/caddyStaticPages";
 
 export const instanceTlsModeSchema = z.enum(["managed", "external", "off"]);
 export type InstanceTlsMode = z.infer<typeof instanceTlsModeSchema>;
@@ -75,14 +65,6 @@ function normalizeAcmeEmail(value: string | null | undefined): string | null {
   return trimmed || null;
 }
 
-function parseBooleanEnv(value: string | null | undefined): boolean | null {
-  const normalized = (value || "").trim().toLowerCase();
-  if (!normalized) return null;
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return null;
-}
-
 function isLocalLikeHost(host: string): boolean {
   const normalized = host.trim().toLowerCase();
   if (!normalized) return false;
@@ -137,7 +119,7 @@ function readBootstrapAcmeEmailEnv(): string | null {
   return normalizeAcmeEmail(process.env.VIVD_CADDY_ACME_EMAIL);
 }
 
-function normalizeStoredSettings(
+export function normalizeStoredInstanceNetworkSettings(
   value: unknown,
 ): InstanceNetworkSettings {
   const parsed = instanceNetworkSettingsSchema.safeParse(value);
@@ -149,88 +131,13 @@ function normalizeStoredSettings(
   };
 }
 
-function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): string {
-  const caddySitesDir =
-    process.env.CADDY_SITES_DIR?.trim() || soloSelfHostDefaults.caddySitesDir;
-  const systemPagesDir = getCaddySystemPagesDir(caddySitesDir);
-  const globalOptions: string[] = ["{"];
-  if (settings.tlsMode !== "managed") {
-    globalOptions.push("    auto_https off");
-  }
-  if (settings.tlsMode === "managed" && settings.acmeEmail) {
-    globalOptions.push(`    email ${settings.acmeEmail}`);
-  }
-  globalOptions.push(
-    "",
-    "    admin 0.0.0.0:2019 {",
-    `        origins ${soloSelfHostDefaults.caddyAdminUrl} http://backend:3000 http://localhost:2019 http://127.0.0.1:2019`,
-    "    }",
-    "}",
-    "",
-    `import ${caddySitesDir}/*.caddy`,
-    "",
-  );
-
-  const host = settings.publicHost || "localhost";
-  const address =
-    settings.tlsMode === "managed" && !isLocalLikeHost(host) ? host : `http://${host}`;
-
-  return `${globalOptions.join("\n")}${address} {
-    handle_path ${soloSelfHostDefaults.localS3DownloadPath}/* {
-        reverse_proxy minio:9000
-    }
-
-    handle /plugins/* {
-        reverse_proxy backend:3000
-    }
-
-    handle /email/v1/feedback/* {
-        reverse_proxy backend:3000
-    }
-
-    handle /vivd-studio/api/* {
-        reverse_proxy backend:3000
-    }
-
-    handle /vivd-studio* {
-        reverse_proxy frontend:80
-    }
-
-    import ${soloSelfHostDefaults.caddyRuntimeRoutesDir}/*.caddy
-
-    handle /health {
-        respond "OK" 200
-    }
-
-    import ${caddySitesDir}/_primary/*.caddy
-
-    handle {
-        root * ${systemPagesDir}
-        rewrite * /${UNPUBLISHED_SITE_PLACEHOLDER_FILENAME}
-        file_server
-    }
-
-    handle_errors {
-        @404 expression {err.status_code} == 404
-        handle @404 {
-            root * ${systemPagesDir}
-            rewrite * /${DEFAULT_404_FILENAME}
-            file_server {
-                status {err.status_code}
-            }
-        }
-    }
-}
-`;
-}
+let storedSettings: InstanceNetworkSettings = {};
 
 class InstanceNetworkSettingsService {
-  private storedSettings: InstanceNetworkSettings = {};
-
   getResolvedSettings(): ResolvedInstanceNetworkSettings {
     const explicitHost = readExplicitHostEnv();
     const bootstrapHost = readBootstrapHostEnv();
-    const storedHost = normalizeHostLike(this.storedSettings.publicHost) ?? null;
+    const storedHost = normalizeHostLike(storedSettings.publicHost) ?? null;
 
     const publicHost = explicitHost ?? storedHost ?? bootstrapHost ?? null;
     const publicHostSource =
@@ -243,7 +150,7 @@ class InstanceNetworkSettingsService {
             : "default";
 
     const bootstrapTlsMode = readBootstrapTlsModeEnv();
-    const storedTlsMode = this.storedSettings.tlsMode ?? null;
+    const storedTlsMode = storedSettings.tlsMode ?? null;
     const tlsMode =
       storedTlsMode ?? bootstrapTlsMode ?? defaultTlsModeForHost(publicHost);
     const tlsModeSource =
@@ -254,7 +161,7 @@ class InstanceNetworkSettingsService {
           : "default";
 
     const bootstrapAcmeEmail = readBootstrapAcmeEmailEnv();
-    const storedAcmeEmail = normalizeAcmeEmail(this.storedSettings.acmeEmail);
+    const storedAcmeEmail = normalizeAcmeEmail(storedSettings.acmeEmail);
     const acmeEmail = storedAcmeEmail ?? bootstrapAcmeEmail ?? null;
     const acmeEmailSource =
       storedAcmeEmail != null
@@ -280,61 +187,10 @@ class InstanceNetworkSettingsService {
   }
 
   async refreshFromStore(): Promise<ResolvedInstanceNetworkSettings> {
-    this.storedSettings = normalizeStoredSettings(
+    storedSettings = normalizeStoredInstanceNetworkSettings(
       await getSystemSettingJsonValue<unknown>(SYSTEM_SETTING_KEYS.instanceNetworkSettings),
     );
     return this.getResolvedSettings();
-  }
-
-  async updateStoredSettings(
-    patch: InstanceNetworkSettings,
-  ): Promise<ResolvedInstanceNetworkSettings> {
-    this.storedSettings = normalizeStoredSettings({
-      ...this.storedSettings,
-      ...patch,
-    });
-
-    await setSystemSettingJsonValue(
-      SYSTEM_SETTING_KEYS.instanceNetworkSettings,
-      this.storedSettings,
-    );
-
-    return this.getResolvedSettings();
-  }
-
-  async syncSelfHostedCaddyConfig(): Promise<boolean> {
-    const envOverride = parseBooleanEnv(process.env.VIVD_SELFHOST_CADDY_UI_MANAGED);
-    const enabled =
-      envOverride ?? ((await installProfileService.getInstallProfile()) === "solo");
-    if (!enabled) {
-      return false;
-    }
-
-    const caddyfilePath = process.env.CADDY_MAIN_CONFIG_PATH?.trim() || "/etc/caddy/Caddyfile";
-    const caddySitesDir =
-      process.env.CADDY_SITES_DIR?.trim() || soloSelfHostDefaults.caddySitesDir;
-    const resolved = this.getResolvedSettings();
-    const content = buildSelfHostCaddyfile(resolved);
-    ensureCaddyStaticPages(caddySitesDir);
-
-    try {
-      const existing = fs.existsSync(caddyfilePath)
-        ? fs.readFileSync(caddyfilePath, "utf-8")
-        : null;
-      if (existing === content) {
-        return false;
-      }
-
-      fs.writeFileSync(caddyfilePath, content, "utf-8");
-      return true;
-    } catch (error) {
-      console.warn(
-        `[InstanceNetworkSettings] Failed to write self-host Caddyfile at ${caddyfilePath}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      return false;
-    }
   }
 }
 

@@ -1,0 +1,37 @@
+{
+  "name": "@vivd/plugin-table-booking",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./manifest": "./src/manifest.ts",
+    "./backend/config": "./src/backend/config.ts",
+    "./backend/contribution": "./src/backend/contribution.ts",
+    "./backend/integrationHooks": "./src/backend/integrationHooks.ts",
+    "./backend/module": "./src/backend/module.ts",
+    "./backend/plugin": "./src/backend/plugin.ts",
+    "./backend/ports": "./src/backend/ports.ts",
+    "./backend/publicApi": "./src/backend/publicApi.ts",
+    "./backend/schedule": "./src/backend/schedule.ts",
+    "./backend/service": "./src/backend/service.ts",
+    "./backend/snippets": "./src/backend/snippets.ts",
+    "./backend/http/availability": "./src/backend/http/availability.ts",
+    "./backend/http/book": "./src/backend/http/book.ts",
+    "./backend/http/cancel": "./src/backend/http/cancel.ts",
+    "./cli/plugin": "./src/cli/plugin.ts",
+    "./cli/module": "./src/cli/module.ts",
+    "./frontend/plugin": "./src/frontend/plugin.ts",
+    "./frontend/module": "./src/frontend/module.ts",
+    "./frontend/TableBookingProjectPage": "./src/frontend/TableBookingProjectPage.tsx",
+    "./shared/projectUi": "./src/shared/projectUi.ts",
+    "./shared/summary": "./src/shared/summary.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@vivd/plugin-sdk": "1.0.0"
+  }
+}

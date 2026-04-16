@@ -19,6 +19,7 @@ vi.mock("../src/services/system/SystemSettingsService", () => ({
 }));
 
 import { instanceNetworkSettingsService } from "../src/services/system/InstanceNetworkSettingsService";
+import { instanceSelfHostAdminService } from "../src/services/system/InstanceSelfHostAdminService";
 
 const envSnapshot = { ...process.env };
 
@@ -91,6 +92,8 @@ describe("instance network settings service", () => {
     const caddySitesDir = path.join(tempDir, "sites.d");
     process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
     process.env.CADDY_SITES_DIR = caddySitesDir;
+    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
+    process.env.VIVD_INSTALL_PROFILE = "solo";
     storedValue = {
       publicHost: "solo.example.com",
       tlsMode: "managed",
@@ -98,7 +101,7 @@ describe("instance network settings service", () => {
     };
 
     await instanceNetworkSettingsService.refreshFromStore();
-    await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+    await instanceSelfHostAdminService.syncSelfHostedCaddyConfig();
 
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
       "email admin@example.com",
@@ -119,10 +122,10 @@ describe("instance network settings service", () => {
       ),
     ).toContain("Open /vivd-studio");
 
-    await instanceNetworkSettingsService.updateStoredSettings({
+    await instanceSelfHostAdminService.updateStoredSettings({
       tlsMode: "off",
     });
-    await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+    await instanceSelfHostAdminService.syncSelfHostedCaddyConfig();
 
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain("auto_https off");
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
@@ -141,7 +144,7 @@ describe("instance network settings service", () => {
     };
 
     await instanceNetworkSettingsService.refreshFromStore();
-    const changed = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+    const changed = await instanceSelfHostAdminService.syncSelfHostedCaddyConfig();
 
     expect(changed).toBe(false);
     expect(fs.existsSync(caddyfilePath)).toBe(false);
@@ -151,6 +154,8 @@ describe("instance network settings service", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-caddy-"));
     const caddyfilePath = path.join(tempDir, "Caddyfile");
     process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
+    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
+    process.env.VIVD_INSTALL_PROFILE = "solo";
     process.env.VIVD_SELFHOST_CADDY_UI_MANAGED = "false";
     storedValue = {
       publicHost: "solo.example.com",
@@ -158,7 +163,7 @@ describe("instance network settings service", () => {
     };
 
     await instanceNetworkSettingsService.refreshFromStore();
-    const changed = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+    const changed = await instanceSelfHostAdminService.syncSelfHostedCaddyConfig();
 
     expect(changed).toBe(false);
     expect(fs.existsSync(caddyfilePath)).toBe(false);

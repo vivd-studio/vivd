@@ -20,6 +20,7 @@ import { startInstalledPluginBackgroundJobs } from "./services/plugins/integrati
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
 import { publishService } from "./services/publish/PublishService";
 import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
+import { instanceSelfHostAdminService } from "./services/system/InstanceSelfHostAdminService";
 import { reloadCaddyConfig } from "./services/system/CaddyAdminService";
 
 const app = express();
@@ -188,7 +189,7 @@ app.get("/vivd-studio/api/health", (_req, res) => {
 
 async function bootstrapInstanceNetworkSettings() {
   await instanceNetworkSettingsService.refreshFromStore();
-  const caddyfileChanged = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+  const caddyfileChanged = await instanceSelfHostAdminService.syncSelfHostedCaddyConfig();
   if (caddyfileChanged) {
     await reloadCaddyConfig();
   }

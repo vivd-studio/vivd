@@ -13,15 +13,9 @@ import {
 } from "../services/system/InstallProfileService";
 import {
   isExperimentalSoloModeEnabled,
-  isSelfHostAdminFeaturesEnabled,
 } from "../services/system/FeatureFlagsService";
-import {
-  instanceNetworkSettingsService,
-  instanceTlsModeSchema,
-} from "../services/system/InstanceNetworkSettingsService";
+import { instanceNetworkSettingsService } from "../services/system/InstanceNetworkSettingsService";
 import { instanceSoftwareService } from "../services/system/InstanceSoftwareService";
-import { reloadCaddyConfig } from "../services/system/CaddyAdminService";
-import { publishService } from "../services/publish/PublishService";
 
 const instanceLimitDefaultsPatchSchema = z
   .object({
@@ -34,22 +28,12 @@ const instanceLimitDefaultsPatchSchema = z
   })
   .strict();
 
-const instanceNetworkSettingsPatchSchema = z
-  .object({
-    publicHost: z.string().trim().min(1).max(255).nullable().optional(),
-    tlsMode: instanceTlsModeSchema.nullable().optional(),
-    acmeEmail: z.string().trim().email().nullable().optional(),
-  })
-  .strict();
-
 const SOLO_INSTALL_PROFILE_LOCK_MESSAGE =
   "Install profile changes are not available from the UI on solo installs.";
 const SOLO_CAPABILITIES_LOCK_MESSAGE =
   "Advanced tenancy capabilities are not editable on solo installs.";
 const SOLO_EXPERIMENTAL_MODE_MESSAGE =
   "Solo mode is currently experimental-only and disabled for this installation.";
-const SELF_HOST_ADMIN_FEATURES_MESSAGE =
-  "Experimental self-host admin features are hidden for this installation.";
 
 async function buildInstanceSettingsPayload() {
   const policy = await installProfileService.resolvePolicy();
@@ -102,7 +86,6 @@ export const instanceSuperAdminProcedures = {
           capabilities: partialInstanceCapabilityPolicySchema.optional(),
           pluginDefaults: instancePluginDefaultsSchema.optional(),
           limitDefaults: instanceLimitDefaultsPatchSchema.optional(),
-          network: instanceNetworkSettingsPatchSchema.optional(),
         })
         .strict(),
     )
@@ -130,8 +113,6 @@ export const instanceSuperAdminProcedures = {
         });
       }
 
-      const targetInstallProfile = input.installProfile ?? currentPolicy.installProfile;
-
       if (input.installProfile) {
         await installProfileService.updateInstallProfile(input.installProfile);
       }
@@ -144,81 +125,10 @@ export const instanceSuperAdminProcedures = {
       if (input.limitDefaults) {
         await installProfileService.updateInstanceLimitDefaults(input.limitDefaults);
       }
-      if (input.network) {
-        if (!isSelfHostAdminFeaturesEnabled()) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: SELF_HOST_ADMIN_FEATURES_MESSAGE,
-          });
-        }
-        if (targetInstallProfile !== "solo") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              "Instance network settings are currently UI-managed only for solo installs.",
-          });
-        }
-        await instanceNetworkSettingsService.updateStoredSettings(input.network);
-        const caddyfileChanged =
-          await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
-        if (caddyfileChanged) {
-          await reloadCaddyConfig();
-        }
-        await publishService.syncGeneratedCaddyConfigs();
-      }
 
       return {
         success: true,
         ...(await buildInstanceSettingsPayload()),
       };
     }),
-
-  startInstanceSoftwareUpdate: superAdminProcedure.mutation(async () => {
-    if (!isSelfHostAdminFeaturesEnabled()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: SELF_HOST_ADMIN_FEATURES_MESSAGE,
-      });
-    }
-
-    const policy = await installProfileService.resolvePolicy();
-    if (policy.installProfile !== "solo") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Managed updates are available only for solo self-host installs.",
-      });
-    }
-
-    const software = await instanceSoftwareService.getStatus(policy.installProfile);
-    if (!software.managedUpdate.enabled) {
-      return {
-        started: false as const,
-        error:
-          software.managedUpdate.reason ||
-          "Managed self-host updates are not configured for this installation.",
-        targetTag: null,
-      };
-    }
-
-    if (!software.latestTag) {
-      return {
-        started: false as const,
-        error: "Could not resolve the latest release tag for this installation.",
-        targetTag: null,
-      };
-    }
-
-    if (software.releaseStatus === "current") {
-      return {
-        started: false as const,
-        error: "This installation is already on the latest known release.",
-        targetTag: software.latestTag,
-      };
-    }
-
-    return await instanceSoftwareService.startManagedUpdate({
-      installProfile: policy.installProfile,
-      targetTag: software.latestTag,
-    });
-  }),
 };

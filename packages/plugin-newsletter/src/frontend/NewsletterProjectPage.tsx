@@ -29,8 +29,10 @@ import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
+  NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
+  type NewsletterCampaignsPayload,
   type NewsletterSubscribersPayload,
   type NewsletterSummaryPayload,
 } from "../shared/summary";
@@ -46,6 +48,17 @@ type NewsletterPluginConfig = {
   sourceHosts: string[];
   redirectHostAllowlist: string[];
 };
+
+type NewsletterCampaignAudience = "all_confirmed" | "mode_confirmed";
+
+function getCampaignAudienceLabel(
+  audience: NewsletterCampaignAudience,
+  currentMode: "newsletter" | "waitlist",
+): string {
+  return audience === "mode_confirmed"
+    ? `Confirmed (${currentMode})`
+    : "All confirmed";
+}
 
 function parseListInput(value: string): string[] {
   return Array.from(
@@ -130,6 +143,17 @@ export default function NewsletterProjectPage({
   const [collectName, setCollectName] = useState(false);
   const [sourceHostsInput, setSourceHostsInput] = useState("");
   const [redirectHostsInput, setRedirectHostsInput] = useState("");
+  const [campaignSubject, setCampaignSubject] = useState("");
+  const [campaignBody, setCampaignBody] = useState("");
+  const [campaignAudience, setCampaignAudience] =
+    useState<NewsletterCampaignAudience>("all_confirmed");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [campaignSelectionMode, setCampaignSelectionMode] = useState<"auto" | "manual">(
+    "auto",
+  );
+  const [editingNewCampaign, setEditingNewCampaign] = useState(false);
+  const [campaignOffset, setCampaignOffset] = useState(0);
+  const [deleteCampaignId, setDeleteCampaignId] = useState<string | null>(null);
   const [subscriberStatus, setSubscriberStatus] = useState<
     "all" | "pending" | "confirmed" | "unsubscribed" | "bounced" | "complained"
   >("all");
@@ -137,6 +161,7 @@ export default function NewsletterProjectPage({
   const [offset, setOffset] = useState(0);
   const [unsubscribeEmail, setUnsubscribeEmail] = useState<string | null>(null);
   const limit = 100;
+  const campaignLimit = 20;
 
   const projectListQuery = trpc.project.list.useQuery(undefined, {
     enabled: !!projectSlug,
@@ -151,6 +176,19 @@ export default function NewsletterProjectPage({
       pluginId: typedPluginId,
       readId: NEWSLETTER_SUMMARY_READ_ID,
       input: { rangeDays: 30 },
+    },
+    { enabled: !!projectSlug },
+  );
+  const campaignsQuery = trpc.plugins.read.useQuery(
+    {
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      readId: NEWSLETTER_CAMPAIGNS_READ_ID,
+      input: {
+        status: "all",
+        limit: campaignLimit,
+        offset: campaignOffset,
+      },
     },
     { enabled: !!projectSlug },
   );
@@ -215,6 +253,48 @@ export default function NewsletterProjectPage({
     },
   });
 
+  const campaignActionMutation = trpc.plugins.action.useMutation({
+    onSuccess: async (result) => {
+      if (result.actionId === "save_campaign_draft") {
+        const payload = result.result as { campaignId?: string; estimatedRecipientCount?: number };
+        if (payload.campaignId) {
+          if (editingNewCampaign) {
+            setCampaignOffset(0);
+            setCampaignSelectionMode("manual");
+          }
+          setSelectedCampaignId(payload.campaignId);
+          setEditingNewCampaign(false);
+        }
+        toast.success("Campaign draft saved", {
+          description:
+            typeof payload.estimatedRecipientCount === "number"
+              ? `${payload.estimatedRecipientCount} confirmed recipients currently match this audience.`
+              : undefined,
+        });
+      } else if (result.actionId === "delete_campaign_draft") {
+        setDeleteCampaignId(null);
+        if ((result.result as { campaignId?: string }).campaignId === selectedCampaignId) {
+          setCampaignSelectionMode("auto");
+          setSelectedCampaignId(null);
+          setCampaignSubject("");
+          setCampaignBody("");
+          setCampaignAudience("all_confirmed");
+        }
+        toast.success("Campaign draft deleted");
+      }
+
+      await Promise.all([
+        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
+        utils.plugins.read.invalidate(),
+      ]);
+    },
+    onError: (error) => {
+      toast.error("Campaign action failed", {
+        description: error.message,
+      });
+    },
+  });
+
   const pluginInfo = pluginInfoQuery.data as
     | (RouterOutputs["plugins"]["info"] & {
         config: NewsletterPluginConfig | null;
@@ -236,6 +316,9 @@ export default function NewsletterProjectPage({
       })
     | undefined;
   const summary = summaryQuery.data?.result as NewsletterSummaryPayload | undefined;
+  const campaigns = campaignsQuery.data?.result as
+    | NewsletterCampaignsPayload
+    | undefined;
   const subscribers = subscribersQuery.data?.result as
     | NewsletterSubscribersPayload
     | undefined;
@@ -250,8 +333,61 @@ export default function NewsletterProjectPage({
     );
   }, [pluginInfo?.config]);
 
+  useEffect(() => {
+    if (!campaigns?.rows) return;
+    if (editingNewCampaign) {
+      return;
+    }
+
+    if (campaigns.rows.length === 0) {
+      if (!selectedCampaignId) {
+        setCampaignSubject("");
+        setCampaignBody("");
+        setCampaignAudience("all_confirmed");
+      }
+      return;
+    }
+
+    if (selectedCampaignId) {
+      const selected = campaigns.rows.find((row) => row.id === selectedCampaignId);
+      if (!selected) {
+        if (campaignSelectionMode === "manual") {
+          return;
+        }
+      } else {
+        setCampaignSubject(selected.subject);
+        setCampaignBody(selected.body);
+        setCampaignAudience(selected.audience);
+        if (campaignSelectionMode !== "auto") {
+          setCampaignSelectionMode("auto");
+        }
+        return;
+      }
+    }
+
+    const firstCampaign = campaigns.rows[0];
+    setSelectedCampaignId(firstCampaign.id);
+    setCampaignSubject(firstCampaign.subject);
+    setCampaignBody(firstCampaign.body);
+    setCampaignAudience(firstCampaign.audience);
+  }, [campaignSelectionMode, campaigns?.rows, editingNewCampaign, selectedCampaignId]);
+
+  useEffect(() => {
+    if (
+      campaignOffset > 0 &&
+      campaigns &&
+      campaigns.rows.length === 0 &&
+      campaignOffset >= campaigns.total
+    ) {
+      setCampaignOffset(Math.max(0, campaignOffset - campaignLimit));
+    }
+  }, [campaignLimit, campaignOffset, campaigns]);
+
   const isLoading =
-    pluginInfoQuery.isLoading || summaryQuery.isLoading || subscribersQuery.isLoading;
+    pluginInfoQuery.isLoading ||
+    summaryQuery.isLoading ||
+    campaignsQuery.isLoading ||
+    subscribersQuery.isLoading;
   const pluginEnabled = !!pluginInfo?.enabled;
   const pluginEntitled = pluginInfo?.entitled ?? false;
   const needsEnable = pluginEntitled && !pluginEnabled && !pluginInfo?.instanceId;
@@ -273,6 +409,22 @@ export default function NewsletterProjectPage({
   }, [subscribers?.total]);
 
   const currentPage = useMemo(() => Math.floor(offset / limit) + 1, [offset]);
+  const campaignPageCount = useMemo(() => {
+    const total = campaigns?.total ?? 0;
+    return Math.max(1, Math.ceil(total / campaignLimit));
+  }, [campaignLimit, campaigns?.total]);
+  const currentCampaignPage = useMemo(
+    () => Math.floor(campaignOffset / campaignLimit) + 1,
+    [campaignLimit, campaignOffset],
+  );
+  const selectedCampaign = useMemo(
+    () => campaigns?.rows.find((row) => row.id === selectedCampaignId) ?? null,
+    [campaigns?.rows, selectedCampaignId],
+  );
+  const currentCampaignRecipientEstimate =
+    campaignAudience === "mode_confirmed"
+      ? (campaigns?.audienceOptions.modeConfirmed ?? 0)
+      : (campaigns?.audienceOptions.allConfirmed ?? 0);
 
   const saveConfig = () => {
     saveConfigMutation.mutate({
@@ -284,6 +436,48 @@ export default function NewsletterProjectPage({
         sourceHosts: parseListInput(sourceHostsInput),
         redirectHostAllowlist: parseListInput(redirectHostsInput),
       },
+    });
+  };
+
+  const startNewCampaignDraft = () => {
+    setCampaignSelectionMode("auto");
+    setEditingNewCampaign(true);
+    setSelectedCampaignId(null);
+    setCampaignSubject("");
+    setCampaignBody("");
+    setCampaignAudience("all_confirmed");
+  };
+
+  const openCampaignFromList = (campaignId: string) => {
+    const selected = campaigns?.rows.find((row) => row.id === campaignId);
+    setCampaignSelectionMode("auto");
+    setEditingNewCampaign(false);
+    setSelectedCampaignId(campaignId);
+    if (selected) {
+      setCampaignSubject(selected.subject);
+      setCampaignBody(selected.body);
+      setCampaignAudience(selected.audience);
+    }
+  };
+
+  const goToCampaignPage = (nextOffset: number) => {
+    setCampaignSelectionMode("auto");
+    setEditingNewCampaign(false);
+    setSelectedCampaignId(null);
+    setCampaignOffset(nextOffset);
+  };
+
+  const saveCampaignDraft = () => {
+    campaignActionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "save_campaign_draft",
+      args: [
+        editingNewCampaign || !selectedCampaignId ? "new" : selectedCampaignId,
+        campaignSubject,
+        campaignBody,
+        campaignAudience,
+      ],
     });
   };
 
@@ -325,6 +519,16 @@ export default function NewsletterProjectPage({
         onSettled: () => setUnsubscribeEmail(null),
       },
     );
+  };
+
+  const confirmDeleteCampaign = () => {
+    if (!deleteCampaignId) return;
+    campaignActionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "delete_campaign_draft",
+      args: [deleteCampaignId],
+    });
   };
 
   return (
@@ -387,6 +591,176 @@ export default function NewsletterProjectPage({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
+              <CardTitle>Campaigns</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Prepare broadcast drafts for confirmed subscribers.
+              </p>
+            </div>
+            <Button variant="outline" onClick={startNewCampaignDraft}>
+              New draft
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              This slice adds draft preparation and audience sizing only. Batched send
+              execution is still the next broadcasting step.
+            </p>
+            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Saved drafts</p>
+                  <Badge variant="secondary">{campaigns?.total ?? 0}</Badge>
+                </div>
+                {campaigns?.rows.length ? (
+                  <div className="space-y-2">
+                    {campaigns.rows.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className={`w-full rounded-lg border p-3 text-left transition ${
+                          row.id === selectedCampaignId && !editingNewCampaign
+                            ? "border-primary bg-muted/40"
+                            : "hover:bg-muted/30"
+                        }`}
+                        onClick={() => openCampaignFromList(row.id)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate font-medium">{row.subject}</p>
+                          <Badge variant="outline">{row.status}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {getCampaignAudienceLabel(row.audience, row.mode)}
+                          {` • ${row.estimatedRecipientCount} recipients`}
+                        </p>
+                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                          {row.body}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    No campaign drafts yet.
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2 border-t pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    {campaigns?.total ?? 0} drafts total, page {currentCampaignPage} of{" "}
+                    {campaignPageCount}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        goToCampaignPage(Math.max(0, campaignOffset - campaignLimit))
+                      }
+                      disabled={campaignOffset === 0}
+                    >
+                      Previous drafts
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToCampaignPage(campaignOffset + campaignLimit)}
+                      disabled={!campaigns || campaignOffset + campaignLimit >= campaigns.total}
+                    >
+                      Next drafts
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-lg border p-4">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="space-y-2">
+                    <Label>Subject</Label>
+                    <Input
+                      value={campaignSubject}
+                      placeholder="April launch update"
+                      onChange={(event) => setCampaignSubject(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Audience</Label>
+                    <Select
+                      value={campaignAudience}
+                      onValueChange={(value) =>
+                        setCampaignAudience(value as NewsletterCampaignAudience)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all_confirmed">All confirmed</SelectItem>
+                        <SelectItem value="mode_confirmed">
+                          Confirmed ({campaigns?.currentMode ?? mode})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Body</Label>
+                  <Textarea
+                    value={campaignBody}
+                    onChange={(event) => setCampaignBody(event.target.value)}
+                    placeholder="Write the announcement you want to send to confirmed subscribers."
+                    rows={10}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {editingNewCampaign || !selectedCampaign
+                        ? "New draft"
+                        : `Editing draft updated ${formatDate(selectedCampaign.updatedAt)}`}
+                    </span>
+                    <span>
+                      {currentCampaignRecipientEstimate} confirmed recipients currently
+                      match this audience
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={saveCampaignDraft}
+                    disabled={
+                      campaignActionMutation.isPending ||
+                      !campaignSubject.trim() ||
+                      !campaignBody.trim()
+                    }
+                  >
+                    {campaignActionMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving draft
+                      </>
+                    ) : selectedCampaignId && !editingNewCampaign ? (
+                      "Save draft"
+                    ) : (
+                      "Create draft"
+                    )}
+                  </Button>
+                  {selectedCampaignId && !editingNewCampaign ? (
+                    <Button
+                      variant="outline"
+                      disabled={campaignActionMutation.isPending}
+                      onClick={() => setDeleteCampaignId(selectedCampaignId)}
+                    >
+                      Delete draft
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
               <CardTitle>Subscribers</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Search, review, and export the current audience list.
@@ -402,6 +776,7 @@ export default function NewsletterProjectPage({
                 onClick={() => {
                   pluginInfoQuery.refetch();
                   summaryQuery.refetch();
+                  campaignsQuery.refetch();
                   subscribersQuery.refetch();
                 }}
               >
@@ -703,6 +1078,38 @@ export default function NewsletterProjectPage({
           </CardContent>
         </Card>
       </div>
+      <AlertDialog
+        open={Boolean(deleteCampaignId)}
+        onOpenChange={(open) => {
+          if (!open && !campaignActionMutation.isPending) {
+            setDeleteCampaignId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete campaign draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This only removes the saved draft. No subscriber emails have been sent by
+              this draft yet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={campaignActionMutation.isPending || !deleteCampaignId}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmDeleteCampaign();
+              }}
+            >
+              {campaignActionMutation.isPending ? "Deleting..." : "Delete draft"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={Boolean(unsubscribeEmail)}
         onOpenChange={(open) => {

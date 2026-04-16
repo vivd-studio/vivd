@@ -160,14 +160,25 @@ vi.mock("../src/services/system/FeatureFlagsService", () => ({
 vi.mock("../src/services/system/InstanceNetworkSettingsService", async () => {
   const { z } = await import("zod");
   return {
-    instanceTlsModeSchema: z.enum(["managed", "external", "off"]),
+    instanceNetworkSettingsSchema: z
+      .object({
+        publicHost: z.string().trim().min(1).max(255).nullable().optional(),
+        tlsMode: z.enum(["managed", "external", "off"]).nullable().optional(),
+        acmeEmail: z.string().trim().email().nullable().optional(),
+      })
+      .strict(),
     instanceNetworkSettingsService: {
       getResolvedSettings: getResolvedNetworkSettingsMock,
-      updateStoredSettings: updateStoredNetworkSettingsMock,
-      syncSelfHostedCaddyConfig: syncSelfHostedCaddyConfigMock,
     },
   };
 });
+
+vi.mock("../src/services/system/InstanceSelfHostAdminService", () => ({
+  instanceSelfHostAdminService: {
+    updateStoredSettings: updateStoredNetworkSettingsMock,
+    syncSelfHostedCaddyConfig: syncSelfHostedCaddyConfigMock,
+  },
+}));
 
 vi.mock("../src/services/system/CaddyAdminService", () => ({
   reloadCaddyConfig: reloadCaddyConfigMock,
@@ -584,11 +595,9 @@ describe("superadmin router", () => {
     const caller = superAdminRouter.createCaller(makeContext());
 
     await expect(
-      caller.updateInstanceSettings({
-        network: {
-          publicHost: "example.com",
-          tlsMode: "external",
-        },
+      caller.updateSelfHostNetworkSettings({
+        publicHost: "example.com",
+        tlsMode: "external",
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
@@ -603,11 +612,9 @@ describe("superadmin router", () => {
     const caller = superAdminRouter.createCaller(makeContext());
 
     await expect(
-      caller.updateInstanceSettings({
-        network: {
-          publicHost: "example.com",
-          tlsMode: "external",
-        },
+      caller.updateSelfHostNetworkSettings({
+        publicHost: "example.com",
+        tlsMode: "external",
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
@@ -706,39 +713,9 @@ describe("superadmin router", () => {
     expect(updateInstanceCapabilityPolicyMock).not.toHaveBeenCalled();
   });
 
-  it("allows network updates when switching to solo in the same mutation", async () => {
-    isExperimentalSoloModeEnabledMock.mockReturnValue(true);
+  it("allows explicit solo network updates through the experimental self-host mutation", async () => {
     isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
-    resolvePolicyMock
-      .mockResolvedValueOnce({
-        installProfile: "platform",
-        singleProjectMode: false,
-        capabilities: {
-          multiOrg: true,
-          tenantHosts: true,
-          customDomains: true,
-          orgLimitOverrides: true,
-          orgPluginEntitlements: true,
-          projectPluginEntitlements: true,
-          dedicatedPluginHost: true,
-        },
-        pluginDefaults: {
-          contact_form: {
-            pluginId: "contact_form",
-            state: "disabled",
-            managedBy: "manual_superadmin",
-          },
-          analytics: {
-            pluginId: "analytics",
-            state: "disabled",
-            managedBy: "manual_superadmin",
-          },
-        },
-        limitDefaults: {},
-        controlPlane: { mode: "host_based" },
-        pluginRuntime: { mode: "dedicated_host" },
-      })
-      .mockResolvedValueOnce({
+    resolvePolicyMock.mockResolvedValue({
         installProfile: "solo",
         singleProjectMode: true,
         capabilities: {
@@ -769,16 +746,13 @@ describe("superadmin router", () => {
 
     const caller = superAdminRouter.createCaller(makeContext());
 
-    await caller.updateInstanceSettings({
-      installProfile: "solo",
-      network: {
-        publicHost: "example.com",
-        tlsMode: "managed",
-        acmeEmail: "admin@example.com",
-      },
+    await caller.updateSelfHostNetworkSettings({
+      publicHost: "example.com",
+      tlsMode: "managed",
+      acmeEmail: "admin@example.com",
     });
 
-    expect(updateInstallProfileMock).toHaveBeenCalledWith("solo");
+    expect(updateInstallProfileMock).not.toHaveBeenCalled();
     expect(updateStoredNetworkSettingsMock).toHaveBeenCalledWith({
       publicHost: "example.com",
       tlsMode: "managed",
@@ -821,7 +795,7 @@ describe("superadmin router", () => {
     isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     const caller = superAdminRouter.createCaller(makeContext());
 
-    await expect(caller.startInstanceSoftwareUpdate()).rejects.toMatchObject({
+    await expect(caller.startSelfHostManagedUpdate()).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Managed updates are available only for solo self-host installs.",
     });
@@ -832,7 +806,7 @@ describe("superadmin router", () => {
   it("rejects managed instance updates while self-host admin features stay hidden", async () => {
     const caller = superAdminRouter.createCaller(makeContext());
 
-    await expect(caller.startInstanceSoftwareUpdate()).rejects.toMatchObject({
+    await expect(caller.startSelfHostManagedUpdate()).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Experimental self-host admin features are hidden for this installation.",
     });
@@ -888,7 +862,7 @@ describe("superadmin router", () => {
     });
     const caller = superAdminRouter.createCaller(makeContext());
 
-    const result = await caller.startInstanceSoftwareUpdate();
+    const result = await caller.startSelfHostManagedUpdate();
 
     expect(result).toMatchObject({
       started: true,

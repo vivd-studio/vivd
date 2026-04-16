@@ -30,11 +30,15 @@ import type {
   NewsletterUnsubscribeByTokenResult,
 } from "./ports";
 import type {
+  NewsletterCampaignAudience,
+  NewsletterCampaignsPayload,
   NewsletterSubscribersPayload,
   NewsletterSummaryPayload,
 } from "../shared/summary";
 
 const confirmEmailSchema = z.string().trim().email();
+const campaignSubjectSchema = z.string().trim().min(1).max(160);
+const campaignBodySchema = z.string().trim().min(1).max(20_000);
 const CONFIRM_TOKEN_TTL_MS = 48 * 60 * 60 * 1000;
 const UNSUBSCRIBE_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
@@ -47,6 +51,14 @@ type NewsletterStatus =
   | "unsubscribed"
   | "bounced"
   | "complained";
+
+type NewsletterCampaignStatus =
+  | "draft"
+  | "queued"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "canceled";
 
 function normalizeNewsletterConfig(configJson: unknown): NewsletterPluginConfig {
   const parsed = newsletterPluginConfigSchema.safeParse(configJson ?? {});
@@ -324,6 +336,20 @@ export class NewsletterSubscriberSuppressedError extends Error {
   }
 }
 
+export class NewsletterCampaignNotFoundError extends Error {
+  constructor(campaignId: string) {
+    super(`Campaign draft not found: ${campaignId}`);
+    this.name = "NewsletterCampaignNotFoundError";
+  }
+}
+
+export class NewsletterCampaignStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NewsletterCampaignStateError";
+  }
+}
+
 export class NewsletterConfirmationDeliveryError extends Error {
   constructor(message: string) {
     super(message);
@@ -422,9 +448,14 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
     inferSourceHosts,
     hostUtils,
     emailDeliveryService,
-    emailTemplates,
+  emailTemplates,
   } = deps;
-  const { newsletterSubscriber, newsletterActionToken, projectPluginInstance } =
+  const {
+    newsletterSubscriber,
+    newsletterActionToken,
+    newsletterCampaign,
+    projectPluginInstance,
+  } =
     tables;
 
   async function resolvePublicEndpoints() {
@@ -459,6 +490,43 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
         eq(newsletterSubscriber.emailNormalized, normalizedEmail),
       ),
     });
+  }
+
+  async function loadCampaignById(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }) {
+    return db.query.newsletterCampaign.findFirst({
+      where: and(
+        eq(newsletterCampaign.id, options.campaignId),
+        eq(newsletterCampaign.organizationId, options.organizationId),
+        eq(newsletterCampaign.projectSlug, options.projectSlug),
+      ),
+    });
+  }
+
+  async function countConfirmedAudience(options: {
+    organizationId: string;
+    projectSlug: string;
+    mode: "newsletter" | "waitlist";
+    audience: NewsletterCampaignAudience;
+  }) {
+    const countRows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(newsletterSubscriber)
+      .where(
+        and(
+          eq(newsletterSubscriber.organizationId, options.organizationId),
+          eq(newsletterSubscriber.projectSlug, options.projectSlug),
+          eq(newsletterSubscriber.status, "confirmed"),
+          options.audience === "mode_confirmed"
+            ? eq(newsletterSubscriber.mode, options.mode)
+            : undefined,
+        ),
+      );
+
+    return toCount(countRows[0]?.count);
   }
 
   async function rotateActionTokens(options: {
@@ -1304,6 +1372,238 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
           confirmations: toCount(recentConfirmRows[0]?.count),
           unsubscribes: toCount(recentUnsubscribeRows[0]?.count),
         },
+      };
+    }
+
+    async listCampaigns(options: {
+      organizationId: string;
+      projectSlug: string;
+      status: "all" | "draft" | "queued" | "sending" | "sent" | "failed" | "canceled";
+      limit?: number;
+      offset?: number;
+    }): Promise<NewsletterCampaignsPayload> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        return {
+          pluginId: "newsletter",
+          enabled: false,
+          status: options.status,
+          total: 0,
+          limit: options.limit ?? 20,
+          offset: options.offset ?? 0,
+          currentMode: "newsletter",
+          audienceOptions: {
+            allConfirmed: 0,
+            modeConfirmed: 0,
+          },
+          rows: [],
+        };
+      }
+
+      const config = normalizeNewsletterConfig(existing.configJson);
+      const limit = Math.max(1, Math.min(100, options.limit ?? 20));
+      const offset = Math.max(0, options.offset ?? 0);
+      const where = and(
+        eq(newsletterCampaign.organizationId, options.organizationId),
+        eq(newsletterCampaign.projectSlug, options.projectSlug),
+        options.status === "all"
+          ? undefined
+          : eq(newsletterCampaign.status, options.status),
+      );
+
+      const [countRows, rowResults, allConfirmed, modeConfirmed] = await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(newsletterCampaign)
+          .where(where),
+        db.query.newsletterCampaign.findMany({
+          where,
+          limit,
+          offset,
+          orderBy: [desc(newsletterCampaign.updatedAt), asc(newsletterCampaign.subject)],
+        }),
+        countConfirmedAudience({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          mode: config.mode,
+          audience: "all_confirmed",
+        }),
+        countConfirmedAudience({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          mode: config.mode,
+          audience: "mode_confirmed",
+        }),
+      ]);
+
+      return {
+        pluginId: "newsletter",
+        enabled: true,
+        status: options.status,
+        total: toCount(countRows[0]?.count),
+        limit,
+        offset,
+        currentMode: config.mode,
+        audienceOptions: {
+          allConfirmed,
+          modeConfirmed,
+        },
+        rows: rowResults.map((row: any) => ({
+          id: row.id,
+          subject: row.subject,
+          body: row.body,
+          status:
+            (row.status as NewsletterCampaignStatus) === "draft" ||
+            row.status === "queued" ||
+            row.status === "sending" ||
+            row.status === "sent" ||
+            row.status === "failed" ||
+            row.status === "canceled"
+              ? row.status
+              : "draft",
+          audience: row.audience === "mode_confirmed" ? "mode_confirmed" : "all_confirmed",
+          mode: row.mode === "waitlist" ? "waitlist" : "newsletter",
+          estimatedRecipientCount: toCount(row.estimatedRecipientCount),
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        })),
+      };
+    }
+
+    async saveCampaignDraft(options: {
+      organizationId: string;
+      projectSlug: string;
+      campaignId?: string | null;
+      subject: string;
+      body: string;
+      audience: NewsletterCampaignAudience;
+    }): Promise<{
+      campaignId: string;
+      status: "draft";
+      estimatedRecipientCount: number;
+    }> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        throw new NewsletterPluginNotEnabledError();
+      }
+
+      const config = normalizeNewsletterConfig(existing.configJson);
+      const subject = campaignSubjectSchema.parse(options.subject);
+      const body = campaignBodySchema.parse(options.body);
+      const audience =
+        options.audience === "mode_confirmed" ? "mode_confirmed" : "all_confirmed";
+      const estimatedRecipientCount = await countConfirmedAudience({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        mode: config.mode,
+        audience,
+      });
+
+      if (options.campaignId) {
+        const campaign = await loadCampaignById({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          campaignId: options.campaignId,
+        });
+        if (!campaign) {
+          throw new NewsletterCampaignNotFoundError(options.campaignId);
+        }
+        if (campaign.status !== "draft") {
+          throw new NewsletterCampaignStateError(
+            "Only draft campaigns can be edited right now.",
+          );
+        }
+
+        const [updated] = await db
+          .update(newsletterCampaign)
+          .set({
+            mode: config.mode,
+            audience,
+            subject,
+            body,
+            estimatedRecipientCount,
+            updatedAt: new Date(),
+          })
+          .where(eq(newsletterCampaign.id, options.campaignId))
+          .returning();
+
+        return {
+          campaignId: updated?.id ?? options.campaignId,
+          status: "draft",
+          estimatedRecipientCount,
+        };
+      }
+
+      const campaignId = randomUUID();
+      const [created] = await db
+        .insert(newsletterCampaign)
+        .values({
+          id: campaignId,
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          pluginInstanceId: existing.id,
+          mode: config.mode,
+          status: "draft",
+          audience,
+          subject,
+          body,
+          estimatedRecipientCount,
+        })
+        .returning();
+
+      return {
+        campaignId: created?.id ?? campaignId,
+        status: "draft",
+        estimatedRecipientCount,
+      };
+    }
+
+    async deleteCampaignDraft(options: {
+      organizationId: string;
+      projectSlug: string;
+      campaignId: string;
+    }): Promise<{
+      campaignId: string;
+      status: "deleted";
+    }> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        throw new NewsletterPluginNotEnabledError();
+      }
+
+      const campaign = await loadCampaignById({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        campaignId: options.campaignId,
+      });
+      if (!campaign) {
+        throw new NewsletterCampaignNotFoundError(options.campaignId);
+      }
+      if (campaign.status !== "draft") {
+        throw new NewsletterCampaignStateError(
+          "Only draft campaigns can be deleted right now.",
+        );
+      }
+
+      await db
+        .delete(newsletterCampaign)
+        .where(eq(newsletterCampaign.id, options.campaignId));
+
+      return {
+        campaignId: options.campaignId,
+        status: "deleted",
       };
     }
 

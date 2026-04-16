@@ -6,6 +6,8 @@ import type {
 import { createNewsletterPluginBackendHooks } from "./integrationHooks";
 import { createNewsletterPluginModule } from "./module";
 import {
+  NewsletterCampaignNotFoundError,
+  NewsletterCampaignStateError,
   NewsletterConfirmationDeliveryError,
   NewsletterPluginNotEnabledError,
   NewsletterSignupRateLimitError,
@@ -63,6 +65,15 @@ export function createNewsletterPluginBackendContribution(
       readSummary(options) {
         return service.getNewsletterSummary(options);
       },
+      readCampaigns(options) {
+        return service.listCampaigns(options);
+      },
+      saveCampaignDraft(options) {
+        return service.saveCampaignDraft(options);
+      },
+      deleteCampaignDraft(options) {
+        return service.deleteCampaignDraft(options);
+      },
       readSubscribers(options) {
         return service.listSubscribers(options);
       },
@@ -70,6 +81,8 @@ export function createNewsletterPluginBackendContribution(
         const { error } = context;
         if (
           error instanceof NewsletterPluginNotEnabledError ||
+          error instanceof NewsletterCampaignNotFoundError ||
+          error instanceof NewsletterCampaignStateError ||
           error instanceof NewsletterSubscriberNotFoundError ||
           error instanceof NewsletterSubscriberSuppressedError ||
           error instanceof NewsletterSignupRateLimitError ||
@@ -94,6 +107,7 @@ export function createNewsletterPluginBackendContribution(
       tables: {
         newsletterSubscriber: deps.tables.newsletterSubscriber,
         newsletterActionToken: deps.tables.newsletterActionToken,
+        newsletterCampaign: deps.tables.newsletterCampaign,
       },
     }),
     publicRoutes: [

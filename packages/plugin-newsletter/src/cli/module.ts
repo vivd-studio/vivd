@@ -198,6 +198,8 @@ export const newsletterCliModule: PluginCliModule = {
       "  vivd plugins action newsletter unsubscribe <email>",
       "  vivd plugins read newsletter summary --file input.json",
       "  vivd plugins read newsletter subscribers --file input.json",
+      "  vivd plugins read newsletter campaigns --file input.json",
+      "Campaign drafts are currently easiest to manage from the project UI.",
       ...(newsletterPluginDefinition.agentHints ?? []).map(
         (hint) => `Note: ${hint}`,
       ),
