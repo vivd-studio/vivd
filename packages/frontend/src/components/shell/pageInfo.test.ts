@@ -35,7 +35,17 @@ describe("getPageInfo", () => {
     expect(getPageInfo("/vivd-studio/projects/new/scratch")).toMatchObject({
       title: "New project",
       isProjectPage: false,
+      usesImmersiveSidebar: true,
       isScratchWizardPage: true,
+    });
+  });
+
+  it("marks project overview routes as immersive-sidebar pages", () => {
+    expect(getPageInfo("/vivd-studio/projects/demo")).toMatchObject({
+      title: "Projects",
+      isProjectPage: true,
+      usesImmersiveSidebar: true,
+      projectSlug: "demo",
     });
   });
 });

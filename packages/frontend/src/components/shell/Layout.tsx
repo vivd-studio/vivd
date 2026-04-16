@@ -60,8 +60,12 @@ export function Layout() {
 
   return (
     <SidebarProvider
-      desktopMode={pageInfo.isProjectPage ? "immersive" : "default"}
-      immersiveKey={pageInfo.isProjectPage ? pageInfo.projectSlug ?? location.pathname : undefined}
+      desktopMode={pageInfo.usesImmersiveSidebar ? "immersive" : "default"}
+      immersiveKey={
+        pageInfo.usesImmersiveSidebar
+          ? pageInfo.projectSlug ?? location.pathname
+          : undefined
+      }
     >
       <NavigationSearchProvider>
         {!isEmbeddedProjectPanel ? <AppSidebar /> : null}

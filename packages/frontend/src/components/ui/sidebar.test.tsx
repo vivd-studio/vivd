@@ -12,6 +12,7 @@ import {
 } from "./sidebar";
 
 const SIDEBAR_STORAGE_KEY = "sidebar_state";
+const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 340;
 
 function TestSidebar({
   defaultOpen = true,
@@ -245,7 +246,7 @@ describe("SidebarProvider persistence", () => {
 
     fireEvent.pointerLeave(hotspot);
     act(() => {
-      vi.advanceTimersByTime(259);
+      vi.advanceTimersByTime(SIDEBAR_IMMERSIVE_HIDE_DELAY_MS - 1);
     });
     expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
 

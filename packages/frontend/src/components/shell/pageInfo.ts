@@ -3,6 +3,7 @@ import { getFrontendSharedProjectPluginUi } from "@/plugins/sharedUiRegistry";
 export interface PageInfo {
   title: string;
   isProjectPage: boolean;
+  usesImmersiveSidebar?: boolean;
   projectSlug?: string;
   isProjectPluginsPage?: boolean;
   isProjectPluginPage?: boolean;
@@ -25,6 +26,7 @@ export function getPageInfo(pathname: string): PageInfo {
     return {
       title: "New project",
       isProjectPage: false,
+      usesImmersiveSidebar: true,
       isScratchWizardPage: true,
     };
   }
@@ -60,6 +62,7 @@ export function getPageInfo(pathname: string): PageInfo {
     return {
       title: "Projects",
       isProjectPage: true,
+      usesImmersiveSidebar: true,
       projectSlug: projectMatch[1],
     };
   }
@@ -82,6 +85,7 @@ export function getPageInfo(pathname: string): PageInfo {
   return {
     title: "Projects",
     isProjectPage: false,
+    usesImmersiveSidebar: false,
     isProjectPluginsPage: false,
     isProjectPluginPage: false,
     isScratchWizardPage: false,

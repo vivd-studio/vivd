@@ -31,7 +31,7 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
-const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 260;
+const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 340;
 const SIDEBAR_IMMERSIVE_WAKE_EDGE_PX = 12;
 
 function isWithinAnySidebarPanel(
@@ -463,7 +463,7 @@ const Sidebar = React.forwardRef<
         <div
           data-sidebar="gap"
           className={cn(
-            "relative bg-transparent transition-[width] duration-200 ease-linear",
+            "relative bg-transparent transition-[width] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
             isImmersiveDesktop
               ? open
                 ? "w-[var(--sidebar-width)]"
@@ -483,7 +483,7 @@ const Sidebar = React.forwardRef<
             "fixed inset-y-0 hidden h-svh md:flex",
             isImmersiveDesktop
               ? [
-                  "z-30 transition-[width,opacity,transform,visibility] duration-360 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  "z-30 transition-[width,opacity,transform,visibility] duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
                   side === "left" ? "left-0" : "right-0",
                   state === "collapsed"
                     ? variant === "floating" || variant === "inset"
@@ -499,7 +499,7 @@ const Sidebar = React.forwardRef<
                   variant === "floating" || variant === "inset" ? "p-2" : "",
                 ]
               : [
-                  "z-10 w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear",
+                  "z-10 w-[var(--sidebar-width)] transition-[left,right,width] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
                   side === "left"
                     ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
                     : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
