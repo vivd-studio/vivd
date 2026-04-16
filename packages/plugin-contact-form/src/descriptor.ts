@@ -1,5 +1,14 @@
-import type { PluginPackageDescriptor } from "@vivd/plugin-sdk";
-import { contactFormCliPluginPackage } from "./cli/plugin";
+import type { PluginPackageInstallDescriptor } from "@vivd/plugin-sdk";
+import { definePluginPackageInstallDescriptor } from "@vivd/plugin-sdk";
+import { contactFormPluginManifest } from "./manifest";
 
-export const contactFormPluginDescriptor: PluginPackageDescriptor<"contact_form"> =
-  contactFormCliPluginPackage;
+export const contactFormPluginDescriptor =
+  definePluginPackageInstallDescriptor({
+    pluginId: contactFormPluginManifest.pluginId,
+    manifest: contactFormPluginManifest,
+    surfaceExports: {
+      backend: "@vivd/plugin-contact-form/backend/plugin",
+      frontend: "@vivd/plugin-contact-form/frontend/plugin",
+      cli: "@vivd/plugin-contact-form/cli/plugin",
+    },
+  } as const satisfies PluginPackageInstallDescriptor<"contact_form">);

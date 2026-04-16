@@ -26,12 +26,38 @@ export interface PluginPackageManifest<
   manifestVersion: 1;
 }
 
+export interface PluginPackageSurfaceExports {
+  backend: string;
+  frontend: string;
+  cli: string;
+}
+
+export interface PluginPackageInstallDescriptor<
+  TPluginId extends string = string,
+> {
+  pluginId: TPluginId;
+  manifest: PluginPackageManifest<TPluginId>;
+  surfaceExports: PluginPackageSurfaceExports;
+}
+
 export type PluginStopFn = () => void;
 
 export function definePluginPackageManifest<
   const T extends PluginPackageManifest,
 >(manifest: T): T {
   return manifest;
+}
+
+export function definePluginPackageInstallDescriptor<
+  const T extends PluginPackageInstallDescriptor,
+>(descriptor: T): T {
+  return descriptor;
+}
+
+export function definePluginPackageInstallDescriptors<
+  const T extends readonly PluginPackageInstallDescriptor[],
+>(descriptors: T): T {
+  return descriptors;
 }
 
 export function definePluginPackageDescriptors<

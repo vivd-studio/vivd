@@ -56,6 +56,14 @@ export default defineConfig({
         find: /^@vivd\/plugin-newsletter\/(.*)$/,
         replacement: path.resolve(__dirname, "../plugin-newsletter/src/$1"),
       },
+      {
+        find: /^@vivd\/plugin-sdk$/,
+        replacement: path.resolve(__dirname, "../plugin-sdk/src/index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-sdk\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-sdk/src/$1"),
+      },
     ],
   },
   test: {
