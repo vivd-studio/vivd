@@ -68,7 +68,7 @@ This is the smallest scope that is still a real booking product rather than a co
 
 Create a new extracted package:
 
-- `packages/plugin-table-booking`
+- `plugins/native/table-booking`
 
 Suggested initial shape:
 

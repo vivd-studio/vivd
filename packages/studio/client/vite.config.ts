@@ -14,27 +14,27 @@ export default defineConfig({
       "@studio/shared": path.resolve(__dirname, "../shared"),
       "@vivd/installed-plugins": path.resolve(
         __dirname,
-        "../../installed-plugins/src",
+        "../../../plugins/installed/src",
       ),
       "@vivd/plugin-sdk": path.resolve(
         __dirname,
-        "../../plugin-sdk/src",
+        "../../../plugins/sdk/src",
       ),
       "@vivd/plugin-analytics": path.resolve(
         __dirname,
-        "../../plugin-analytics/src",
+        "../../../plugins/native/analytics/src",
       ),
       "@vivd/plugin-contact-form": path.resolve(
         __dirname,
-        "../../plugin-contact-form/src",
+        "../../../plugins/native/contact-form/src",
       ),
       "@vivd/plugin-newsletter": path.resolve(
         __dirname,
-        "../../plugin-newsletter/src",
+        "../../../plugins/native/newsletter/src",
       ),
       "@vivd/plugin-table-booking": path.resolve(
         __dirname,
-        "../../plugin-table-booking/src",
+        "../../../plugins/native/table-booking/src",
       ),
     },
   },

@@ -45,6 +45,7 @@ export function listPluginDefinitions(): PluginDefinition[] {
 export function listPluginCatalogEntries(): PluginCatalogEntry[] {
   return listPluginDefinitions().map((plugin) => ({
     pluginId: plugin.pluginId,
+    kind: plugin.kind,
     name: plugin.name,
     description: plugin.description,
     category: plugin.category,
@@ -69,6 +70,7 @@ export function getPluginCatalogEntry(pluginId: PluginId): PluginCatalogEntry {
   const definition = getPluginDefinition(pluginId);
   return {
     pluginId: definition.pluginId,
+    kind: definition.kind,
     name: definition.name,
     description: definition.description,
     category: definition.category,

@@ -37,35 +37,35 @@ export default defineConfig({
       },
       {
         find: /^@vivd\/installed-plugins$/,
-        replacement: path.resolve(__dirname, "../installed-plugins/src/index.ts"),
+        replacement: path.resolve(__dirname, "../../plugins/installed/src/index.ts"),
       },
       {
         find: /^@vivd\/installed-plugins\/(.*)$/,
-        replacement: path.resolve(__dirname, "../installed-plugins/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/installed/src/$1"),
       },
       {
         find: /^@vivd\/plugin-analytics\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-analytics/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/analytics/src/$1"),
       },
       {
         find: /^@vivd\/plugin-contact-form\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-contact-form/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/contact-form/src/$1"),
       },
       {
         find: /^@vivd\/plugin-newsletter\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-newsletter/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/newsletter/src/$1"),
       },
       {
         find: /^@vivd\/plugin-table-booking\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-table-booking/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/table-booking/src/$1"),
       },
       {
         find: /^@vivd\/plugin-sdk$/,
-        replacement: path.resolve(__dirname, "../plugin-sdk/src/index.ts"),
+        replacement: path.resolve(__dirname, "../../plugins/sdk/src/index.ts"),
       },
       {
         find: /^@vivd\/plugin-sdk\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-sdk/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/sdk/src/$1"),
       },
     ],
   },

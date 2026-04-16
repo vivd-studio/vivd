@@ -27,14 +27,14 @@ FROM devbase AS deps
 
 # Install deps for backend (+ shared) and local studio spawning (dev)
 COPY package.json package-lock.json ./
-COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
-COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
+COPY plugins/installed/package.json plugins/installed/package.json
+COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
-COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
-COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
-COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
-COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
+COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
+COPY plugins/native/contact-form/package.json plugins/native/contact-form/package.json
+COPY plugins/native/newsletter/package.json plugins/native/newsletter/package.json
+COPY plugins/native/table-booking/package.json plugins/native/table-booking/package.json
 # Keep workspace metadata available for npm workspaces resolution
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
@@ -48,14 +48,14 @@ RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vi
 
 # Stage 2: Development (hot reload)
 FROM deps AS dev
-COPY packages/installed-plugins ./packages/installed-plugins
-COPY packages/plugin-sdk ./packages/plugin-sdk
+COPY plugins/installed ./plugins/installed
+COPY plugins/sdk ./plugins/sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
-COPY packages/plugin-analytics ./packages/plugin-analytics
-COPY packages/plugin-contact-form ./packages/plugin-contact-form
-COPY packages/plugin-newsletter ./packages/plugin-newsletter
-COPY packages/plugin-table-booking ./packages/plugin-table-booking
+COPY plugins/native/analytics ./plugins/native/analytics
+COPY plugins/native/contact-form ./plugins/native/contact-form
+COPY plugins/native/newsletter ./plugins/native/newsletter
+COPY plugins/native/table-booking ./plugins/native/table-booking
 COPY packages/cli ./packages/cli
 COPY packages/theme ./packages/theme
 COPY packages/studio ./packages/studio
@@ -74,14 +74,14 @@ CMD ["npm", "run", "dev"]
 
 # Stage 3: Build (compile TypeScript)
 FROM deps AS builder
-COPY packages/installed-plugins ./packages/installed-plugins
-COPY packages/plugin-sdk ./packages/plugin-sdk
+COPY plugins/installed ./plugins/installed
+COPY plugins/sdk ./plugins/sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
-COPY packages/plugin-analytics ./packages/plugin-analytics
-COPY packages/plugin-contact-form ./packages/plugin-contact-form
-COPY packages/plugin-newsletter ./packages/plugin-newsletter
-COPY packages/plugin-table-booking ./packages/plugin-table-booking
+COPY plugins/native/analytics ./plugins/native/analytics
+COPY plugins/native/contact-form ./plugins/native/contact-form
+COPY plugins/native/newsletter ./plugins/native/newsletter
+COPY plugins/native/table-booking ./plugins/native/table-booking
 
 RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
@@ -103,14 +103,14 @@ LABEL org.opencontainers.image.revision=$VIVD_IMAGE_REVISION
 
 # Install production deps for the backend workspace (links shared as a workspace dep)
 COPY package.json package-lock.json ./
-COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
-COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
+COPY plugins/installed/package.json plugins/installed/package.json
+COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
-COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
-COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
-COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
-COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
+COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
+COPY plugins/native/contact-form/package.json plugins/native/contact-form/package.json
+COPY plugins/native/newsletter/package.json plugins/native/newsletter/package.json
+COPY plugins/native/table-booking/package.json plugins/native/table-booking/package.json
 COPY packages/studio/package.json packages/studio/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
@@ -121,7 +121,7 @@ RUN npm ci -w @vivd/plugin-sdk -w @vivd/installed-plugins -w @vivd/plugin-analyt
 
 # Copy built outputs
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
-COPY --from=builder /app/packages/plugin-sdk/dist ./packages/plugin-sdk/dist
+COPY --from=builder /app/plugins/sdk/dist ./plugins/sdk/dist
 COPY --from=builder /app/packages/backend/drizzle ./packages/backend/drizzle
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 

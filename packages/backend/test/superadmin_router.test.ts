@@ -1195,6 +1195,10 @@ describe("superadmin router", () => {
       .mockResolvedValueOnce({
         rows: [],
         total: 0,
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        total: 0,
       });
     const caller = superAdminRouter.createCaller(makeContext());
 
@@ -1203,10 +1207,11 @@ describe("superadmin router", () => {
       offset: 0,
     });
 
-    expect(listProjectAccessMock).toHaveBeenCalledTimes(3);
+    expect(listProjectAccessMock).toHaveBeenCalledTimes(4);
     expect(result.pluginCatalog.map((plugin) => plugin.pluginId)).toEqual([
       "contact_form",
       "analytics",
+      "table_booking",
       "newsletter",
     ]);
     expect(result.total).toBe(1);

@@ -67,7 +67,7 @@ That is a core part of the product: Vivd ships platform capabilities the agent c
 - `packages/shared` holds shared config, contracts, and types used across services.
 - `packages/theme` contains shared design tokens and theme styles.
 - `packages/builder` is the dedicated artifact-builder runtime that is currently still dark-launched.
-- `packages/plugin-*` contains extracted first-party plugin packages such as Contact Form and Analytics.
+- `plugins/` groups plugin-owned workspaces, including `plugins/sdk`, `plugins/installed`, and `plugins/native/*`.
 - `plans/` holds internal notes, planning, and architecture material.
 
 ## Development

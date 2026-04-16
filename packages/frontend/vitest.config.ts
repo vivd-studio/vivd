@@ -4,11 +4,11 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 const sharedSrc = path.resolve(__dirname, "../shared/src");
-const pluginSdkSrc = path.resolve(__dirname, "../plugin-sdk/src");
-const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
-const pluginContactFormSrc = path.resolve(__dirname, "../plugin-contact-form/src");
-const pluginNewsletterSrc = path.resolve(__dirname, "../plugin-newsletter/src");
-const pluginTableBookingSrc = path.resolve(__dirname, "../plugin-table-booking/src");
+const pluginSdkSrc = path.resolve(__dirname, "../../plugins/sdk/src");
+const pluginAnalyticsSrc = path.resolve(__dirname, "../../plugins/native/analytics/src");
+const pluginContactFormSrc = path.resolve(__dirname, "../../plugins/native/contact-form/src");
+const pluginNewsletterSrc = path.resolve(__dirname, "../../plugins/native/newsletter/src");
+const pluginTableBookingSrc = path.resolve(__dirname, "../../plugins/native/table-booking/src");
 
 export default defineConfig({
   plugins: [react()],

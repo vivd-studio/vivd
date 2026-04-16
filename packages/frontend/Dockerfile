@@ -4,14 +4,14 @@ WORKDIR /app
 
 # Install deps for the frontend + backend types + shared/builder workspace packages via the root lockfile
 COPY package.json package-lock.json ./
-COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
-COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
+COPY plugins/installed/package.json plugins/installed/package.json
+COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
-COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
-COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
-COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
-COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
+COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
+COPY plugins/native/contact-form/package.json plugins/native/contact-form/package.json
+COPY plugins/native/newsletter/package.json plugins/native/newsletter/package.json
+COPY plugins/native/table-booking/package.json plugins/native/table-booking/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/studio/package.json packages/studio/package.json
@@ -22,14 +22,14 @@ RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vi
 
 # Stage 2: Development
 FROM deps AS dev
-COPY packages/installed-plugins ./packages/installed-plugins
-COPY packages/plugin-sdk ./packages/plugin-sdk
+COPY plugins/installed ./plugins/installed
+COPY plugins/sdk ./plugins/sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
-COPY packages/plugin-analytics ./packages/plugin-analytics
-COPY packages/plugin-contact-form ./packages/plugin-contact-form
-COPY packages/plugin-newsletter ./packages/plugin-newsletter
-COPY packages/plugin-table-booking ./packages/plugin-table-booking
+COPY plugins/native/analytics ./plugins/native/analytics
+COPY plugins/native/contact-form ./plugins/native/contact-form
+COPY plugins/native/newsletter ./plugins/native/newsletter
+COPY plugins/native/table-booking ./plugins/native/table-booking
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
@@ -43,14 +43,14 @@ CMD ["npm", "run", "dev", "--", "--host"]
 
 # Stage 3: Build
 FROM deps AS build
-COPY packages/installed-plugins ./packages/installed-plugins
-COPY packages/plugin-sdk ./packages/plugin-sdk
+COPY plugins/installed ./plugins/installed
+COPY plugins/sdk ./plugins/sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
-COPY packages/plugin-analytics ./packages/plugin-analytics
-COPY packages/plugin-contact-form ./packages/plugin-contact-form
-COPY packages/plugin-newsletter ./packages/plugin-newsletter
-COPY packages/plugin-table-booking ./packages/plugin-table-booking
+COPY plugins/native/analytics ./plugins/native/analytics
+COPY plugins/native/contact-form ./plugins/native/contact-form
+COPY plugins/native/newsletter ./plugins/native/newsletter
+COPY plugins/native/table-booking ./plugins/native/table-booking
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 

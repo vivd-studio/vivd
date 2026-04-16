@@ -6,11 +6,11 @@
     "paths": {
       "@studio/*": ["./server/*"],
       "@studio/shared/*": ["./shared/*"],
-      "@vivd/installed-plugins": ["../installed-plugins/src/index.ts"],
-      "@vivd/installed-plugins/*": ["../installed-plugins/src/*"],
-      "@vivd/plugin-table-booking": ["../plugin-table-booking/src/index.ts"],
-      "@vivd/plugin-table-booking/*": ["../plugin-table-booking/src/*"],
-      "@vivd/plugin-sdk": ["../plugin-sdk/src/index.ts"],
+      "@vivd/installed-plugins": ["../../plugins/installed/src/index.ts"],
+      "@vivd/installed-plugins/*": ["../../plugins/installed/src/*"],
+      "@vivd/plugin-table-booking": ["../../plugins/native/table-booking/src/index.ts"],
+      "@vivd/plugin-table-booking/*": ["../../plugins/native/table-booking/src/*"],
+      "@vivd/plugin-sdk": ["../../plugins/sdk/src/index.ts"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }

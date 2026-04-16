@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../../../packages/frontend/src/*"],
+      "@vivd/plugin-analytics": ["../analytics/src/index.ts"],
+      "@vivd/plugin-analytics/*": ["../analytics/src/*"],
+      "@vivd/plugin-contact-form": ["./src/index.ts"],
+      "@vivd/plugin-contact-form/*": ["./src/*"],
+      "@vivd/plugin-sdk": ["../../sdk/src/index.ts"],
+      "@vivd/shared": ["../../../packages/shared/src/index.ts"],
+      "@vivd/shared/*": ["../../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src"]
+}

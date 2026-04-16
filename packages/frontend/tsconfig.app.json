@@ -42,22 +42,22 @@
         "../backend/*"
       ],
       "@vivd/plugin-analytics/*": [
-        "../plugin-analytics/src/*"
+        "../../plugins/native/analytics/src/*"
       ],
       "@vivd/plugin-contact-form/*": [
-        "../plugin-contact-form/src/*"
+        "../../plugins/native/contact-form/src/*"
       ],
       "@vivd/plugin-newsletter/*": [
-        "../plugin-newsletter/src/*"
+        "../../plugins/native/newsletter/src/*"
       ],
       "@vivd/plugin-table-booking/*": [
-        "../plugin-table-booking/src/*"
+        "../../plugins/native/table-booking/src/*"
       ],
       "@vivd/plugin-sdk": [
-        "../plugin-sdk/src/index.ts"
+        "../../plugins/sdk/src/index.ts"
       ],
       "@vivd/plugin-sdk/*": [
-        "../plugin-sdk/src/*"
+        "../../plugins/sdk/src/*"
       ],
       "@vivd/shared": [
         "../shared/src/index.ts"

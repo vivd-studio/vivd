@@ -11,10 +11,10 @@
     "rootDir": "./src",
     "paths": {
       "@vivd/backend/*": ["./*"],
-      "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
-      "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
-      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
-      "@vivd/plugin-table-booking/*": ["../plugin-table-booking/src/*"]
+      "@vivd/plugin-analytics/*": ["../../plugins/native/analytics/src/*"],
+      "@vivd/plugin-contact-form/*": ["../../plugins/native/contact-form/src/*"],
+      "@vivd/plugin-newsletter/*": ["../../plugins/native/newsletter/src/*"],
+      "@vivd/plugin-table-booking/*": ["../../plugins/native/table-booking/src/*"]
     }
   },
   "include": ["src/**/*"],

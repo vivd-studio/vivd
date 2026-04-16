@@ -16,11 +16,12 @@ Vivd uses npm workspaces with a single root `package.json` and root `package-loc
 - `packages/frontend`: control-plane React UI.
 - `packages/studio`: isolated Studio runtime (server + client) for workspace edits and agent operations.
 - `packages/shared`: shared contracts, types, and cross-runtime helpers.
-- `packages/installed-plugins`: instance-level installed plugin registry consumed by backend/frontend/CLI/Studio hosts.
+- `plugins/sdk`: plugin contract and manifest SDK boundary.
+- `plugins/installed`: instance-level installed plugin registry consumed by backend/frontend/CLI/Studio hosts.
+- `plugins/native/*`: extracted first-party plugin packages.
 - `packages/theme`: shared CSS/theme tokens.
 - `packages/docs`: public docs site.
 - `packages/scraper`: dedicated scraping/screenshot service.
-- `packages/plugin-*`: extracted first-party plugin packages.
 - If a change affects user-facing behavior, update `packages/docs` or note the right docs section.
 
 ## Architecture Guardrails

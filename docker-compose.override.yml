@@ -44,32 +44,32 @@ services:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-sdk
-          target: /app/packages/plugin-sdk
+          path: ./plugins/sdk
+          target: /app/plugins/sdk
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/installed-plugins
-          target: /app/packages/installed-plugins
+          path: ./plugins/installed
+          target: /app/plugins/installed
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-analytics
-          target: /app/packages/plugin-analytics
+          path: ./plugins/native/analytics
+          target: /app/plugins/native/analytics
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-contact-form
-          target: /app/packages/plugin-contact-form
+          path: ./plugins/native/contact-form
+          target: /app/plugins/native/contact-form
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-newsletter
-          target: /app/packages/plugin-newsletter
+          path: ./plugins/native/newsletter
+          target: /app/plugins/native/newsletter
           ignore:
             - node_modules/
             - dist/
@@ -79,17 +79,17 @@ services:
           ignore:
             - node_modules/
         - action: rebuild
-          path: ./packages/installed-plugins/package.json
+          path: ./plugins/installed/package.json
         - action: rebuild
-          path: ./packages/plugin-sdk/package.json
+          path: ./plugins/sdk/package.json
         - action: rebuild
           path: ./packages/backend/package.json
         - action: rebuild
-          path: ./packages/plugin-analytics/package.json
+          path: ./plugins/native/analytics/package.json
         - action: rebuild
-          path: ./packages/plugin-contact-form/package.json
+          path: ./plugins/native/contact-form/package.json
         - action: rebuild
-          path: ./packages/plugin-newsletter/package.json
+          path: ./plugins/native/newsletter/package.json
         - action: rebuild
           path: ./packages/cli/package.json
         - action: rebuild
@@ -126,32 +126,32 @@ services:
           ignore:
             - node_modules/
         - action: sync
-          path: ./packages/installed-plugins
-          target: /app/packages/installed-plugins
+          path: ./plugins/installed
+          target: /app/plugins/installed
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-sdk
-          target: /app/packages/plugin-sdk
+          path: ./plugins/sdk
+          target: /app/plugins/sdk
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-analytics
-          target: /app/packages/plugin-analytics
+          path: ./plugins/native/analytics
+          target: /app/plugins/native/analytics
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-contact-form
-          target: /app/packages/plugin-contact-form
+          path: ./plugins/native/contact-form
+          target: /app/plugins/native/contact-form
           ignore:
             - node_modules/
             - dist/
         - action: sync
-          path: ./packages/plugin-newsletter
-          target: /app/packages/plugin-newsletter
+          path: ./plugins/native/newsletter
+          target: /app/plugins/native/newsletter
           ignore:
             - node_modules/
             - dist/
@@ -159,15 +159,15 @@ services:
           path: ./packages/backend/src
           target: /app/packages/backend/src
         - action: rebuild
-          path: ./packages/installed-plugins/package.json
+          path: ./plugins/installed/package.json
         - action: rebuild
-          path: ./packages/plugin-sdk/package.json
+          path: ./plugins/sdk/package.json
         - action: rebuild
-          path: ./packages/plugin-analytics/package.json
+          path: ./plugins/native/analytics/package.json
         - action: rebuild
-          path: ./packages/plugin-contact-form/package.json
+          path: ./plugins/native/contact-form/package.json
         - action: rebuild
-          path: ./packages/plugin-newsletter/package.json
+          path: ./plugins/native/newsletter/package.json
         - action: rebuild
           path: ./packages/frontend/package.json
         - action: rebuild

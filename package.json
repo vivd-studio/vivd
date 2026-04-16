@@ -3,7 +3,9 @@
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "plugins/*",
+    "plugins/native/*"
   ],
   "scripts": {
     "publish:tag": "./scripts/publish.sh",

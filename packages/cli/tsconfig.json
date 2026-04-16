@@ -11,11 +11,11 @@
     "outDir": "dist",
     "types": ["node"],
     "paths": {
-      "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
-      "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
-      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
-      "@vivd/plugin-table-booking/*": ["../plugin-table-booking/src/*"],
-      "@vivd/plugin-sdk": ["../plugin-sdk/src/index.ts"],
+      "@vivd/plugin-analytics/*": ["../../plugins/native/analytics/src/*"],
+      "@vivd/plugin-contact-form/*": ["../../plugins/native/contact-form/src/*"],
+      "@vivd/plugin-newsletter/*": ["../../plugins/native/newsletter/src/*"],
+      "@vivd/plugin-table-booking/*": ["../../plugins/native/table-booking/src/*"],
+      "@vivd/plugin-sdk": ["../../plugins/sdk/src/index.ts"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }
@@ -23,9 +23,9 @@
   "include": [
     "src/**/*.ts",
     "../shared/src/**/*.ts",
-    "../plugin-analytics/src/cli/**/*.ts",
-    "../plugin-contact-form/src/cli/**/*.ts",
-    "../plugin-newsletter/src/cli/**/*.ts",
-    "../plugin-table-booking/src/cli/**/*.ts"
+    "../../plugins/native/analytics/src/cli/**/*.ts",
+    "../../plugins/native/contact-form/src/cli/**/*.ts",
+    "../../plugins/native/newsletter/src/cli/**/*.ts",
+    "../../plugins/native/table-booking/src/cli/**/*.ts"
   ]
 }

@@ -7,14 +7,14 @@ RUN apt-get update \
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
+COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/builder/package.json packages/builder/package.json
 RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/builder --include-workspace-root=false \
   && npm cache clean --force
 
 FROM deps AS build
-COPY packages/plugin-sdk ./packages/plugin-sdk
+COPY plugins/sdk ./plugins/sdk
 COPY packages/shared ./packages/shared
 COPY packages/builder ./packages/builder
 RUN npm run build -w @vivd/plugin-sdk \
@@ -23,13 +23,13 @@ RUN npm run build -w @vivd/plugin-sdk \
 
 FROM base AS prod
 COPY package.json package-lock.json ./
-COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
+COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/builder/package.json packages/builder/package.json
 RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/builder --omit=dev --include-workspace-root=false \
   && npm cache clean --force
 
-COPY --from=build /app/packages/plugin-sdk/dist ./packages/plugin-sdk/dist
+COPY --from=build /app/plugins/sdk/dist ./plugins/sdk/dist
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/builder/dist ./packages/builder/dist
 WORKDIR /app/packages/builder

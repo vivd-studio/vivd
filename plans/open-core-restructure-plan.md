@@ -15,9 +15,7 @@ This document turns the current self-host direction into a concrete repo and arc
 It builds on:
 
 - [plans/self-hosting-profile-split-plan.md](./self-hosting-profile-split-plan.md)
-- [plans/plugin-system-design.md](./plugin-system-design.md)
-- [plans/plugin-registry-refactor-plan.md](./plugin-registry-refactor-plan.md)
-- [plans/plugin-package-contribution-plan.md](./plugin-package-contribution-plan.md)
+- [plans/plugin-sdk-v2-plan.md](./plugin-sdk-v2-plan.md)
 
 ## Recommendation
 
@@ -108,7 +106,7 @@ Recommended shape:
 
 - `core` owns the plugin host/runtime and the extension points
 - `plugin-sdk` owns the public authoring contract
-- first-party plugins remain separate `packages/plugin-*`
+- first-party plugins remain separate `plugins/native/*`
 - core may ship with an official open plugin bundle, but plugin implementations should not define the core boundary
 
 That gives a cleaner result than baking Contact Form, Analytics, Newsletter, and future plugins directly into a monolithic core package.
@@ -166,9 +164,9 @@ Keep the monorepo.
 Recommended near-term shape:
 
 - keep `packages/backend`, `packages/frontend`, `packages/studio`, `packages/cli`, `packages/shared`, `packages/theme`, and the needed self-host runtimes as the core package set
-- add `packages/plugin-sdk` for stable public plugin APIs
-- keep `packages/plugin-*` as separate plugin packages
-- treat `packages/installed-plugins` as the current official bundle/composition package, and rename it later only when multiple bundles actually exist
+- add `plugins/sdk` for stable public plugin APIs
+- keep `plugins/native/*` as separate plugin packages
+- treat `plugins/installed` as the current official bundle/composition package, and rename it later only when multiple bundles actually exist
 - add platform packages only when the extracted surface is real, for example `packages/platform-backend`, `packages/platform-frontend`, and `packages/platform-shared`
 - add a dedicated self-host distribution package or app for install assets when ready, instead of keeping distribution concerns implicit inside docs
 
@@ -188,7 +186,7 @@ Start with the seams that already exist.
 
 ### 1. Plugin SDK extraction from `@vivd/shared`
 
-Move the stable plugin authoring surface out of `packages/shared` into `packages/plugin-sdk`.
+Move the stable plugin authoring surface out of `packages/shared` into `plugins/sdk`.
 
 Likely first exports:
 
@@ -200,10 +198,10 @@ Likely first exports:
 Migration rule:
 
 - `packages/shared` remains internal/shared repo plumbing
-- `packages/plugin-sdk` becomes the documented public plugin surface
+- `plugins/sdk` becomes the documented public plugin surface
 - keep temporary compatibility re-exports for one migration window only
 
-### 2. Bundle composition from `packages/installed-plugins`
+### 2. Bundle composition from `plugins/installed`
 
 The current `installed-plugins` package is already close to an official plugin bundle.
 
@@ -345,7 +343,7 @@ External-embed provider packs are the best candidate for early GitHub-based dist
 - define which current packages are part of the open core package set
 - document which current files are clearly platform-only
 
-### Phase 1: Introduce `packages/plugin-sdk`
+### Phase 1: Introduce `plugins/sdk`
 
 - create the package
 - move public plugin contracts out of `packages/shared`

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../../packages/frontend/src/*"],
+      "@vivd/installed-plugins": ["./src/index.ts"],
+      "@vivd/installed-plugins/*": ["./src/*"],
+      "@vivd/plugin-analytics": ["../native/analytics/src/index.ts"],
+      "@vivd/plugin-analytics/*": ["../native/analytics/src/*"],
+      "@vivd/plugin-contact-form": ["../native/contact-form/src/index.ts"],
+      "@vivd/plugin-contact-form/*": ["../native/contact-form/src/*"],
+      "@vivd/plugin-newsletter": ["../native/newsletter/src/index.ts"],
+      "@vivd/plugin-newsletter/*": ["../native/newsletter/src/*"],
+      "@vivd/plugin-table-booking": ["../native/table-booking/src/index.ts"],
+      "@vivd/plugin-table-booking/*": ["../native/table-booking/src/*"],
+      "@vivd/plugin-sdk": ["../sdk/src/index.ts"],
+      "@vivd/shared": ["../../packages/shared/src/index.ts"],
+      "@vivd/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src"]
+}

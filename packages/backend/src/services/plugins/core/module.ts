@@ -32,6 +32,7 @@ export function toPluginCatalogEntry<TPluginId extends string>(
 ): PluginCatalogEntry<TPluginId> {
   return {
     pluginId: definition.pluginId,
+    kind: definition.kind,
     name: definition.name,
     description: definition.description,
     category: definition.category,

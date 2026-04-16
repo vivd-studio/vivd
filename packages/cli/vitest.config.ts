@@ -2,10 +2,10 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 const sharedSrc = path.resolve(__dirname, "../shared/src");
-const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
-const pluginContactFormSrc = path.resolve(__dirname, "../plugin-contact-form/src");
-const pluginNewsletterSrc = path.resolve(__dirname, "../plugin-newsletter/src");
-const pluginTableBookingSrc = path.resolve(__dirname, "../plugin-table-booking/src");
+const pluginAnalyticsSrc = path.resolve(__dirname, "../../plugins/native/analytics/src");
+const pluginContactFormSrc = path.resolve(__dirname, "../../plugins/native/contact-form/src");
+const pluginNewsletterSrc = path.resolve(__dirname, "../../plugins/native/newsletter/src");
+const pluginTableBookingSrc = path.resolve(__dirname, "../../plugins/native/table-booking/src");
 
 export default defineConfig({
   resolve: {
@@ -16,7 +16,7 @@ export default defineConfig({
       },
       {
         find: /^@vivd\/plugin-analytics\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-analytics/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/analytics/src/$1"),
       },
       {
         find: /^@vivd\/plugin-contact-form$/,
@@ -24,7 +24,7 @@ export default defineConfig({
       },
       {
         find: /^@vivd\/plugin-contact-form\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-contact-form/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/contact-form/src/$1"),
       },
       {
         find: /^@vivd\/plugin-newsletter$/,
@@ -32,7 +32,7 @@ export default defineConfig({
       },
       {
         find: /^@vivd\/plugin-newsletter\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-newsletter/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/newsletter/src/$1"),
       },
       {
         find: /^@vivd\/plugin-table-booking$/,
@@ -40,7 +40,7 @@ export default defineConfig({
       },
       {
         find: /^@vivd\/plugin-table-booking\/(.*)$/,
-        replacement: path.resolve(__dirname, "../plugin-table-booking/src/$1"),
+        replacement: path.resolve(__dirname, "../../plugins/native/table-booking/src/$1"),
       },
       {
         find: /^@vivd\/shared$/,

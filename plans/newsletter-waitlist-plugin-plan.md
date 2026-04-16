@@ -7,7 +7,7 @@ Last updated: 2026-04-16
 
 The initial shipped scope matches the core audience-capture plan:
 
-- extracted `packages/plugin-newsletter` package
+- extracted `plugins/native/newsletter` package
 - public subscribe/confirm/unsubscribe endpoints
 - double opt-in confirmation and one-click unsubscribe
 - project operator UI for list/search/export and small manual actions
@@ -91,7 +91,7 @@ If Vivd later needs actual email sending, that should be a second phase on top o
 
 Create a new extracted package:
 
-- `packages/plugin-newsletter`
+- `plugins/native/newsletter`
 
 Initial package shape should mirror the extracted plugins already in the repo:
 
@@ -457,7 +457,7 @@ It should not introduce a different runtime contract.
 ### Slice 1: Foundation
 
 1. Add DB tables and plugin-id migration updates.
-2. Scaffold `packages/plugin-newsletter`.
+2. Scaffold `plugins/native/newsletter`.
 3. Implement manifest, definition, config, backend service, snippets, and public routes.
 4. Wire backend/frontend/CLI/studio registries and package dependencies.
 5. Add superadmin entitlement support and monthly usage counting.
