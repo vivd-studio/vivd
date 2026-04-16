@@ -33,9 +33,15 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+import {
+  getPluginAccessRequestLabel,
+  getProjectPluginPresentation,
+  isPluginAccessRequestPending,
+} from "@/plugins/presentation";
 import { cn } from "@/lib/utils";
 import {
   tableBookingPluginConfigSchema,
@@ -826,9 +832,12 @@ export default function TableBookingProjectPage({
   projectSlug,
   isEmbedded = false,
 }: TableBookingProjectPageProps) {
+  const { config } = useAppConfig();
   const utils = trpc.useUtils();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const canEnablePlugin = session?.user?.role === "super_admin";
+  const canRequestPluginAccess =
+    !isSessionPending && !canEnablePlugin && Boolean(config.supportEmail);
   const typedPluginId =
     "table_booking" as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
 
@@ -1081,6 +1090,20 @@ export default function TableBookingProjectPage({
   const pluginEnabled = !!pluginInfo?.enabled;
   const needsEnable =
     (pluginInfo?.entitled ?? false) && !pluginEnabled && !pluginInfo?.instanceId;
+  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
+  const PluginIcon = pluginPresentation.icon;
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await pluginInfoQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", {
+        description: error.message,
+      });
+    },
+  });
+  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const isRefreshing =
     pluginInfoQuery.isFetching ||
     summaryQuery.isFetching ||
@@ -1394,6 +1417,9 @@ export default function TableBookingProjectPage({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                  <PluginIcon className="h-4 w-4" />
+                </span>
                 <h2 className="text-lg font-semibold">Project: {projectTitle}</h2>
                 <Badge variant={pluginEnabled ? "success" : "outline"}>
                   {pluginEnabled
@@ -1407,7 +1433,9 @@ export default function TableBookingProjectPage({
                 {pluginEnabled
                   ? "Use the calendar to see service windows, date overrides, and live bookings in one place."
                   : pluginInfo?.entitled
-                    ? canEnablePlugin
+                    ? isSessionPending
+                      ? "Table Booking is available for this project, but it still needs to be enabled before guests can book."
+                      : canEnablePlugin
                       ? "Table Booking is available for this project, but it still needs to be enabled before guests can book."
                       : "Table Booking is available for this project, but a super-admin still needs to enable it."
                     : "Table Booking access is managed from the admin plugin settings."}
@@ -1431,6 +1459,26 @@ export default function TableBookingProjectPage({
                   </>
                 ) : (
                   "Enable for this project"
+                )}
+              </Button>
+            ) : !pluginEnabled && canRequestPluginAccess ? (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  requestAccessMutation.mutate({
+                    slug: projectSlug,
+                    pluginId: typedPluginId,
+                  })
+                }
+                disabled={isRequestPending || requestAccessMutation.isPending}
+              >
+                {requestAccessMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  getPluginAccessRequestLabel(pluginInfo?.accessRequest)
                 )}
               </Button>
             ) : null}

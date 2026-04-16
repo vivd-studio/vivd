@@ -19,7 +19,7 @@ describe("PermissionDock", () => {
       />,
     );
 
-    expect(screen.getByText("Publish site")).toBeInTheDocument();
+    expect(screen.getByText("Publish this version to")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "example.com" }),
     ).toHaveAttribute("href", "https://example.com");

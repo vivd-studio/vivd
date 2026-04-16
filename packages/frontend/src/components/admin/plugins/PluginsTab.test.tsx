@@ -192,16 +192,19 @@ describe("PluginsTab", () => {
 
     expect(
       screen.getByText(
-        "One row per project. Manage all plugin entitlements for that project in one place, including row-level actions to set all plugins at once.",
+        "Scan projects from the list, then inspect one project at a time to manage plugin access, rollout state, and plugin-specific rules in a focused modal.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Projects")).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Set all plugins" }),
+      screen.getByRole("button", { name: "Bulk actions for site-1" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Contact Form")).toBeInTheDocument();
-    expect(screen.getByText("Analytics")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enable all plugins" })).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(
+      screen.getByText(
+        "Full-width compact rows. Click any row to inspect and edit.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Contact Form")).not.toBeInTheDocument();
   });
 
   it("queries grouped plugin access once", () => {
@@ -214,7 +217,7 @@ describe("PluginsTab", () => {
     });
   });
 
-  it("can set all plugins on a project row", async () => {
+  it("opens project detail in a modal and can set all plugins", async () => {
     listAccessUseQueryMock.mockReturnValue({
       data: {
         pluginCatalog,
@@ -239,7 +242,12 @@ describe("PluginsTab", () => {
 
     render(<PluginsTab />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Enable all plugins" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /site-1/i })[0]!);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Contact Form")).toBeInTheDocument();
+    expect(screen.getByText("Analytics")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable all" }));
 
     await waitFor(() => {
       expect(upsertEntitlementMutateAsyncMock).toHaveBeenCalledTimes(2);
@@ -301,7 +309,9 @@ describe("PluginsTab", () => {
     render(<PluginsTab />);
 
     expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
-    expect(screen.getByText("Showing 1-100 of 101 projects")).toBeInTheDocument();
+    expect(
+      screen.getByText("Showing 1-100 of 101 projects"),
+    ).toBeInTheDocument();
     expect(screen.getByText("site-001")).toBeInTheDocument();
     expect(screen.queryByText("site-101")).not.toBeInTheDocument();
 
@@ -310,7 +320,9 @@ describe("PluginsTab", () => {
     await waitFor(() => {
       expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
     });
-    expect(screen.getByText("Showing 101-101 of 101 projects")).toBeInTheDocument();
+    expect(
+      screen.getByText("Showing 101-101 of 101 projects"),
+    ).toBeInTheDocument();
     expect(screen.getByText("site-101")).toBeInTheDocument();
     expect(screen.queryByText("site-001")).not.toBeInTheDocument();
   });

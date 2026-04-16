@@ -60,6 +60,8 @@ export interface AppConfig {
   activeOrganizationTenantHost: string | null;
   /** Public docs base URL override for installs that do not host docs locally. */
   publicDocsBaseUrl: string | null;
+  /** Support contact email for lightweight request-access flows. */
+  supportEmail: string | null;
 }
 
 interface AppConfigContextValue {
@@ -100,6 +102,7 @@ const defaultConfig: AppConfig = {
   controlPlaneHost: null,
   activeOrganizationTenantHost: null,
   publicDocsBaseUrl: null,
+  supportEmail: null,
 };
 
 const AppConfigContext = createContext<AppConfigContextValue>({

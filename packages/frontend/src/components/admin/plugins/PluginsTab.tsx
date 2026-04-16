@@ -1,5 +1,5 @@
 import { type ChangeEvent, useMemo, useState } from "react";
-import { Plug, RefreshCcw } from "lucide-react";
+import { MoreHorizontal, Plug, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
@@ -16,6 +16,20 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,12 +38,23 @@ import {
 } from "@/components/ui/select";
 
 type AccessStateFilter = "all" | "enabled" | "disabled" | "suspended";
-type ProjectAccessRow = RouterOutputs["superadmin"]["pluginsListAccess"]["rows"][number];
+type ProjectAccessRow =
+  RouterOutputs["superadmin"]["pluginsListAccess"]["rows"][number];
 type PluginAccessRow = ProjectAccessRow["plugins"][number];
 type PluginCatalogEntry =
   RouterOutputs["superadmin"]["getInstanceSettings"]["pluginCatalog"][number];
-type UpsertEntitlementInput = RouterInputs["superadmin"]["pluginsUpsertEntitlement"];
+type UpsertEntitlementInput =
+  RouterInputs["superadmin"]["pluginsUpsertEntitlement"];
 type PluginState = UpsertEntitlementInput["state"];
+type ProjectAccessSummary = {
+  enabled: number;
+  disabled: number;
+  suspended: number;
+  projectScoped: number;
+  organizationScoped: number;
+  limited: number;
+  turnstile: number;
+};
 
 const PROJECT_PAGE_SIZE = 100;
 
@@ -52,6 +77,91 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+function projectRowKey(
+  project: Pick<ProjectAccessRow, "organizationId" | "projectSlug">,
+): string {
+  return `${project.organizationId}:${project.projectSlug}`;
+}
+
+function summarizeProjectAccess(
+  project: ProjectAccessRow,
+): ProjectAccessSummary {
+  return project.plugins.reduce<ProjectAccessSummary>(
+    (summary, plugin) => {
+      if (plugin.state === "enabled") summary.enabled += 1;
+      if (plugin.state === "disabled") summary.disabled += 1;
+      if (plugin.state === "suspended") summary.suspended += 1;
+      if (plugin.effectiveScope === "project") summary.projectScoped += 1;
+      if (plugin.effectiveScope === "organization")
+        summary.organizationScoped += 1;
+      if (plugin.monthlyEventLimit != null) summary.limited += 1;
+      if (plugin.turnstileEnabled) summary.turnstile += 1;
+      return summary;
+    },
+    {
+      enabled: 0,
+      disabled: 0,
+      suspended: 0,
+      projectScoped: 0,
+      organizationScoped: 0,
+      limited: 0,
+      turnstile: 0,
+    },
+  );
+}
+
+function formatProjectMix(summary: ProjectAccessSummary): string {
+  return [
+    `${summary.enabled} enabled`,
+    `${summary.disabled} disabled`,
+    summary.suspended > 0 ? `${summary.suspended} suspended` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function formatProjectRules(summary: ProjectAccessSummary): string {
+  const parts = [
+    summary.projectScoped > 0
+      ? `${summary.projectScoped} project override${summary.projectScoped === 1 ? "" : "s"}`
+      : null,
+    summary.organizationScoped > 0
+      ? `${summary.organizationScoped} org default${summary.organizationScoped === 1 ? "" : "s"}`
+      : null,
+    summary.limited > 0
+      ? `${summary.limited} limit${summary.limited === 1 ? "" : "s"}`
+      : null,
+    summary.turnstile > 0 ? `${summary.turnstile} Turnstile` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : "No custom rules";
+}
+
+function formatScopeLabel(scope: PluginAccessRow["effectiveScope"]): string {
+  if (scope === "project") return "Project override";
+  if (scope === "organization") return "Organization default";
+  if (scope === "instance") return "Instance default";
+  return "Not configured";
+}
+
+function formatInstanceStatus(
+  status: PluginAccessRow["projectPluginStatus"],
+): string {
+  if (status === "enabled") return "Instance enabled";
+  if (status === "disabled") return "Instance disabled";
+  return "No plugin instance";
+}
+
+function confirmBulkStateChange(
+  project: ProjectAccessRow,
+  state: PluginState,
+): boolean {
+  if (state === "enabled") return true;
+  return window.confirm(
+    `Set all plugins on ${project.projectSlug} to ${state}? This updates ${project.plugins.length} plugin entitlement${project.plugins.length === 1 ? "" : "s"}.`,
+  );
+}
+
 export function PluginsTab() {
   const { config } = useAppConfig();
   const isExperimentalSolo = isExperimentalSoloInstall(config);
@@ -72,9 +182,9 @@ export function PluginsTab() {
       <CardContent>
         {isExperimentalSolo ? (
           <div className="mb-4 rounded-lg border bg-muted/15 p-4 text-sm text-muted-foreground">
-            Experimental self-host compatibility is enabled as an internal path. Plugin
-            defaults here should be treated as compatibility behavior, not the primary product
-            model.
+            Experimental self-host compatibility is enabled as an internal path.
+            Plugin defaults here should be treated as compatibility behavior,
+            not the primary product model.
           </div>
         ) : null}
         {isExperimentalSolo ? (
@@ -100,13 +210,19 @@ function InstancePluginDefaultsPanel() {
   });
 
   if (settingsQuery.isLoading) {
-    return <LoadingSpinner message="Loading plugin defaults..." className="justify-start" />;
+    return (
+      <LoadingSpinner
+        message="Loading plugin defaults..."
+        className="justify-start"
+      />
+    );
   }
 
   if (settingsQuery.error || !settingsQuery.data) {
     return (
       <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        Failed to load instance plugin defaults: {getErrorMessage(settingsQuery.error)}
+        Failed to load instance plugin defaults:{" "}
+        {getErrorMessage(settingsQuery.error)}
       </div>
     );
   }
@@ -124,7 +240,9 @@ function InstancePluginDefaultsPanel() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-medium">{plugin.name}</div>
-                <div className="text-sm text-muted-foreground">{plugin.description}</div>
+                <div className="text-sm text-muted-foreground">
+                  {plugin.description}
+                </div>
               </div>
               <Badge variant={enabled ? "success" : "secondary"}>
                 {enabled ? "Enabled" : "Disabled"}
@@ -197,6 +315,10 @@ function ProjectsPluginAccessPanel() {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<AccessStateFilter>("all");
   const [page, setPage] = useState(1);
+  const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(
+    null,
+  );
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const queryInput = useMemo(
     () => ({
@@ -207,7 +329,8 @@ function ProjectsPluginAccessPanel() {
     [search],
   );
 
-  const listAccessQuery = trpc.superadmin.pluginsListAccess.useQuery(queryInput);
+  const listAccessQuery =
+    trpc.superadmin.pluginsListAccess.useQuery(queryInput);
   const upsertMutation = trpc.superadmin.pluginsUpsertEntitlement.useMutation();
 
   const projectRows = useMemo<ProjectAccessRow[]>(() => {
@@ -226,6 +349,10 @@ function ProjectsPluginAccessPanel() {
   const pageStartIndex = (currentPage - 1) * PROJECT_PAGE_SIZE;
   const pageEndIndex = pageStartIndex + PROJECT_PAGE_SIZE;
   const pagedProjectRows = projectRows.slice(pageStartIndex, pageEndIndex);
+  const selectedProject =
+    projectRows.find(
+      (project) => projectRowKey(project) === selectedProjectKey,
+    ) ?? null;
 
   const refreshAll = async () => {
     await listAccessQuery.refetch();
@@ -239,6 +366,11 @@ function ProjectsPluginAccessPanel() {
   const handleStateFilterChange = (value: string) => {
     setStateFilter(value as AccessStateFilter);
     setPage(1);
+  };
+
+  const openProjectDetail = (project: ProjectAccessRow) => {
+    setSelectedProjectKey(projectRowKey(project));
+    setDetailOpen(true);
   };
 
   const runSingleUpdate = async (
@@ -263,7 +395,9 @@ function ProjectsPluginAccessPanel() {
     if (inputs.length === 0) return;
 
     try {
-      await Promise.all(inputs.map((input) => upsertMutation.mutateAsync(input)));
+      await Promise.all(
+        inputs.map((input) => upsertMutation.mutateAsync(input)),
+      );
       await utils.superadmin.pluginsListAccess.invalidate();
       toast.success(successMessage);
     } catch (error) {
@@ -283,7 +417,9 @@ function ProjectsPluginAccessPanel() {
         state,
         monthlyEventLimit: row.monthlyEventLimit,
         hardStop: row.hardStop,
-        turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+        turnstileEnabled: row.catalog.supportsTurnstile
+          ? row.turnstileEnabled
+          : false,
         notes: `Updated from Super Admin Plugins tab (${row.catalog.name}, ${state})`,
         ensurePluginWhenEnabled: true,
       },
@@ -295,6 +431,8 @@ function ProjectsPluginAccessPanel() {
     project: ProjectAccessRow,
     state: PluginState,
   ) => {
+    if (!confirmBulkStateChange(project, state)) return;
+
     const inputs: UpsertEntitlementInput[] = project.plugins.map((row) => ({
       pluginId: row.pluginId,
       organizationId: row.organizationId,
@@ -303,7 +441,9 @@ function ProjectsPluginAccessPanel() {
       state,
       monthlyEventLimit: row.monthlyEventLimit,
       hardStop: row.hardStop,
-      turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+      turnstileEnabled: row.catalog.supportsTurnstile
+        ? row.turnstileEnabled
+        : false,
       notes: `Bulk update from Super Admin Plugins tab (${state})`,
       ensurePluginWhenEnabled: true,
     }));
@@ -315,7 +455,8 @@ function ProjectsPluginAccessPanel() {
   };
 
   const updateLimit = async (row: PluginAccessRow) => {
-    const current = row.monthlyEventLimit == null ? "" : String(row.monthlyEventLimit);
+    const current =
+      row.monthlyEventLimit == null ? "" : String(row.monthlyEventLimit);
     const raw = window.prompt(row.catalog.limitPrompt, current);
     if (raw === null) return;
 
@@ -330,7 +471,9 @@ function ProjectsPluginAccessPanel() {
           state: row.state,
           monthlyEventLimit: null,
           hardStop: row.hardStop,
-          turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+          turnstileEnabled: row.catalog.supportsTurnstile
+            ? row.turnstileEnabled
+            : false,
           notes: `Set to unlimited from Super Admin Plugins tab (${row.catalog.name})`,
           ensurePluginWhenEnabled: false,
         },
@@ -354,7 +497,9 @@ function ProjectsPluginAccessPanel() {
         state: row.state,
         monthlyEventLimit: Math.floor(parsed),
         hardStop: row.hardStop,
-        turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+        turnstileEnabled: row.catalog.supportsTurnstile
+          ? row.turnstileEnabled
+          : false,
         notes: `Updated monthly limit from Super Admin Plugins tab (${row.catalog.name})`,
         ensurePluginWhenEnabled: false,
       },
@@ -387,8 +532,9 @@ function ProjectsPluginAccessPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        One row per project. Manage all plugin entitlements for that project in one
-        place, including row-level actions to set all plugins at once.
+        Scan projects from the list, then inspect one project at a time to
+        manage plugin access, rollout state, and plugin-specific rules in a
+        focused modal.
       </p>
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
         <Input
@@ -397,10 +543,7 @@ function ProjectsPluginAccessPanel() {
           placeholder="Search org or project..."
           className="md:max-w-sm"
         />
-        <Select
-          value={stateFilter}
-          onValueChange={handleStateFilterChange}
-        >
+        <Select value={stateFilter} onValueChange={handleStateFilterChange}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by state" />
           </SelectTrigger>
@@ -411,7 +554,11 @@ function ProjectsPluginAccessPanel() {
             <SelectItem value="suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={() => void refreshAll()} disabled={isFetching}>
+        <Button
+          variant="outline"
+          onClick={() => void refreshAll()}
+          disabled={isFetching}
+        >
           <RefreshCcw className="h-4 w-4 mr-1.5" />
           Refresh
         </Button>
@@ -423,124 +570,314 @@ function ProjectsPluginAccessPanel() {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/30">
-            <tr className="text-left">
-              <th className="px-3 py-2 font-medium">Organization</th>
-              <th className="px-3 py-2 font-medium">Project</th>
-              <th className="px-3 py-2 font-medium">Deployment</th>
-              <th className="px-3 py-2 font-medium">Plugins</th>
-              <th className="px-3 py-2 font-medium">Set all plugins</th>
-              <th className="px-3 py-2 font-medium">Last update</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagedProjectRows.map((project) => (
-              <tr
-                key={`${project.organizationId}:${project.projectSlug}`}
-                className="border-t align-top"
-              >
-                <td className="px-3 py-2">
-                  <div className="font-medium">{project.organizationName}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {project.organizationSlug}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="font-medium">{project.projectSlug}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {project.projectTitle || "(untitled)"}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  {project.isDeployed ? (
-                    <div>
-                      <Badge variant="success">Deployed</Badge>
-                      <div className="text-xs text-muted-foreground break-all">
-                        {project.deployedDomain}
+      <div className="overflow-hidden rounded-md border bg-background">
+        <div className="flex items-center justify-between border-b bg-muted/10 px-4 py-2.5">
+          <div>
+            <div className="text-sm font-medium">Projects</div>
+            <div className="text-xs text-muted-foreground">
+              Full-width compact rows. Click any row to inspect and edit.
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {totalProjects === 0 ? "0 projects" : `${totalProjects} projects`}
+          </div>
+        </div>
+        {pagedProjectRows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-muted-foreground">
+            {isLoading ? (
+              <LoadingSpinner message="Loading plugin access..." />
+            ) : (
+              "No projects match the current filters."
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="hidden border-b bg-muted/5 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid lg:grid-cols-[minmax(220px,1.2fr)_minmax(170px,0.9fr)_minmax(130px,0.7fr)_minmax(260px,1fr)_minmax(220px,0.9fr)_auto] lg:gap-4">
+              <span>Project</span>
+              <span>Organization</span>
+              <span>Deployment</span>
+              <span>Plugin mix</span>
+              <span>Rules / Updated</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <div className="divide-y">
+              {pagedProjectRows.map((project) => {
+                const summary = summarizeProjectAccess(project);
+
+                return (
+                  <div
+                    key={projectRowKey(project)}
+                    className="group flex items-center gap-2 px-3 py-1.5 hover:bg-muted/10"
+                  >
+                    <button
+                      type="button"
+                      className="flex-1 rounded-sm px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      onClick={() => openProjectDetail(project)}
+                    >
+                      <div className="flex flex-col gap-2 lg:grid lg:grid-cols-[minmax(220px,1.2fr)_minmax(170px,0.9fr)_minmax(130px,0.7fr)_minmax(260px,1fr)_minmax(220px,0.9fr)] lg:items-center lg:gap-4">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {project.projectSlug}
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              {project.projectTitle || "(untitled)"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {project.organizationName} ·{" "}
+                          {project.organizationSlug}
+                        </div>
+                        <div>
+                          {project.isDeployed ? (
+                            <Badge variant="success">Deployed</Badge>
+                          ) : (
+                            <Badge variant="outline">Not deployed</Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatProjectMix(summary)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatProjectRules(summary)} · Updated{" "}
+                          {formatDate(project.updatedAt)}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <Badge variant="outline">Not deployed</Badge>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="min-w-[620px] space-y-2">
-                    {project.plugins.map((pluginRow) => (
-                      <div
-                        key={pluginRow.pluginId}
-                        className="rounded-md border bg-muted/15 p-2"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <div className="font-medium">{pluginRow.catalog.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {pluginRow.catalog.description}
-                            </div>
-                          </div>
-                          <Badge variant={formatStateBadgeVariant(pluginRow.state)}>
-                            {pluginRow.state}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {pluginRow.catalog.usageLabel}: {pluginRow.usageThisMonth} · Limit:{" "}
-                          {pluginRow.monthlyEventLimit == null
-                            ? "Unlimited"
-                            : pluginRow.monthlyEventLimit}{" "}
-                          · Scope: {pluginRow.effectiveScope} · Instance:{" "}
-                          {pluginRow.projectPluginStatus || "-"} · Updated:{" "}
-                          {formatDate(pluginRow.updatedAt)}
-                        </div>
-                        {pluginRow.catalog.supportsTurnstile ? (
-                          <div className="mt-1 text-xs">
-                            {pluginRow.turnstileEnabled ? (
-                              pluginRow.state !== "enabled" ? (
-                                <Badge variant="secondary">Turnstile On (inactive)</Badge>
+                    </button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0 opacity-70 group-hover:opacity-100"
+                          disabled={upsertMutation.isPending}
+                          aria-label={`Bulk actions for ${project.projectSlug}`}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void setAllProjectPluginsState(project, "enabled");
+                          }}
+                        >
+                          Enable all
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void setAllProjectPluginsState(project, "disabled");
+                          }}
+                        >
+                          Disable all
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void setAllProjectPluginsState(
+                              project,
+                              "suspended",
+                            );
+                          }}
+                        >
+                          Suspend all
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => openProjectDetail(project)}
+                        >
+                          Inspect project
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-h-[85vh] max-w-5xl overflow-hidden p-0">
+          {selectedProject ? (
+            <>
+              <DialogHeader className="border-b bg-muted/10 px-5 py-4 text-left">
+                <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
+                  <span>{selectedProject.projectSlug}</span>
+                  <span className="font-normal text-muted-foreground">
+                    {selectedProject.projectTitle || "(untitled)"}
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  <span>
+                    {selectedProject.organizationName} ·{" "}
+                    {selectedProject.organizationSlug}
+                  </span>
+                  <span>
+                    {selectedProject.isDeployed
+                      ? `Deployed to ${selectedProject.deployedDomain}`
+                      : "Not deployed"}
+                  </span>
+                  <span>
+                    Last update {formatDate(selectedProject.updatedAt)}
+                  </span>
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex flex-wrap gap-2 border-b px-5 py-3">
+                <Badge variant="outline">
+                  {formatProjectMix(summarizeProjectAccess(selectedProject))}
+                </Badge>
+                <Badge variant="outline">
+                  {formatProjectRules(summarizeProjectAccess(selectedProject))}
+                </Badge>
+                <div className="ml-auto flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="success"
+                    disabled={upsertMutation.isPending}
+                    onClick={() =>
+                      void setAllProjectPluginsState(selectedProject, "enabled")
+                    }
+                  >
+                    Enable all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={upsertMutation.isPending}
+                    onClick={() =>
+                      void setAllProjectPluginsState(
+                        selectedProject,
+                        "disabled",
+                      )
+                    }
+                  >
+                    Disable all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={upsertMutation.isPending}
+                    onClick={() =>
+                      void setAllProjectPluginsState(
+                        selectedProject,
+                        "suspended",
+                      )
+                    }
+                  >
+                    Suspend all
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-[calc(85vh-145px)] overflow-y-auto">
+                <div className="divide-y">
+                  {selectedProject.plugins.map((pluginRow) => (
+                    <div key={pluginRow.pluginId} className="px-5 py-4">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                              {pluginRow.catalog.name}
+                            </span>
+                            <Badge
+                              variant={formatStateBadgeVariant(pluginRow.state)}
+                            >
+                              {pluginRow.state}
+                            </Badge>
+                            <Badge variant="outline">
+                              {formatScopeLabel(pluginRow.effectiveScope)}
+                            </Badge>
+                            {pluginRow.catalog.supportsTurnstile ? (
+                              pluginRow.turnstileEnabled ? (
+                                pluginRow.state !== "enabled" ? (
+                                  <Badge variant="secondary">
+                                    Turnstile on (inactive)
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant={
+                                      pluginRow.turnstileReady
+                                        ? "success"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {pluginRow.turnstileReady
+                                      ? "Turnstile ready"
+                                      : "Turnstile syncing"}
+                                  </Badge>
+                                )
                               ) : (
-                                <Badge
-                                  variant={
-                                    pluginRow.turnstileReady ? "success" : "secondary"
-                                  }
-                                >
-                                  {pluginRow.turnstileReady
-                                    ? "Turnstile Enabled"
-                                    : "Turnstile Syncing"}
-                                </Badge>
+                                <Badge variant="outline">Turnstile off</Badge>
                               )
-                            ) : (
-                              <Badge variant="outline">Turnstile Off</Badge>
-                            )}
+                            ) : null}
                           </div>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap gap-1">
+                          <div className="text-sm text-muted-foreground">
+                            {pluginRow.catalog.description}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span>
+                              {pluginRow.catalog.usageLabel}:{" "}
+                              {pluginRow.usageThisMonth}
+                            </span>
+                            <span>
+                              Limit:{" "}
+                              {pluginRow.monthlyEventLimit == null
+                                ? "Unlimited"
+                                : pluginRow.monthlyEventLimit}
+                            </span>
+                            <span>
+                              {formatInstanceStatus(
+                                pluginRow.projectPluginStatus,
+                              )}
+                            </span>
+                            <span>
+                              Updated {formatDate(pluginRow.updatedAt)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 xl:max-w-[320px] xl:justify-end">
                           <Button
                             size="sm"
                             variant={
-                              pluginRow.state === "enabled" ? "success" : "outline"
+                              pluginRow.state === "enabled"
+                                ? "success"
+                                : "outline"
                             }
                             disabled={upsertMutation.isPending}
-                            onClick={() => void updateState(pluginRow, "enabled")}
+                            onClick={() =>
+                              void updateState(pluginRow, "enabled")
+                            }
                           >
                             Enable
                           </Button>
                           <Button
                             size="sm"
                             variant={
-                              pluginRow.state === "disabled" ? "secondary" : "outline"
+                              pluginRow.state === "disabled"
+                                ? "secondary"
+                                : "outline"
                             }
                             disabled={upsertMutation.isPending}
-                            onClick={() => void updateState(pluginRow, "disabled")}
+                            onClick={() =>
+                              void updateState(pluginRow, "disabled")
+                            }
                           >
                             Disable
                           </Button>
                           <Button
                             size="sm"
                             variant={
-                              pluginRow.state === "suspended" ? "secondary" : "outline"
+                              pluginRow.state === "suspended"
+                                ? "secondary"
+                                : "outline"
                             }
                             disabled={upsertMutation.isPending}
-                            onClick={() => void updateState(pluginRow, "suspended")}
+                            onClick={() =>
+                              void updateState(pluginRow, "suspended")
+                            }
                           >
                             Suspend
                           </Button>
@@ -558,7 +895,9 @@ function ProjectsPluginAccessPanel() {
                             <Button
                               size="sm"
                               variant={
-                                pluginRow.turnstileEnabled ? "secondary" : "outline"
+                                pluginRow.turnstileEnabled
+                                  ? "secondary"
+                                  : "outline"
                               }
                               disabled={upsertMutation.isPending}
                               onClick={() =>
@@ -569,60 +908,21 @@ function ProjectsPluginAccessPanel() {
                               }
                             >
                               {pluginRow.turnstileEnabled
-                                ? "Turnstile Off"
-                                : "Turnstile On"}
+                                ? "Turnstile off"
+                                : "Turnstile on"}
                             </Button>
                           ) : null}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex min-w-[170px] flex-col gap-1">
-                    <Button
-                      size="sm"
-                      variant="success"
-                      disabled={upsertMutation.isPending}
-                      onClick={() => void setAllProjectPluginsState(project, "enabled")}
-                    >
-                      Enable all plugins
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={upsertMutation.isPending}
-                      onClick={() => void setAllProjectPluginsState(project, "disabled")}
-                    >
-                      Disable all plugins
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={upsertMutation.isPending}
-                      onClick={() => void setAllProjectPluginsState(project, "suspended")}
-                    >
-                      Suspend all plugins
-                    </Button>
-                  </div>
-                </td>
-                <td className="px-3 py-2">{formatDate(project.updatedAt)}</td>
-              </tr>
-            ))}
-            {pagedProjectRows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  {isLoading ? (
-                    <LoadingSpinner message="Loading plugin access..." />
-                  ) : (
-                    "No projects match the current filters."
-                  )}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col gap-2 border rounded-md px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
           {totalProjects === 0

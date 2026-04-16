@@ -27,6 +27,15 @@ function clonePlainObject<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function getNotRequestedAccessState() {
+  return {
+    status: "not_requested" as const,
+    requestedAt: null,
+    requestedByUserId: null,
+    requesterEmail: null,
+  };
+}
+
 export function toPluginCatalogEntry<TPluginId extends string>(
   definition: PluginDefinition<TPluginId>,
 ): PluginCatalogEntry<TPluginId> {
@@ -63,5 +72,6 @@ export function buildPluginInfoContractPayload<TPluginId extends string>(
     usage: payload.usage,
     details: payload.details,
     instructions: payload.instructions,
+    accessRequest: getNotRequestedAccessState(),
   };
 }

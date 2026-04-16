@@ -25,9 +25,15 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+import {
+  getPluginAccessRequestLabel,
+  getProjectPluginPresentation,
+  isPluginAccessRequestPending,
+} from "@/plugins/presentation";
 import {
   NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
@@ -133,9 +139,12 @@ export default function NewsletterProjectPage({
   projectSlug,
   isEmbedded = false,
 }: NewsletterProjectPageProps) {
+  const { config } = useAppConfig();
   const utils = trpc.useUtils();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const canEnablePlugin = session?.user?.role === "super_admin";
+  const canRequestPluginAccess =
+    !isSessionPending && !canEnablePlugin && Boolean(config.supportEmail);
   const typedPluginId =
     "newsletter" as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
 
@@ -391,6 +400,20 @@ export default function NewsletterProjectPage({
   const pluginEnabled = !!pluginInfo?.enabled;
   const pluginEntitled = pluginInfo?.entitled ?? false;
   const needsEnable = pluginEntitled && !pluginEnabled && !pluginInfo?.instanceId;
+  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
+  const PluginIcon = pluginPresentation.icon;
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await pluginInfoQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", {
+        description: error.message,
+      });
+    },
+  });
+  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
 
   const projectTitle =
     projectListQuery.data?.projects?.find((project) => project.slug === projectSlug)?.title ??
@@ -540,30 +563,60 @@ export default function NewsletterProjectPage({
         {needsEnable ? (
           <Card>
             <CardHeader>
-              <CardTitle>Enable plugin</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                  <PluginIcon className="h-4 w-4" />
+                </span>
+                <span>Enable plugin</span>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 Newsletter is entitled for this project but not enabled yet.
               </p>
-              <Button
-                onClick={() =>
-                  ensureMutation.mutate({ slug: projectSlug, pluginId: typedPluginId })
-                }
-                disabled={!canEnablePlugin || ensureMutation.isPending}
-              >
-                {ensureMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enabling
-                  </>
-                ) : (
-                  "Enable Newsletter"
-                )}
-              </Button>
-              {!canEnablePlugin ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {canEnablePlugin ? (
+                  <Button
+                    onClick={() =>
+                      ensureMutation.mutate({ slug: projectSlug, pluginId: typedPluginId })
+                    }
+                    disabled={ensureMutation.isPending}
+                  >
+                    {ensureMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Enabling
+                      </>
+                    ) : (
+                      "Enable Newsletter"
+                    )}
+                  </Button>
+                ) : null}
+                {canRequestPluginAccess ? (
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      requestAccessMutation.mutate({
+                        slug: projectSlug,
+                        pluginId: typedPluginId,
+                      })
+                    }
+                    disabled={isRequestPending || requestAccessMutation.isPending}
+                  >
+                    {requestAccessMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      getPluginAccessRequestLabel(pluginInfo?.accessRequest)
+                    )}
+                  </Button>
+                ) : null}
+              </div>
+              {!canEnablePlugin && !isSessionPending ? (
                 <p className="text-xs text-muted-foreground">
-                  Only super-admin users can enable plugins.
+                  Only super-admin users can enable plugins directly.
                 </p>
               ) : null}
             </CardContent>

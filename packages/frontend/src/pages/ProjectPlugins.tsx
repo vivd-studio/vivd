@@ -18,7 +18,11 @@ import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { isExperimentalSoloInstall } from "@/lib/featureFlags";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
-import { getProjectPluginUi } from "@/plugins/registry";
+import {
+  getPluginAccessRequestLabel,
+  getProjectPluginPresentation,
+  isPluginAccessRequestPending,
+} from "@/plugins/presentation";
 
 type ProjectPluginCatalogItem = RouterOutputs["plugins"]["catalog"]["plugins"][number];
 
@@ -86,7 +90,7 @@ export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const utils = trpc.useUtils();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const isEmbedded = useMemo(
     () => new URLSearchParams(location.search).get("embedded") === "1",
     [location.search],
@@ -111,10 +115,23 @@ export default function ProjectPlugins() {
       });
     },
   });
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await utils.plugins.catalog.invalidate({ slug });
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", {
+        description: error.message,
+      });
+    },
+  });
 
   const projectTitle =
     projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
   const canManageProjectPlugins = session?.user?.role === "super_admin";
+  const canRequestPluginAccess =
+    !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
   const isExperimentalSolo = isExperimentalSoloInstall(config);
   const plugins = catalogQuery.data?.plugins ?? [];
   const enabledCount = plugins.filter((plugin) => plugin.installState === "enabled").length;
@@ -123,6 +140,13 @@ export default function ProjectPlugins() {
     (plugin) =>
       plugin.installState === "disabled" || plugin.installState === "suspended",
   ).length;
+  const enabledPluginEntries = useMemo(
+    () =>
+      plugins
+        .filter((plugin) => plugin.installState === "enabled")
+        .map((plugin) => getProjectPluginPresentation(plugin.pluginId, projectSlug)),
+    [plugins, projectSlug],
+  );
   const latestPluginUpdate = useMemo(() => {
     let latest: number | null = null;
     for (const plugin of plugins) {
@@ -145,9 +169,11 @@ export default function ProjectPlugins() {
         {
           key: "available",
           title: "Ready to enable",
-          description: canManageProjectPlugins
+          description: isSessionPending
             ? "Available in this instance and waiting for project activation."
-            : "Available in this instance. A super-admin can enable them for this project.",
+            : canManageProjectPlugins
+              ? "Available in this instance and waiting for project activation."
+              : "Available in this instance. A super-admin can enable them for this project.",
           plugins: plugins.filter((plugin) => plugin.installState === "available"),
         },
         {
@@ -259,6 +285,24 @@ export default function ProjectPlugins() {
                   </div>
                 ))}
               </dl>
+              {enabledPluginEntries.length > 0 ? (
+                <div className="rounded-lg border px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Enabled plugins</span>
+                    {enabledPluginEntries.map((plugin) => {
+                      const PluginIcon = plugin.icon;
+                      return (
+                        <Button key={plugin.pluginId} variant="outline" size="sm" asChild>
+                          <Link to={plugin.path ?? ROUTES.PROJECT_PLUGIN(projectSlug, plugin.pluginId)}>
+                            <PluginIcon className="mr-1.5 h-4 w-4" />
+                            {plugin.title}
+                          </Link>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -290,17 +334,23 @@ export default function ProjectPlugins() {
 
               <div className="space-y-3">
                 {section.plugins.map((plugin) => {
-                  const pluginUi = getProjectPluginUi(plugin.pluginId);
-                  const routePath = ROUTES.PROJECT_PLUGIN(
-                    projectSlug,
+                  const pluginPresentation = getProjectPluginPresentation(
                     plugin.pluginId,
-                    pluginUi?.defaultSubpath,
+                    projectSlug,
                   );
+                  const routePath =
+                    pluginPresentation.path ??
+                    ROUTES.PROJECT_PLUGIN(projectSlug, plugin.pluginId);
                   const detailLink = isEmbedded ? `${routePath}?embedded=1` : routePath;
                   const isEnablePending =
                     genericEnsureMutation.isPending &&
                     genericEnsureMutation.variables?.pluginId === plugin.pluginId;
+                  const isRequestPending = isPluginAccessRequestPending(plugin.accessRequest);
+                  const isRequestSending =
+                    requestAccessMutation.isPending &&
+                    requestAccessMutation.variables?.pluginId === plugin.pluginId;
                   const formattedUpdatedAt = formatPluginTimestamp(plugin.updatedAt);
+                  const PluginIcon = pluginPresentation.icon;
 
                   return (
                     <Card
@@ -316,7 +366,12 @@ export default function ProjectPlugins() {
                         <div className="min-w-0 space-y-3">
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="font-medium">{plugin.catalog.name}</div>
+                              <div className="flex items-center gap-2 font-medium">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                                  <PluginIcon className="h-4 w-4" />
+                                </span>
+                                <span>{plugin.catalog.name}</span>
+                              </div>
                               <Badge
                                 variant={getPluginInstallBadgeVariant(plugin.installState)}
                                 className="shrink-0"
@@ -368,9 +423,32 @@ export default function ProjectPlugins() {
                               )}
                             </Button>
                           ) : null}
+                          {plugin.installState !== "enabled" && canRequestPluginAccess ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="pointer-events-auto w-full sm:w-auto"
+                              onClick={() =>
+                                requestAccessMutation.mutate({
+                                  slug,
+                                  pluginId: plugin.pluginId,
+                                })
+                              }
+                              disabled={isRequestPending || isRequestSending}
+                            >
+                              {isRequestSending ? (
+                                <>
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                  Sending...
+                                </>
+                              ) : (
+                                getPluginAccessRequestLabel(plugin.accessRequest)
+                              )}
+                            </Button>
+                          ) : null}
 
                           <div className="hidden items-center gap-1 text-sm text-muted-foreground sm:flex">
-                            <span>{getPluginCardLinkLabel(plugin, pluginUi?.openLabel)}</span>
+                            <span>{getPluginCardLinkLabel(plugin, pluginPresentation.openLabel)}</span>
                             <ChevronRight className="h-4 w-4" />
                           </div>
                         </div>

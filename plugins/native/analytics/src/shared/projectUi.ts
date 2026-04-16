@@ -1,6 +1,7 @@
 import type { SharedProjectPluginUiDefinition } from "@vivd/plugin-sdk";
 
 export const analyticsSharedProjectUi = {
+  icon: "bar-chart-3",
   pageTitle: "Analytics",
   openLabel: "Open dashboard",
   shortcut: {

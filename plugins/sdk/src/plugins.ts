@@ -53,6 +53,7 @@ export interface ProjectPluginShortcutDefinition {
 }
 
 export interface SharedProjectPluginUiDefinition {
+  icon?: PluginUiIconName;
   pageTitle?: string;
   openLabel?: string;
   defaultSubpath?: string;

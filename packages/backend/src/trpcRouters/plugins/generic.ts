@@ -1,8 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
+import { pluginAccessRequestService } from "../../services/plugins/PluginAccessRequestService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { PLUGIN_IDS } from "../../services/plugins/catalog";
+import { projectPluginInstanceService } from "../../services/plugins/core/instanceService";
 import { projectPluginService } from "../../services/plugins/ProjectPluginService";
 import {
   extractRequestHost,
@@ -42,6 +44,11 @@ export const readPluginInput = z.object({
   input: z.record(z.string(), z.unknown()).default({}),
 });
 
+export const requestPluginAccessInput = z.object({
+  slug: z.string().min(1),
+  pluginId: z.enum(PLUGIN_IDS),
+});
+
 export const ensurePluginProcedure = projectMemberProcedure
   .input(ensurePluginInput)
   .mutation(async ({ ctx, input }) => {
@@ -70,6 +77,49 @@ export const ensurePluginProcedure = projectMemberProcedure
       projectSlug: input.slug,
       pluginId: input.pluginId,
     });
+  });
+
+export const requestPluginAccessProcedure = projectMemberProcedure
+  .input(requestPluginAccessInput)
+  .mutation(async ({ ctx, input }) => {
+    if (ctx.session.user.role === "super_admin") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Super-admin users can enable plugins directly",
+      });
+    }
+
+    const instance = await projectPluginInstanceService.getPluginInstance({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: input.pluginId,
+    });
+    if (instance?.status === "enabled") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Plugin is already enabled for this project",
+      });
+    }
+
+    try {
+      return {
+        pluginId: input.pluginId,
+        accessRequest: await pluginAccessRequestService.requestAccess({
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          pluginId: input.pluginId,
+          requestedByUserId: ctx.session.user.id,
+          requesterEmail: ctx.session.user.email,
+          requesterName: ctx.session.user.name,
+        }),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message,
+      });
+    }
   });
 
 export const infoPluginProcedure = projectMemberProcedure

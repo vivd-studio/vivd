@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   adminProcedure,
+  generationProcedure,
   orgProcedure,
   projectMemberProcedure,
 } from "../../trpc";
@@ -242,7 +243,7 @@ export const projectGenerationProcedures = {
     return getScratchAvailableModels();
   }),
 
-  generate: adminProcedure
+  generate: generationProcedure
     .input(
       z.object({
         url: z.string().min(1),
@@ -380,7 +381,7 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  generateFromScratch: adminProcedure
+  generateFromScratch: generationProcedure
     .input(
       z.object({
         title: z.string().min(1),
@@ -471,7 +472,7 @@ export const projectGenerationProcedures = {
    * Step 1 of 3-step upload flow: Create a draft project for scratch generation.
    * Returns slug/version so frontend can upload files via multipart.
    */
-  createScratchDraft: adminProcedure
+  createScratchDraft: generationProcedure
     .input(
       z.object({
         title: z.string().min(1),
@@ -606,7 +607,7 @@ export const projectGenerationProcedures = {
   /**
    * Step 3 of 3-step upload flow: Start generation after assets have been uploaded.
    */
-  startScratchGeneration: adminProcedure
+  startScratchGeneration: generationProcedure
     .input(
       z.object({
         slug: z.string().min(1),
@@ -796,7 +797,7 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  regenerate: adminProcedure
+  regenerate: generationProcedure
     .input(
       z.object({
         slug: z.string(),

@@ -20,6 +20,7 @@ import {
   externalEmbedPluginService,
   ExternalEmbedPluginNotEnabledError,
 } from "./externalEmbed/service";
+import { pluginAccessRequestService } from "./PluginAccessRequestService";
 import { pluginEntitlementService } from "./PluginEntitlementService";
 import {
   derivePluginInstallState,
@@ -32,6 +33,15 @@ import {
   type PluginId,
 } from "./catalog";
 import { getPluginModule } from "./registry";
+
+function getNotRequestedAccessState() {
+  return {
+    status: "not_requested" as const,
+    requestedAt: null,
+    requestedByUserId: null,
+    requesterEmail: null,
+  };
+}
 
 export interface PluginCatalogForProject {
   project: {
@@ -54,6 +64,12 @@ class ProjectPluginService {
     });
     const byPluginId = new Map(rows.map((row) => [row.pluginId as PluginId, row]));
     const available = listPluginCatalogEntries();
+    const accessRequestsByPluginId =
+      await pluginAccessRequestService.listRequestStates({
+        organizationId,
+        projectSlug,
+        pluginIds: available.map((entry) => entry.pluginId),
+      });
     const plugins = await Promise.all(
       available.map(async (catalog) => {
         const instance = byPluginId.get(catalog.pluginId);
@@ -75,6 +91,11 @@ class ProjectPluginService {
           instanceId: instance?.id ?? null,
           instanceStatus: instance?.status ?? null,
           updatedAt: instance?.updatedAt?.toISOString() ?? entitlement.updatedAt?.toISOString() ?? null,
+          accessRequest:
+            instance?.status === "enabled"
+              ? getNotRequestedAccessState()
+              : (accessRequestsByPluginId.get(catalog.pluginId) ??
+                getNotRequestedAccessState()),
         } satisfies ProjectPluginCatalogItem;
       }),
     );
@@ -96,14 +117,18 @@ class ProjectPluginService {
     pluginId: PluginId;
   }): Promise<{ instanceId: string; created: boolean; status: string }> {
     const manifest = getPluginManifest(options.pluginId);
+    let result: { instanceId: string; created: boolean; status: string };
     if (manifest.kind === "external_embed") {
-      return externalEmbedPluginService.ensurePluginInstance({
+      result = await externalEmbedPluginService.ensurePluginInstance({
         ...options,
         manifest,
       });
+    } else {
+      result = await getPluginModule(options.pluginId).ensureInstance(options);
     }
 
-    return getPluginModule(options.pluginId).ensureInstance(options);
+    await pluginAccessRequestService.resolveRequest(options);
+    return result;
   }
 
   async getPluginInfoContract(options: {
@@ -113,20 +138,32 @@ class ProjectPluginService {
   }): Promise<ProjectPluginInfoContractPayload> {
     const manifest = getPluginManifest(options.pluginId);
     if (manifest.kind === "external_embed") {
-      return buildPluginInfoContractPayload(
+      const payload = buildPluginInfoContractPayload(
         manifest.definition,
         await externalEmbedPluginService.getInfoPayload({
           ...options,
           manifest,
         }),
       );
+      return {
+        ...payload,
+        accessRequest: payload.enabled
+          ? getNotRequestedAccessState()
+          : await pluginAccessRequestService.getRequestState(options),
+      };
     }
 
     const module = getPluginModule(options.pluginId);
-    return buildPluginInfoContractPayload(
+    const payload = buildPluginInfoContractPayload(
       module.definition,
       await module.getInfoPayload(options),
     );
+    return {
+      ...payload,
+      accessRequest: payload.enabled
+        ? getNotRequestedAccessState()
+        : await pluginAccessRequestService.getRequestState(options),
+    };
   }
 
   async updatePluginConfigById(options: {

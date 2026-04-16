@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import * as trpcExpress from "@trpc/server/adapters/express";
 import { getSession } from "./lib/authProvider";
+import { extractRequestIp } from "./lib/requestClientIp";
 import { z } from "zod";
 import { db } from "./db";
 import { STUDIO_USER_ACTION_TOKEN_HEADER } from "@vivd/shared/studio";
@@ -20,6 +21,7 @@ import {
   studioLifecycleGuardService,
   type StudioLifecycleAction,
 } from "./services/system/StudioLifecycleGuardService";
+import { controlPlaneRateLimitService } from "./services/system/ControlPlaneRateLimitService";
 import {
   verifyStudioUserActionToken,
   type VerifiedStudioUserActionToken,
@@ -114,35 +116,6 @@ function extractRequestProtocol(
   }
 
   return null;
-}
-
-function extractRequestIp(
-  req: trpcExpress.CreateExpressContextOptions["req"],
-): string | null {
-  const cfConnectingIp = readForwardedHost(req.headers["cf-connecting-ip"]);
-  if (cfConnectingIp) return cfConnectingIp;
-
-  const xRealIp = readForwardedHost(req.headers["x-real-ip"]);
-  if (xRealIp) return xRealIp;
-
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    const parts = forwarded
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-    return parts.length > 0 ? parts[parts.length - 1] ?? null : null;
-  }
-
-  if (Array.isArray(forwarded) && forwarded.length > 0) {
-    for (let index = forwarded.length - 1; index >= 0; index -= 1) {
-      const candidate = forwarded[index]?.trim();
-      if (candidate) return candidate;
-    }
-  }
-
-  const requestIp = req.ip?.trim();
-  return requestIp || null;
 }
 
 export const createContext = async ({
@@ -798,6 +771,32 @@ function createStudioLifecycleGuardMiddleware(
   });
 }
 
+function createControlPlaneRateLimitMiddleware(options: {
+  action: "project_generation" | "project_publish";
+  message: string;
+}) {
+  return t.middleware(async ({ ctx, next }) => {
+    const decision = await controlPlaneRateLimitService.checkAction({
+      action: options.action,
+      organizationId: ctx.organizationId,
+      requestIp: ctx.requestIp,
+      userId: ctx.session?.user.id ?? null,
+    });
+
+    if (!decision.allowed) {
+      if (decision.retryAfterSeconds > 0) {
+        ctx.res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+      }
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: options.message,
+      });
+    }
+
+    return next();
+  });
+}
+
 // Project-scoped access: for client_editors, requires an assigned project and enforces slug match.
 export const projectMemberProcedure = orgProcedure.use(
   enforceClientEditorProjectAccess,
@@ -831,6 +830,18 @@ export const adminProcedure = orgProcedure.use(
     }
     return opts.next();
   }
+);
+export const generationProcedure = adminProcedure.use(
+  createControlPlaneRateLimitMiddleware({
+    action: "project_generation",
+    message: "Generation budget exceeded. Please wait a moment and retry.",
+  }),
+);
+export const publishMutationProcedure = projectMemberProcedure.use(
+  createControlPlaneRateLimitMiddleware({
+    action: "project_publish",
+    message: "Publish budget exceeded. Please wait a moment and retry.",
+  }),
 );
 
 // Legacy name: previously meant "admin/owner" in single-tenant mode.

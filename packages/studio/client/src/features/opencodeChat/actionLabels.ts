@@ -150,8 +150,8 @@ const COMMAND_ACTION_DEFINITIONS: CommandActionDefinition[] = [
 
       if (domain) {
         return {
-          displayTitle: "Publish site",
-          displaySummary: "This will publish the current version to:",
+          displayTitle: "Publish this version",
+          displaySummary: "Publish this version to",
           destinationLabel: domain,
           destinationUrl: toPublicUrl(domain),
           running: { action: "Publishing", target: `to ${domain}...` },
@@ -242,7 +242,7 @@ export function resolvePermissionRequestDisplay(
       title: metadataTitle,
       summary:
         metadataSummary ??
-        "Approve or reject this action to let the run continue.",
+        "Allow this step to let the run continue.",
       technicalPermission: request.permission,
       technicalPatterns,
       showTechnicalDetails:
@@ -258,7 +258,7 @@ export function resolvePermissionRequestDisplay(
         summary:
           metadataSummary ??
           resolvedCommand.displaySummary ??
-          "Approve or reject this action to let the run continue.",
+          "Allow this step to let the run continue.",
         destinationLabel: resolvedCommand.destinationLabel,
         destinationUrl: resolvedCommand.destinationUrl,
         technicalPermission: request.permission,
@@ -284,7 +284,7 @@ export function resolvePermissionRequestDisplay(
     title: request.permission === "bash" ? "Approve this step" : "Approve requested access",
     summary:
       metadataSummary ??
-      "Approve or reject this action to let the run continue.",
+      "Allow this step to let the run continue.",
     technicalPermission: request.permission,
     technicalPatterns,
     showTechnicalDetails:

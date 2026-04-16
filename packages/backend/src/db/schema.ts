@@ -432,6 +432,48 @@ export const projectPluginInstance = pgTable(
   ],
 );
 
+export const projectPluginAccessRequest = pgTable(
+  "project_plugin_access_request",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    requestedByUserId: text("requested_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    requesterEmail: text("requester_email").notNull().default(""),
+    emailProvider: text("email_provider"),
+    emailMessageId: text("email_message_id"),
+    requestedAt: timestamp("requested_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("project_plugin_access_request_org_project_plugin_unique").on(
+      table.organizationId,
+      table.projectSlug,
+      table.pluginId,
+    ),
+    index("project_plugin_access_request_org_project_idx").on(
+      table.organizationId,
+      table.projectSlug,
+    ),
+    index("project_plugin_access_request_status_idx").on(table.status),
+  ],
+);
+
 export const pluginEntitlement = pgTable(
   "plugin_entitlement",
   {

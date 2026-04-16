@@ -388,6 +388,12 @@ export const organizationRouter = router({
           instanceId: instance?.id ?? null,
           instanceStatus: instance?.status ?? null,
           updatedAt: instance?.updatedAt?.toISOString() ?? null,
+          accessRequest: {
+            status: "not_requested",
+            requestedAt: null,
+            requestedByUserId: null,
+            requesterEmail: null,
+          },
           summaryLines: pluginSummary.summaryLines,
           badges: pluginSummary.badges,
         };

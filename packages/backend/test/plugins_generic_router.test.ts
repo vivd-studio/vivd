@@ -4,6 +4,7 @@ const {
   ensurePluginInstanceMock,
   getPluginInfoContractMock,
   readPluginDataMock,
+  requestPluginAccessMock,
   updatePluginConfigByIdMock,
   runPluginActionMock,
   PluginActionArgumentErrorMock,
@@ -15,18 +16,23 @@ const {
     }
   }
 
-  return {
-    ensurePluginInstanceMock: vi.fn(),
-    getPluginInfoContractMock: vi.fn(),
-    readPluginDataMock: vi.fn(),
-    updatePluginConfigByIdMock: vi.fn(),
-    runPluginActionMock: vi.fn(),
-    PluginActionArgumentErrorMock: PluginActionArgumentError,
+    return {
+      ensurePluginInstanceMock: vi.fn(),
+      getPluginInfoContractMock: vi.fn(),
+      readPluginDataMock: vi.fn(),
+      requestPluginAccessMock: vi.fn(),
+      updatePluginConfigByIdMock: vi.fn(),
+      runPluginActionMock: vi.fn(),
+      PluginActionArgumentErrorMock: PluginActionArgumentError,
   };
 });
 
 const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
   resolveEffectiveEntitlementMock: vi.fn(),
+}));
+
+const { getPluginInstanceMock } = vi.hoisted(() => ({
+  getPluginInstanceMock: vi.fn(),
 }));
 
 const {
@@ -86,6 +92,18 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   },
 }));
 
+vi.mock("../src/services/plugins/PluginAccessRequestService", () => ({
+  pluginAccessRequestService: {
+    requestAccess: requestPluginAccessMock,
+  },
+}));
+
+vi.mock("../src/services/plugins/core/instanceService", () => ({
+  projectPluginInstanceService: {
+    getPluginInstance: getPluginInstanceMock,
+  },
+}));
+
 vi.mock("../src/services/plugins/registry", () => ({
   PLUGIN_IDS: ["contact_form", "analytics", "newsletter", "google_maps"],
   getOptionalPluginModule: vi.fn(() => ({
@@ -100,6 +118,7 @@ import { router } from "../src/trpc";
 import {
   ensurePluginProcedure,
   infoPluginProcedure,
+  requestPluginAccessProcedure,
   readPluginProcedure,
   runPluginActionProcedure,
   updatePluginConfigProcedure,
@@ -149,6 +168,7 @@ describe("plugins.generic router", () => {
   const pluginsRouter = router({
     ensure: ensurePluginProcedure,
     info: infoPluginProcedure,
+    requestAccess: requestPluginAccessProcedure,
     read: readPluginProcedure,
     updateConfig: updatePluginConfigProcedure,
     action: runPluginActionProcedure,
@@ -158,9 +178,11 @@ describe("plugins.generic router", () => {
     ensurePluginInstanceMock.mockReset();
     getPluginInfoContractMock.mockReset();
     readPluginDataMock.mockReset();
+    requestPluginAccessMock.mockReset();
     updatePluginConfigByIdMock.mockReset();
     runPluginActionMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
+    getPluginInstanceMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
     selectFromMock.mockClear();
@@ -168,6 +190,7 @@ describe("plugins.generic router", () => {
 
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
     selectWhereMock.mockResolvedValue([]);
+    getPluginInstanceMock.mockResolvedValue(null);
     resolveEffectiveEntitlementMock.mockResolvedValue({
       organizationId: "org-1",
       projectSlug: "site-1",
@@ -260,6 +283,70 @@ describe("plugins.generic router", () => {
       message: "Only super-admin users can enable plugins",
     });
     expect(ensurePluginInstanceMock).not.toHaveBeenCalled();
+  });
+
+  it("sends plugin access requests for non-super-admin project members", async () => {
+    requestPluginAccessMock.mockResolvedValueOnce({
+      status: "pending",
+      requestedAt: "2026-04-17T10:00:00.000Z",
+      requestedByUserId: "user-1",
+      requesterEmail: "user@example.com",
+    });
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.requestAccess({ slug: "site-1", pluginId: "contact_form" }),
+    ).resolves.toMatchObject({
+      pluginId: "contact_form",
+      accessRequest: {
+        status: "pending",
+      },
+    });
+
+    expect(requestPluginAccessMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "contact_form",
+      requestedByUserId: "user-1",
+      requesterEmail: "user@example.com",
+      requesterName: "User",
+    });
+  });
+
+  it("rejects plugin access requests from super-admin users", async () => {
+    const caller = pluginsRouter.createCaller(
+      makeContext({
+        session: {
+          session: {
+            id: "sess-1",
+            userId: "user-1",
+            expiresAt: new Date(Date.now() + 60_000),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ipAddress: null,
+            userAgent: null,
+          },
+          user: {
+            id: "user-1",
+            email: "super@example.com",
+            name: "Super User",
+            role: "super_admin",
+            emailVerified: true,
+            image: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      }),
+    );
+
+    await expect(
+      caller.requestAccess({ slug: "site-1", pluginId: "contact_form" }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Super-admin users can enable plugins directly",
+    });
   });
 
   it("updates config through the generic config procedure", async () => {

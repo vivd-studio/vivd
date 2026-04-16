@@ -96,6 +96,13 @@ export interface PluginCatalogEntry<TPluginId extends string = string> {
   capabilities: PluginCapabilityDefinition;
 }
 
+export interface ProjectPluginAccessRequestState {
+  status: "not_requested" | "pending";
+  requestedAt: string | null;
+  requestedByUserId: string | null;
+  requesterEmail: string | null;
+}
+
 export interface ProjectPluginInfoContractPayload<
   TPluginId extends string = string,
 > {
@@ -114,6 +121,7 @@ export interface ProjectPluginInfoContractPayload<
   usage: Record<string, unknown> | null;
   details: Record<string, unknown> | null;
   instructions: string[];
+  accessRequest: ProjectPluginAccessRequestState;
 }
 
 export interface ProjectPluginActionPayload<TPluginId extends string = string> {

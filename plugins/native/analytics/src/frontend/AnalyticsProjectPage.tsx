@@ -10,8 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
+import {
+  getPluginAccessRequestLabel,
+  isPluginAccessRequestPending,
+} from "@/plugins/presentation";
 import { toast } from "sonner";
 import {
   ANALYTICS_SUMMARY_READ_ID,
@@ -160,7 +165,8 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function AnalyticsProjectPage() {
-  const { data: session } = authClient.useSession();
+  const { config } = useAppConfig();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const utils = trpc.useUtils();
@@ -186,6 +192,8 @@ export default function AnalyticsProjectPage() {
   const analyticsNeedsProjectEnable =
     analyticsEntitled && !analyticsEnabled && !analyticsInfoQuery.data?.instanceId;
   const canEnableProjectAnalytics = session?.user?.role === "super_admin";
+  const canRequestAnalyticsAccess =
+    !isSessionPending && !canEnableProjectAnalytics && Boolean(config.supportEmail);
   const analyticsEnsureMutation = trpc.plugins.ensure.useMutation({
     onSuccess: async () => {
       toast.success("Analytics enabled for this project");
@@ -200,6 +208,20 @@ export default function AnalyticsProjectPage() {
       });
     },
   });
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await analyticsInfoQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", {
+        description: error.message,
+      });
+    },
+  });
+  const isRequestPending = isPluginAccessRequestPending(
+    analyticsInfoQuery.data?.accessRequest,
+  );
 
   const analyticsSummaryQuery = trpc.plugins.read.useQuery(
     {
@@ -369,7 +391,9 @@ export default function AnalyticsProjectPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>
                   {analyticsNeedsProjectEnable
-                    ? canEnableProjectAnalytics
+                    ? isSessionPending
+                      ? "Analytics is available for this instance but has not been enabled for this project yet."
+                      : canEnableProjectAnalytics
                       ? "Analytics is available for this instance but has not been enabled for this project yet."
                       : "Analytics is available for this instance, but a super-admin still needs to enable it for this project."
                     : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in the admin plugin settings."}
@@ -393,6 +417,27 @@ export default function AnalyticsProjectPage() {
                       </>
                     ) : (
                       "Enable for this project"
+                    )}
+                  </Button>
+                ) : canRequestAnalyticsAccess ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      requestAccessMutation.mutate({
+                        slug,
+                        pluginId: typedPluginId,
+                      })
+                    }
+                    disabled={isRequestPending || requestAccessMutation.isPending}
+                  >
+                    {requestAccessMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      getPluginAccessRequestLabel(analyticsInfoQuery.data?.accessRequest)
                     )}
                   </Button>
                 ) : null}

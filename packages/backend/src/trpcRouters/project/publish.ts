@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { projectMemberProcedure } from "../../trpc";
+import {
+  projectMemberProcedure,
+  publishMutationProcedure,
+} from "../../trpc";
 import {
   publishService,
   PublishConflictError,
@@ -115,7 +118,7 @@ export const projectPublishProcedures = {
   /**
    * Publish a project version to a custom domain
    */
-  publish: projectMemberProcedure
+  publish: publishMutationProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -199,7 +202,7 @@ export const projectPublishProcedures = {
   /**
    * Unpublish a project (remove from domain)
    */
-  unpublish: projectMemberProcedure
+  unpublish: publishMutationProcedure
     .input(
       z.object({
         slug: z.string(),

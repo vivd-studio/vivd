@@ -9,9 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+import {
+  getPluginAccessRequestLabel,
+  getProjectPluginPresentation,
+  isPluginAccessRequestPending,
+} from "./presentation";
 
 type GenericProjectPluginPageProps = {
   projectSlug: string;
@@ -47,9 +53,12 @@ export default function GenericProjectPluginPage({
   pluginId,
   isEmbedded = false,
 }: GenericProjectPluginPageProps) {
+  const { config } = useAppConfig();
   const utils = trpc.useUtils();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const canManageProjectPlugins = session?.user?.role === "super_admin";
+  const canRequestPluginAccess =
+    !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
   const typedPluginId = pluginId as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
 
   const infoQuery = trpc.plugins.info.useQuery(
@@ -71,6 +80,15 @@ export default function GenericProjectPluginPage({
       toast.error("Failed to enable plugin", { description: error.message });
     },
   });
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId });
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", { description: error.message });
+    },
+  });
   const updateConfigMutation = trpc.plugins.updateConfig.useMutation({
     onSuccess: async () => {
       toast.success("Plugin configuration saved");
@@ -90,6 +108,9 @@ export default function GenericProjectPluginPage({
   const badge = pluginInfo
     ? formatInstallBadge(pluginInfo.entitlementState, pluginInfo.enabled)
     : { label: "Loading", variant: "secondary" as const };
+  const pluginPresentation = getProjectPluginPresentation(pluginId, projectSlug);
+  const PluginIcon = pluginPresentation.icon;
+  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const [configText, setConfigText] = useState("{}");
 
   useEffect(() => {
@@ -109,6 +130,9 @@ export default function GenericProjectPluginPage({
   const disabledCopy = useMemo(() => {
     if (!pluginInfo) return "Loading plugin info...";
     if (pluginInfo.entitlementState === "enabled" && !pluginInfo.enabled) {
+      if (isSessionPending) {
+        return `${pluginInfo.catalog.name} is available for this instance but has not been enabled for this project yet.`;
+      }
       return canManageProjectPlugins
         ? `${pluginInfo.catalog.name} is available for this instance but has not been enabled for this project yet.`
         : `${pluginInfo.catalog.name} is available for this instance, but a super-admin still needs to enable it for this project.`;
@@ -117,8 +141,7 @@ export default function GenericProjectPluginPage({
       return `${pluginInfo.catalog.name} is suspended for this project.`;
     }
     return `${pluginInfo.catalog.name} access is managed in the admin plugin settings. Ask a super-admin to enable it for this project.`;
-  }, [canManageProjectPlugins, pluginInfo]);
-
+  }, [canManageProjectPlugins, isSessionPending, pluginInfo]);
   const handleSaveConfig = () => {
     let parsedConfig: Record<string, unknown>;
     try {
@@ -176,7 +199,12 @@ export default function GenericProjectPluginPage({
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <CardTitle>{pluginInfo?.catalog.name ?? pluginId}</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                    <PluginIcon className="h-4 w-4" />
+                  </span>
+                  <span>{pluginInfo?.catalog.name ?? pluginPresentation.title}</span>
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
                   {pluginInfo?.catalog.description ?? "Plugin details"}
                 </p>
@@ -203,6 +231,28 @@ export default function GenericProjectPluginPage({
                       </>
                     ) : (
                       "Enable for this project"
+                    )}
+                  </Button>
+                ) : null}
+                {!pluginInfo?.enabled && canRequestPluginAccess ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      requestAccessMutation.mutate({
+                        slug: projectSlug,
+                        pluginId: typedPluginId,
+                      })
+                    }
+                    disabled={isRequestPending || requestAccessMutation.isPending}
+                  >
+                    {requestAccessMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      getPluginAccessRequestLabel(pluginInfo?.accessRequest)
                     )}
                   </Button>
                 ) : null}

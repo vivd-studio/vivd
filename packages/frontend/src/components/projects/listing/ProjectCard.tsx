@@ -46,6 +46,7 @@ import { toast } from "sonner";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
+import { getProjectPluginPresentation } from "@/plugins/presentation";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
@@ -291,6 +292,8 @@ export function ProjectCard({
         description: `New title: ${data.title}`,
       });
       setShowEditTitleDialog(false);
+      setIsInlineTitleEditing(false);
+      setInlineTitleInput(data.title);
       utils.project.list.invalidate();
     },
     onError: (error) => {
@@ -309,6 +312,10 @@ export function ProjectCard({
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [editTitleInput, setEditTitleInput] = useState(project.title ?? "");
+  const [inlineTitleInput, setInlineTitleInput] = useState(
+    project.title?.trim() || project.slug,
+  );
+  const [isInlineTitleEditing, setIsInlineTitleEditing] = useState(false);
   const [renameSlugInput, setRenameSlugInput] = useState(project.slug);
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -317,6 +324,7 @@ export function ProjectCard({
   const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<"tags" | "actions">("tags");
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const suppressActionsCloseAutoFocusRef = useRef(false);
+  const inlineTitleInputRef = useRef<HTMLInputElement>(null);
   const tagsAreaAnchorRef = useRef<HTMLDivElement>(null);
   const actionsMenuItemAnchorRef = useRef<Measurable>({
     getBoundingClientRect: () => new DOMRect(),
@@ -328,6 +336,9 @@ export function ProjectCard({
     projectSlug: project.slug,
     surface: "project-card",
   });
+  const enabledPluginEntries = (project.enabledPlugins ?? []).map((pluginId) =>
+    getProjectPluginPresentation(pluginId, project.slug),
+  );
   const canManagePreview = membership?.organizationRole !== "client_editor";
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const canOverrideProjectStatus =
@@ -396,6 +407,11 @@ export function ProjectCard({
     setEditTitleInput(project.title ?? "");
   }, [project.title]);
 
+  useEffect(() => {
+    if (isInlineTitleEditing) return;
+    setInlineTitleInput(project.title?.trim() || project.slug);
+  }, [isInlineTitleEditing, project.slug, project.title]);
+
   const hasMultipleVersions = (project.totalVersions || 1) > 1;
   const versions = project.versions || [];
 
@@ -437,11 +453,8 @@ export function ProjectCard({
   const totalVersions = project.totalVersions || 1;
   const projectTags = project.tags ?? [];
   const isUrlProject = (project.source || "url") === "url";
-  const subtitle = isUrlProject
-    ? project.url
-    : project.title
-      ? `“${project.title}”`
-      : "Start-from-scratch project";
+  const displayTitle = project.title?.trim() || project.slug;
+  const supportingDetail = isUrlProject ? project.url : "";
   const publishedUrl = project.publishedDomain
     ? `${isDevDomain(project.publishedDomain) ? "http" : "https"}://${project.publishedDomain}`
     : null;
@@ -520,6 +533,44 @@ export function ProjectCard({
     navigate(projectStudioRoute);
   };
 
+  const startInlineTitleEdit = () => {
+    if (!canRenameProject || isRenamePending || isTitleUpdatePending) return;
+    setInlineTitleInput(displayTitle);
+    setIsInlineTitleEditing(true);
+  };
+
+  const cancelInlineTitleEdit = () => {
+    setInlineTitleInput(displayTitle);
+    setIsInlineTitleEditing(false);
+  };
+
+  const commitInlineTitleEdit = () => {
+    if (isTitleUpdatePending) return;
+
+    const nextTitle = inlineTitleInput.trim();
+    if (!nextTitle || nextTitle === displayTitle) {
+      cancelInlineTitleEdit();
+      return;
+    }
+
+    setIsInlineTitleEditing(false);
+    updateTitleMutation.mutate({
+      slug: project.slug,
+      title: nextTitle,
+    });
+  };
+
+  useEffect(() => {
+    if (!isInlineTitleEditing) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      inlineTitleInputRef.current?.focus();
+      inlineTitleInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isInlineTitleEditing]);
+
   return (
     <>
       <Card
@@ -536,15 +587,47 @@ export function ProjectCard({
           }
         }}
       >
-        <CardHeader className="pb-3 pt-4 px-4">
-          <div className="flex justify-between items-start gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <CardTitle
-                className="text-base font-semibold truncate"
-                title={project.slug}
-              >
-                {project.slug}
-              </CardTitle>
+        <CardHeader className="px-4 pb-3 pt-4">
+          <div className="flex min-h-[44px] items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {isInlineTitleEditing ? (
+                <Input
+                  ref={inlineTitleInputRef}
+                  value={inlineTitleInput}
+                  onChange={(event) => setInlineTitleInput(event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  onBlur={() => commitInlineTitleEdit()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitInlineTitleEdit();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelInlineTitleEdit();
+                    }
+                  }}
+                  placeholder="Project title"
+                  disabled={isTitleUpdatePending}
+                  className="h-8 min-w-0 max-w-[220px]"
+                  aria-label={`Edit title for ${project.slug}`}
+                />
+              ) : (
+                <CardTitle
+                  className={`truncate text-base font-semibold ${
+                    canRenameProject ? "cursor-text" : ""
+                  }`}
+                  title={displayTitle}
+                  onClick={(event) => event.stopPropagation()}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    startInlineTitleEdit();
+                  }}
+                >
+                  {displayTitle}
+                </CardTitle>
+              )}
               {totalVersions > 0 &&
                 (hasMultipleVersions ? (
                   <VersionSelector
@@ -571,7 +654,7 @@ export function ProjectCard({
                   />
                 ))}
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
+            <div className="grid shrink-0 content-start justify-items-end gap-1">
               <ProjectTagsPopover
                 key={`${project.slug}:${tagsPopoverSessionKey}`}
                 open={tagsPopoverOpen}
@@ -617,7 +700,7 @@ export function ProjectCard({
               >
                 <div
                   ref={tagsAreaAnchorRef}
-                  className="flex min-h-[22px] max-w-[200px] cursor-pointer flex-wrap justify-end gap-1 text-right"
+                  className="flex h-[22px] max-w-[200px] cursor-pointer flex-nowrap justify-end gap-1 overflow-hidden text-right"
                   title="Click to edit labels"
                   onClick={(e) => {
                     if (isRenamePending) return;
@@ -632,10 +715,15 @@ export function ProjectCard({
                   ) : (
                     <>
                       {projectTags.slice(0, 4).map((tag) => (
-                        <TagChip key={tag} tag={tag} color={getColor(tag)} className="text-[10px] py-0.5" />
+                        <TagChip
+                          key={tag}
+                          tag={tag}
+                          color={getColor(tag)}
+                          className="max-w-[84px] shrink truncate py-0.5 text-[10px]"
+                        />
                       ))}
                       {projectTags.length > 4 && (
-                        <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+                        <span className="inline-flex shrink-0 items-center rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                           +{projectTags.length - 4}
                         </span>
                       )}
@@ -643,43 +731,78 @@ export function ProjectCard({
                   )}
                 </div>
               </ProjectTagsPopover>
-              {!isCompleted && (
-                <Badge variant={statusColor} className="shrink-0">
-                  {statusLabel}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div
-            className="text-xs text-muted-foreground truncate"
-            title={subtitle}
-          >
-            {subtitle}
-          </div>
-          {project.publishedDomain && (
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <Globe className="w-3 h-3 text-green-600 shrink-0" />
-              <a
-                href={publishedUrl ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-green-600 hover:text-green-700 hover:underline truncate"
-                title={`Published at ${project.publishedDomain}${
-                  project.publishedVersion
-                    ? ` (v${project.publishedVersion})`
-                    : ""
-                }`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {project.publishedDomain}
-                {project.publishedVersion && (
-                  <span className="text-muted-foreground ml-1">
-                    (v{project.publishedVersion})
-                  </span>
+              <div className="flex min-h-5 items-center justify-end">
+                {!isCompleted && (
+                  <Badge variant={statusColor} className="shrink-0">
+                    {statusLabel}
+                  </Badge>
                 )}
-              </a>
+              </div>
             </div>
-          )}
+          </div>
+          {supportingDetail ? (
+            <div
+              className="text-xs text-muted-foreground line-clamp-1"
+              title={supportingDetail}
+            >
+              {supportingDetail}
+            </div>
+          ) : null}
+          <div className={`grid gap-1 ${supportingDetail ? "mt-2" : "mt-1"}`}>
+            <div className="flex min-h-7 items-center gap-1.5">
+              {enabledPluginEntries.length > 0 ? (
+                <>
+                  <span className="text-xs text-muted-foreground">Plugins</span>
+                  {enabledPluginEntries.map((plugin) => {
+                    const PluginIcon = plugin.icon;
+                    return (
+                      <Button
+                        key={`enabled-plugin-${plugin.pluginId}`}
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        title={plugin.title}
+                        aria-label={`Open ${plugin.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (plugin.path) navigate(plugin.path);
+                        }}
+                        disabled={isRenamePending || !plugin.path}
+                      >
+                        <PluginIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    );
+                  })}
+                </>
+              ) : null}
+            </div>
+            <div className="flex min-h-[18px] items-center gap-1.5">
+              {project.publishedDomain ? (
+                <>
+                  <Globe className="h-3 w-3 shrink-0 text-green-600" />
+                  <a
+                    href={publishedUrl ?? undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate text-xs text-green-600 hover:text-green-700 hover:underline"
+                    title={`Published at ${project.publishedDomain}${
+                      project.publishedVersion
+                        ? ` (v${project.publishedVersion})`
+                        : ""
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {project.publishedDomain}
+                    {project.publishedVersion && (
+                      <span className="ml-1 text-muted-foreground">
+                        (v{project.publishedVersion})
+                      </span>
+                    )}
+                  </a>
+                </>
+              ) : null}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="pb-1.5 px-4 grow flex flex-col">
           {isCompleted && project.thumbnailUrl && (
@@ -1026,6 +1149,19 @@ export function ProjectCard({
               </Button>
             );
           })}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(ROUTES.PROJECT_PLUGINS(project.slug));
+            }}
+            disabled={isRenamePending}
+          >
+            <Plug className="h-4 w-4" />
+            <span className="text-xs font-medium">Plugins</span>
+          </Button>
           {isUrlProject && project.url && (
             <Button
               variant="outline"

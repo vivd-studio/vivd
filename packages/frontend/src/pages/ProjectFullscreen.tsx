@@ -467,18 +467,28 @@ export default function ProjectFullscreen() {
             Edit
           </Button>
         ) : null}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setPublishDialogOpen(true)}
-          disabled={isRenamePending}
-          className="h-8 rounded-md px-3"
-        >
-          Publish
-        </Button>
-        {projectHeaderPluginShortcuts.map((shortcut) => {
-          const ShortcutIcon = shortcut.icon;
-          return (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPublishDialogOpen(true)}
+              disabled={isRenamePending}
+              className="h-8 rounded-md px-3"
+            >
+              Publish
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
+              disabled={isRenamePending}
+              className="h-8 rounded-md px-3"
+            >
+              <Plug className="mr-1.5 h-4 w-4" />
+              Plugins
+            </Button>
+            {projectHeaderPluginShortcuts.map((shortcut) => {
+              const ShortcutIcon = shortcut.icon;
+              return (
             <Button
               key={`header-shortcut-${shortcut.pluginId}`}
               variant="outline"

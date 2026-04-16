@@ -27,8 +27,8 @@ describe("resolvePermissionRequestDisplay", () => {
       }),
     );
 
-    expect(result.title).toBe("Publish site");
-    expect(result.summary).toBe("This will publish the current version to:");
+    expect(result.title).toBe("Publish this version");
+    expect(result.summary).toBe("Publish this version to");
     expect(result.destinationLabel).toBe("example.com");
     expect(result.destinationUrl).toBe("https://example.com");
     expect(result.technicalPatterns).toEqual([

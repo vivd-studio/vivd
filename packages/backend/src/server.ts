@@ -6,6 +6,7 @@ import multer from "multer";
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
+import { extractRequestIp } from "./lib/requestClientIp";
 import { appRouter } from "./trpcRouters/appRouter";
 import { createContext } from "./trpc";
 import { createImportRouter } from "./httpRoutes/import";
@@ -22,6 +23,7 @@ import { publishService } from "./services/publish/PublishService";
 import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
 import { instanceSelfHostAdminService } from "./services/system/InstanceSelfHostAdminService";
 import { reloadCaddyConfig } from "./services/system/CaddyAdminService";
+import { controlPlaneRateLimitService } from "./services/system/ControlPlaneRateLimitService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,6 +45,38 @@ function getRequestHostHeader(req: express.Request): string | null {
 
 function isSuperAdminHost(req: express.Request): boolean {
   return domainService.isSuperAdminHost(getRequestHostHeader(req));
+}
+
+function shouldRateLimitAuthRequest(req: express.Request): boolean {
+  const method = req.method.toUpperCase();
+  return method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+}
+
+async function enforceExpressRateLimit(options: {
+  action: "auth" | "zip_import";
+  message: string;
+  organizationId?: string | null;
+  req: express.Request;
+  res: express.Response;
+  userId?: string | null;
+}): Promise<boolean> {
+  const decision = await controlPlaneRateLimitService.checkAction({
+    action: options.action,
+    organizationId: options.organizationId ?? null,
+    requestIp: extractRequestIp(options.req),
+    requestPath: options.req.path,
+    userId: options.userId ?? null,
+  });
+
+  if (decision.allowed) {
+    return true;
+  }
+
+  if (decision.retryAfterSeconds > 0) {
+    options.res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+  }
+  options.res.status(429).json({ error: options.message });
+  return false;
 }
 
 async function getSessionOrganizationRole(
@@ -144,6 +178,18 @@ app.use(express.json({ limit: "50mb" }));
 // Auth Routes
 const authHandler = toNodeHandler(auth);
 app.all("/vivd-studio/api/auth/*path", async (req, res) => {
+  if (shouldRateLimitAuthRequest(req)) {
+    const allowed = await enforceExpressRateLimit({
+      action: "auth",
+      message: "Auth request budget exceeded. Please wait a moment and retry.",
+      req,
+      res,
+    });
+    if (!allowed) {
+      return;
+    }
+  }
+
   // Host-gate Better Auth admin endpoints so they aren't reachable from customer domains.
   if (
     (req.path === "/vivd-studio/api/auth/admin" ||
@@ -167,6 +213,22 @@ app.use(
 // Import Projects endpoint(s)
 app.use(
   "/vivd-studio/api",
+  async (req, res, next) => {
+    if (req.method.toUpperCase() !== "POST" || req.path !== "/import") {
+      next();
+      return;
+    }
+
+    const allowed = await enforceExpressRateLimit({
+      action: "zip_import",
+      message: "Import budget exceeded. Please wait a moment and retry.",
+      req,
+      res,
+    });
+    if (allowed) {
+      next();
+    }
+  },
   createImportRouter({
     auth,
     upload: zipImportUpload,

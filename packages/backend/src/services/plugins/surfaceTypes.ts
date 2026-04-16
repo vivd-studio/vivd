@@ -1,3 +1,4 @@
+import type { ProjectPluginAccessRequestState } from "@vivd/plugin-sdk";
 import type {
   PluginEntitlementManagedBy,
   PluginEntitlementScope,
@@ -27,6 +28,7 @@ export interface ProjectPluginCatalogItem {
   instanceId: string | null;
   instanceStatus: string | null;
   updatedAt: string | null;
+  accessRequest: ProjectPluginAccessRequestState;
 }
 
 export interface OrganizationPluginIssue {

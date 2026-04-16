@@ -52,39 +52,34 @@ export function PermissionDock({
 
   return (
     <div className="relative mt-auto px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
-      <div className="mx-auto w-full max-w-3xl">
-        <div className="rounded-[1.4rem] border border-border/70 bg-background/95 px-4 py-4 shadow-2xl shadow-black/10 backdrop-blur-md supports-[backdrop-filter]:bg-background/82 dark:border-white/10 dark:shadow-black/45 md:px-5 md:py-5">
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Agent Permission
-            </div>
-            <div className="text-xs font-semibold text-foreground">
-              Explicit approval required
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {display.summary}
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-1.5">
-            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              {display.title}
-            </div>
+      <div className="mx-auto w-full max-w-2xl">
+        <div className="rounded-xl border border-border/80 bg-background px-4 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.12)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.34)] md:px-5 md:py-4">
+          <div className="space-y-2">
             {display.destinationLabel ? (
-              <a
-                href={display.destinationUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="block text-lg font-semibold text-foreground underline decoration-foreground/35 underline-offset-4 transition-colors hover:text-primary hover:decoration-primary md:text-xl"
-              >
-                {display.destinationLabel}
-              </a>
-            ) : null}
+              <>
+                <p className="text-sm text-muted-foreground">{display.summary}</p>
+                <a
+                  href={display.destinationUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-[1.35rem] font-semibold leading-tight text-foreground underline decoration-foreground/25 underline-offset-[5px] transition-colors hover:text-foreground hover:decoration-foreground/55 md:text-[1.55rem]"
+                >
+                  {display.destinationLabel}
+                </a>
+              </>
+            ) : (
+              <>
+                <div className="text-base font-semibold text-foreground">
+                  {display.title}
+                </div>
+                <p className="text-sm text-muted-foreground">{display.summary}</p>
+              </>
+            )}
           </div>
 
           {display.showTechnicalDetails ? (
             <details className="mt-3 border-t border-border/50 pt-2">
-              <summary className="cursor-pointer text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <summary className="cursor-pointer text-[11px] text-muted-foreground transition-colors hover:text-foreground">
                 Technical details
               </summary>
               <div className="mt-2 space-y-1.5">
@@ -93,7 +88,7 @@ export function PermissionDock({
                 </div>
                 {display.technicalPatterns.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    <div className="text-[11px] text-muted-foreground">
                       Requested scope
                     </div>
                     {display.technicalPatterns.map((pattern) => (
@@ -116,7 +111,7 @@ export function PermissionDock({
               onClick={() => handleRespond("reject")}
               disabled={responding !== null}
             >
-              Deny
+              Don't allow
             </Button>
             {showAlways ? (
               <Button
@@ -124,14 +119,14 @@ export function PermissionDock({
                 onClick={() => handleRespond("always")}
                 disabled={responding !== null}
               >
-                Allow always
+                Always allow
               </Button>
             ) : null}
             <Button
               onClick={() => handleRespond("once")}
               disabled={responding !== null}
             >
-              Allow once
+              Allow
             </Button>
           </div>
         </div>

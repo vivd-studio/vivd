@@ -7,6 +7,8 @@ const {
   catalogUseQueryMock,
   genericEnsureMutateMock,
   genericEnsureUseMutationMock,
+  requestAccessMutateMock,
+  requestAccessUseMutationMock,
   projectListUseQueryMock,
   useParamsMock,
   useUtilsMock,
@@ -14,6 +16,8 @@ const {
   catalogUseQueryMock: vi.fn(),
   genericEnsureMutateMock: vi.fn(),
   genericEnsureUseMutationMock: vi.fn(),
+  requestAccessMutateMock: vi.fn(),
+  requestAccessUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   useParamsMock: vi.fn(),
   useUtilsMock: vi.fn(),
@@ -63,6 +67,7 @@ vi.mock("@/lib/AppConfigContext", () => ({
       installProfile: "solo",
       experimentalSoloModeEnabled: false,
       selfHostAdminFeaturesEnabled: false,
+      supportEmail: "support@vivd.studio",
     },
     isLoading: false,
   }),
@@ -77,6 +82,9 @@ vi.mock("@/lib/trpc", () => ({
       },
       ensure: {
         useMutation: genericEnsureUseMutationMock,
+      },
+      requestAccess: {
+        useMutation: requestAccessUseMutationMock,
       },
     },
     project: {
@@ -107,6 +115,8 @@ describe("ProjectPlugins", () => {
     catalogUseQueryMock.mockReset();
     genericEnsureMutateMock.mockReset();
     genericEnsureUseMutationMock.mockReset();
+    requestAccessMutateMock.mockReset();
+    requestAccessUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
     useParamsMock.mockReset();
     useSessionMock.mockReset();
@@ -119,6 +129,7 @@ describe("ProjectPlugins", () => {
           role: "super_admin",
         },
       },
+      isPending: false,
     });
     useUtilsMock.mockReturnValue({
       plugins: {
@@ -136,6 +147,12 @@ describe("ProjectPlugins", () => {
             instanceId: null,
             instanceStatus: null,
             updatedAt: null,
+            accessRequest: {
+              status: "not_requested",
+              requestedAt: null,
+              requestedByUserId: null,
+              requesterEmail: null,
+            },
             catalog: {
               pluginId: "contact_form",
               name: "Contact Form",
@@ -148,6 +165,12 @@ describe("ProjectPlugins", () => {
             instanceId: null,
             instanceStatus: null,
             updatedAt: null,
+            accessRequest: {
+              status: "not_requested",
+              requestedAt: null,
+              requestedByUserId: null,
+              requesterEmail: null,
+            },
             catalog: {
               pluginId: "analytics",
               name: "Analytics",
@@ -160,6 +183,12 @@ describe("ProjectPlugins", () => {
             instanceId: "ppi-search-1",
             instanceStatus: "enabled",
             updatedAt: "2026-02-22T10:00:00.000Z",
+            accessRequest: {
+              status: "not_requested",
+              requestedAt: null,
+              requestedByUserId: null,
+              requesterEmail: null,
+            },
             catalog: {
               pluginId: "search_console",
               name: "Search Console",
@@ -180,6 +209,11 @@ describe("ProjectPlugins", () => {
     });
     genericEnsureUseMutationMock.mockReturnValue({
       mutate: genericEnsureMutateMock,
+      isPending: false,
+      variables: undefined,
+    });
+    requestAccessUseMutationMock.mockReturnValue({
+      mutate: requestAccessMutateMock,
       isPending: false,
       variables: undefined,
     });
@@ -217,12 +251,104 @@ describe("ProjectPlugins", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Search Console")).toBeInTheDocument();
+    expect(screen.getAllByText("Search Console")).toHaveLength(2);
     expect(screen.getByText("Configured for this project and ready to open.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Search Console details" })).toHaveAttribute(
       "href",
       "/vivd-studio/projects/site-1/plugins/search_console",
     );
+  });
+
+  it("offers request access for non-admin users on inactive plugins", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          role: "user",
+          email: "editor@example.com",
+        },
+      },
+      isPending: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectPlugins />
+      </MemoryRouter>,
+    );
+
+    const requestButtons = screen.getAllByRole("button", { name: "Request access" });
+    fireEvent.click(requestButtons[0]!);
+    expect(requestAccessMutateMock).toHaveBeenCalledWith({
+      slug: "site-1",
+      pluginId: "contact_form",
+    });
+  });
+
+  it("shows request sent state for pending access requests", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          role: "user",
+          email: "editor@example.com",
+        },
+      },
+      isPending: false,
+    });
+    catalogUseQueryMock.mockReturnValue({
+      data: {
+        plugins: [
+          {
+            pluginId: "contact_form",
+            installState: "available",
+            instanceId: null,
+            instanceStatus: null,
+            updatedAt: null,
+            accessRequest: {
+              status: "pending",
+              requestedAt: "2026-04-17T10:00:00.000Z",
+              requestedByUserId: "user-1",
+              requesterEmail: "editor@example.com",
+            },
+            catalog: {
+              pluginId: "contact_form",
+              name: "Contact Form",
+              description: "Collect visitor inquiries and store submissions in Vivd.",
+            },
+          },
+        ],
+      },
+      error: null,
+      isLoading: false,
+      refetch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectPlugins />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Request sent" })).toBeDisabled();
+  });
+
+  it("does not show request access while session state is still loading", () => {
+    useSessionMock.mockReturnValue({
+      data: null,
+      isPending: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectPlugins />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Request access" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Enable for this project" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the overview summary and enabled plugin instance metadata", () => {

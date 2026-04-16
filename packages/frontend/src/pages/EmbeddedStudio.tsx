@@ -685,6 +685,16 @@ export default function EmbeddedStudio() {
         >
           Publish
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
+          disabled={isRenamePending}
+          className="h-8 rounded-md px-3"
+        >
+          <Plug className="mr-1.5 h-4 w-4" />
+          Plugins
+        </Button>
         {projectHeaderPluginShortcuts.map((shortcut) => {
           const ShortcutIcon = shortcut.icon;
           return (
