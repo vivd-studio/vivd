@@ -20,6 +20,7 @@
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
       "@vivd/plugin-newsletter": ["../plugin-newsletter/src/index.ts"],
       "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
+      "@vivd/plugin-sdk": ["../plugin-sdk/src/index.ts"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }

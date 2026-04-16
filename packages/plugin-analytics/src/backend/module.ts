@@ -7,8 +7,8 @@ import type {
   PluginReadContext,
   PluginUpdateConfigContext,
   ProjectPluginReadPayload,
-} from "@vivd/shared/types";
-import { UnsupportedPluginReadError } from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
+import { UnsupportedPluginReadError } from "@vivd/plugin-sdk";
 import { analyticsPluginConfigSchema, type AnalyticsPluginConfig } from "./config";
 import {
   ANALYTICS_SUMMARY_READ_ID,

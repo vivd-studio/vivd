@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { SharedProjectPluginUiDefinition } from "@vivd/shared/types";
+import type { SharedProjectPluginUiDefinition } from "@vivd/plugin-sdk";
 
 export interface ProjectPluginPageProps {
   projectSlug: string;

@@ -29,6 +29,7 @@ import { installProfileService } from "../src/services/system/InstallProfileServ
 
 const ORIGINAL_ENV = new Map<string, string | undefined>([
   ["VIVD_INSTALL_PROFILE", process.env.VIVD_INSTALL_PROFILE],
+  ["VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE", process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE],
   ["SINGLE_PROJECT_MODE", process.env.SINGLE_PROJECT_MODE],
   ["VIVD_INSTANCE_CAPABILITY_POLICY", process.env.VIVD_INSTANCE_CAPABILITY_POLICY],
   ["VIVD_INSTANCE_PLUGIN_DEFAULTS", process.env.VIVD_INSTANCE_PLUGIN_DEFAULTS],
@@ -55,6 +56,7 @@ describe("InstallProfileService", () => {
     getSystemSettingValueMock.mockResolvedValue(null);
     getSystemSettingJsonValueMock.mockResolvedValue(null);
     delete process.env.VIVD_INSTALL_PROFILE;
+    delete process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE;
     delete process.env.SINGLE_PROJECT_MODE;
     delete process.env.VIVD_INSTANCE_CAPABILITY_POLICY;
     delete process.env.VIVD_INSTANCE_PLUGIN_DEFAULTS;
@@ -65,15 +67,15 @@ describe("InstallProfileService", () => {
     restoreEnv();
   });
 
-  it("defaults fresh installs to solo when no stored or env profile is set", async () => {
-    await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+  it("defaults fresh installs to platform when no stored or env profile is set", async () => {
+    await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
 
     await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
     await expect(installProfileService.resolvePolicy()).resolves.toMatchObject({
-      installProfile: "solo",
+      installProfile: "platform",
       capabilities: {
         customDomains: true,
-        tenantHosts: false,
+        tenantHosts: true,
       },
     });
   });
@@ -86,14 +88,29 @@ describe("InstallProfileService", () => {
     await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
   });
 
-  it("prefers the stored profile over the env bootstrap value", async () => {
+  it("coerces solo env bootstrap to platform while the experimental flag is off", async () => {
     process.env.VIVD_INSTALL_PROFILE = "solo";
-    getSystemSettingValueMock.mockResolvedValueOnce("platform");
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
   });
 
+  it("allows solo env bootstrap when the experimental flag is enabled", async () => {
+    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
+    process.env.VIVD_INSTALL_PROFILE = "solo";
+
+    await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+  });
+
+  it("prefers the stored profile over the env bootstrap value", async () => {
+    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
+    process.env.VIVD_INSTALL_PROFILE = "platform";
+    getSystemSettingValueMock.mockResolvedValueOnce("solo");
+
+    await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+  });
+
   it("keeps the platform-only capability subset disabled on solo", async () => {
+    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
     getSystemSettingValueMock.mockResolvedValueOnce("solo");
     getSystemSettingJsonValueMock.mockImplementation(async (key: string) => {
       if (key === "instance_capability_policy") {
@@ -129,5 +146,12 @@ describe("InstallProfileService", () => {
         mode: "same_host_path",
       },
     });
+  });
+
+  it("rejects enabling solo when the experimental flag is off", async () => {
+    await expect(installProfileService.updateInstallProfile("solo")).rejects.toThrow(
+      /experimental-only/i,
+    );
+    expect(setSystemSettingValueMock).not.toHaveBeenCalled();
   });
 });

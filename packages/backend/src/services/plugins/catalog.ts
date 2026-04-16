@@ -1,12 +1,12 @@
 import {
   definePluginPackageDescriptors,
   extractPluginIds,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import { installedPluginManifests } from "@vivd/installed-plugins";
 import type {
   PluginCatalogEntry as SharedPluginCatalogEntry,
   PluginDefinition as SharedPluginDefinition,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 
 export const pluginPackageDescriptors =
   definePluginPackageDescriptors(installedPluginManifests);

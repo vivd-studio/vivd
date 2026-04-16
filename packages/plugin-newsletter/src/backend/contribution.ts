@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vivd/shared/types";
+import type { PluginModule } from "@vivd/plugin-sdk";
 import type {
   NewsletterBackendRouteDefinition,
   NewsletterPluginServiceDeps,

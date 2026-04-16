@@ -8,7 +8,7 @@ import {
 } from "./analytics/module";
 import type {
   PluginModule as SharedPluginModule,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   backendPluginPackageDescriptors,
 } from "./descriptors";

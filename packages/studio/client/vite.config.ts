@@ -16,6 +16,10 @@ export default defineConfig({
         __dirname,
         "../../installed-plugins/src",
       ),
+      "@vivd/plugin-sdk": path.resolve(
+        __dirname,
+        "../../plugin-sdk/src",
+      ),
       "@vivd/plugin-analytics": path.resolve(
         __dirname,
         "../../plugin-analytics/src",

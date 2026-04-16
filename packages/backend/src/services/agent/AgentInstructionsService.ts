@@ -16,6 +16,7 @@ import {
   getSystemSettingValue,
   SYSTEM_SETTING_KEYS,
 } from "../system/SystemSettingsService";
+import { emailTemplateBrandingService } from "../email/templateBranding";
 
 export interface RenderAgentInstructionsInput {
   projectName: string;
@@ -45,8 +46,19 @@ function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
   return fallback;
 }
 
-function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean((env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim());
+async function resolveSupportEmail(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  try {
+    const branding = await emailTemplateBrandingService.getResolvedBranding();
+    const supportEmail =
+      branding.supportEmail?.trim() ||
+      (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+    return supportEmail || null;
+  } catch {
+    const fallback = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+    return fallback || null;
+  }
 }
 
 class AgentInstructionsService {
@@ -76,6 +88,7 @@ class AgentInstructionsService {
     input: RenderAgentInstructionsInput,
   ): Promise<RenderAgentInstructionsResult> {
     const { template, source } = await this.getTemplate();
+    const supportRequestEnabled = Boolean(await resolveSupportEmail(process.env));
     const pluginAgentHints = listInstalledPluginAgentHints(input.enabledPlugins);
     const instructions =
       source === "default"
@@ -89,7 +102,7 @@ class AgentInstructionsService {
               process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
               false,
             ),
-            supportRequestEnabled: isSupportRequestEnabled(process.env),
+            supportRequestEnabled,
           })
         : ensureMandatoryToolChannelGuidance(
             normalizeAgentInstructionsTemplate(
@@ -105,7 +118,7 @@ class AgentInstructionsService {
                     process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
                     false,
                   ),
-                  supportRequestEnabled: isSupportRequestEnabled(process.env),
+                  supportRequestEnabled,
                 }),
               }),
             ),

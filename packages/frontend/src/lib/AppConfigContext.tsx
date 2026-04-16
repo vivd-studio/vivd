@@ -10,6 +10,8 @@ export interface AppConfig {
   singleProjectMode: boolean;
   /** Active install profile. */
   installProfile: "solo" | "platform";
+  /** Whether the unsupported solo posture is explicitly enabled for this installation. */
+  experimentalSoloModeEnabled: boolean;
   /** Profile-aware label for the instance admin surface. */
   instanceAdminLabel: string;
   /** Instance capability flags resolved by the backend. */
@@ -56,6 +58,7 @@ interface AppConfigContextValue {
 const defaultConfig: AppConfig = {
   singleProjectMode: false,
   installProfile: "platform",
+  experimentalSoloModeEnabled: false,
   instanceAdminLabel: "Super Admin",
   capabilities: {
     multiOrg: true,

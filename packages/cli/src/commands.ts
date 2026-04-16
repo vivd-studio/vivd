@@ -58,7 +58,7 @@ import {
 import type {
   PluginCliInfoContractPayload,
   PluginCliReadResultPayload,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 
 type CommandResult = {
   data: unknown;
@@ -75,6 +75,10 @@ type ProjectInfoResponse = {
     requestedVersion: number;
   };
   enabledPluginIds: string[];
+};
+
+type SupportContactResponse = {
+  supportEmail: string | null;
 };
 
 type ChecklistStatus = "pass" | "fail" | "warning" | "skip" | "fixed";
@@ -513,10 +517,15 @@ function isPreviewScreenshotCliEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return parseBooleanEnv(env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED, false);
 }
 
-function getRootHelpText(env: NodeJS.ProcessEnv = process.env): string {
+function getRootHelpText(options?: {
+  env?: NodeJS.ProcessEnv;
+  supportRequestEnabled?: boolean;
+}): string {
+  const env = options?.env ?? process.env;
   return renderVivdCliRootHelp({
     previewScreenshotEnabled: isPreviewScreenshotCliEnabled(env),
-    supportRequestEnabled: isSupportRequestEnabled(env),
+    supportRequestEnabled:
+      options?.supportRequestEnabled ?? isSupportRequestEnabledFromEnv(env),
   });
 }
 
@@ -561,6 +570,40 @@ function getPreviewHelpText(env: NodeJS.ProcessEnv = process.env): string {
 
 function getSupportHelpText(): string {
   return GENERAL_HELP.support;
+}
+
+function readConfiguredSupportEmail(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+  return configured || null;
+}
+
+function isSupportRequestEnabledFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(readConfiguredSupportEmail(env));
+}
+
+async function resolveSupportEmail(
+  flags: Pick<CliFlags, "slug" | "version">,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  const configured = readConfiguredSupportEmail(env);
+  if (configured) {
+    return configured;
+  }
+
+  const runtime = resolveCliRuntime(env, flags);
+  if (!runtime) {
+    return null;
+  }
+
+  try {
+    const result = (await runtime.client.query("studioApi.getSupportContact", {
+      studioId: runtime.config.studioId,
+    })) as SupportContactResponse;
+    const supportEmail = result.supportEmail?.trim();
+    return supportEmail || null;
+  } catch {
+    return null;
+  }
 }
 
 async function ensureUniqueFilePath(filePath: string): Promise<string> {
@@ -771,11 +814,25 @@ async function withRuntime<T>(
   return fn(runtime);
 }
 
-function helpTextFor(topic: string[]): string {
+async function helpTextFor(
+  topic: string[],
+  flags: Pick<CliFlags, "slug" | "version">,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
   const normalized = topic.join(" ").trim();
-  const supportRequestEnabled = isSupportRequestEnabled();
+  let supportRequestEnabled: boolean | null = null;
+  const getSupportRequestEnabled = async (): Promise<boolean> => {
+    if (supportRequestEnabled == null) {
+      supportRequestEnabled = Boolean(await resolveSupportEmail(flags, env));
+    }
+    return supportRequestEnabled;
+  };
+
   if (!normalized || normalized === "root") {
-    return getRootHelpText(process.env);
+    return getRootHelpText({
+      env,
+      supportRequestEnabled: await getSupportRequestEnabled(),
+    });
   }
   if (normalized.startsWith("preview")) {
     return getPreviewHelpText();
@@ -798,21 +855,15 @@ function helpTextFor(topic: string[]): string {
     return GENERAL_HELP.publish;
   }
   if (normalized.startsWith("support")) {
-    if (!supportRequestEnabled) {
+    if (!(await getSupportRequestEnabled())) {
       return "Support contact is not configured for this runtime.";
     }
     return getSupportHelpText();
   }
-  return getRootHelpText(process.env);
-}
-
-function resolveSupportEmail(env: NodeJS.ProcessEnv = process.env): string | null {
-  const configured = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
-  return configured || null;
-}
-
-function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(resolveSupportEmail(env));
+  return getRootHelpText({
+    env,
+    supportRequestEnabled: await getSupportRequestEnabled(),
+  });
 }
 
 function buildSupportRequestSubject(projectSlug: string | null): string {
@@ -1801,7 +1852,7 @@ async function runSupportRequest(
   summaryTokens: string[],
   flags: CliFlags,
 ): Promise<CommandResult> {
-  const recipient = resolveSupportEmail();
+  const recipient = await resolveSupportEmail(flags);
   if (!recipient) {
     throw new Error("Support contact is not configured for this runtime.");
   }
@@ -1863,7 +1914,7 @@ async function runSupportRequest(
 async function runHelp(flags: CliFlags, tokens: string[]): Promise<CommandResult> {
   const topic = resolveHelpTopic(tokens);
   const normalized = topic.join(" ").trim() || "root";
-  const help = helpTextFor(topic);
+  const help = await helpTextFor(topic, flags);
   return jsonResult({ topic: normalized, help }, help);
 }
 

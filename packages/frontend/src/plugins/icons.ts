@@ -1,4 +1,4 @@
-import type { PluginUiIconName } from "@vivd/shared/types";
+import type { PluginUiIconName } from "@vivd/plugin-sdk";
 import {
   BarChart3,
   CreditCard,

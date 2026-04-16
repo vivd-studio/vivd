@@ -1,6 +1,9 @@
 import { protectedProcedure, router } from "../trpc";
 import { domainService } from "../services/publish/DomainService";
-import { installProfileService } from "../services/system/InstallProfileService";
+import {
+  installProfileService,
+  isExperimentalSoloModeEnabled,
+} from "../services/system/InstallProfileService";
 import { emailTemplateBrandingService } from "../services/email/templateBranding";
 
 /**
@@ -35,6 +38,7 @@ export const configRouter = router({
       // and bypasses the project list/dashboard view
       singleProjectMode: instancePolicy.singleProjectMode,
       installProfile: instancePolicy.installProfile,
+      experimentalSoloModeEnabled: isExperimentalSoloModeEnabled(),
       instanceAdminLabel:
         instancePolicy.installProfile === "solo"
           ? "Instance Settings"

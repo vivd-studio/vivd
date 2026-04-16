@@ -23,6 +23,7 @@ import {
   buildAndUploadPreview,
   syncSourceToBucket,
 } from "./ArtifactSyncService.js";
+import { writeLoadedSnapshotCommit } from "../../workspace/loadedSnapshotState.js";
 
 const ENV_KEYS = [
   "VIVD_S3_BUCKET",
@@ -81,6 +82,25 @@ describe("ArtifactSyncService", () => {
         version: 1,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("skips source sync while an older snapshot is pinned", async () => {
+    process.env.VIVD_S3_BUCKET = "test-bucket";
+
+    const tempProject = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-source-sync-pinned-"));
+    await fs.writeFile(path.join(tempProject, "index.html"), "<html></html>", "utf-8");
+    await writeLoadedSnapshotCommit(tempProject, "deadbeef");
+
+    await expect(
+      syncSourceToBucket({
+        projectDir: tempProject,
+        slug: "site-1",
+        version: 1,
+        commitHash: "abc123",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(spawnSyncMock).not.toHaveBeenCalled();
   });
 
   it("skips preview upload for non-Astro projects", async () => {

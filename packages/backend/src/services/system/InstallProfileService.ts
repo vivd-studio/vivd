@@ -129,12 +129,23 @@ function parseBoolean(value: string | undefined): boolean | null {
   return null;
 }
 
+export function isExperimentalSoloModeEnabled(): boolean {
+  return parseBoolean(process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE) === true;
+}
+
+function normalizeInstallProfileSelection(
+  profile: InstallProfile | null,
+): InstallProfile | null {
+  if (profile !== "solo") return profile;
+  return isExperimentalSoloModeEnabled() ? "solo" : "platform";
+}
+
 function readEnvInstallProfile(): InstallProfile | null {
   const raw = process.env.VIVD_INSTALL_PROFILE?.trim();
   if (!raw) return null;
   const parsed = installProfileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  return parsed.data;
+  return normalizeInstallProfileSelection(parsed.data);
 }
 
 function parseEnvJson<T>(raw: string | undefined, schema: z.ZodType<T>): T | null {
@@ -206,7 +217,7 @@ async function readStoredInstallProfile(): Promise<InstallProfile | null> {
   const raw = await getSystemSettingValue(SYSTEM_SETTING_KEYS.installProfile);
   if (!raw) return null;
   const parsed = installProfileSchema.safeParse(raw.trim());
-  return parsed.success ? parsed.data : null;
+  return parsed.success ? normalizeInstallProfileSelection(parsed.data) : null;
 }
 
 class InstallProfileService {
@@ -214,7 +225,7 @@ class InstallProfileService {
     return (
       (await readStoredInstallProfile()) ??
       readEnvInstallProfile() ??
-      "solo"
+      "platform"
     );
   }
 
@@ -281,6 +292,11 @@ class InstallProfileService {
   }
 
   async updateInstallProfile(profile: InstallProfile): Promise<void> {
+    if (profile === "solo" && !isExperimentalSoloModeEnabled()) {
+      throw new Error(
+        "Solo mode is currently experimental-only. Set VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE=true to enable it.",
+      );
+    }
     await setSystemSettingValue(SYSTEM_SETTING_KEYS.installProfile, profile);
   }
 

@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAppConfig } from "@/lib/AppConfigContext";
 
 const CAPABILITY_META = [
   {
@@ -238,6 +239,7 @@ function writePendingManagedUpdate(pending: PendingManagedUpdate | null) {
 
 export function InstanceSettingsTab() {
   const location = useLocation();
+  const { config } = useAppConfig();
   const utils = trpc.useUtils();
   const settingsQuery = trpc.superadmin.getInstanceSettings.useQuery();
   const softwareQuery = trpc.superadmin.getInstanceSoftware.useQuery(undefined, {
@@ -267,6 +269,8 @@ export function InstanceSettingsTab() {
   const effectiveInstallProfile = settings?.installProfile ?? null;
   const isSoloInstall = effectiveInstallProfile === "solo";
   const isPlatformInstall = effectiveInstallProfile === "platform";
+  const isExperimentalSoloInstall =
+    isSoloInstall && config.experimentalSoloModeEnabled;
   const waitingForUpdate = !!pendingManagedUpdate;
 
   useEffect(() => {
@@ -448,7 +452,9 @@ export function InstanceSettingsTab() {
 
   const handleSaveNetwork = () => {
     if (!isSoloInstall) {
-      toast.error("Network settings are currently editable only for solo installs.");
+      toast.error(
+        "Network settings are currently editable only for experimental solo self-host installs.",
+      );
       return;
     }
 
@@ -479,7 +485,9 @@ export function InstanceSettingsTab() {
         <CardHeader>
           <CardTitle>General</CardTitle>
           <CardDescription>
-            Review the active install profile and routing shape for this instance.
+            {isExperimentalSoloInstall
+              ? "Review the active experimental self-host posture and routing shape for this instance."
+              : "Review the active platform posture, routing shape, and instance-wide defaults."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -490,13 +498,13 @@ export function InstanceSettingsTab() {
                 <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
                   <Badge variant="secondary">Solo</Badge>
                   <span className="text-sm text-muted-foreground">
-                    Single-tenant self-host profile
+                    Experimental self-host profile
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  <code>solo</code> stays on the single-tenant self-host profile.{" "}
-                  <code>platform</code> and the broader multi-org tenancy controls are handled
-                  separately for licensed platform deployments.
+                  <code>solo</code> is enabled here only as an internal experimental
+                  self-host path. <code>platform</code> remains the supported posture for
+                  normal operation.
                 </p>
               </>
             ) : isPlatformInstall ? (
@@ -508,8 +516,11 @@ export function InstanceSettingsTab() {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  <code>platform</code> preserves the broader multi-org SaaS surface and
-                  host-based tenancy controls for platform deployments.
+                  <code>platform</code> is the supported posture for this installation and
+                  keeps the hosted multi-org control plane active.
+                  {!config.experimentalSoloModeEnabled
+                    ? " Solo self-host stays hidden unless the backend experimental flag is enabled."
+                    : ""}
                 </p>
               </>
             ) : (
@@ -538,8 +549,8 @@ export function InstanceSettingsTab() {
         <CardHeader>
           <CardTitle>Software</CardTitle>
           <CardDescription>
-            {isSoloInstall
-              ? "Review the running self-host bundle version and apply newer releases when the managed updater is configured."
+            {isExperimentalSoloInstall
+              ? "Review the running experimental self-host bundle version and apply newer releases when the managed updater is configured."
               : "Review the running deployment version. Platform updates stay deployment-managed for now."}
           </CardDescription>
         </CardHeader>
@@ -661,7 +672,7 @@ export function InstanceSettingsTab() {
         <CardHeader>
           <CardTitle>Network</CardTitle>
           <CardDescription>
-            {isSoloInstall
+            {isExperimentalSoloInstall
               ? "Configure the main public host and how HTTPS is handled for this instance."
               : "This shows the currently resolved host and TLS state. Platform host topology stays deployment-managed for now."}
           </CardDescription>
@@ -669,9 +680,9 @@ export function InstanceSettingsTab() {
         <CardContent className="space-y-5">
           {!isSoloInstall ? (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              Network settings are currently UI-managed only for <code>solo</code> installs.
-              Keep <code>platform</code> host and TLS topology in deployment config until the
-              platform-specific surface exists.
+              Network settings are currently UI-managed only for the experimental{" "}
+              <code>solo</code> self-host path. Keep <code>platform</code> host and TLS
+              topology in deployment config until the platform-specific surface exists.
             </div>
           ) : null}
 

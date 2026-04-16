@@ -47,6 +47,13 @@ services:
           target: /app/packages/shared
           ignore:
             - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-sdk
+          target: /app/packages/plugin-sdk
+          ignore:
+            - node_modules/
+            - dist/
         - action: sync
           path: ./packages/installed-plugins
           target: /app/packages/installed-plugins
@@ -73,6 +80,8 @@ services:
             - dist/
         - action: rebuild
           path: ./packages/installed-plugins/package.json
+        - action: rebuild
+          path: ./packages/plugin-sdk/package.json
         - action: rebuild
           path: ./packages/studio/package.json
         - action: rebuild

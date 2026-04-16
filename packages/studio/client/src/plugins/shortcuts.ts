@@ -3,7 +3,7 @@ import {
   listProjectPluginShortcuts,
   type ProjectPluginShortcutSurface,
   type ProjectPluginActivationSupportDefinition,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import type { LucideIcon } from "lucide-react";
 import { getPluginUiIcon } from "./icons";
 import { studioSharedProjectPluginUiRegistry } from "./sharedUiRegistry";

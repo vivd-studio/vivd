@@ -32,6 +32,7 @@
     "dev": "tsup --watch"
   },
   "dependencies": {
+    "@vivd/plugin-sdk": "1.0.0",
     "typescript": "^5.9.3",
     "yaml": "^2.8.2"
   },

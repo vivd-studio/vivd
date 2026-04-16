@@ -1,4 +1,4 @@
-import type { SharedProjectPluginUiDefinition } from "@vivd/shared/types";
+import type { SharedProjectPluginUiDefinition } from "@vivd/plugin-sdk";
 
 export const newsletterSharedProjectUi = {
   pageTitle: "Newsletter",

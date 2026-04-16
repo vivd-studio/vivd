@@ -9,12 +9,12 @@ import type {
   PluginUpdateConfigContext,
   ProjectPluginActionPayload,
   ProjectPluginReadPayload,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   PluginActionArgumentError,
   UnsupportedPluginActionError,
   UnsupportedPluginReadError,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   newsletterPluginConfigSchema,
   type NewsletterPluginConfig,

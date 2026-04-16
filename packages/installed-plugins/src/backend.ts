@@ -1,5 +1,5 @@
-import { definePluginPackageDescriptors } from "@vivd/shared/types";
-import type { PluginPackageDescriptor } from "@vivd/shared/types";
+import { definePluginPackageDescriptors } from "@vivd/plugin-sdk";
+import type { PluginPackageDescriptor } from "@vivd/plugin-sdk";
 import { analyticsBackendPluginPackage } from "@vivd/plugin-analytics/backend/plugin";
 import { contactFormBackendPluginPackage } from "@vivd/plugin-contact-form/backend/plugin";
 import { newsletterBackendPluginPackage } from "@vivd/plugin-newsletter/backend/plugin";

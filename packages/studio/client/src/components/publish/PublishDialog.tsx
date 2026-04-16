@@ -361,13 +361,14 @@ export function PublishDialog({
       }
       utils.project.gitHasChanges.invalidate({ slug: projectSlug, version });
       utils.project.gitHistory.invalidate({ slug: projectSlug, version });
+      utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version });
     },
     onError: (error) => {
       toast.error(`Failed to save: ${error.message}`);
     },
   });
 
-  const loadVersionMutation = trpc.project.gitLoadVersion.useMutation();
+  const loadLatestMutation = trpc.project.gitLoadLatest.useMutation();
 
   // Create tag mutation
   const createTagMutation = trpc.project.createTag.useMutation({
@@ -509,13 +510,13 @@ export function PublishDialog({
     const publishDisabled =
       publishMutation.isPending ||
       saveMutation.isPending ||
-      loadVersionMutation.isPending ||
+      loadLatestMutation.isPending ||
       !canPublishNow;
 
     const publishDisabledReason: string | null = (() => {
       if (publishMutation.isPending) return "Publishing is already in progress.";
       if (saveMutation.isPending) return "Saving your changes...";
-      if (loadVersionMutation.isPending) return "Switching snapshots...";
+      if (loadLatestMutation.isPending) return "Switching snapshots...";
 
       if (!publishState) return "Loading publish status...";
       if (!publishState.storageEnabled) return "Publishing isn't available right now.";
@@ -761,7 +762,7 @@ export function PublishDialog({
                         disabled={
                           publishMutation.isPending ||
                           saveMutation.isPending ||
-                          loadVersionMutation.isPending
+                          loadLatestMutation.isPending
                         }
                       >
                         {saveMutation.isPending ? (
@@ -778,20 +779,20 @@ export function PublishDialog({
                         variant="outline"
                         className={publishWarningSecondaryActionClassName}
                         onClick={() => {
-                          if (!publishState?.studioHeadCommitHash) {
-                            toast.error("Latest snapshot isn't available yet. Please wait a little while.");
-                            return;
-                          }
                           setPublishError(null);
-                          loadVersionMutation
+                          loadLatestMutation
                             .mutateAsync({
                               slug: projectSlug,
                               version,
-                              commitHash: publishState.studioHeadCommitHash,
                             })
                             .then(() => {
                               toast.success("Switched back to latest snapshot");
-                              void publishStateQuery.refetch();
+                              void Promise.all([
+                                publishStateQuery.refetch(),
+                                utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+                                utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+                                utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+                              ]);
                             })
                             .catch((err) => {
                               const message = err instanceof Error ? err.message : "Failed to switch snapshots";
@@ -801,10 +802,10 @@ export function PublishDialog({
                         disabled={
                           publishMutation.isPending ||
                           saveMutation.isPending ||
-                          loadVersionMutation.isPending
+                          loadLatestMutation.isPending
                         }
                       >
-                        {loadVersionMutation.isPending ? (
+                        {loadLatestMutation.isPending ? (
                           <>
                             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                             Loading...
@@ -854,7 +855,7 @@ export function PublishDialog({
                       disabled={
                         publishMutation.isPending ||
                         saveMutation.isPending ||
-                        loadVersionMutation.isPending
+                        loadLatestMutation.isPending
                       }
                     >
                       {saveMutation.isPending ? (
@@ -891,7 +892,7 @@ export function PublishDialog({
                       disabled={
                         publishMutation.isPending ||
                         saveMutation.isPending ||
-                        loadVersionMutation.isPending
+                        loadLatestMutation.isPending
                       }
                     >
                       {saveMutation.isPending ? (
@@ -941,7 +942,7 @@ export function PublishDialog({
                   disabled={
                     publishMutation.isPending ||
                     saveMutation.isPending ||
-                    loadVersionMutation.isPending
+                    loadLatestMutation.isPending
                   }
                 />
                 {domainError ? (

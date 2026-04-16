@@ -1,4 +1,4 @@
-import { getSharedProjectPluginUi } from "@vivd/shared/types";
+import { getSharedProjectPluginUi } from "@vivd/plugin-sdk";
 import type { ProjectPluginUiDefinition } from "./types";
 import {
   frontendPluginModules,

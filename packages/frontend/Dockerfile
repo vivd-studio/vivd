@@ -5,6 +5,7 @@ WORKDIR /app
 # Install deps for the frontend + backend types + shared/builder workspace packages via the root lockfile
 COPY package.json package-lock.json ./
 COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -16,11 +17,12 @@ COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
 
 # Stage 2: Development
 FROM deps AS dev
 COPY packages/installed-plugins ./packages/installed-plugins
+COPY packages/plugin-sdk ./packages/plugin-sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
@@ -30,6 +32,7 @@ COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
 # Ensure shared is built for workspace package resolution inside the image.
+RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
 
 WORKDIR /app/packages/frontend
@@ -39,6 +42,7 @@ CMD ["npm", "run", "dev", "--", "--host"]
 # Stage 3: Build
 FROM deps AS build
 COPY packages/installed-plugins ./packages/installed-plugins
+COPY packages/plugin-sdk ./packages/plugin-sdk
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
@@ -47,6 +51,7 @@ COPY packages/plugin-newsletter ./packages/plugin-newsletter
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
+RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
 
 ARG VITE_APP_ENV

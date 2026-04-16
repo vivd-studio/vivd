@@ -11,6 +11,7 @@ const {
   getConnectedOrganizationIdMock,
   detectProjectTypeMock,
   getConnectedUserActionAuthConfigMock,
+  reportSoonMock,
 } = vi.hoisted(() => ({
   touchMock: vi.fn(),
   stopDevServerMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   getConnectedOrganizationIdMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
   getConnectedUserActionAuthConfigMock: vi.fn(),
+  reportSoonMock: vi.fn(),
 }));
 
 vi.mock("../services/project/DevServerService.js", () => ({
@@ -28,12 +30,19 @@ vi.mock("../services/project/DevServerService.js", () => ({
     touch: touchMock,
     stopDevServer: stopDevServerMock,
     getOrStartDevServer: getOrStartDevServerMock,
+    hasServer: vi.fn(() => false),
     restartDevServer: vi.fn(),
   },
 }));
 
 vi.mock("../services/project/projectType.js", () => ({
   detectProjectType: detectProjectTypeMock,
+}));
+
+vi.mock("../services/reporting/WorkspaceStateReporter.js", () => ({
+  workspaceStateReporter: {
+    reportSoon: reportSoonMock,
+  },
 }));
 
 vi.mock("../lib/connectedUserActionAuth.js", () => ({
@@ -99,6 +108,7 @@ describe("project router", () => {
     getConnectedOrganizationIdMock.mockReset();
     detectProjectTypeMock.mockReset();
     getConnectedUserActionAuthConfigMock.mockReset();
+    reportSoonMock.mockReset();
 
     touchMock.mockReturnValue(undefined);
     stopDevServerMock.mockResolvedValue(undefined);
@@ -275,6 +285,46 @@ describe("project router", () => {
     ).resolves.toEqual({
       url: "/vivd-studio/api/preview/site-1/v2/",
     });
+  });
+
+  it("returns only an actively pinned working commit", async () => {
+    const caller = projectRouter.createCaller(
+      makeContext({
+        workspace: {
+          isInitialized: vi.fn(() => true),
+          getProjectPath: vi.fn(() => "/tmp/workspace"),
+          getWorkingCommit: vi.fn(async () => null),
+          getHeadCommit: vi.fn(async () => ({ hash: "head-123" })),
+        } as unknown as Context["workspace"],
+      }),
+    );
+
+    await expect(
+      caller.gitWorkingCommit({ slug: "site-1", version: 2 }),
+    ).resolves.toEqual({ hash: null });
+  });
+
+  it("uses the explicit load-latest path instead of loading HEAD as an older snapshot", async () => {
+    const loadLatestMock = vi.fn(async () => undefined);
+    const caller = projectRouter.createCaller(
+      makeContext({
+        workspace: {
+          isInitialized: vi.fn(() => true),
+          getProjectPath: vi.fn(() => "/tmp/workspace"),
+          loadLatest: loadLatestMock,
+        } as unknown as Context["workspace"],
+      }),
+    );
+
+    await expect(
+      caller.gitLoadLatest({ slug: "site-1", version: 2 }),
+    ).resolves.toEqual({
+      success: true,
+      message: "Returned to the latest snapshot",
+    });
+
+    expect(loadLatestMock).toHaveBeenCalledTimes(1);
+    expect(reportSoonMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns the runtime root for static preview info", async () => {

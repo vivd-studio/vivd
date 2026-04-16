@@ -4,11 +4,21 @@ const { getSystemSettingValueMock } = vi.hoisted(() => ({
   getSystemSettingValueMock: vi.fn(),
 }));
 
+const { getResolvedBrandingMock } = vi.hoisted(() => ({
+  getResolvedBrandingMock: vi.fn(),
+}));
+
 vi.mock("../src/services/system/SystemSettingsService", () => ({
   SYSTEM_SETTING_KEYS: {
     studioAgentInstructionsTemplate: "studio_agent_instructions_template",
   },
   getSystemSettingValue: getSystemSettingValueMock,
+}));
+
+vi.mock("../src/services/email/templateBranding", () => ({
+  emailTemplateBrandingService: {
+    getResolvedBranding: getResolvedBrandingMock,
+  },
 }));
 
 import { agentInstructionsService } from "../src/services/agent/AgentInstructionsService";
@@ -17,6 +27,8 @@ describe("AgentInstructionsService", () => {
   beforeEach(() => {
     getSystemSettingValueMock.mockReset();
     getSystemSettingValueMock.mockResolvedValue(null);
+    getResolvedBrandingMock.mockReset();
+    getResolvedBrandingMock.mockResolvedValue({});
     delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
   });
 
@@ -114,6 +126,26 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).not.toContain("vivd support request");
     expect(result.instructions).not.toContain(
       "contacting Vivd support on the user's behalf",
+    );
+  });
+
+  it("includes support-command guidance when support email is configured in branding only", async () => {
+    getResolvedBrandingMock.mockResolvedValue({
+      supportEmail: "support@vivd.studio",
+    });
+
+    const result = await agentInstructionsService.render({
+      projectName: "Acme",
+      source: "url",
+      enabledPlugins: ["contact_form"],
+    });
+
+    expect(result.instructions).toContain("vivd support request ...");
+    expect(result.instructions).toContain(
+      "the agent may prepare a support request with `vivd support request ...` on the user's behalf",
+    );
+    expect(result.instructions).toContain(
+      "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.",
     );
   });
 

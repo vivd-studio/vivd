@@ -44,6 +44,12 @@ services:
             - node_modules/
             - dist/
         - action: sync
+          path: ./packages/plugin-sdk
+          target: /app/packages/plugin-sdk
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/installed-plugins
           target: /app/packages/installed-plugins
           ignore:
@@ -74,6 +80,8 @@ services:
             - node_modules/
         - action: rebuild
           path: ./packages/installed-plugins/package.json
+        - action: rebuild
+          path: ./packages/plugin-sdk/package.json
         - action: rebuild
           path: ./packages/backend/package.json
         - action: rebuild
@@ -124,6 +132,12 @@ services:
             - node_modules/
             - dist/
         - action: sync
+          path: ./packages/plugin-sdk
+          target: /app/packages/plugin-sdk
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/plugin-analytics
           target: /app/packages/plugin-analytics
           ignore:
@@ -146,6 +160,8 @@ services:
           target: /app/packages/backend/src
         - action: rebuild
           path: ./packages/installed-plugins/package.json
+        - action: rebuild
+          path: ./packages/plugin-sdk/package.json
         - action: rebuild
           path: ./packages/plugin-analytics/package.json
         - action: rebuild

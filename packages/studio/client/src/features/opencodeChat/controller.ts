@@ -37,11 +37,14 @@ type UseOpencodeChatControllerArgs = {
 type PendingSessionStart = {
   requestId: number;
   cancelled: boolean;
+  cleanupRequested: boolean;
   sessionId: string | null;
 };
 
 const STALE_ACTIVE_SESSION_RECONCILE_MS = 8_000;
 const TERMINAL_PENDING_ASSISTANT_RECONCILE_MS = 1_500;
+// Allow stopGeneration to cancel a just-created session before its first prompt dispatch.
+const NEW_SESSION_DISPATCH_GRACE_MS = 16;
 
 export function useOpencodeChatController({
   projectSlug,
@@ -310,12 +313,6 @@ export function useOpencodeChatController({
         if (data.sessionId !== selectedSessionId) {
           setSelectedSessionId(data.sessionId);
         }
-
-        if (targetSessionId === selectedSessionId) {
-          await refetchSelectedSessionSnapshot();
-        } else {
-          await refetchSessions();
-        }
         return true;
       } catch (error) {
         opencodeChat.removeOptimisticUserMessage(optimisticMessageId);
@@ -333,10 +330,8 @@ export function useOpencodeChatController({
       opencodeChat,
       runTaskMutation,
       buildRunTaskPayload,
-      refetchSelectedSessionSnapshot,
       selectedSessionId,
       setSelectedSessionId,
-      refetchSessions,
     ],
   );
 
@@ -366,6 +361,7 @@ export function useOpencodeChatController({
       void (async () => {
         let pendingRequestId: number | null = null;
         let pendingStart: PendingSessionStart | null = null;
+        let preservePendingStartRef = false;
 
         try {
           if (targetSessionId) {
@@ -379,6 +375,7 @@ export function useOpencodeChatController({
           pendingStart = {
             requestId: pendingRequestId,
             cancelled: false,
+            cleanupRequested: false,
             sessionId: null,
           };
           pendingSessionStartRef.current = pendingStart;
@@ -390,13 +387,16 @@ export function useOpencodeChatController({
           pendingStart.sessionId = created.sessionId;
 
           if (pendingStart.cancelled) {
-            await deleteSessionMutation
-              .mutateAsync({
-                sessionId: created.sessionId,
-                projectSlug,
-                version,
-              })
-              .catch(() => undefined);
+            if (!pendingStart.cleanupRequested) {
+              pendingStart.cleanupRequested = true;
+              await deleteSessionMutation
+                .mutateAsync({
+                  sessionId: created.sessionId,
+                  projectSlug,
+                  version,
+                })
+                .catch(() => undefined);
+            }
             setSelectedSessionId(null);
             options?.onCompleted?.(false);
             return;
@@ -405,22 +405,29 @@ export function useOpencodeChatController({
           if (created.sessionId !== selectedSessionId) {
             setSelectedSessionId(created.sessionId);
           }
-          await refetchSessions();
+
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, NEW_SESSION_DISPATCH_GRACE_MS);
+          });
 
           if (pendingStart.cancelled) {
-            await deleteSessionMutation
-              .mutateAsync({
-                sessionId: created.sessionId,
-                projectSlug,
-                version,
-              })
-              .catch(() => undefined);
+            if (!pendingStart.cleanupRequested) {
+              pendingStart.cleanupRequested = true;
+              await deleteSessionMutation
+                .mutateAsync({
+                  sessionId: created.sessionId,
+                  projectSlug,
+                  version,
+                })
+                .catch(() => undefined);
+            }
             setSelectedSessionId(null);
             options?.onCompleted?.(false);
             return;
           }
 
           const success = await dispatchTaskToSession(task, created.sessionId);
+          preservePendingStartRef = success;
           options?.onCompleted?.(success);
         } catch (error) {
           if (!pendingStart?.cancelled) {
@@ -438,7 +445,13 @@ export function useOpencodeChatController({
             pendingRequestId != null &&
             pendingSessionStartRef.current?.requestId === pendingRequestId
           ) {
-            pendingSessionStartRef.current = null;
+            if (
+              !preservePendingStartRef ||
+              !pendingStart?.sessionId ||
+              pendingStart.cancelled
+            ) {
+              pendingSessionStartRef.current = null;
+            }
           }
           options?.onSettled?.();
         }
@@ -450,7 +463,6 @@ export function useOpencodeChatController({
       deleteSessionMutation,
       dispatchTaskToSession,
       projectSlug,
-      refetchSessions,
       selectedSessionId,
       setSelectedSessionId,
       version,
@@ -515,6 +527,17 @@ export function useOpencodeChatController({
           projectSlug,
           version,
         });
+        if (!pendingStart.cleanupRequested) {
+          pendingStart.cleanupRequested = true;
+          void deleteSessionMutation
+            .mutateAsync({
+              sessionId: pendingStart.sessionId,
+              projectSlug,
+              version,
+            })
+            .catch(() => undefined);
+        }
+        setSelectedSessionId(null);
       }
       return;
     }
@@ -629,6 +652,8 @@ export function useOpencodeChatController({
       suppressedSessionId,
     ],
   );
+  const sessionShowsRunActivity =
+    activityState.isStreaming || isActiveSessionStatus(currentSessionStatus);
 
   useEffect(() => {
     if (
@@ -641,6 +666,26 @@ export function useOpencodeChatController({
 
     setSuppressedSessionId(null);
   }, [currentSessionStatus, selectedSessionId, suppressedSessionId]);
+
+  useEffect(() => {
+    const pendingStart = pendingSessionStartRef.current;
+    if (!pendingStart?.sessionId || pendingStart.cancelled) {
+      return;
+    }
+
+    if (pendingStart.sessionId !== selectedSessionId) {
+      return;
+    }
+
+    if (
+      !sessionShowsRunActivity &&
+      !isTerminalSessionStatusType(sessionStatusType)
+    ) {
+      return;
+    }
+
+    pendingSessionStartRef.current = null;
+  }, [selectedSessionId, sessionShowsRunActivity, sessionStatusType]);
 
   useEffect(() => {
     if (
@@ -860,10 +905,7 @@ export function useOpencodeChatController({
   ]);
 
   useEffect(() => {
-    if (
-      selectedSessionId &&
-      (activityState.isThinking || isActiveSessionStatus(currentSessionStatus))
-    ) {
+    if (selectedSessionId && sessionShowsRunActivity) {
       activeRunSessionIdRef.current = selectedSessionId;
       return;
     }
@@ -877,10 +919,10 @@ export function useOpencodeChatController({
       onTaskComplete?.();
     }
   }, [
-    activityState.isThinking,
     currentSessionStatus,
     onTaskComplete,
     selectedSessionId,
+    sessionShowsRunActivity,
     sessionStatusType,
   ]);
 

@@ -1,4 +1,4 @@
-import type { PluginReadDefinition } from "@vivd/shared/types";
+import type { PluginReadDefinition } from "@vivd/plugin-sdk";
 import { z } from "zod";
 
 export const ANALYTICS_SUMMARY_READ_ID = "summary";

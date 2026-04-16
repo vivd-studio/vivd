@@ -1,4 +1,4 @@
-import type { PluginStopFn } from "@vivd/shared/types";
+import type { PluginStopFn } from "@vivd/plugin-sdk";
 import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";

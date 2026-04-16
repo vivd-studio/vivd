@@ -1,12 +1,12 @@
 import {
   buildSharedProjectPluginUiRegistry,
   definePluginPackageDescriptors,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import type { ComponentType } from "react";
 import type {
   PluginPackageDescriptor,
   SharedProjectPluginUiDefinition,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import { analyticsFrontendPluginPackage } from "@vivd/plugin-analytics/frontend/plugin";
 import { contactFormFrontendPluginPackage } from "@vivd/plugin-contact-form/frontend/plugin";
 import { newsletterFrontendPluginPackage } from "@vivd/plugin-newsletter/frontend/plugin";

@@ -40,7 +40,10 @@ function getPluginInstallBadgeLabel(
 
 function getPluginStatusCopy(
   plugin: ProjectPluginCatalogItem,
-  installProfile: "solo" | "platform",
+  options: {
+    installProfile: "solo" | "platform";
+    experimentalSoloModeEnabled: boolean;
+  },
 ): string {
   if (plugin.installState === "enabled") {
     return "Open this plugin to view details, configuration, snippets, and plugin-specific actions.";
@@ -51,8 +54,8 @@ function getPluginStatusCopy(
   if (plugin.installState === "suspended") {
     return "This plugin is suspended for this project.";
   }
-  return installProfile === "solo"
-    ? "This plugin is disabled for this instance."
+  return options.installProfile === "solo" && options.experimentalSoloModeEnabled
+    ? "This plugin is disabled for this experimental self-host installation."
     : "This plugin is not currently available for this project.";
 }
 
@@ -194,7 +197,10 @@ export default function ProjectPlugins() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    {getPluginStatusCopy(plugin, config.installProfile)}
+                    {getPluginStatusCopy(plugin, {
+                      installProfile: config.installProfile,
+                      experimentalSoloModeEnabled: config.experimentalSoloModeEnabled,
+                    })}
                   </p>
                   {plugin.instanceId ? (
                     <div className="text-xs text-muted-foreground">

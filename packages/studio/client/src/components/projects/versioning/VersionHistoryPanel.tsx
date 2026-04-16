@@ -271,15 +271,16 @@ export function VersionHistoryPanel({
   const commits = historyData?.commits || [];
   const hasUncommittedChanges = changesData?.hasChanges || false;
   const changedFiles = changesData?.changedFiles || [];
-  const workingCommitHash = workingCommitData?.hash || null;
+  const pinnedWorkingCommitHash = workingCommitData?.hash || null;
   const headCommit = commits[0] || null;
-  const workingCommit = workingCommitHash
-    ? commits.find((c: CommitInfo) => c.hash === workingCommitHash) || null
+  const activeCommitHash = pinnedWorkingCommitHash || headCommit?.hash || null;
+  const workingCommit = pinnedWorkingCommitHash
+    ? commits.find((c: CommitInfo) => c.hash === pinnedWorkingCommitHash) || null
     : null;
   const viewingOlderSnapshot = Boolean(
     headCommit?.hash &&
-      workingCommitHash &&
-      workingCommitHash !== headCommit.hash
+      pinnedWorkingCommitHash &&
+      pinnedWorkingCommitHash !== headCommit.hash
   );
   // Standalone studio publishes by tag; commit hash is not tracked here.
   const publishedCommitHash: string | null = null;
@@ -869,9 +870,8 @@ export function VersionHistoryPanel({
                   <div className="absolute left-[21px] top-2 bottom-2 w-px bg-border" />
 
                   {commits.map((commit: CommitInfo, index: number) => {
-                    const isCurrent = workingCommitHash === commit.hash;
-                    const isLatest =
-                      index === 0 && workingCommitHash !== commit.hash;
+                    const isCurrent = activeCommitHash === commit.hash;
+                    const isLatest = index === 0 && activeCommitHash !== commit.hash;
                     const isHead = index === 0;
                     const isLoadingThisCommit =
                       isLoadingVersion && loadingVersionHash === commit.hash;
@@ -941,7 +941,7 @@ export function VersionHistoryPanel({
                                 </p>
                               </div>
                             </div>
-                            {workingCommitHash !== commit.hash && (
+                            {activeCommitHash !== commit.hash && (
                               <Button
                                 variant="ghost"
                                 size="sm"

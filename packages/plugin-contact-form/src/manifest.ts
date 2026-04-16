@@ -1,5 +1,5 @@
-import type { PluginPackageManifest } from "@vivd/shared/types";
-import { definePluginPackageManifest } from "@vivd/shared/types";
+import type { PluginPackageManifest } from "@vivd/plugin-sdk";
+import { definePluginPackageManifest } from "@vivd/plugin-sdk";
 import { contactFormPluginDefinition } from "./backend/module";
 import { contactFormSharedProjectUi } from "./shared/projectUi";
 

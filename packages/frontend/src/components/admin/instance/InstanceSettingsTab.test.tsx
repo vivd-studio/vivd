@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  useAppConfigMock,
   useUtilsMock,
   getInstanceSettingsUseQueryMock,
   getInstanceSoftwareUseQueryMock,
@@ -11,6 +12,7 @@ const {
   startInstanceSoftwareUpdateUseMutationMock,
   startInstanceSoftwareUpdateMutateMock,
 } = vi.hoisted(() => ({
+  useAppConfigMock: vi.fn(),
   useUtilsMock: vi.fn(),
   getInstanceSettingsUseQueryMock: vi.fn(),
   getInstanceSoftwareUseQueryMock: vi.fn(),
@@ -18,6 +20,10 @@ const {
   updateInstanceSettingsMutateMock: vi.fn(),
   startInstanceSoftwareUpdateUseMutationMock: vi.fn(),
   startInstanceSoftwareUpdateMutateMock: vi.fn(),
+}));
+
+vi.mock("@/lib/AppConfigContext", () => ({
+  useAppConfig: useAppConfigMock,
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -63,6 +69,7 @@ describe("InstanceSettingsTab", () => {
   const softwareRefetchMock = vi.fn();
 
   beforeEach(() => {
+    useAppConfigMock.mockReset();
     useUtilsMock.mockReset();
     getInstanceSettingsUseQueryMock.mockReset();
     getInstanceSoftwareUseQueryMock.mockReset();
@@ -94,6 +101,14 @@ describe("InstanceSettingsTab", () => {
         getAppConfig: {
           invalidate: vi.fn().mockResolvedValue(undefined),
         },
+      },
+    });
+
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "platform",
+        experimentalSoloModeEnabled: false,
       },
     });
 
@@ -197,6 +212,14 @@ describe("InstanceSettingsTab", () => {
   });
 
   it("hides profile switching and advanced capability editing in solo mode", () => {
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        experimentalSoloModeEnabled: true,
+      },
+    });
+
     getInstanceSettingsUseQueryMock.mockReturnValue({
       data: {
         installProfile: "solo",
@@ -264,8 +287,8 @@ describe("InstanceSettingsTab", () => {
 
     renderTab();
 
-    expect(screen.getByText("Single-tenant self-host profile")).toBeInTheDocument();
-    expect(screen.getByText(/licensed platform deployments/i)).toBeInTheDocument();
+    expect(screen.getByText("Experimental self-host profile")).toBeInTheDocument();
+    expect(screen.getByText(/supported posture for normal operation/i)).toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply latest release" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
@@ -285,6 +308,14 @@ describe("InstanceSettingsTab", () => {
   });
 
   it("locks the updater after the managed update starts", async () => {
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        experimentalSoloModeEnabled: true,
+      },
+    });
+
     getInstanceSettingsUseQueryMock.mockReturnValue({
       data: {
         installProfile: "solo",
@@ -376,6 +407,14 @@ describe("InstanceSettingsTab", () => {
   });
 
   it("reloads only after the target version is reported as current", async () => {
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        experimentalSoloModeEnabled: true,
+      },
+    });
+
     window.sessionStorage.setItem(
       "vivd.instance-software.pending-update",
       JSON.stringify({
@@ -468,6 +507,14 @@ describe("InstanceSettingsTab", () => {
   });
 
   it("clears the pending update when the instance comes back on a newer version", async () => {
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        experimentalSoloModeEnabled: true,
+      },
+    });
+
     window.sessionStorage.setItem(
       "vivd.instance-software.pending-update",
       JSON.stringify({

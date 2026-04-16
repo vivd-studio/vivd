@@ -16,6 +16,7 @@
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form": ["./src/index.ts"],
       "@vivd/plugin-contact-form/*": ["./src/*"],
+      "@vivd/plugin-sdk": ["../plugin-sdk/src/index.ts"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }

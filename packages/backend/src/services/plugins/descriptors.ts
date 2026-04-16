@@ -1,12 +1,12 @@
 import {
   installedBackendPluginPackages,
 } from "@vivd/installed-plugins/backend";
-import { definePluginPackageDescriptors } from "@vivd/shared/types";
+import { definePluginPackageDescriptors } from "@vivd/plugin-sdk";
 import type {
   PluginModule as SharedPluginModule,
   PluginPackageDescriptor,
   PluginStopFn,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import type express from "express";
 import type { Multer } from "multer";
 import { analyticsPluginBackendContribution } from "./analytics/backendContribution";

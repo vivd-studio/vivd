@@ -1,4 +1,4 @@
-import type { PluginPackageDescriptor } from "@vivd/shared/types";
+import type { PluginPackageDescriptor } from "@vivd/plugin-sdk";
 import { contactFormCliPluginPackage } from "./cli/plugin";
 
 export const contactFormPluginDescriptor: PluginPackageDescriptor<"contact_form"> =

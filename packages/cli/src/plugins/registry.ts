@@ -4,7 +4,7 @@ import type {
   PluginCliRenderResult,
   PluginCliInfoContractPayload,
   PluginCliModule,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import { cliPluginDescriptors } from "./descriptors";
 
 const cliPluginModules: PluginCliModule[] = [

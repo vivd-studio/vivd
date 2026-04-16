@@ -53,6 +53,9 @@ function getErrorMessage(error: unknown): string {
 
 export function PluginsTab() {
   const { config } = useAppConfig();
+  const isExperimentalSoloInstall =
+    config.installProfile === "solo" && config.experimentalSoloModeEnabled;
+
   return (
     <Card>
       <CardHeader className="space-y-3">
@@ -61,13 +64,20 @@ export function PluginsTab() {
           Plugin Access
         </CardTitle>
         <CardDescription>
-          {config.installProfile === "solo"
-            ? "Enable or disable plugins for the whole instance. Project-specific plugin configuration still lives on each project."
-            : "Central super-admin controls for project-level plugin entitlements."}
+          {isExperimentalSoloInstall
+            ? "Experimental self-host defaults for the whole instance. Project-specific plugin configuration still lives on each project."
+            : "Central hosted-platform controls for project-level plugin access and rollout."}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {config.installProfile === "solo" ? (
+        {isExperimentalSoloInstall ? (
+          <div className="mb-4 rounded-lg border bg-muted/15 p-4 text-sm text-muted-foreground">
+            Solo self-host mode is enabled as an internal experimental path. Plugin
+            defaults here should be treated as compatibility behavior, not the primary
+            product model.
+          </div>
+        ) : null}
+        {isExperimentalSoloInstall ? (
           <InstancePluginDefaultsPanel />
         ) : (
           <ProjectsPluginAccessPanel />

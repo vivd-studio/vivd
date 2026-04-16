@@ -7,6 +7,7 @@ import {
 } from "../services/plugins/registry";
 import {
   installProfileSchema,
+  isExperimentalSoloModeEnabled,
   installProfileService,
   instancePluginDefaultsSchema,
   partialInstanceCapabilityPolicySchema,
@@ -42,6 +43,8 @@ const SOLO_INSTALL_PROFILE_LOCK_MESSAGE =
   "Install profile changes are not available from the UI on solo installs.";
 const SOLO_CAPABILITIES_LOCK_MESSAGE =
   "Advanced tenancy capabilities are not editable on solo installs.";
+const SOLO_EXPERIMENTAL_MODE_MESSAGE =
+  "Solo mode is currently experimental-only and disabled for this installation.";
 
 async function buildInstanceSettingsPayload() {
   const policy = await installProfileService.resolvePolicy();
@@ -57,7 +60,7 @@ async function buildInstanceSettingsPayload() {
       PLUGIN_IDS.map((pluginId) => [
         pluginId,
         {
-          enabled: policy.pluginDefaults[pluginId].state === "enabled",
+          enabled: policy.pluginDefaults[pluginId]?.state === "enabled",
         },
       ]),
     ),
@@ -100,6 +103,13 @@ export const instanceSuperAdminProcedures = {
     )
     .mutation(async ({ input }) => {
       const currentPolicy = await installProfileService.resolvePolicy();
+
+      if (input.installProfile === "solo" && !isExperimentalSoloModeEnabled()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: SOLO_EXPERIMENTAL_MODE_MESSAGE,
+        });
+      }
 
       if (currentPolicy.installProfile === "solo" && input.installProfile) {
         throw new TRPCError({

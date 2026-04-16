@@ -1,7 +1,7 @@
 import {
   definePluginPackageDescriptors,
   extractPluginIds,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import { analyticsPluginManifest } from "@vivd/plugin-analytics/manifest";
 import { contactFormPluginManifest } from "@vivd/plugin-contact-form/manifest";
 import { newsletterPluginManifest } from "@vivd/plugin-newsletter/manifest";

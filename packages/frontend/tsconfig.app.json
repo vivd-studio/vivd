@@ -50,6 +50,12 @@
       "@vivd/plugin-newsletter/*": [
         "../plugin-newsletter/src/*"
       ],
+      "@vivd/plugin-sdk": [
+        "../plugin-sdk/src/index.ts"
+      ],
+      "@vivd/plugin-sdk/*": [
+        "../plugin-sdk/src/*"
+      ],
       "@vivd/shared": [
         "../shared/src/index.ts"
       ],

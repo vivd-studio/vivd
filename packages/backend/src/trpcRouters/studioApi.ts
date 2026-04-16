@@ -20,6 +20,7 @@ import { setProjectVersionStatus } from "../services/project/ProjectStatusServic
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
 import { studioAgentLeaseService } from "../services/project/StudioAgentLeaseService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
+import { emailTemplateBrandingService } from "../services/email/templateBranding";
 import {
   projectPluginService,
 } from "../services/plugins/ProjectPluginService";
@@ -402,6 +403,19 @@ export const studioApiRouter = router({
         slug: input.slug,
         version: input.version,
       });
+    }),
+
+  getSupportContact: studioOrgProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+      }),
+    )
+    .query(async () => {
+      const branding = await emailTemplateBrandingService.getResolvedBranding();
+      return {
+        supportEmail: branding.supportEmail?.trim() || null,
+      };
     }),
 
   /**

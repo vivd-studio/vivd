@@ -25,6 +25,7 @@ const {
   getPreviewStatusMock,
   capturePreviewLogsMock,
   capturePreviewScreenshotMock,
+  getResolvedBrandingMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
   recordImageGenerationMock: vi.fn(),
@@ -50,6 +51,7 @@ const {
   getPreviewStatusMock: vi.fn(),
   capturePreviewLogsMock: vi.fn(),
   capturePreviewScreenshotMock: vi.fn(),
+  getResolvedBrandingMock: vi.fn(),
 }));
 
 vi.mock("../src/services/usage/UsageService", () => ({
@@ -123,6 +125,12 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
 vi.mock("../src/services/agent/AgentInstructionsService", () => ({
   agentInstructionsService: {
     render: renderAgentInstructionsMock,
+  },
+}));
+
+vi.mock("../src/services/email/templateBranding", () => ({
+  emailTemplateBrandingService: {
+    getResolvedBranding: getResolvedBrandingMock,
   },
 }));
 
@@ -206,6 +214,7 @@ describe("studioApi router", () => {
     getPreviewStatusMock.mockReset();
     capturePreviewLogsMock.mockReset();
     capturePreviewScreenshotMock.mockReset();
+    getResolvedBrandingMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
     recordImageGenerationMock.mockResolvedValue(undefined);
@@ -214,6 +223,7 @@ describe("studioApi router", () => {
     touchProjectUpdatedAtMock.mockResolvedValue(undefined);
     getVersionDirMock.mockReturnValue("/tmp/org-1/site-1/v1");
     generateThumbnailMock.mockResolvedValue(undefined);
+    getResolvedBrandingMock.mockResolvedValue({});
     getPreviewStatusMock.mockResolvedValue({
       provider: "fly",
       runtime: {
@@ -647,6 +657,33 @@ describe("studioApi router", () => {
         templateSource: "default",
       }),
     );
+  });
+
+  it("returns the resolved support contact for studio-authenticated runtimes", async () => {
+    getResolvedBrandingMock.mockResolvedValue({
+      supportEmail: "support@vivd.studio",
+    });
+
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationRole: null,
+        studioRuntimeAuth: {
+          studioId: "studio-1",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+
+    await expect(
+      caller.getSupportContact({
+        studioId: "studio-1",
+      }),
+    ).resolves.toEqual({
+      supportEmail: "support@vivd.studio",
+    });
   });
 
   it("returns plugin catalog and plugin info through machine-scoped studio auth", async () => {

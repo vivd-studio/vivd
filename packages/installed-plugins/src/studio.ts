@@ -1,4 +1,4 @@
-import { buildSharedProjectPluginUiRegistry } from "@vivd/shared/types";
+import { buildSharedProjectPluginUiRegistry } from "@vivd/plugin-sdk";
 import { installedPluginManifests } from "./index";
 
 export const installedStudioPluginDescriptors = installedPluginManifests;

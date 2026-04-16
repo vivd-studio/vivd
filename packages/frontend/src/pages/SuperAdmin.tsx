@@ -51,7 +51,7 @@ const SECTION_META: Record<
   instance: {
     title: "Instance",
     description:
-      "Configure install profile, capability gates, and instance-wide defaults.",
+      "Review the supported platform posture, capability gates, and instance-wide defaults.",
   },
   org: {
     title: "Organizations",
@@ -442,6 +442,15 @@ export default function SuperAdmin() {
 
   return (
     <div className="w-full space-y-8">
+      {!config.experimentalSoloModeEnabled && config.installProfile === "platform" ? (
+        <Card className="border-border/70 bg-muted/20 shadow-sm">
+          <CardContent className="py-4 text-sm text-muted-foreground">
+            Hosted platform mode is the supported posture for this installation. Solo
+            self-host stays hidden unless the backend experimental flag is enabled.
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">

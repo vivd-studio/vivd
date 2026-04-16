@@ -1,4 +1,5 @@
 import {
+  isExperimentalSoloModeEnabled,
   installProfileSchema,
   installProfileService,
   type InstallProfile,
@@ -56,7 +57,13 @@ export function areStudioCompatibilityRoutesEnabled(
 function readEnvInstallProfileFallback(): InstallProfile {
   const raw = process.env.VIVD_INSTALL_PROFILE?.trim();
   const parsed = installProfileSchema.safeParse(raw);
-  return parsed.success ? parsed.data : "solo";
+  if (parsed.success) {
+    if (parsed.data === "solo" && !isExperimentalSoloModeEnabled()) {
+      return "platform";
+    }
+    return parsed.data;
+  }
+  return "platform";
 }
 
 export async function shouldCreateStudioCompatibilityRoutes(

@@ -4,4 +4,4 @@ export type {
   PluginActionDefinition,
   PluginCapabilityDefinition,
   PluginConfigCapabilityDefinition,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";

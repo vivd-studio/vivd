@@ -8,11 +8,11 @@ import type {
   PluginPublicErrorPayload,
   PluginUpdateConfigContext,
   ProjectPluginActionPayload,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   PluginActionArgumentError,
   UnsupportedPluginActionError,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   DEFAULT_CONTACT_FORM_FIELDS,
   contactFormFieldSchema,

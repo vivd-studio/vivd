@@ -1,6 +1,6 @@
 import type express from "express";
 import type { Multer } from "multer";
-import type { PluginModule } from "@vivd/shared/types";
+import type { PluginModule } from "@vivd/plugin-sdk";
 import { createAnalyticsPublicRouter } from "./http/runtime";
 import { createAnalyticsPluginBackendHooks } from "./integrationHooks";
 import { createAnalyticsPluginModule } from "./module";

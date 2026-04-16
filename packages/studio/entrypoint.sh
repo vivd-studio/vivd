@@ -244,6 +244,13 @@ sync_source() {
     return 0
   fi
 
+  LOADED_SNAPSHOT_STATE_FILE="$(dirname "$VIVD_WORKSPACE_DIR")/.vivd-loaded-snapshot-$(basename "$VIVD_WORKSPACE_DIR").txt"
+  LEGACY_WORKING_COMMIT_FILE="${VIVD_WORKSPACE_DIR}/.vivd-working-commit"
+  if [ -s "$LOADED_SNAPSHOT_STATE_FILE" ] || [ -s "$LEGACY_WORKING_COMMIT_FILE" ]; then
+    echo "Skipping source sync while an older snapshot is loaded."
+    return 0
+  fi
+
   aws_s3_sync "$VIVD_WORKSPACE_DIR" "$S3_SOURCE_URI" \
     --delete \
     --exclude "node_modules/*" \

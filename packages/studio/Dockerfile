@@ -25,6 +25,7 @@ FROM base AS deps
 # Install deps for just the studio workspace (+ theme) via root workspaces/lockfile
 COPY package.json package-lock.json ./
 COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -36,12 +37,13 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Stage 2: Development
 FROM deps AS dev
+COPY packages/plugin-sdk ./packages/plugin-sdk
 COPY packages/shared ./packages/shared
 COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/theme ./packages/theme
@@ -52,6 +54,7 @@ COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
 # Ensure shared is built (runtime imports come from `@vivd/shared/dist/*`)
+RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/cli
 
@@ -67,6 +70,7 @@ CMD ["npm", "run", "dev"]
 
 # Stage 3: Build
 FROM deps AS build
+COPY packages/plugin-sdk ./packages/plugin-sdk
 COPY packages/shared ./packages/shared
 COPY packages/installed-plugins ./packages/installed-plugins
 COPY packages/theme ./packages/theme
@@ -76,6 +80,7 @@ COPY packages/plugin-newsletter ./packages/plugin-newsletter
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
+RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/cli
 RUN npm run build -w @vivd/studio
@@ -91,6 +96,7 @@ LABEL org.opencontainers.image.revision=$VIVD_IMAGE_REVISION
 # Install production deps for the studio workspace (links theme as a workspace dep)
 COPY package.json package-lock.json ./
 COPY packages/installed-plugins/package.json packages/installed-plugins/package.json
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
@@ -102,15 +108,17 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Copy shared package (runtime dependency)
+COPY packages/plugin-sdk ./packages/plugin-sdk
 COPY packages/shared ./packages/shared
 COPY packages/cli ./packages/cli
 
 # Copy built outputs
+COPY --from=build /app/packages/plugin-sdk/dist ./packages/plugin-sdk/dist
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/cli/dist ./packages/cli/dist
 COPY --from=build /app/packages/studio/dist ./packages/studio/dist

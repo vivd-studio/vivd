@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { detectProjectType, hasNodeModules } from "../project/projectType.js";
 import { ensureAstroCmsToolkit } from "../project/astroCmsToolkit.js";
+import { hasAnyLoadedSnapshotMarker } from "../../workspace/loadedSnapshotState.js";
 
 type ArtifactKind = "source" | "preview" | "published";
 
@@ -610,6 +611,13 @@ export async function syncSourceToBucket(options: {
 }): Promise<void> {
   const bucket = getBucket();
   if (!bucket) return;
+
+  if (await hasAnyLoadedSnapshotMarker(options.projectDir)) {
+    console.warn(
+      `[SourceSync] Skipping source sync for ${options.slug}/v${options.version} while an older snapshot is loaded.`,
+    );
+    return;
+  }
 
   const config = detectProjectType(options.projectDir);
   await ensureAstroCmsToolkit(options.projectDir, config.framework);

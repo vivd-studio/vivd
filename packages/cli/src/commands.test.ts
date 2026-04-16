@@ -2007,6 +2007,66 @@ describe("dispatchCli", () => {
     ).rejects.toThrow("Support contact is not configured for this runtime.");
   });
 
+  it("shows support help when the runtime resolves support contact through studioApi", async () => {
+    runtime.client.query.mockResolvedValue({
+      supportEmail: "support@vivd.studio",
+    });
+
+    const rootHelp = await dispatchCli(["help"]);
+    const supportHelp = await dispatchCli(["support", "help"]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getSupportContact", {
+      studioId: "studio_1",
+    });
+    expect(rootHelp.human).toContain("SUPPORT");
+    expect(rootHelp.human).toContain("vivd support request <summary...>");
+    expect(supportHelp.human).toContain("vivd support request <summary...>");
+  });
+
+  it("drafts a support request when the runtime resolves support contact through studioApi", async () => {
+    runtime.client.query.mockImplementation(async (procedure) => {
+      if (procedure === "studioApi.getSupportContact") {
+        return {
+          supportEmail: "support@vivd.studio",
+        };
+      }
+      if (procedure === "studioApi.getProjectInfo") {
+        return {
+          project: {
+            slug: "demo",
+            title: "Demo site",
+            source: "url",
+            currentVersion: 7,
+            requestedVersion: 7,
+          },
+          enabledPluginIds: ["analytics"],
+        };
+      }
+      throw new Error(`Unexpected query: ${procedure}`);
+    });
+
+    const result = await dispatchCli([
+      "support",
+      "request",
+      "enable",
+      "contact_form",
+      "for",
+      "this",
+      "project",
+    ]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getSupportContact", {
+      studioId: "studio_1",
+    });
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      version: 7,
+    });
+    expect(result.human).toContain("Recipient: support@vivd.studio");
+    expect(result.human).toContain("Enabled plugins: analytics");
+  });
+
   it("shows help with CMS commands", async () => {
     process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = "true";
     process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@vivd.studio";

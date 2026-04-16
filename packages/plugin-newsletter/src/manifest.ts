@@ -1,5 +1,5 @@
-import type { PluginPackageManifest } from "@vivd/shared/types";
-import { definePluginPackageManifest } from "@vivd/shared/types";
+import type { PluginPackageManifest } from "@vivd/plugin-sdk";
+import { definePluginPackageManifest } from "@vivd/plugin-sdk";
 import { newsletterPluginDefinition } from "./backend/module";
 import { newsletterSharedProjectUi } from "./shared/projectUi";
 

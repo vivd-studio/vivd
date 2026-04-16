@@ -1,0 +1,39 @@
+{
+  "name": "@vivd/plugin-sdk",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./pluginCli": {
+      "import": "./dist/pluginCli.js",
+      "types": "./dist/pluginCli.d.ts"
+    },
+    "./pluginContracts": {
+      "import": "./dist/pluginContracts.js",
+      "types": "./dist/pluginContracts.d.ts"
+    },
+    "./pluginPackages": {
+      "import": "./dist/pluginPackages.js",
+      "types": "./dist/pluginPackages.d.ts"
+    },
+    "./plugins": {
+      "import": "./dist/plugins.js",
+      "types": "./dist/plugins.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3"
+  }
+}

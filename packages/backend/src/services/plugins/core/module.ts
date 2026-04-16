@@ -3,12 +3,12 @@ import type {
   ProjectPluginInfoContractPayload,
   PluginCatalogEntry,
   PluginDefinition,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 export {
   PluginActionArgumentError,
   UnsupportedPluginActionError,
   UnsupportedPluginReadError,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 
 export type {
   PluginModule,
@@ -21,7 +21,7 @@ export type {
   PluginInfoSourcePayload,
   ProjectPluginInfoContractPayload,
   ProjectPluginReadPayload,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 
 function clonePlainObject<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

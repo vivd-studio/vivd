@@ -118,10 +118,15 @@ export default function GenericProjectPluginPage({
     if (pluginInfo.entitlementState === "suspended") {
       return `${pluginInfo.catalog.name} is suspended for this project.`;
     }
-    return config.installProfile === "solo"
-      ? `${pluginInfo.catalog.name} is disabled for this instance. Open Instance Settings -> Plugins to enable it.`
+    return config.installProfile === "solo" && config.experimentalSoloModeEnabled
+      ? `${pluginInfo.catalog.name} is disabled for this experimental self-host installation. Open Instance Settings -> Plugins to enable it.`
       : `${pluginInfo.catalog.name} access is managed in Super Admin. Ask a super-admin to enable it for this project.`;
-  }, [canManageProjectPlugins, config.installProfile, pluginInfo]);
+  }, [
+    canManageProjectPlugins,
+    config.experimentalSoloModeEnabled,
+    config.installProfile,
+    pluginInfo,
+  ]);
 
   const handleSaveConfig = () => {
     let parsedConfig: Record<string, unknown>;

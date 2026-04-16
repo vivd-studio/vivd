@@ -2,7 +2,7 @@ import type {
   PluginCliActionResultPayload,
   PluginCliInfoContractPayload,
   PluginCliModule,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import { newsletterPluginDefinition } from "../backend/module";
 
 type NewsletterInfoResponse = {

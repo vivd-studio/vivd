@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 
 const sharedSrc = path.resolve(__dirname, "../shared/src");
 const installedPluginsSrc = path.resolve(__dirname, "../installed-plugins/src");
+const pluginSdkSrc = path.resolve(__dirname, "../plugin-sdk/src");
 const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
 const pluginContactFormSrc = path.resolve(__dirname, "../plugin-contact-form/src");
 const pluginNewsletterSrc = path.resolve(__dirname, "../plugin-newsletter/src");
@@ -41,6 +42,14 @@ export default defineConfig({
       {
         find: /^@vivd\/installed-plugins\/(.*)$/,
         replacement: `${installedPluginsSrc}/$1`,
+      },
+      {
+        find: /^@vivd\/plugin-sdk$/,
+        replacement: path.resolve(pluginSdkSrc, "index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-sdk\/(.*)$/,
+        replacement: `${pluginSdkSrc}/$1`,
       },
       { find: /^@vivd\/shared$/, replacement: path.resolve(sharedSrc, "index.ts") },
       { find: /^@vivd\/shared\/(.*)$/, replacement: `${sharedSrc}/$1` },

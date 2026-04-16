@@ -667,6 +667,29 @@ export class PublishService {
     );
   }
 
+  private recordTenantPlaceholderDomain(domain: string): void {
+    const normalizedDomain = this.normalizeDomain(domain);
+    const domains = this.readTenantPlaceholderManifestDomains();
+    if (domains.includes(normalizedDomain)) return;
+    this.writeTenantPlaceholderManifestDomains([...domains, normalizedDomain]);
+  }
+
+  private forgetTenantPlaceholderDomain(domain: string): void {
+    const manifestPath = this.getTenantPlaceholderManifestPath();
+    if (!fs.existsSync(manifestPath)) return;
+
+    const normalizedDomain = this.normalizeDomain(domain);
+    const currentDomains = this.readTenantPlaceholderManifestDomains();
+    if (!currentDomains.includes(normalizedDomain)) return;
+
+    const remainingDomains = currentDomains.filter((entry) => entry !== normalizedDomain);
+    if (remainingDomains.length === 0) {
+      fs.unlinkSync(manifestPath);
+      return;
+    }
+    this.writeTenantPlaceholderManifestDomains(remainingDomains);
+  }
+
   private async syncUnpublishedTenantHostConfigs(
     publishedDomains: string[],
   ): Promise<void> {
@@ -757,6 +780,7 @@ export class PublishService {
 
   private generateUnpublishedTenantHostCaddyConfig(domain: string): void {
     this.ensureCaddyStaticPages();
+    this.recordTenantPlaceholderDomain(domain);
 
     const isDev = this.isDevDomain(domain);
     const domainSpec = buildPublishedSiteAddressSpec(domain, { isDev });
@@ -1062,6 +1086,7 @@ ${blocks.join("\n\n")}
     redirectRules: ProjectRedirectRule[] = [],
   ): Promise<void> {
     this.ensureCaddyStaticPages();
+    this.forgetTenantPlaceholderDomain(domain);
 
     const isDev = this.isDevDomain(domain);
     const domainSpec = buildPublishedSiteAddressSpec(domain, { isDev });
@@ -1195,6 +1220,7 @@ ${errorHandlerBlock}
   }
 
   private removePublishedSiteConfig(domain: string): void {
+    this.forgetTenantPlaceholderDomain(domain);
     const configPath = this.getPublishedSiteConfigPath(domain);
     if (fs.existsSync(configPath)) {
       fs.unlinkSync(configPath);

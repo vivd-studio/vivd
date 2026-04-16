@@ -144,16 +144,6 @@ vi.mock("./provider", () => ({
   useOpencodeChat: () => mockOpencodeChat,
 }));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 describe("useOpencodeChatController", () => {
   beforeEach(() => {
     createSessionMutateAsync.mockReset();
@@ -250,6 +240,8 @@ describe("useOpencodeChatController", () => {
       sessionId: "sess-new",
       createdAt: expect.any(Number),
     });
+    expect(mockOpencodeChat.refetchBootstrap).not.toHaveBeenCalled();
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).not.toHaveBeenCalled();
   });
 
   it("passes the selected model variant through runTask payloads", async () => {
@@ -355,10 +347,7 @@ describe("useOpencodeChatController", () => {
     );
   });
 
-  it("stops a pending new-session start before the first prompt dispatch", async () => {
-    const refetchGate = deferred<undefined>();
-    mockOpencodeChat.refetchBootstrap.mockReturnValue(refetchGate.promise);
-
+  it("stops a pending new-session start and cleans up the created session", async () => {
     const { result } = renderHook(() =>
       useOpencodeChatController({
         projectSlug: "site-1",
@@ -387,8 +376,6 @@ describe("useOpencodeChatController", () => {
       version: 1,
     });
 
-    refetchGate.resolve(undefined);
-
     await waitFor(() => {
       expect(deleteSessionMutateAsync).toHaveBeenCalledWith({
         sessionId: "sess-new",
@@ -396,11 +383,9 @@ describe("useOpencodeChatController", () => {
         version: 1,
       });
     });
-
-    expect(runTaskMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("reconciles the selected session snapshot after sending a follow-up into the active session", async () => {
+  it("does not eagerly refetch the selected session snapshot after sending a follow-up into the active session", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
     runTaskMutateAsync.mockResolvedValue({
       success: true,
@@ -429,11 +414,74 @@ describe("useOpencodeChatController", () => {
       });
     });
 
+    expect(mockOpencodeChat.refetchBootstrap).not.toHaveBeenCalled();
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).not.toHaveBeenCalled();
+  });
+
+  it("does not report task completion for a follow-up until the run shows real activity", async () => {
+    const onTaskComplete = vi.fn();
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.sessionStatus = { type: "idle" } as any;
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-user-1",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1, completed: 2 },
+        },
+        parts: [{ id: "part-user-1", messageID: "msg-user-1", type: "text", text: "First" }],
+      },
+      {
+        info: {
+          id: "msg-assistant-1",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: 3, completed: 4 },
+        },
+        parts: [{ id: "part-assistant-1", messageID: "msg-assistant-1", type: "text", text: "Done" }],
+      },
+    ];
+    runTaskMutateAsync.mockResolvedValue({
+      success: true,
+      sessionId: "sess-1",
+      version: 1,
+    });
+
+    const { result, rerender } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+        onTaskComplete,
+      }),
+    );
+
+    act(() => {
+      result.current.sendTask("Follow up", "sess-1");
+    });
+
     await waitFor(() => {
-      expect(mockOpencodeChat.refetchBootstrap).toHaveBeenCalledTimes(1);
-      expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
-        1,
-      );
+      expect(runTaskMutateAsync).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        task: "Follow up",
+        sessionId: "sess-1",
+        version: 1,
+      });
+    });
+
+    expect(onTaskComplete).not.toHaveBeenCalled();
+
+    mockOpencodeChat.sessionStatus = { type: "busy" } as any;
+    rerender();
+
+    expect(onTaskComplete).not.toHaveBeenCalled();
+
+    mockOpencodeChat.sessionStatus = { type: "done" } as any;
+    rerender();
+
+    await waitFor(() => {
+      expect(onTaskComplete).toHaveBeenCalledTimes(1);
     });
   });
 

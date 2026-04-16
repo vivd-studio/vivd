@@ -972,12 +972,7 @@ export const projectRouter = router({
     .query(async ({ ctx }) => {
       try {
         const workingHash = await ctx.workspace.getWorkingCommit();
-        if (workingHash) {
-          return { hash: workingHash };
-        }
-
-        const head = await ctx.workspace.getHeadCommit();
-        return { hash: head?.hash || null };
+        return { hash: workingHash };
       } catch (err) {
         console.error("Error fetching head commit:", err);
         return {
@@ -1031,6 +1026,51 @@ export const projectRouter = router({
       return {
         success: true,
         message: `Loaded version ${shortHash}`,
+      };
+    }),
+
+  gitLoadLatest: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspace.isInitialized()) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const projectDir = ctx.workspace.getProjectPath();
+      const config = detectProjectType(projectDir);
+      const hadDevServer = config.mode === "devserver" && devServerService.hasServer();
+
+      if (hadDevServer) {
+        try {
+          await devServerService.stopDevServer({ reason: "git-load-latest" });
+        } catch {
+          // Best-effort only.
+        }
+      }
+
+      await ctx.workspace.loadLatest();
+      projectTouchReporter.touch(input.slug);
+      void workspaceStateReporter.reportSoon();
+
+      if (hadDevServer) {
+        try {
+          await devServerService.restartDevServer(projectDir, "/", {
+            resetCaches: true,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[DevServer] Failed to restart after loadLatest: ${msg}`);
+        }
+      }
+
+      return {
+        success: true,
+        message: "Returned to the latest snapshot",
       };
     }),
 

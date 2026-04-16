@@ -288,4 +288,27 @@ describe("PublishService conflict behavior", () => {
       ),
     ).toContain("Open /vivd-studio");
   });
+
+  it("cleans up a directly-restored tenant placeholder when the tenant host disappears later", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-tenant-placeholder-cleanup-"));
+    process.env.CADDY_SITES_DIR = tempDir;
+
+    (service as any).generateUnpublishedTenantHostCaddyConfig("acme.example.com");
+
+    const configPath = path.join(tempDir, "acme-example-com.caddy");
+    expect(fs.existsSync(configPath)).toBe(true);
+
+    vi.spyOn(db, "select").mockReturnValue({
+      from: vi.fn().mockResolvedValue([]),
+    } as any);
+    vi.spyOn(db.query.domain, "findMany").mockResolvedValue([]);
+    const reloadCaddySpy = vi
+      .spyOn(service as any, "reloadCaddy")
+      .mockResolvedValue(undefined);
+
+    await service.syncGeneratedCaddyConfigs();
+
+    expect(reloadCaddySpy).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(configPath)).toBe(false);
+  });
 });

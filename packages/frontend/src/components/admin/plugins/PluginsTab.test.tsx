@@ -152,6 +152,7 @@ describe("PluginsTab", () => {
       isLoading: false,
       config: {
         installProfile: "platform",
+        experimentalSoloModeEnabled: false,
       },
     });
 

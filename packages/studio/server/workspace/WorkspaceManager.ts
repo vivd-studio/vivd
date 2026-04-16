@@ -3,8 +3,15 @@ import type { SimpleGit } from "simple-git";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+import {
+  LEGACY_WORKING_COMMIT_MARKER,
+  clearLegacyWorkingCommitMarker,
+  clearLoadedSnapshotCommit,
+  readLegacyWorkingCommitMarker,
+  readLoadedSnapshotCommit,
+  writeLoadedSnapshotCommit,
+} from "./loadedSnapshotState.js";
 
-const WORKING_COMMIT_MARKER = ".vivd-working-commit";
 const DEFAULT_INDEX_LOCK_STALE_MS = 30_000;
 
 export class WorkspaceManager {
@@ -45,6 +52,15 @@ export class WorkspaceManager {
     // Configure git user for commits
     await this.git.addConfig("user.email", "studio@vivd.dev");
     await this.git.addConfig("user.name", "Vivd Studio");
+
+    // Loading an older snapshot is session-local. Fresh opens should land on latest HEAD.
+    const loadedSnapshotCommit = await this.getWorkingCommit();
+    if (loadedSnapshotCommit) {
+      console.warn(
+        `[Git] Restoring latest snapshot on workspace open (previous pin ${loadedSnapshotCommit.slice(0, 7)}).`,
+      );
+      await this.loadLatest();
+    }
   }
 
   private getGitIndexLockPath(): string | null {
@@ -232,7 +248,7 @@ export class WorkspaceManager {
   private isIgnoredWorkspacePath(filePath: string): boolean {
     const normalized = this.normalizeGitPath(filePath);
     if (!normalized) return true;
-    if (normalized === WORKING_COMMIT_MARKER) return true;
+    if (normalized === LEGACY_WORKING_COMMIT_MARKER) return true;
     if (normalized.startsWith(".astro/")) return true;
     if (normalized.startsWith("dist/")) return true;
     return false;
@@ -299,7 +315,7 @@ export class WorkspaceManager {
 
       // Ensure our internal marker file is never committed and doesn't count as a "change"
       try {
-        await this.git.raw(["reset", "HEAD", WORKING_COMMIT_MARKER]);
+        await this.git.raw(["reset", "HEAD", LEGACY_WORKING_COMMIT_MARKER]);
       } catch {
         // Ignore if file isn't staged or doesn't exist
       }
@@ -413,8 +429,8 @@ export class WorkspaceManager {
       const workingCommit = await this.getWorkingCommitLocked();
 
       if (workingCommit) {
-        // Remove untracked files (but keep our marker file)
-        await this.git.raw(["clean", "-fd", "-e", WORKING_COMMIT_MARKER]);
+        // Remove untracked files before restoring the loaded snapshot.
+        await this.git.raw(["clean", "-fd"]);
         // Restore to the loaded version
         await this.git.raw(["checkout", workingCommit, "--", "."]);
         return;
@@ -513,32 +529,20 @@ export class WorkspaceManager {
         throw new Error("Workspace not initialized");
       }
 
-      // 1) Clean untracked files
-      await this.git.raw(["clean", "-fd"]);
-
-      // 2) Remove currently tracked files so we don't keep files that exist in HEAD but not in target commit
-      try {
-        const trackedFiles = await this.git.raw(["ls-files"]);
-        const filesToDelete = trackedFiles
-          .split("\n")
-          .map((f) => f.trim())
-          .filter(Boolean);
-
-        for (const file of filesToDelete) {
-          const filePath = path.join(this.workspaceDir, file);
-          if (await fs.pathExists(filePath)) {
-            await fs.remove(filePath);
-          }
-        }
-      } catch (err) {
-        console.warn("[Git] Failed to clean tracked files before load:", err);
+      const headHash = await this.getHeadHashLocked();
+      if (headHash && headHash === commitHash.trim()) {
+        await this.loadLatestLocked();
+        return;
       }
 
-      // 3) Restore files from the specific commit without changing HEAD
-      await this.git.raw(["checkout", commitHash, "--", "."]);
-
-      // Track the loaded commit in a marker file
+      await this.restoreCommitFilesLocked(commitHash);
       await this.setWorkingCommit(commitHash);
+    });
+  }
+
+  async loadLatest(): Promise<void> {
+    return await this.withGitLock("loadLatest", async () => {
+      await this.loadLatestLocked();
     });
   }
 
@@ -550,54 +554,94 @@ export class WorkspaceManager {
 
   private async getWorkingCommitLocked(): Promise<string | null> {
     if (!this.workspaceDir) return null;
-    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
-    try {
-      const exists = await fs.pathExists(markerPath);
-      if (!exists) return null;
-      const hash = (await fs.readFile(markerPath, "utf-8")).trim();
-      if (!hash) return null;
+    const storedHash = await readLoadedSnapshotCommit(this.workspaceDir);
+    const legacyHash = storedHash ? null : await readLegacyWorkingCommitMarker(this.workspaceDir);
+    const hash = storedHash || legacyHash;
+    if (!hash) return null;
 
-      if (this.git) {
-        try {
-          const headHash = (await this.git.raw(["rev-parse", "HEAD"])).trim();
-          if (headHash && headHash === hash) {
+    if (this.git) {
+      try {
+        const headHash = (await this.git.raw(["rev-parse", "HEAD"])).trim();
+        if (headHash && headHash === hash) {
+          await this.clearWorkingCommit();
+          return null;
+        }
+        if (headHash && headHash !== hash) {
+          const status = await this.git.raw(["status", "--porcelain"]);
+          const nonMarkerStatusLines = this.getRelevantStatusLines(status);
+          // If the workspace matches HEAD again, the loaded-snapshot state is stale.
+          if (nonMarkerStatusLines.length === 0) {
             await this.clearWorkingCommit();
             return null;
           }
-          if (headHash && headHash !== hash) {
-            const status = await this.git.raw(["status", "--porcelain"]);
-            const nonMarkerStatusLines = this.getRelevantStatusLines(status);
-            // If HEAD advanced but there are no real workspace changes, the marker is stale.
-            if (nonMarkerStatusLines.length === 0) {
-              await this.clearWorkingCommit();
-              return null;
-            }
-          }
-        } catch {
-          // If we can't resolve HEAD/status, fall back to marker value.
         }
+      } catch {
+        // If we can't resolve HEAD/status, fall back to the stored value.
       }
-
-      return hash;
-    } catch {
-      return null;
     }
+
+    if (legacyHash && !storedHash) {
+      await this.setWorkingCommit(hash);
+    }
+
+    return hash;
   }
 
   private async setWorkingCommit(hash: string): Promise<void> {
     if (!this.workspaceDir) return;
-    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
-    await fs.writeFile(markerPath, hash, "utf-8");
+    await writeLoadedSnapshotCommit(this.workspaceDir, hash);
+    await clearLegacyWorkingCommitMarker(this.workspaceDir);
   }
 
   private async clearWorkingCommit(): Promise<void> {
     if (!this.workspaceDir) return;
-    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
-    try {
-      await fs.remove(markerPath);
-    } catch {
-      // ignore
+    await clearLoadedSnapshotCommit(this.workspaceDir);
+    await clearLegacyWorkingCommitMarker(this.workspaceDir);
+  }
+
+  private async restoreCommitFilesLocked(commitHash: string): Promise<void> {
+    if (!this.git || !this.workspaceDir) {
+      throw new Error("Workspace not initialized");
     }
+
+    // 1) Clean untracked files.
+    await this.git.raw(["clean", "-fd"]);
+
+    // 2) Remove tracked files so deleted files from the target commit disappear too.
+    try {
+      const trackedFiles = await this.git.raw(["ls-files"]);
+      const filesToDelete = trackedFiles
+        .split("\n")
+        .map((filePath) => filePath.trim())
+        .filter(Boolean);
+
+      for (const file of filesToDelete) {
+        const filePath = path.join(this.workspaceDir, file);
+        if (await fs.pathExists(filePath)) {
+          await fs.remove(filePath);
+        }
+      }
+    } catch (err) {
+      console.warn("[Git] Failed to clean tracked files before load:", err);
+    }
+
+    // 3) Restore files from the target commit without moving HEAD.
+    await this.git.raw(["checkout", commitHash, "--", "."]);
+  }
+
+  private async loadLatestLocked(): Promise<void> {
+    if (!this.git) {
+      throw new Error("Workspace not initialized");
+    }
+
+    const headHash = await this.getHeadHashLocked();
+    if (!headHash) {
+      await this.clearWorkingCommit();
+      return;
+    }
+
+    await this.restoreCommitFilesLocked(headHash);
+    await this.clearWorkingCommit();
   }
 
   async getHeadCommit(): Promise<{ hash: string; message: string } | null> {
@@ -938,7 +982,7 @@ export class WorkspaceManager {
       if (hasUncommittedChanges) {
         await this.git.raw(["add", "-A"]);
         try {
-          await this.git.raw(["reset", "HEAD", WORKING_COMMIT_MARKER]);
+          await this.git.raw(["reset", "HEAD", LEGACY_WORKING_COMMIT_MARKER]);
         } catch {
           // ignore
         }

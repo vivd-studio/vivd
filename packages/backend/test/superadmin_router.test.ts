@@ -22,6 +22,7 @@ const {
   deleteTurnstileWidgetMock,
   getDefaultTemplateMock,
   resolvePolicyMock,
+  isExperimentalSoloModeEnabledMock,
   updateInstallProfileMock,
   updateInstanceCapabilityPolicyMock,
   updateInstancePluginDefaultsMock,
@@ -74,6 +75,7 @@ const {
     deleteTurnstileWidgetMock: vi.fn(),
     getDefaultTemplateMock: vi.fn(),
     resolvePolicyMock: vi.fn(),
+    isExperimentalSoloModeEnabledMock: vi.fn(),
     updateInstallProfileMock: vi.fn(),
     updateInstanceCapabilityPolicyMock: vi.fn(),
     updateInstancePluginDefaultsMock: vi.fn(),
@@ -138,6 +140,7 @@ vi.mock("../src/services/system/InstallProfileService", async () => {
         maxProjects: z.number().int().nonnegative().optional(),
       })
       .strict(),
+    isExperimentalSoloModeEnabled: isExperimentalSoloModeEnabledMock,
     installProfileService: {
       resolvePolicy: resolvePolicyMock,
       updateInstallProfile: updateInstallProfileMock,
@@ -391,6 +394,7 @@ describe("superadmin router", () => {
     deleteTurnstileWidgetMock.mockReset();
     getDefaultTemplateMock.mockReset();
     resolvePolicyMock.mockReset();
+    isExperimentalSoloModeEnabledMock.mockReset();
     updateInstallProfileMock.mockReset();
     updateInstanceCapabilityPolicyMock.mockReset();
     updateInstancePluginDefaultsMock.mockReset();
@@ -519,6 +523,7 @@ describe("superadmin router", () => {
       controlPlane: { mode: "host_based" },
       pluginRuntime: { mode: "dedicated_host" },
     });
+    isExperimentalSoloModeEnabledMock.mockReturnValue(false);
 
     delete process.env.FLY_STUDIO_IMAGE;
     delete process.env.DOCKER_STUDIO_IMAGE;
@@ -674,6 +679,7 @@ describe("superadmin router", () => {
   });
 
   it("allows network updates when switching to solo in the same mutation", async () => {
+    isExperimentalSoloModeEnabledMock.mockReturnValue(true);
     resolvePolicyMock
       .mockResolvedValueOnce({
         installProfile: "platform",
@@ -750,6 +756,22 @@ describe("superadmin router", () => {
       acmeEmail: "admin@example.com",
     });
     expect(syncGeneratedCaddyConfigsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects switching to solo while experimental solo mode is disabled", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updateInstanceSettings({
+        installProfile: "solo",
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Solo mode is currently experimental-only and disabled for this installation.",
+    });
+
+    expect(updateInstallProfileMock).not.toHaveBeenCalled();
   });
 
   it("returns machine listing errors as payload (not thrown)", async () => {
@@ -1153,6 +1175,10 @@ describe("superadmin router", () => {
           },
         ],
         total: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        total: 0,
       });
     const caller = superAdminRouter.createCaller(makeContext());
 
@@ -1161,10 +1187,11 @@ describe("superadmin router", () => {
       offset: 0,
     });
 
-    expect(listProjectAccessMock).toHaveBeenCalledTimes(2);
+    expect(listProjectAccessMock).toHaveBeenCalledTimes(3);
     expect(result.pluginCatalog.map((plugin) => plugin.pluginId)).toEqual([
       "contact_form",
       "analytics",
+      "newsletter",
     ]);
     expect(result.total).toBe(1);
     expect(result.rows[0]).toMatchObject({

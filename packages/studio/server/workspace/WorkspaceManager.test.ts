@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorkspaceManager } from "./WorkspaceManager.js";
+import { getLoadedSnapshotStatePath } from "./loadedSnapshotState.js";
 
 type EnvSnapshot = {
   HOME: string | undefined;
@@ -84,6 +85,64 @@ describe("WorkspaceManager save/discard transitions", () => {
 
     const head = await manager.getHeadCommit();
     expect(head?.hash).toBe(secondCommit);
+  });
+
+  it("stores loaded snapshot state outside the workspace root and clears it on loadLatest", async () => {
+    const indexPath = path.join(tempWorkspaceDir, "index.html");
+    const legacyMarkerPath = path.join(tempWorkspaceDir, ".vivd-working-commit");
+    const statePath = getLoadedSnapshotStatePath(tempWorkspaceDir);
+
+    await fs.writeFile(indexPath, "<h1>Version 1</h1>", "utf-8");
+    const firstCommit = await manager.commit("First");
+    expect(firstCommit).toBeTruthy();
+
+    await fs.writeFile(indexPath, "<h1>Version 2</h1>", "utf-8");
+    const secondCommit = await manager.commit("Second");
+    expect(secondCommit).toBeTruthy();
+
+    await manager.loadVersion(firstCommit!);
+
+    await expect(fs.readFile(indexPath, "utf-8")).resolves.toBe("<h1>Version 1</h1>");
+    await expect(manager.getWorkingCommit()).resolves.toBe(firstCommit);
+    await expect(fs.readFile(statePath, "utf-8")).resolves.toBe(`${firstCommit}\n`);
+    await expect(fs.stat(legacyMarkerPath)).rejects.toThrow();
+
+    await manager.loadLatest();
+
+    await expect(fs.readFile(indexPath, "utf-8")).resolves.toBe("<h1>Version 2</h1>");
+    await expect(manager.getWorkingCommit()).resolves.toBeNull();
+    await expect(fs.stat(statePath)).rejects.toThrow();
+    const head = await manager.getHeadCommit();
+    expect(head?.hash).toBe(secondCommit);
+  });
+
+  it("restores latest HEAD on workspace open when an older snapshot pin was persisted", async () => {
+    const indexPath = path.join(tempWorkspaceDir, "index.html");
+
+    await fs.writeFile(indexPath, "<h1>Version 1</h1>", "utf-8");
+    const firstCommit = await manager.commit("First");
+    expect(firstCommit).toBeTruthy();
+
+    await fs.writeFile(indexPath, "<h1>Version 2</h1>", "utf-8");
+    const secondCommit = await manager.commit("Second");
+    expect(secondCommit).toBeTruthy();
+
+    await manager.loadVersion(firstCommit!);
+    await expect(fs.readFile(indexPath, "utf-8")).resolves.toBe("<h1>Version 1</h1>");
+
+    await manager.cleanup();
+
+    const reopened = new WorkspaceManager();
+    try {
+      await reopened.open(tempWorkspaceDir);
+      await expect(reopened.getWorkingCommit()).resolves.toBeNull();
+      await expect(fs.readFile(indexPath, "utf-8")).resolves.toBe("<h1>Version 2</h1>");
+      const head = await reopened.getHeadCommit();
+      expect(head?.hash).toBe(secondCommit);
+    } finally {
+      await reopened.cleanup();
+      manager = reopened;
+    }
   });
 
   it("clears a stale working-commit marker when it points at HEAD", async () => {

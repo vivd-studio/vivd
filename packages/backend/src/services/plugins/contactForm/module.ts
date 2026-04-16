@@ -1,6 +1,6 @@
 import type {
   PluginModule,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 import {
   contactFormPluginConfigSchema,
   contactFormPluginDefinition,

@@ -1,7 +1,7 @@
 import type {
   PluginCliInfoContractPayload,
   PluginCliModule,
-} from "@vivd/shared/types";
+} from "@vivd/plugin-sdk";
 
 type AnalyticsCliInfoResponse = {
   pluginId: "analytics";
