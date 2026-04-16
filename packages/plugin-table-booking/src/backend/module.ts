@@ -42,6 +42,10 @@ export const tableBookingPluginDefinition = {
   category: "commerce",
   version: 1,
   sortOrder: 20,
+  agentHints: [
+    "Use the HTML or Astro install snippet instead of rebuilding the widget by hand.",
+    "Configure weekly schedule, date overrides, notification recipients, and source hosts before launch.",
+  ],
   configSchema: tableBookingPluginConfigSchema,
   defaultConfig: tableBookingPluginConfigSchema.parse({ timezone: "UTC" }),
   capabilities: {

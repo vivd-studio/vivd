@@ -7,3 +7,5 @@ export const tableBookingBackendPluginPackage = {
     createContribution: createTableBookingPluginBackendContribution,
   },
 } as const;
+
+export default tableBookingBackendPluginPackage;

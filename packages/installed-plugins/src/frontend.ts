@@ -11,6 +11,7 @@ import type {
 import installedPlugin0 from "@vivd/plugin-contact-form/frontend/plugin";
 import installedPlugin1 from "@vivd/plugin-analytics/frontend/plugin";
 import installedPlugin2 from "@vivd/plugin-newsletter/frontend/plugin";
+import installedPlugin3 from "@vivd/plugin-table-booking/frontend/plugin";
 
 interface InstalledFrontendPluginModule {
   pluginId: string;
@@ -32,6 +33,7 @@ export const installedFrontendPluginDescriptors =
   installedPlugin0,
   installedPlugin1,
   installedPlugin2,
+  installedPlugin3,
   ] as const satisfies readonly FrontendPluginPackage[]);
 
 export const installedFrontendSharedProjectPluginUiRegistry =

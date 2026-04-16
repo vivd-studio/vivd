@@ -32,6 +32,10 @@ export default defineConfig({
         __dirname,
         "../../plugin-newsletter/src",
       ),
+      "@vivd/plugin-table-booking": path.resolve(
+        __dirname,
+        "../../plugin-table-booking/src",
+      ),
     },
   },
   build: {

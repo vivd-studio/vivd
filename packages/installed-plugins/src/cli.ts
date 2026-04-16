@@ -4,6 +4,7 @@ import type { PluginPackageDescriptor } from "@vivd/plugin-sdk";
 import installedPlugin0 from "@vivd/plugin-contact-form/cli/plugin";
 import installedPlugin1 from "@vivd/plugin-analytics/cli/plugin";
 import installedPlugin2 from "@vivd/plugin-newsletter/cli/plugin";
+import installedPlugin3 from "@vivd/plugin-table-booking/cli/plugin";
 
 type CliPluginPackage = PluginPackageDescriptor<string, unknown>;
 
@@ -11,4 +12,5 @@ export const installedCliPluginDescriptors = definePluginPackageDescriptors([
   installedPlugin0,
   installedPlugin1,
   installedPlugin2,
+  installedPlugin3,
 ] as const satisfies readonly CliPluginPackage[]);

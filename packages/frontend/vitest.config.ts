@@ -8,6 +8,7 @@ const pluginSdkSrc = path.resolve(__dirname, "../plugin-sdk/src");
 const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
 const pluginContactFormSrc = path.resolve(__dirname, "../plugin-contact-form/src");
 const pluginNewsletterSrc = path.resolve(__dirname, "../plugin-newsletter/src");
+const pluginTableBookingSrc = path.resolve(__dirname, "../plugin-table-booking/src");
 
 export default defineConfig({
   plugins: [react()],
@@ -33,6 +34,14 @@ export default defineConfig({
       {
         find: /^@vivd\/plugin-newsletter\/(.*)$/,
         replacement: `${pluginNewsletterSrc}/$1`,
+      },
+      {
+        find: /^@vivd\/plugin-table-booking$/,
+        replacement: path.resolve(pluginTableBookingSrc, "index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-table-booking\/(.*)$/,
+        replacement: `${pluginTableBookingSrc}/$1`,
       },
       {
         find: /^@vivd\/plugin-sdk$/,

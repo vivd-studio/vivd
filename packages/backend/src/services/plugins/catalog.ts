@@ -31,6 +31,7 @@ const HOST_OWNED_PLUGIN_DEFAULT_ENABLEMENT_BY_PROFILE: Record<
     contact_form: true,
     analytics: true,
     newsletter: true,
+    table_booking: true,
   },
   platform: {},
 };

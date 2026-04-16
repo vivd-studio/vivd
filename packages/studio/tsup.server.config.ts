@@ -20,5 +20,6 @@ export default defineConfig({
     /^@vivd\/plugin-analytics(\/.*)?$/,
     /^@vivd\/plugin-contact-form(\/.*)?$/,
     /^@vivd\/plugin-newsletter(\/.*)?$/,
+    /^@vivd\/plugin-table-booking(\/.*)?$/,
   ],
 });

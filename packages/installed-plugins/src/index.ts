@@ -6,12 +6,14 @@ import {
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 import { newsletterPluginDescriptor } from "@vivd/plugin-newsletter/descriptor";
+import { tableBookingPluginDescriptor } from "@vivd/plugin-table-booking/descriptor";
 
 export const installedPluginDescriptors =
   definePluginPackageInstallDescriptors([
     contactFormPluginDescriptor,
     analyticsPluginDescriptor,
     newsletterPluginDescriptor,
+    tableBookingPluginDescriptor,
   ] as const);
 
 export const installedPluginManifests = definePluginPackageDescriptors(

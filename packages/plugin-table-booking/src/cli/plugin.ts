@@ -5,3 +5,5 @@ export const tableBookingCliPluginPackage = {
   ...tableBookingPluginManifest,
   cli: tableBookingCliModule,
 } as const;
+
+export default tableBookingCliPluginPackage;

@@ -179,7 +179,9 @@ export const tableBookingCliModule: PluginCliModule = {
       "  vivd plugins read table_booking summary --file input.json",
       "  vivd plugins read table_booking bookings --file input.json",
       "  vivd plugins read table_booking agenda --file input.json",
-      ...(tableBookingPluginDefinition.agentHints ?? []).map((hint) => `Note: ${hint}`),
+      ...(tableBookingPluginDefinition.agentHints ?? []).map(
+        (hint: string) => `Note: ${hint}`,
+      ),
     ],
   },
   genericRendererModes: {

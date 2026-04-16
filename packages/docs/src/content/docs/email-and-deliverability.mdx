@@ -15,9 +15,10 @@ The `Email` admin surface controls install-wide transactional email behavior.
 Use it when you need to shape how emails look, track bounce and complaint feedback, or
 adjust suppression policy for the whole install.
 
-<Aside type="note" title="Install-wide email, not project form config">
-  This surface does not replace project-level Contact Form setup. Recipient lists and
-  form fields still belong in the project plugin settings.
+<Aside type="note" title="Install-wide email, not project plugin config">
+  This surface does not replace project-level Contact Form or Table Booking setup.
+  Recipient lists, booking notification recipients, and widget-specific behavior still
+  belong in the project plugin settings.
 </Aside>
 
 ## What this surface controls
@@ -33,6 +34,7 @@ These still live elsewhere:
 
 - provider credentials such as SMTP, SES, or Resend secrets: `.env` or deployment config
 - contact form recipients and form fields: project plugin settings
+- table booking notification recipients and booking rules: project plugin settings
 - account password/email changes: personal account settings
 
 ## Email identity
@@ -96,17 +98,18 @@ Use the global policy settings to decide whether the install should:
 
 You can also manually unsuppress a recipient after the underlying issue has been fixed.
 
-## Relationship to Contact Form
+## Relationship to project plugins
 
-The Contact Form plugin depends on email delivery, but it is not the same configuration
-surface.
+Project plugins such as Contact Form and Table Booking depend on email delivery, but they
+are not the same configuration surface.
 
 Use:
 
 - [Contact Form](/plugins/contact-form/) for recipient lists, fields, and snippets
+- [Table Booking](/plugins/table-booking/) for schedules, notification recipients, and snippets
 - `Email` admin for delivery health and transactional email identity
 
-If forms are visible but messages never arrive, check both surfaces.
+If forms or booking widgets are visible but emails never arrive, check both surfaces.
 
 ## Recommended setup order
 
@@ -122,3 +125,4 @@ If forms are visible but messages never arrive, check both surfaces.
 - Read [Self-Hosting](/self-hosting/) for the env bootstrap side.
 - Read [Instance Settings](/instance-settings/) for adjacent install-wide admin settings.
 - Read [Contact Form](/plugins/contact-form/) if the issue is project-specific form delivery.
+- Read [Table Booking](/plugins/table-booking/) if the issue is project-specific booking notifications.

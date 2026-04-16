@@ -169,6 +169,13 @@
       "when": 1776342114688,
       "tag": "0023_certain_medusa",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1776346200000,
+      "tag": "0024_table_booking_plugin",
+      "breakpoints": true
     }
   ]
 }

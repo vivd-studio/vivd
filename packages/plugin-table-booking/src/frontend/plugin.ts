@@ -5,3 +5,5 @@ export const tableBookingFrontendPluginPackage = {
   ...tableBookingPluginManifest,
   frontend: tableBookingFrontendPluginModule,
 } as const;
+
+export default tableBookingFrontendPluginPackage;

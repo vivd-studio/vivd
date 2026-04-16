@@ -50,16 +50,29 @@ export function createNewsletterBackendHostPluginContribution(options: {
     },
     pluginEntitlementService: options.pluginEntitlementService,
     projectPluginInstanceService: {
-      ensurePluginInstance(hostOptions) {
+      ensurePluginInstance(hostOptions: {
+        organizationId: string;
+        projectSlug: string;
+        pluginId: "newsletter";
+      }) {
         return ensureProjectPluginInstance({
           ...hostOptions,
           defaultConfig: newsletterPluginDefinition.defaultConfig,
         });
       },
-      getPluginInstance(hostOptions) {
+      getPluginInstance(hostOptions: {
+        organizationId: string;
+        projectSlug: string;
+        pluginId: "newsletter";
+      }) {
         return getProjectPluginInstance(hostOptions);
       },
-      async updatePluginInstance(hostOptions) {
+      async updatePluginInstance(hostOptions: {
+        instanceId: string;
+        configJson?: unknown;
+        status?: string;
+        updatedAt?: Date;
+      }) {
         const updates: {
           configJson?: unknown;
           status?: string;
@@ -92,7 +105,14 @@ export function createNewsletterBackendHostPluginContribution(options: {
     },
     emailDeliveryService: getEmailDeliveryService(),
     emailTemplates: {
-      buildConfirmationEmail(hostOptions) {
+      buildConfirmationEmail(hostOptions: {
+        projectTitle: string;
+        recipientName?: string | null;
+        confirmUrl: string;
+        unsubscribeUrl: string;
+        expiresInSeconds: number;
+        mode: "newsletter" | "waitlist";
+      }) {
         return buildNewsletterConfirmationEmail(hostOptions);
       },
     },

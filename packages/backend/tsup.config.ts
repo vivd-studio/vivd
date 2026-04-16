@@ -10,6 +10,7 @@ export default defineConfig({
     /^@vivd\/plugin-analytics(\/.*)?$/,
     /^@vivd\/plugin-contact-form(\/.*)?$/,
     /^@vivd\/plugin-newsletter(\/.*)?$/,
+    /^@vivd\/plugin-table-booking(\/.*)?$/,
   ],
   // Keep CommonJS-only deps external so Node can load them natively from the ESM bundle.
   external: ["extract-zip", "maxmind"],

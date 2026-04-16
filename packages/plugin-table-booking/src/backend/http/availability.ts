@@ -6,6 +6,19 @@ function requestWantsJson(req: express.Request): boolean {
   return acceptHeader.includes("application/json") || !acceptHeader.includes("text/html");
 }
 
+function extractSourceHost(req: express.Request): string | null {
+  for (const rawHeader of [req.get("origin"), req.get("referer")]) {
+    const candidate = rawHeader?.trim();
+    if (!candidate) continue;
+    try {
+      return new URL(candidate).host || null;
+    } catch {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -72,10 +85,7 @@ export function createTableBookingAvailabilityRouter(
         token,
         date,
         partySize,
-        sourceHost:
-          req.get("origin") || req.get("referer")
-            ? new URL(String(req.get("origin") || req.get("referer"))).host
-            : null,
+        sourceHost: extractSourceHost(req),
         origin: req.get("origin") || null,
         referer: req.get("referer") || null,
       });

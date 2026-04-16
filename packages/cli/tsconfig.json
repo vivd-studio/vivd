@@ -14,6 +14,7 @@
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
       "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
+      "@vivd/plugin-table-booking/*": ["../plugin-table-booking/src/*"],
       "@vivd/plugin-sdk": ["../plugin-sdk/src/index.ts"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
@@ -24,6 +25,7 @@
     "../shared/src/**/*.ts",
     "../plugin-analytics/src/cli/**/*.ts",
     "../plugin-contact-form/src/cli/**/*.ts",
-    "../plugin-newsletter/src/cli/**/*.ts"
+    "../plugin-newsletter/src/cli/**/*.ts",
+    "../plugin-table-booking/src/cli/**/*.ts"
   ]
 }

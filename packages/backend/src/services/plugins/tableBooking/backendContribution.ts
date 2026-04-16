@@ -1,4 +1,3 @@
-import { getEmailDeliveryService } from "../../integrations/EmailDeliveryService";
 import { pluginEntitlementService } from "../PluginEntitlementService";
 import { createTableBookingBackendHostPluginContribution } from "./hostPlugin";
 

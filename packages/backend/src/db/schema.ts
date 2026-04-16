@@ -441,7 +441,7 @@ export const pluginEntitlement = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").notNull().default("project"), // 'organization' | 'project'
     projectSlug: text("project_slug").notNull().default(""), // empty for organization-scope
-    pluginId: text("plugin_id").notNull(), // currently: 'contact_form' | 'analytics'
+    pluginId: text("plugin_id").notNull(), // currently: 'contact_form' | 'analytics' | 'newsletter' | 'table_booking'
     state: text("state").notNull().default("disabled"), // 'disabled' | 'enabled' | 'suspended'
     managedBy: text("managed_by").notNull().default("manual_superadmin"), // 'manual_superadmin' | 'plan' | 'self_serve'
     monthlyEventLimit: integer("monthly_event_limit"),
@@ -736,6 +736,99 @@ export const newsletterCampaign = pgTable(
   ],
 );
 
+export const tableBookingReservation = pgTable(
+  "table_booking_reservation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("confirmed"),
+    serviceDate: text("service_date").notNull(),
+    serviceStartAt: timestamp("service_start_at").notNull(),
+    serviceEndAt: timestamp("service_end_at").notNull(),
+    partySize: integer("party_size").notNull(),
+    guestName: text("guest_name").notNull(),
+    guestEmail: text("guest_email").notNull(),
+    guestEmailNormalized: text("guest_email_normalized").notNull(),
+    guestPhone: text("guest_phone").notNull(),
+    notes: text("notes"),
+    sourceHost: text("source_host"),
+    sourcePath: text("source_path"),
+    referrerHost: text("referrer_host"),
+    utmSource: text("utm_source"),
+    utmMedium: text("utm_medium"),
+    utmCampaign: text("utm_campaign"),
+    lastIpHash: text("last_ip_hash"),
+    confirmedAt: timestamp("confirmed_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    cancelledBy: text("cancelled_by"),
+    completedAt: timestamp("completed_at"),
+    noShowAt: timestamp("no_show_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("table_booking_reservation_org_project_status_service_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.status,
+      table.serviceStartAt,
+    ),
+    index("table_booking_reservation_plugin_service_date_idx").on(
+      table.pluginInstanceId,
+      table.serviceDate,
+      table.serviceStartAt,
+    ),
+    index("table_booking_reservation_plugin_email_created_idx").on(
+      table.pluginInstanceId,
+      table.guestEmailNormalized,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const tableBookingActionToken = pgTable(
+  "table_booking_action_token",
+  {
+    id: text("id").primaryKey(),
+    reservationId: text("reservation_id")
+      .notNull()
+      .references(() => tableBookingReservation.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    kind: text("kind").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("table_booking_action_token_hash_idx").on(table.tokenHash),
+    uniqueIndex("table_booking_action_token_reservation_kind_unique").on(
+      table.reservationId,
+      table.kind,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
@@ -746,6 +839,8 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   newsletterSubscribers: many(newsletterSubscriber),
   newsletterActionTokens: many(newsletterActionToken),
   newsletterCampaigns: many(newsletterCampaign),
+  tableBookingReservations: many(tableBookingReservation),
+  tableBookingActionTokens: many(tableBookingActionToken),
 }));
 
 export const projectTagRelations = relations(projectTag, ({ one }) => ({
@@ -822,6 +917,7 @@ export const projectPluginInstanceRelations = relations(
     analyticsEvents: many(analyticsEvent),
     newsletterSubscribers: many(newsletterSubscriber),
     newsletterCampaigns: many(newsletterCampaign),
+    tableBookingReservations: many(tableBookingReservation),
   }),
 );
 
@@ -913,6 +1009,35 @@ export const newsletterCampaignRelations = relations(
     pluginInstance: one(projectPluginInstance, {
       fields: [newsletterCampaign.pluginInstanceId],
       references: [projectPluginInstance.id],
+    }),
+  }),
+);
+
+export const tableBookingReservationRelations = relations(
+  tableBookingReservation,
+  ({ one, many }) => ({
+    project: one(projectMeta, {
+      fields: [tableBookingReservation.organizationId, tableBookingReservation.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [tableBookingReservation.pluginInstanceId],
+      references: [projectPluginInstance.id],
+    }),
+    actionTokens: many(tableBookingActionToken),
+  }),
+);
+
+export const tableBookingActionTokenRelations = relations(
+  tableBookingActionToken,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [tableBookingActionToken.organizationId, tableBookingActionToken.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    reservation: one(tableBookingReservation, {
+      fields: [tableBookingActionToken.reservationId],
+      references: [tableBookingReservation.id],
     }),
   }),
 );

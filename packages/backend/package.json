@@ -40,6 +40,7 @@
     "@vivd/plugin-contact-form": "1.0.0",
     "@vivd/plugin-sdk": "1.0.0",
     "@vivd/plugin-newsletter": "1.0.0",
+    "@vivd/plugin-table-booking": "1.0.0",
     "@vivd/shared": "1.0.0",
     "archiver": "^7.0.1",
     "axios": "^1.13.2",

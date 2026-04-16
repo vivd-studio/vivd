@@ -11,13 +11,14 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
 COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
+COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
 
 # Stage 2: Development
 FROM deps AS dev
@@ -28,6 +29,7 @@ COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
@@ -48,6 +50,7 @@ COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 

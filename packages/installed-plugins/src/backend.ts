@@ -3,9 +3,11 @@ import { definePluginPackageDescriptors } from "@vivd/plugin-sdk";
 import installedPlugin0 from "@vivd/plugin-contact-form/backend/plugin";
 import installedPlugin1 from "@vivd/plugin-analytics/backend/plugin";
 import installedPlugin2 from "@vivd/plugin-newsletter/backend/plugin";
+import installedPlugin3 from "@vivd/plugin-table-booking/backend/plugin";
 
 export const installedBackendPluginPackages = definePluginPackageDescriptors([
   installedPlugin0,
   installedPlugin1,
   installedPlugin2,
+  installedPlugin3,
 ] as const);

@@ -13,7 +13,8 @@
       "@vivd/backend/*": ["./*"],
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
-      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"]
+      "@vivd/plugin-newsletter/*": ["../plugin-newsletter/src/*"],
+      "@vivd/plugin-table-booking/*": ["../plugin-table-booking/src/*"]
     }
   },
   "include": ["src/**/*"],

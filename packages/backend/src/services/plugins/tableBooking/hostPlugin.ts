@@ -51,16 +51,29 @@ export function createTableBookingBackendHostPluginContribution(options: {
     },
     pluginEntitlementService: options.pluginEntitlementService,
     projectPluginInstanceService: {
-      ensurePluginInstance(hostOptions) {
+      ensurePluginInstance(hostOptions: {
+        organizationId: string;
+        projectSlug: string;
+        pluginId: "table_booking";
+      }) {
         return ensureProjectPluginInstance({
           ...hostOptions,
           defaultConfig: tableBookingPluginDefinition.defaultConfig,
         });
       },
-      getPluginInstance(hostOptions) {
+      getPluginInstance(hostOptions: {
+        organizationId: string;
+        projectSlug: string;
+        pluginId: "table_booking";
+      }) {
         return getProjectPluginInstance(hostOptions);
       },
-      async updatePluginInstance(hostOptions) {
+      async updatePluginInstance(hostOptions: {
+        instanceId: string;
+        configJson?: unknown;
+        status?: string;
+        updatedAt?: Date;
+      }) {
         const updates: {
           configJson?: unknown;
           status?: string;
@@ -93,16 +106,44 @@ export function createTableBookingBackendHostPluginContribution(options: {
     },
     emailDeliveryService: getEmailDeliveryService(),
     emailTemplates: {
-      buildGuestConfirmationEmail(hostOptions) {
+      buildGuestConfirmationEmail(hostOptions: {
+        projectTitle: string;
+        guestName?: string | null;
+        partySize: number;
+        bookingDateTimeLabel: string;
+        cancelUrl: string;
+      }) {
         return buildGuestBookingConfirmationEmail(hostOptions);
       },
-      buildGuestCancellationEmail(hostOptions) {
+      buildGuestCancellationEmail(hostOptions: {
+        projectTitle: string;
+        guestName?: string | null;
+        partySize: number;
+        bookingDateTimeLabel: string;
+      }) {
         return buildGuestBookingCancellationEmail(hostOptions);
       },
-      buildStaffNewBookingEmail(hostOptions) {
+      buildStaffNewBookingEmail(hostOptions: {
+        projectTitle: string;
+        bookingDateTimeLabel: string;
+        partySize: number;
+        guestName: string;
+        guestEmail: string;
+        guestPhone: string;
+        notes?: string | null;
+      }) {
         return buildStaffNewBookingEmail(hostOptions);
       },
-      buildStaffCancellationEmail(hostOptions) {
+      buildStaffCancellationEmail(hostOptions: {
+        projectTitle: string;
+        bookingDateTimeLabel: string;
+        partySize: number;
+        guestName: string;
+        guestEmail: string;
+        guestPhone: string;
+        cancelledBy: "guest" | "staff";
+        notes?: string | null;
+      }) {
         return buildStaffBookingCancellationEmail(hostOptions);
       },
     },

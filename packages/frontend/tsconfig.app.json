@@ -50,6 +50,9 @@
       "@vivd/plugin-newsletter/*": [
         "../plugin-newsletter/src/*"
       ],
+      "@vivd/plugin-table-booking/*": [
+        "../plugin-table-booking/src/*"
+      ],
       "@vivd/plugin-sdk": [
         "../plugin-sdk/src/index.ts"
       ],

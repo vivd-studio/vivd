@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import NewsletterProjectPage from "@vivd/plugin-newsletter/frontend/NewsletterProjectPage";
 import {
   NEWSLETTER_CAMPAIGNS_READ_ID,
-  NEWSLETTER_SUBSCRIBERS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
   type NewsletterCampaignsPayload,
   type NewsletterSubscribersPayload,

@@ -36,6 +36,7 @@ function renderMessagePage(title: string, message: string): string {
 
 function renderConfirmPage(options: {
   token: string;
+  redirect?: string | null;
   bookingDateTimeLabel: string;
   guestName: string;
   partySize: number;
@@ -66,6 +67,11 @@ function renderConfirmPage(options: {
       </div>
       <form method="POST" action="/plugins/table-booking/v1/cancel">
         <input type="hidden" name="token" value="${escapeHtml(options.token)}" />
+        ${
+          options.redirect
+            ? `<input type="hidden" name="redirect" value="${escapeHtml(options.redirect)}" />`
+            : ""
+        }
         <button type="submit">Cancel reservation</button>
       </form>
     </main>
@@ -81,6 +87,7 @@ export function createTableBookingCancelRouter(
 
   router.get("/table-booking/v1/cancel", async (req, res) => {
     const token = String(req.query.token || "").trim();
+    const redirect = String(req.query.redirect || "").trim() || null;
     if (!token) {
       return res
         .status(400)
@@ -92,6 +99,7 @@ export function createTableBookingCancelRouter(
       return res.status(200).send(
         renderConfirmPage({
           token,
+          redirect,
           bookingDateTimeLabel: preview.reservation.bookingDateTimeLabel,
           guestName: preview.reservation.guestName,
           partySize: preview.reservation.partySize,

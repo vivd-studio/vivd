@@ -31,13 +31,14 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
 COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
+COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
@@ -50,6 +51,7 @@ COPY packages/theme ./packages/theme
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
@@ -77,6 +79,7 @@ COPY packages/theme ./packages/theme
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
@@ -102,13 +105,14 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
 COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
+COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 

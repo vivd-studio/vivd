@@ -34,6 +34,7 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
 COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
+COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
 # Keep workspace metadata available for npm workspaces resolution
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
@@ -42,7 +43,7 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
     && npm cache clean --force
 
 # Stage 2: Development (hot reload)
@@ -54,6 +55,7 @@ COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 COPY packages/cli ./packages/cli
 COPY packages/theme ./packages/theme
 COPY packages/studio ./packages/studio
@@ -79,6 +81,7 @@ COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
 COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/plugin-newsletter ./packages/plugin-newsletter
+COPY packages/plugin-table-booking ./packages/plugin-table-booking
 
 RUN npm run build -w @vivd/plugin-sdk
 RUN npm run build -w @vivd/shared
@@ -107,12 +110,13 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
 COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/plugin-newsletter/package.json packages/plugin-newsletter/package.json
+COPY packages/plugin-table-booking/package.json packages/plugin-table-booking/package.json
 COPY packages/studio/package.json packages/studio/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/backend --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend --omit=dev --include-workspace-root=false \
     && npm cache clean --force
 
 # Copy built outputs

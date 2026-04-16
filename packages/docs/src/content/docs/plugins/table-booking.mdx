@@ -1,0 +1,43 @@
+---
+title: Table Booking
+description: Configure the Table Booking plugin so guests can reserve restaurant tables from the live site.
+---
+
+The Table Booking plugin is for restaurant-style projects that need a live-site booking
+widget and a simple booking admin inside Vivd.
+
+## What to configure
+
+- Enable the Table Booking plugin for the project.
+- Set the restaurant timezone, party-size limits, and default booking duration.
+- Define the weekly schedule and any date-specific overrides.
+- Add the recipient email addresses that should receive booking notifications.
+- Review the allowed source hosts and redirect hosts before embedding the widget.
+- Use the generated snippet or `vivd plugins snippets table_booking [html|astro]`
+  instead of rebuilding the booking form manually.
+
+## What v1 includes
+
+- instant-confirm table bookings
+- a generated HTML/Astro booking widget
+- booking overview, agenda, and status actions in the project admin UI
+- guest confirmation and cancellation emails
+- staff notification emails for new bookings and cancellations
+
+## Recommended launch check
+
+1. Verify the opening schedule and any special-day overrides.
+2. Create a real test booking from the published page.
+3. Confirm the guest confirmation email and staff notification email both arrive.
+4. Open the cancel link from the guest email and verify the booking state updates.
+5. Re-check the live site after publishing to confirm slots and form behavior still match.
+
+## Current v1 limits
+
+- no floor plan or table-map management
+- no manual booking create/edit/reschedule flow from admin
+- no deposits or payments
+- no POS or external reservation sync
+
+If the booking widget appears but confirmations or notifications do not arrive, review
+[Email & Deliverability](/email-and-deliverability/) for the current install.

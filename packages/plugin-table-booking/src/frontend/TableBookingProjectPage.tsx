@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Copy, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -157,6 +157,7 @@ export default function TableBookingProjectPage({
   const [bookingSearch, setBookingSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [bookingOffset, setBookingOffset] = useState(0);
   const limit = 100;
 
   const projectListQuery = trpc.project.list.useQuery(undefined, {
@@ -186,7 +187,7 @@ export default function TableBookingProjectPage({
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         limit,
-        offset: 0,
+        offset: bookingOffset,
       },
     },
     { enabled: !!projectSlug },
@@ -309,6 +310,10 @@ export default function TableBookingProjectPage({
     };
   }, [projectSlug, projectTitle]);
 
+  useEffect(() => {
+    setBookingOffset(0);
+  }, [bookingStatus, bookingSearch, startDate, endDate]);
+
   const pluginEnabled = !!pluginInfo?.enabled;
   const needsEnable = (pluginInfo?.entitled ?? false) && !pluginEnabled && !pluginInfo?.instanceId;
   const isLoading =
@@ -366,6 +371,12 @@ export default function TableBookingProjectPage({
 
   const bookingsRows = bookings?.rows ?? [];
   const agendaGroups = agenda?.groups ?? [];
+  const bookingRangeStart = bookings && bookings.total > 0 ? bookingOffset + 1 : 0;
+  const bookingRangeEnd = bookings
+    ? Math.min(bookingOffset + bookingsRows.length, bookings.total)
+    : 0;
+  const canLoadPreviousBookings = bookingOffset > 0;
+  const canLoadMoreBookings = bookingRangeEnd < (bookings?.total ?? 0);
 
   return (
     <SettingsPageShell
@@ -555,6 +566,35 @@ export default function TableBookingProjectPage({
             </div>
 
             <div className="grid gap-3">
+              {bookings ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                  <div>
+                    {bookings.total > 0
+                      ? `Showing ${bookingRangeStart}-${bookingRangeEnd} of ${bookings.total} bookings`
+                      : "No bookings found"}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!canLoadPreviousBookings}
+                      onClick={() =>
+                        setBookingOffset((current) => Math.max(0, current - limit))
+                      }
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!canLoadMoreBookings}
+                      onClick={() => setBookingOffset((current) => current + limit)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
               {bookingsRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No bookings match the current filters.</p>
               ) : (
