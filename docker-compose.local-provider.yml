@@ -78,6 +78,12 @@ services:
           ignore:
             - node_modules/
             - dist/
+        - action: sync
+          path: ./plugins/native/table-booking
+          target: /app/plugins/native/table-booking
+          ignore:
+            - node_modules/
+            - dist/
         - action: rebuild
           path: ./plugins/installed/package.json
         - action: rebuild
@@ -90,6 +96,8 @@ services:
           path: ./plugins/native/contact-form/package.json
         - action: rebuild
           path: ./plugins/native/newsletter/package.json
+        - action: rebuild
+          path: ./plugins/native/table-booking/package.json
         - action: rebuild
           path: ./packages/theme/package.json
         - action: rebuild

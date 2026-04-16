@@ -17,14 +17,16 @@ This skill is for:
 ## Current Shape
 
 Vivd is in a mixed state:
-- `analytics` and `contact_form` are extracted plugin workspace packages at `packages/plugin-analytics` and `packages/plugin-contact-form`
+- plugin-owned workspaces now live under `plugins/`
+- first-party native plugins currently live under `plugins/native/*`
 - host apps still own the generic plugin platform, registries, routing, and compatibility layers
 - the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
 - plugin packages now also export safe package descriptors (`src/descriptor.ts`) so host registries can derive plugin-owned definition/UI/CLI metadata from one package-level source instead of repeating separate arrays/maps per surface
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
-- installed plugin registry in `packages/installed-plugins`
+- plugin SDK in `plugins/sdk`
+- installed plugin registry in `plugins/installed`
 - backend host/plugin registry in `packages/backend`
 - frontend host/plugin registry in `packages/frontend`
 - CLI host/plugin registry in `packages/cli`
@@ -42,11 +44,11 @@ Start here when orienting:
   - `packages/shared/src/types/pluginContracts.ts`
   - `packages/shared/src/types/pluginPackages.ts`
 - Installed plugin set:
-  - `packages/installed-plugins/src/index.ts`
-  - `packages/installed-plugins/src/backend.ts`
-  - `packages/installed-plugins/src/frontend.ts`
-  - `packages/installed-plugins/src/cli.ts`
-  - `packages/installed-plugins/src/studio.ts`
+  - `plugins/installed/src/index.ts`
+  - `plugins/installed/src/backend.ts`
+  - `plugins/installed/src/frontend.ts`
+  - `plugins/installed/src/cli.ts`
+  - `plugins/installed/src/studio.ts`
 - Backend plugin host:
   - `packages/backend/src/services/plugins/descriptors.ts`
   - `packages/backend/src/services/plugins/registry.ts`
@@ -64,24 +66,24 @@ Start here when orienting:
   - `packages/cli/src/commands.ts`
   - `packages/cli/src/plugins/registry.ts`
 - Extracted plugin package example:
-  - `packages/plugin-analytics/package.json`
-  - `packages/plugin-analytics/src/descriptor.ts`
-  - `packages/plugin-analytics/src/backend/config.ts`
-  - `packages/plugin-analytics/src/backend/module.ts`
-  - `packages/plugin-analytics/src/frontend/module.ts`
-  - `packages/plugin-analytics/src/frontend/AnalyticsProjectPage.tsx`
-  - `packages/plugin-analytics/src/cli/module.ts`
-  - `packages/plugin-analytics/src/shared/projectUi.ts`
-  - `packages/plugin-contact-form/package.json`
-  - `packages/plugin-contact-form/src/descriptor.ts`
-  - `packages/plugin-contact-form/src/backendHooks.ts`
-  - `packages/plugin-contact-form/src/backend/config.ts`
-  - `packages/plugin-contact-form/src/backend/module.ts`
-  - `packages/plugin-contact-form/src/backend/adminHooks.ts`
-  - `packages/plugin-contact-form/src/frontend/module.ts`
-  - `packages/plugin-contact-form/src/frontend/ContactFormProjectPage.tsx`
-  - `packages/plugin-contact-form/src/cli/module.ts`
-  - `packages/plugin-contact-form/src/shared/projectUi.ts`
+  - `plugins/native/analytics/package.json`
+  - `plugins/native/analytics/src/descriptor.ts`
+  - `plugins/native/analytics/src/backend/config.ts`
+  - `plugins/native/analytics/src/backend/module.ts`
+  - `plugins/native/analytics/src/frontend/module.ts`
+  - `plugins/native/analytics/src/frontend/AnalyticsProjectPage.tsx`
+  - `plugins/native/analytics/src/cli/module.ts`
+  - `plugins/native/analytics/src/shared/projectUi.ts`
+  - `plugins/native/contact-form/package.json`
+  - `plugins/native/contact-form/src/descriptor.ts`
+  - `plugins/native/contact-form/src/backendHooks.ts`
+  - `plugins/native/contact-form/src/backend/config.ts`
+  - `plugins/native/contact-form/src/backend/module.ts`
+  - `plugins/native/contact-form/src/backend/adminHooks.ts`
+  - `plugins/native/contact-form/src/frontend/module.ts`
+  - `plugins/native/contact-form/src/frontend/ContactFormProjectPage.tsx`
+  - `plugins/native/contact-form/src/cli/module.ts`
+  - `plugins/native/contact-form/src/shared/projectUi.ts`
   - Backend-owned compatibility adapters now live in `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts`
   - Public plugin HTTP route composition now lives in `packages/backend/src/httpRoutes/plugins/registry.ts`
 

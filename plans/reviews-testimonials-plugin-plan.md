@@ -174,7 +174,7 @@ Suggested durable agent hint:
 
 Create a new extracted package:
 
-- `packages/plugin-reviews`
+- `plugins/native/reviews`
 
 Initial package shape should mirror the current extracted-plugin model:
 

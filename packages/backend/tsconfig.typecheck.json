@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "noEmit": true,
-    "rootDir": "..",
+    "rootDir": "../..",
     "paths": {
       "@vivd/backend/*": ["./*"],
       "@vivd/plugin-analytics/*": ["../../plugins/native/analytics/src/*"],
