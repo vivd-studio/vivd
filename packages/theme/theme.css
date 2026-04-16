@@ -660,6 +660,145 @@
   }
 }
 
+/* ============================================
+   Scratch Wizard Backdrop Bloom Colors
+   Dedicated palette for the start-from-scratch
+   screen's animated gradient backdrop.
+   ============================================ */
+@layer base {
+  /* Default (Blue) – Botanical garden */
+  :root {
+    --scratch-bloom-1: 152 55% 62%;
+    --scratch-bloom-2: 42 82% 65%;
+    --scratch-bloom-3: 14 78% 74%;
+    --scratch-bloom-4: 268 42% 72%;
+    --scratch-bloom-5: 180 52% 56%;
+    --scratch-bloom-6: 38 65% 72%;
+  }
+  .dark {
+    --scratch-bloom-1: 152 62% 40%;
+    --scratch-bloom-2: 42 88% 48%;
+    --scratch-bloom-3: 12 82% 55%;
+    --scratch-bloom-4: 268 55% 52%;
+    --scratch-bloom-5: 180 62% 38%;
+    --scratch-bloom-6: 38 75% 52%;
+  }
+
+  /* Natural – Warm sage & amber garden */
+  [data-color-theme="natural"] {
+    --scratch-bloom-1: 148 50% 58%;
+    --scratch-bloom-2: 38 82% 62%;
+    --scratch-bloom-3: 18 72% 72%;
+    --scratch-bloom-4: 340 38% 70%;
+    --scratch-bloom-5: 172 48% 54%;
+    --scratch-bloom-6: 158 40% 65%;
+  }
+  [data-color-theme="natural"].dark,
+  .dark[data-color-theme="natural"] {
+    --scratch-bloom-1: 148 58% 36%;
+    --scratch-bloom-2: 38 88% 44%;
+    --scratch-bloom-3: 18 78% 50%;
+    --scratch-bloom-4: 340 48% 48%;
+    --scratch-bloom-5: 172 55% 32%;
+    --scratch-bloom-6: 158 48% 45%;
+  }
+
+  /* Vivd Green – Emerald & gold garden */
+  [data-color-theme="vivd-green"] {
+    --scratch-bloom-1: 152 62% 52%;
+    --scratch-bloom-2: 42 88% 60%;
+    --scratch-bloom-3: 10 78% 70%;
+    --scratch-bloom-4: 278 44% 70%;
+    --scratch-bloom-5: 174 55% 50%;
+    --scratch-bloom-6: 160 45% 62%;
+  }
+  [data-color-theme="vivd-green"].dark,
+  .dark[data-color-theme="vivd-green"] {
+    --scratch-bloom-1: 152 68% 36%;
+    --scratch-bloom-2: 42 92% 44%;
+    --scratch-bloom-3: 10 85% 50%;
+    --scratch-bloom-4: 278 55% 48%;
+    --scratch-bloom-5: 174 62% 32%;
+    --scratch-bloom-6: 160 52% 42%;
+  }
+
+  /* Vivd Sharp – Bold emerald & hot pink */
+  [data-color-theme="vivd-sharp"] {
+    --scratch-bloom-1: 152 75% 45%;
+    --scratch-bloom-2: 44 95% 58%;
+    --scratch-bloom-3: 8 85% 65%;
+    --scratch-bloom-4: 325 58% 64%;
+    --scratch-bloom-5: 176 65% 45%;
+    --scratch-bloom-6: 142 62% 55%;
+  }
+  [data-color-theme="vivd-sharp"].dark,
+  .dark[data-color-theme="vivd-sharp"] {
+    --scratch-bloom-1: 152 82% 32%;
+    --scratch-bloom-2: 44 96% 40%;
+    --scratch-bloom-3: 8 90% 48%;
+    --scratch-bloom-4: 325 68% 45%;
+    --scratch-bloom-5: 176 72% 28%;
+    --scratch-bloom-6: 142 70% 38%;
+  }
+
+  /* Ocean – Aquatic botanical */
+  [data-color-theme="ocean"] {
+    --scratch-bloom-1: 180 58% 52%;
+    --scratch-bloom-2: 200 75% 62%;
+    --scratch-bloom-3: 230 52% 72%;
+    --scratch-bloom-4: 18 65% 74%;
+    --scratch-bloom-5: 168 55% 55%;
+    --scratch-bloom-6: 155 42% 64%;
+  }
+  [data-color-theme="ocean"].dark,
+  .dark[data-color-theme="ocean"] {
+    --scratch-bloom-1: 180 65% 34%;
+    --scratch-bloom-2: 200 80% 42%;
+    --scratch-bloom-3: 230 60% 52%;
+    --scratch-bloom-4: 18 72% 52%;
+    --scratch-bloom-5: 168 62% 36%;
+    --scratch-bloom-6: 155 50% 45%;
+  }
+
+  /* Aurora – Electric neon bloom */
+  [data-color-theme="aurora"] {
+    --scratch-bloom-1: 225 92% 65%;
+    --scratch-bloom-2: 325 88% 65%;
+    --scratch-bloom-3: 8 90% 65%;
+    --scratch-bloom-4: 272 72% 68%;
+    --scratch-bloom-5: 190 82% 55%;
+    --scratch-bloom-6: 345 75% 70%;
+  }
+  [data-color-theme="aurora"].dark,
+  .dark[data-color-theme="aurora"] {
+    --scratch-bloom-1: 225 96% 48%;
+    --scratch-bloom-2: 325 92% 48%;
+    --scratch-bloom-3: 8 94% 48%;
+    --scratch-bloom-4: 272 80% 50%;
+    --scratch-bloom-5: 190 88% 40%;
+    --scratch-bloom-6: 345 82% 52%;
+  }
+
+  /* Mono – Subtle warm/cool grays */
+  [data-color-theme="mono"] {
+    --scratch-bloom-1: 30 10% 62%;
+    --scratch-bloom-2: 210 8% 58%;
+    --scratch-bloom-3: 0 5% 68%;
+    --scratch-bloom-4: 25 7% 60%;
+    --scratch-bloom-5: 200 10% 55%;
+    --scratch-bloom-6: 0 4% 72%;
+  }
+  [data-color-theme="mono"].dark,
+  .dark[data-color-theme="mono"] {
+    --scratch-bloom-1: 30 12% 32%;
+    --scratch-bloom-2: 210 10% 28%;
+    --scratch-bloom-3: 0 6% 36%;
+    --scratch-bloom-4: 25 8% 30%;
+    --scratch-bloom-5: 200 12% 25%;
+    --scratch-bloom-6: 0 5% 38%;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -718,6 +857,48 @@
 
 .animate-pulse-outline {
   animation: pulse-outline 2s infinite;
+}
+
+/* Scratch wizard bloom – gentle organic drift */
+@keyframes scratch-bloom-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(2%, -1.5%) scale(1.02);
+  }
+  66% {
+    transform: translate(-1.5%, 1%) scale(0.98);
+  }
+}
+
+@keyframes scratch-bloom-drift-alt {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(-2%, 1%) scale(0.98);
+  }
+  66% {
+    transform: translate(1.5%, -1.5%) scale(1.02);
+  }
+}
+
+.scratch-bloom-drift {
+  animation: scratch-bloom-drift 25s ease-in-out infinite;
+}
+
+.scratch-bloom-drift-alt {
+  animation: scratch-bloom-drift-alt 30s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scratch-bloom-drift,
+  .scratch-bloom-drift-alt {
+    animation: none;
+  }
 }
 
 :root {

@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -24,7 +30,6 @@ import {
 import {
   Copy,
   Check,
-  Plus,
   Loader2,
   Globe,
   Trash2,
@@ -576,7 +581,7 @@ export function ProjectCard({
   return (
     <>
       <Card
-        className={`relative flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
+        className={`group relative flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
           isProcessing
             ? "border-primary/60 ring-1 ring-primary/20 animate-pulse duration-3000"
             : ""
@@ -589,7 +594,219 @@ export function ProjectCard({
           }
         }}
       >
-        <CardHeader className="px-4 pb-3 pt-4">
+        <DropdownMenu
+          open={actionsMenuOpen}
+          onOpenChange={setActionsMenuOpen}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 z-10 h-7 w-7 text-muted-foreground/60 hover:text-foreground"
+              onClick={(e) => e.stopPropagation()}
+              disabled={isRenamePending}
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onClick={(e) => e.stopPropagation()}
+            onCloseAutoFocus={(event) => {
+              if (suppressActionsCloseAutoFocusRef.current) {
+                event.preventDefault();
+                suppressActionsCloseAutoFocusRef.current = false;
+              }
+            }}
+          >
+            {/* ── Preview ── */}
+            <DropdownMenuItem
+              onClick={() => window.open(getPreviewUrl(), "_blank")}
+              disabled={!isCompleted || !publicPreviewEnabled}
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Open in new tab
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleCopyPreview}
+              disabled={!isCompleted || !publicPreviewEnabled}
+            >
+              {copied ? (
+                <Check className="w-4 h-4 mr-2" />
+              ) : (
+                <Copy className="w-4 h-4 mr-2" />
+              )}
+              {copied
+                ? "Copied!"
+                : publicPreviewEnabled
+                  ? "Copy preview URL"
+                  : "Preview URL disabled"}
+            </DropdownMenuItem>
+            {canManagePreview && (
+              <DropdownMenuItem
+                onClick={() =>
+                  setPublicPreviewEnabledMutation.mutate({
+                    slug: project.slug,
+                    enabled: !publicPreviewEnabled,
+                  })
+                }
+                disabled={setPublicPreviewEnabledMutation.isPending}
+              >
+                {publicPreviewEnabled ? (
+                  <EyeOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-2" />
+                )}
+                {publicPreviewEnabled ? "Disable preview URL" : "Enable preview URL"}
+              </DropdownMenuItem>
+            )}
+            {isUrlProject && project.url && (
+              <DropdownMenuItem
+                onClick={() => window.open(project.url, "_blank")}
+              >
+                <Globe className="w-4 h-4 mr-2" />
+                Original website
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+
+            {/* ── Content & plugins ── */}
+            <DropdownMenuItem
+              onClick={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
+            >
+              <Plug className="w-4 h-4 mr-2" />
+              Plugins
+            </DropdownMenuItem>
+            {projectPluginShortcuts.map((shortcut) => {
+              const ShortcutIcon = shortcut.icon;
+              return (
+                <DropdownMenuItem
+                  key={`shortcut-menu-${shortcut.pluginId}`}
+                  onClick={() => navigate(shortcut.path)}
+                >
+                  <ShortcutIcon className="w-4 h-4 mr-2" />
+                  {shortcut.label}
+                </DropdownMenuItem>
+              );
+            })}
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                const target = event.currentTarget as HTMLElement | null;
+                if (!target) return;
+                const rect = target.getBoundingClientRect();
+                const frozenRect = new DOMRect(
+                  rect.x,
+                  rect.y,
+                  rect.width,
+                  0,
+                );
+                actionsMenuItemAnchorRef.current = {
+                  getBoundingClientRect: () => frozenRect,
+                };
+                suppressActionsCloseAutoFocusRef.current = true;
+                setActionsMenuOpen(false);
+                requestAnimationFrame(() => openTagsPopover("actions"));
+              }}
+            >
+              <Tags className="w-4 h-4 mr-2" />
+              Edit labels
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                window.open(
+                  `${baseUrl}/vivd-studio/api/download/${project.slug}/${selectedVersion}`,
+                  "_blank",
+                );
+              }}
+              disabled={!isCompleted}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download as ZIP
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                regenerateThumbnailMutation.mutate({
+                  slug: project.slug,
+                  version: selectedVersion,
+                })
+              }
+              disabled={!isCompleted || regenerateThumbnailMutation.isPending}
+            >
+              {regenerateThumbnailMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Image className="w-4 h-4 mr-2" />
+              )}
+              {regenerateThumbnailMutation.isPending
+                ? "Regenerating thumbnail..."
+                : "Regenerate thumbnail"}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            {/* ── Project management ── */}
+            <DropdownMenuItem
+              onClick={() => setShowVersionManagement(true)}
+            >
+              <Settings2 className="w-4 h-4 mr-2" />
+              Manage versions
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setPublishDialogOpen(true)}
+              disabled={!isCompleted}
+            >
+              <Globe className="w-4 h-4 mr-2" />
+              {project.publishedDomain ? "Manage publishing" : "Publish site"}
+            </DropdownMenuItem>
+            {canRenameProject && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditTitleInput(project.title ?? "");
+                  setShowEditTitleDialog(true);
+                }}
+                disabled={isTitleUpdatePending || renameSlugMutation.isPending}
+              >
+                <Type className="w-4 h-4 mr-2" />
+                Edit project title
+              </DropdownMenuItem>
+            )}
+            {canRenameProject && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setRenameSlugInput(project.slug);
+                  setShowRenameDialog(true);
+                }}
+                disabled={renameSlugMutation.isPending || isTitleUpdatePending}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Rename project slug
+              </DropdownMenuItem>
+            )}
+            {canOverrideProjectStatus && (
+              <DropdownMenuItem
+                onClick={() => setShowStatusDialog(true)}
+                disabled={setStatusMutation.isPending}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Set project status
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onClick={() => onDelete(project.slug)}
+              className="text-destructive focus:text-destructive focus:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete project
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <CardHeader className="pl-4 pr-10 pb-3 pt-4">
           <div className="flex min-h-[44px] items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               {isInlineTitleEditing ? (
@@ -656,210 +873,7 @@ export function ProjectCard({
                   />
                 ))}
             </div>
-            <div className="flex shrink-0 items-start gap-1">
-              <DropdownMenu
-                open={actionsMenuOpen}
-                onOpenChange={setActionsMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground/60 hover:text-foreground"
-                    onClick={(e) => e.stopPropagation()}
-                    disabled={isRenamePending}
-                  >
-                    <MoreVertical className="w-3.5 h-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  onClick={(e) => e.stopPropagation()}
-                  onCloseAutoFocus={(event) => {
-                    if (suppressActionsCloseAutoFocusRef.current) {
-                      event.preventDefault();
-                      suppressActionsCloseAutoFocusRef.current = false;
-                    }
-                  }}
-                >
-                  {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
-                  <DropdownMenuItem
-                    onClick={() => window.open(getPreviewUrl(), "_blank")}
-                    disabled={!isCompleted || !publicPreviewEnabled}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open in new tab
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleCopyPreview}
-                    disabled={!isCompleted || !publicPreviewEnabled}
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 mr-2" />
-                    ) : (
-                      <Copy className="w-4 h-4 mr-2" />
-                    )}
-                    {copied
-                      ? "Copied!"
-                      : publicPreviewEnabled
-                        ? "Copy preview URL"
-                        : "Preview URL disabled"}
-                  </DropdownMenuItem>
-                  {canManagePreview && (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        setPublicPreviewEnabledMutation.mutate({
-                          slug: project.slug,
-                          enabled: !publicPreviewEnabled,
-                        })
-                      }
-                      disabled={setPublicPreviewEnabledMutation.isPending}
-                    >
-                      {publicPreviewEnabled ? (
-                        <EyeOff className="w-4 h-4 mr-2" />
-                      ) : (
-                        <Eye className="w-4 h-4 mr-2" />
-                      )}
-                      {publicPreviewEnabled ? "Disable preview URL" : "Enable preview URL"}
-                    </DropdownMenuItem>
-                  )}
-                  {isUrlProject && project.url && (
-                    <DropdownMenuItem
-                      onClick={() => window.open(project.url, "_blank")}
-                    >
-                      <Globe className="w-4 h-4 mr-2" />
-                      Original website
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-                      window.open(
-                        `${baseUrl}/vivd-studio/api/download/${project.slug}/${selectedVersion}`,
-                        "_blank",
-                      );
-                    }}
-                    disabled={!isCompleted}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download as ZIP
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      regenerateThumbnailMutation.mutate({
-                        slug: project.slug,
-                        version: selectedVersion,
-                      })
-                    }
-                    disabled={!isCompleted || regenerateThumbnailMutation.isPending}
-                  >
-                    {regenerateThumbnailMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Image className="w-4 h-4 mr-2" />
-                    )}
-                    {regenerateThumbnailMutation.isPending
-                      ? "Regenerating thumbnail..."
-                      : "Regenerate thumbnail"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      const target = event.currentTarget as HTMLElement | null;
-                      if (!target) return;
-                      const rect = target.getBoundingClientRect();
-                      const frozenRect = new DOMRect(
-                        rect.x,
-                        rect.y,
-                        rect.width,
-                        0,
-                      );
-                      actionsMenuItemAnchorRef.current = {
-                        getBoundingClientRect: () => frozenRect,
-                      };
-                      suppressActionsCloseAutoFocusRef.current = true;
-                      setActionsMenuOpen(false);
-                      requestAnimationFrame(() => openTagsPopover("actions"));
-                    }}
-                  >
-                    <Tags className="w-4 h-4 mr-2" />
-                    Edit tags
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
-                  >
-                    <Plug className="w-4 h-4 mr-2" />
-                    Plugins
-                  </DropdownMenuItem>
-                  {projectPluginShortcuts.map((shortcut) => {
-                    const ShortcutIcon = shortcut.icon;
-                    return (
-                      <DropdownMenuItem
-                        key={`shortcut-menu-${shortcut.pluginId}`}
-                        onClick={() => navigate(shortcut.path)}
-                      >
-                        <ShortcutIcon className="w-4 h-4 mr-2" />
-                        {shortcut.label}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setShowVersionManagement(true)}
-                  >
-                    <Settings2 className="w-4 h-4 mr-2" />
-                    Manage versions
-                  </DropdownMenuItem>
-                  {canOverrideProjectStatus && (
-                    <DropdownMenuItem
-                      onClick={() => setShowStatusDialog(true)}
-                      disabled={setStatusMutation.isPending}
-                    >
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Set project status
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => setPublishDialogOpen(true)}
-                    disabled={!isCompleted}
-                  >
-                    <Globe className="w-4 h-4 mr-2" />
-                    {project.publishedDomain ? "Manage publishing" : "Publish site"}
-                  </DropdownMenuItem>
-                  {canRenameProject && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setEditTitleInput(project.title ?? "");
-                        setShowEditTitleDialog(true);
-                      }}
-                      disabled={isTitleUpdatePending || renameSlugMutation.isPending}
-                    >
-                      <Type className="w-4 h-4 mr-2" />
-                      Edit project title
-                    </DropdownMenuItem>
-                  )}
-                  {canRenameProject && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setRenameSlugInput(project.slug);
-                        setShowRenameDialog(true);
-                      }}
-                      disabled={renameSlugMutation.isPending || isTitleUpdatePending}
-                    >
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Rename project slug
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => onDelete(project.slug)}
-                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete project
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <div className="grid content-start justify-items-end gap-1">
+            <div className="grid shrink-0 content-start justify-items-end gap-1">
               <ProjectTagsPopover
                 key={`${project.slug}:${tagsPopoverSessionKey}`}
                 open={tagsPopoverOpen}
@@ -913,11 +927,7 @@ export function ProjectCard({
                     openTagsPopover("tags");
                   }}
                 >
-                  {projectTags.length === 0 ? (
-                    <span className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors select-none">
-                      + Add labels
-                    </span>
-                  ) : (
+                  {projectTags.length > 0 ? (
                     <>
                       {projectTags.slice(0, 4).map((tag) => (
                         <TagChip
@@ -933,7 +943,7 @@ export function ProjectCard({
                         </span>
                       )}
                     </>
-                  )}
+                  ) : null}
                 </div>
               </ProjectTagsPopover>
               <div className="flex min-h-5 items-center justify-end">
@@ -942,7 +952,6 @@ export function ProjectCard({
                     {statusLabel}
                   </Badge>
                 )}
-              </div>
               </div>
             </div>
           </div>
@@ -1106,58 +1115,51 @@ export function ProjectCard({
             </div>
           )}
         </CardContent>
-        <CardFooter className="pt-2.5 pb-3 px-4 flex items-center justify-end gap-1.5 border-t border-border/30 mt-auto">
-          {enabledPluginEntries.map((plugin) => {
-            const PluginIcon = plugin.icon;
-            return (
-              <Button
-                key={`footer-plugin-${plugin.pluginId}`}
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (plugin.path) navigate(plugin.path);
-                }}
-                title={plugin.title}
-                disabled={isRenamePending || !plugin.path}
-              >
-                <PluginIcon className="h-4 w-4" />
-              </Button>
-            );
-          })}
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(ROUTES.PROJECT_PLUGINS(project.slug));
-            }}
-            disabled={isRenamePending}
-          >
-            <Plug className="h-4 w-4" />
-            <span className="text-xs font-medium">Plugins</span>
-          </Button>
-
-          {isUrlProject && project.url && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-              disabled={isProcessing || isRegenerating || isRenamePending}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRegenerate(project.slug, selectedVersion);
-              }}
-              title="Create new version"
-            >
-              <Plus
-                className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
-              />
-              <span className="text-xs font-medium">New</span>
-            </Button>
-          )}
+        <CardFooter className="pt-2.5 pb-3 px-4 flex items-center justify-end gap-1 border-t border-border/30 mt-auto">
+          <TooltipProvider delayDuration={100}>
+            {enabledPluginEntries.map((plugin) => {
+              const PluginIcon = plugin.icon;
+              return (
+                <Tooltip key={`footer-plugin-${plugin.pluginId}`}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (plugin.path) navigate(plugin.path);
+                      }}
+                      disabled={isRenamePending || !plugin.path}
+                    >
+                      <PluginIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{plugin.title}</TooltipContent>
+                </Tooltip>
+              );
+            })}
+            {enabledPluginEntries.length > 0 && (
+              <span className="mx-1 h-3.5 w-px bg-border/60 rounded-full" aria-hidden />
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(ROUTES.PROJECT_PLUGINS(project.slug));
+                  }}
+                  disabled={isRenamePending}
+                >
+                  <Plug className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Plugins</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </CardFooter>
         {isRenamePending ? (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm">
