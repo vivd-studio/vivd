@@ -1,4 +1,4 @@
-import type { PluginPackageManifest } from "@vivd/plugin-sdk";
+import type { NativePluginPackageManifest } from "@vivd/plugin-sdk";
 import { definePluginPackageManifest } from "@vivd/plugin-sdk";
 import { contactFormPluginDefinition } from "./backend/module";
 import { contactFormSharedProjectUi } from "./shared/projectUi";
@@ -27,4 +27,4 @@ export const contactFormPluginManifest = definePluginPackageManifest({
   previewSupport: {
     mode: "native",
   },
-} as const satisfies PluginPackageManifest<"contact_form">);
+} as const satisfies NativePluginPackageManifest<"contact_form">);

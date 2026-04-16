@@ -23,31 +23,151 @@ export interface PluginControlPlanePresentation {
   dashboardPath: string | null;
 }
 
+export type ExternalEmbedRenderMode =
+  | "iframe"
+  | "script"
+  | "html"
+  | "head_tag"
+  | "body_tag"
+  | "link";
+
+export type ExternalEmbedPlacementTarget =
+  | "page_body"
+  | "page_head"
+  | "layout_head"
+  | "layout_body";
+
+export type PluginConsentCategory =
+  | "functional"
+  | "analytics"
+  | "marketing";
+
+export interface ExternalEmbedProviderDefinition {
+  provider: string;
+  websiteUrl?: string;
+  docsUrl?: string;
+}
+
+export interface ExternalEmbedPlacementDefinition {
+  targets: readonly ExternalEmbedPlacementTarget[];
+  preferredTarget?: ExternalEmbedPlacementTarget;
+}
+
+export interface ExternalEmbedSecurityPolicy {
+  consentCategory?: PluginConsentCategory;
+  requiresSecrets: boolean;
+  requiresBackend: boolean;
+  allowedHosts?: string[];
+  cspNotes?: string[];
+}
+
+export interface ExternalEmbedSnippetTemplates {
+  html?: string;
+  astro?: string;
+}
+
+export interface ExternalEmbedContribution {
+  provider: ExternalEmbedProviderDefinition;
+  renderMode: ExternalEmbedRenderMode;
+  placement: ExternalEmbedPlacementDefinition;
+  inputSchema: unknown;
+  validationRules?: string[];
+  snippetTemplates: ExternalEmbedSnippetTemplates;
+  security: ExternalEmbedSecurityPolicy;
+}
+
+export type ConnectedPluginAuthMode =
+  | "oauth"
+  | "api_key"
+  | "webhook"
+  | "custom";
+
+export interface ConnectedPluginContribution {
+  authMode: ConnectedPluginAuthMode;
+  requiresBackend: true;
+}
+
 export interface PluginPackageDescriptor<
   TPluginId extends string = string,
   TFrontend = unknown,
   TBackend = unknown,
+  TCli = PluginCliModule | undefined,
+  TSharedProjectUi = SharedProjectPluginUiDefinition | undefined,
+  TKind extends PluginKind = PluginKind,
 > {
   pluginId: TPluginId;
-  definition: PluginDefinition<TPluginId>;
-  sharedProjectUi?: SharedProjectPluginUiDefinition;
-  cli?: PluginCliModule;
+  definition: PluginDefinition<TPluginId> & { kind: TKind };
+  sharedProjectUi?: TSharedProjectUi;
+  cli?: TCli;
   frontend?: TFrontend;
   backend?: TBackend;
 }
 
-export interface PluginPackageManifest<
+interface BasePluginPackageManifest<
   TPluginId extends string = string,
   TFrontend = unknown,
   TBackend = unknown,
-> extends PluginPackageDescriptor<TPluginId, TFrontend, TBackend> {
+  TCli = PluginCliModule | undefined,
+  TSharedProjectUi = SharedProjectPluginUiDefinition | undefined,
+  TKind extends PluginKind = PluginKind,
+> extends PluginPackageDescriptor<
+    TPluginId,
+    TFrontend,
+    TBackend,
+    TCli,
+    TSharedProjectUi,
+    TKind
+  > {
   manifestVersion: 2;
-  kind: PluginKind;
+  kind: TKind;
   controlPlane: PluginControlPlanePresentation;
   setup?: PluginSetupGuide;
   previewSupport?: PluginPreviewSupport;
   publishChecks?: readonly PluginPublishCheckDefinition[];
 }
+
+export interface NativePluginPackageManifest<
+  TPluginId extends string = string,
+  TFrontend = unknown,
+  TBackend = unknown,
+> extends BasePluginPackageManifest<TPluginId, TFrontend, TBackend, PluginCliModule | undefined, SharedProjectPluginUiDefinition | undefined, "native"> {}
+
+export interface ExternalEmbedPluginPackageManifest<
+  TPluginId extends string = string,
+> extends BasePluginPackageManifest<
+    TPluginId,
+    never,
+    never,
+    never,
+    never,
+    "external_embed"
+  > {
+  externalEmbed: ExternalEmbedContribution;
+}
+
+export interface ConnectedPluginPackageManifest<
+  TPluginId extends string = string,
+  TFrontend = unknown,
+  TBackend = unknown,
+> extends BasePluginPackageManifest<
+    TPluginId,
+    TFrontend,
+    TBackend,
+    PluginCliModule | undefined,
+    SharedProjectPluginUiDefinition | undefined,
+    "connected"
+  > {
+  connected: ConnectedPluginContribution;
+}
+
+export type PluginPackageManifest<
+  TPluginId extends string = string,
+  TFrontend = unknown,
+  TBackend = unknown,
+> =
+  | NativePluginPackageManifest<TPluginId, TFrontend, TBackend>
+  | ExternalEmbedPluginPackageManifest<TPluginId>
+  | ConnectedPluginPackageManifest<TPluginId, TFrontend, TBackend>;
 
 export interface PluginPackageSurfaceExports {
   backend: string;
@@ -95,6 +215,24 @@ export function definePluginPackageDescriptors<
 
 export const definePluginPackageInstallDescriptor = definePluginBundleEntry;
 export const definePluginPackageInstallDescriptors = definePluginBundleEntries;
+
+export function isNativePluginPackageManifest(
+  manifest: PluginPackageManifest,
+): manifest is NativePluginPackageManifest {
+  return manifest.kind === "native";
+}
+
+export function isExternalEmbedPluginPackageManifest(
+  manifest: PluginPackageManifest,
+): manifest is ExternalEmbedPluginPackageManifest {
+  return manifest.kind === "external_embed";
+}
+
+export function isConnectedPluginPackageManifest(
+  manifest: PluginPackageManifest,
+): manifest is ConnectedPluginPackageManifest {
+  return manifest.kind === "connected";
+}
 
 export type PluginIdsFromDescriptors<T extends readonly { pluginId: string }[]> =
   {

@@ -1,4 +1,4 @@
-import type { PluginPackageManifest } from "@vivd/plugin-sdk";
+import type { NativePluginPackageManifest } from "@vivd/plugin-sdk";
 import { definePluginPackageManifest } from "@vivd/plugin-sdk";
 import { newsletterPluginDefinition } from "./backend/module";
 import { newsletterSharedProjectUi } from "./shared/projectUi";
@@ -26,4 +26,4 @@ export const newsletterPluginManifest = definePluginPackageManifest({
   previewSupport: {
     mode: "native",
   },
-} as const satisfies PluginPackageManifest<"newsletter">);
+} as const satisfies NativePluginPackageManifest<"newsletter">);
