@@ -10,6 +10,7 @@ const {
   createScratchDraftUseMutationMock,
   startScratchGenerationUseMutationMock,
   projectStatusUseQueryMock,
+  getScratchAvailableModelsUseQueryMock,
 } = vi.hoisted(() => ({
   useNavigateMock: vi.fn(),
   useAppConfigMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   createScratchDraftUseMutationMock: vi.fn(),
   startScratchGenerationUseMutationMock: vi.fn(),
   projectStatusUseQueryMock: vi.fn(),
+  getScratchAvailableModelsUseQueryMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -47,6 +49,9 @@ vi.mock("@/lib/trpc", () => ({
       startScratchGeneration: {
         useMutation: startScratchGenerationUseMutationMock,
       },
+      getScratchAvailableModels: {
+        useQuery: getScratchAvailableModelsUseQueryMock,
+      },
       status: { useQuery: projectStatusUseQueryMock },
     },
   },
@@ -55,22 +60,36 @@ vi.mock("@/lib/trpc", () => ({
 import { ScratchWizardProvider, useScratchWizard } from "./ScratchWizardContext";
 
 function ScratchWizardTestHarness() {
-  const { submit, form } = useScratchWizard();
+  const { submit, form, availableModels, selectedModel, setSelectedModel } =
+    useScratchWizard();
 
   return (
-    <button
-      type="button"
-      onClick={() =>
-        void submit({
-          title: "Acme Studio",
-          businessType: "",
-          description: "Build a polished marketing site.",
-          referenceUrlsText: "",
-        })
-      }
-    >
-      {String(form.formState.isSubmitting)}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          void submit({
+            title: "Acme Studio",
+            businessType: "",
+            description: "Build a polished marketing site.",
+            referenceUrlsText: "",
+          })
+        }
+      >
+        {String(form.formState.isSubmitting)}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const advancedModel =
+            availableModels.find((model) => model.tier === "advanced") ?? null;
+          setSelectedModel(advancedModel);
+        }}
+      >
+        Select advanced
+      </button>
+      <div data-testid="selected-model-tier">{selectedModel?.tier ?? "none"}</div>
+    </>
   );
 }
 
@@ -93,6 +112,8 @@ describe("ScratchWizardContext", () => {
     createScratchDraftUseMutationMock.mockReset();
     startScratchGenerationUseMutationMock.mockReset();
     projectStatusUseQueryMock.mockReset();
+    getScratchAvailableModelsUseQueryMock.mockReset();
+    localStorage.clear();
 
     useNavigateMock.mockReturnValue(vi.fn());
     useAppConfigMock.mockReturnValue({
@@ -109,6 +130,27 @@ describe("ScratchWizardContext", () => {
       project: {
         list: { invalidate: invalidateMock },
       },
+    });
+
+    getScratchAvailableModelsUseQueryMock.mockReturnValue({
+      data: [
+        {
+          tier: "standard",
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4-mini",
+          label: "Standard",
+        },
+        {
+          tier: "advanced",
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+          label: "Advanced",
+        },
+      ],
+    });
+    projectStatusUseQueryMock.mockReturnValue({
+      data: undefined,
     });
 
     createScratchDraftUseMutationMock.mockReturnValue({
@@ -147,7 +189,7 @@ describe("ScratchWizardContext", () => {
 
     const view = renderProvider();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
 
     await waitFor(() => {
       expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
@@ -171,6 +213,67 @@ describe("ScratchWizardContext", () => {
         { replace: true },
       );
     });
+  });
+
+  it("hydrates the shared model preference into the scratch selector", async () => {
+    localStorage.setItem(
+      "vivd-selected-model",
+      JSON.stringify({
+        tier: "advanced",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      }),
+    );
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-model-tier")).toHaveTextContent(
+        "advanced",
+      );
+    });
+  });
+
+  it("forwards the selected scratch model into startScratchGeneration", async () => {
+    const startGenerationMock = vi.fn().mockResolvedValue({
+      status: "starting_studio",
+      slug: "site-1",
+      version: 1,
+      studioHandoff: {
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: "sess-1",
+      },
+    });
+    startScratchGenerationUseMutationMock.mockReturnValue({
+      mutateAsync: startGenerationMock,
+    });
+
+    renderProvider();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select advanced" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-model-tier")).toHaveTextContent(
+        "advanced",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
+
+    await waitFor(() => {
+      expect(startGenerationMock).toHaveBeenCalledWith({
+        slug: "site-1",
+        version: 1,
+        model: {
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+        },
+      });
+    });
+    expect(localStorage.getItem("vivd-selected-model")).toContain("advanced");
   });
 
   it("still redirects to Studio when the bootstrap run is already paused", async () => {
@@ -203,7 +306,7 @@ describe("ScratchWizardContext", () => {
 
     const view = renderProvider();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
 
     currentStatus = {
       status: "initial_generation_paused",
@@ -259,7 +362,7 @@ describe("ScratchWizardContext", () => {
 
     const view = renderProvider();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
 
     await waitFor(() => {
       expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
@@ -329,7 +432,7 @@ describe("ScratchWizardContext", () => {
 
     const view = renderProvider();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
 
     await waitFor(() => {
       expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
@@ -412,7 +515,7 @@ describe("ScratchWizardContext", () => {
 
     const view = renderProvider();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
 
     await waitFor(() => {
       expect(currentSlug).toBe("site-1");
@@ -424,7 +527,7 @@ describe("ScratchWizardContext", () => {
 
     navigateMock.mockClear();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "false" }));
     view.rerender(
       <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
         <ScratchWizardProvider>

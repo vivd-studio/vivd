@@ -63,6 +63,12 @@ Before a long debugging pass, confirm:
   - `failure.png`
   - container name or session id
 
+For Studio git/snapshot oddities, also confirm:
+- current `HEAD`
+- whether the runtime is actively pinned to an older snapshot
+- whether source sync is being skipped because an older snapshot is loaded
+- whether the workspace only looks dirty because it is being compared against a loaded older snapshot instead of `HEAD`
+
 ## Guardrails
 
 - Do not weaken the product or smoke contract before classifying the failure.
@@ -70,3 +76,4 @@ Before a long debugging pass, confirm:
 - Do not assume a reopen/bootstrap failure means persistence is broken.
 - Do not assume a persistence failure means the live session logic is broken.
 - Rebuild the Studio image before trusting a rerun after runtime-side code changes.
+- Older-snapshot viewing is session-local runtime state. It should not live as a normal project-root git file, and source sync should not export it into bucket-backed source artifacts.

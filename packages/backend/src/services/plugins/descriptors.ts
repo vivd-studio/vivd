@@ -1,7 +1,8 @@
 import { definePluginPackageDescriptors } from "@vivd/plugin-sdk";
 import type {
-  PluginModule as SharedPluginModule,
+  PluginContribution as SharedPluginContribution,
   PluginPackageDescriptor,
+  PluginRouteDefinition as SharedPluginRouteDefinition,
   PluginStopFn,
 } from "@vivd/plugin-sdk";
 import type express from "express";
@@ -85,19 +86,16 @@ export type PublicPluginRouterDeps = {
   upload: Pick<Multer, "none">;
 };
 
-export interface BackendPublicPluginRouteDefinition {
-  routeId: string;
-  mountPath: string;
-  createRouter: (deps: PublicPluginRouterDeps) => express.Router;
-}
+export interface BackendPublicPluginRouteDefinition
+  extends SharedPluginRouteDefinition<express.Router, PublicPluginRouterDeps> {}
 
 export interface BackendPluginContribution<
   TPluginId extends string = string,
-> {
-  module: SharedPluginModule<TPluginId>;
-  publicRoutes?: readonly BackendPublicPluginRouteDefinition[];
-  hooks?: BackendPluginIntegrationHooks;
-}
+> extends SharedPluginContribution<
+    TPluginId,
+    BackendPluginIntegrationHooks,
+    BackendPublicPluginRouteDefinition
+  > {}
 
 export interface BackendPluginPackageDescriptor
   extends PluginPackageDescriptor<

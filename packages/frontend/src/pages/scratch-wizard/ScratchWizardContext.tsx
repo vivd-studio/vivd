@@ -16,7 +16,12 @@ import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
-import { SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH } from "@vivd/shared";
+import {
+  sameModelSelection,
+  SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+  toModelSelection,
+  type ModelTier,
+} from "@vivd/shared";
 import { scratchSchema, type ScratchValues, type StylePreset } from "./types";
 
 type SiteTheme = "dark" | "light" | null;
@@ -39,6 +44,7 @@ type UploadProgress = {
 const MAX_TOTAL_FILES = 200;
 const MAX_TOTAL_BYTES = 500 * 1024 * 1024; // 500MB
 const BATCH_SIZE = 20;
+const SELECTED_MODEL_STORAGE_KEY = "vivd-selected-model";
 
 type ScratchWizardContextValue = {
   // Form
@@ -77,6 +83,9 @@ type ScratchWizardContextValue = {
   uploadPhase: UploadPhase;
   uploadProgress: UploadProgress;
   validationError: string | null;
+  availableModels: ModelTier[];
+  selectedModel: ModelTier | null;
+  setSelectedModel: (model: ModelTier | null) => void;
 
   // Actions
   submit: (values: ScratchValues) => Promise<void>;
@@ -195,6 +204,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const [siteTheme, setSiteTheme] = useState<SiteTheme>(null);
   const [assets, setAssets] = useState<File[]>([]);
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
+  const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(null);
   const [started, setStarted] = useState<{
     slug: string;
     version: number;
@@ -230,6 +240,84 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       .map((line) => line.trim())
       .filter(Boolean);
   }, [referenceUrlsText]);
+  const { data: availableModelsData } =
+    trpc.project.getScratchAvailableModels.useQuery();
+  const availableModels = availableModelsData ?? [];
+
+  const persistSelectedModelPreference = useCallback((model: ModelTier) => {
+    localStorage.setItem(
+      SELECTED_MODEL_STORAGE_KEY,
+      JSON.stringify({
+        tier: model.tier,
+        provider: model.provider,
+        modelId: model.modelId,
+        ...(model.variant ? { variant: model.variant } : {}),
+      }),
+    );
+  }, []);
+
+  const setSelectedModel = useCallback(
+    (model: ModelTier | null) => {
+      setSelectedModelState(model);
+      if (model) {
+        persistSelectedModelPreference(model);
+        return;
+      }
+      localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY);
+    },
+    [persistSelectedModelPreference],
+  );
+
+  useEffect(() => {
+    if (availableModels.length === 0) {
+      if (selectedModel) {
+        setSelectedModelState(null);
+      }
+      return;
+    }
+
+    if (
+      selectedModel &&
+      availableModels.some((model) => sameModelSelection(model, selectedModel))
+    ) {
+      return;
+    }
+
+    const savedModel = localStorage.getItem(SELECTED_MODEL_STORAGE_KEY);
+    if (savedModel) {
+      try {
+        const { tier, provider, modelId, variant } = JSON.parse(savedModel);
+        const matchingModel =
+          availableModels.find(
+            (model) =>
+              typeof tier === "string" &&
+              model.tier === tier &&
+              model.provider === provider &&
+              model.modelId === modelId &&
+              (model.variant || undefined) === (variant || undefined),
+          ) ??
+          availableModels.find(
+            (model) =>
+              model.provider === provider &&
+              model.modelId === modelId &&
+              (model.variant || undefined) === (variant || undefined),
+          ) ??
+          availableModels.find(
+            (model) =>
+              model.provider === provider && model.modelId === modelId,
+          );
+        if (matchingModel) {
+          setSelectedModelState(matchingModel);
+          return;
+        }
+      } catch {
+        // Ignore invalid local preference.
+      }
+    }
+
+    setSelectedModelState(availableModels[0]);
+    persistSelectedModelPreference(availableModels[0]);
+  }, [availableModels, persistSelectedModelPreference, selectedModel]);
 
   // Mutations for 3-step flow
   const { mutateAsync: createDraft } =
@@ -465,7 +553,16 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
         // Step 3: Start generation
         setUploadPhase("starting");
-        const generationResult = await startGeneration({ slug, version });
+        const generationResult = await startGeneration({
+          slug,
+          version,
+          model:
+            selectedModel
+              ? toModelSelection(selectedModel)
+              : availableModels[0]
+                ? toModelSelection(availableModels[0])
+                : undefined,
+        });
         const initialSessionId =
           "studioHandoff" in generationResult
             ? generationResult.studioHandoff?.sessionId ?? null
@@ -508,6 +605,8 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       stylePreset,
       isStyleExact,
       siteTheme,
+      availableModels,
+      selectedModel,
       referenceUrls,
       createDraft,
       startGeneration,
@@ -565,6 +664,9 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     uploadPhase,
     uploadProgress,
     validationError,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
     submit,
   };
 

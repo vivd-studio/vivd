@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vivd/plugin-sdk";
+import type { PluginContribution } from "@vivd/plugin-sdk";
 import type {
   NewsletterBackendRouteDefinition,
   NewsletterPluginServiceDeps,
@@ -21,11 +21,13 @@ import { createNewsletterConfirmRouter } from "./http/confirm";
 import { createNewsletterSubscribeRouter } from "./http/subscribe";
 import { createNewsletterUnsubscribeRouter } from "./http/unsubscribe";
 
-export interface NewsletterPluginBackendContribution {
+export interface NewsletterPluginBackendContribution
+  extends PluginContribution<
+    "newsletter",
+    ReturnType<typeof createNewsletterPluginBackendHooks>,
+    NewsletterBackendRouteDefinition
+  > {
   service: NewsletterPluginService;
-  module: PluginModule<"newsletter">;
-  hooks: ReturnType<typeof createNewsletterPluginBackendHooks>;
-  publicRoutes: ReadonlyArray<NewsletterBackendRouteDefinition>;
 }
 
 export interface NewsletterPluginBackendContributionDeps

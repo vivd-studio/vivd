@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vivd/plugin-sdk";
+import type { PluginContribution } from "@vivd/plugin-sdk";
 import type {
   TableBookingBackendRouteDefinition,
   TableBookingPluginServiceDeps,
@@ -18,11 +18,13 @@ import { createTableBookingAvailabilityRouter } from "./http/availability";
 import { createTableBookingBookRouter } from "./http/book";
 import { createTableBookingCancelRouter } from "./http/cancel";
 
-export interface TableBookingPluginBackendContribution {
+export interface TableBookingPluginBackendContribution
+  extends PluginContribution<
+    "table_booking",
+    ReturnType<typeof createTableBookingPluginBackendHooks>,
+    TableBookingBackendRouteDefinition
+  > {
   service: ReturnType<typeof createTableBookingPluginService>;
-  module: PluginModule<"table_booking">;
-  hooks: ReturnType<typeof createTableBookingPluginBackendHooks>;
-  publicRoutes: ReadonlyArray<TableBookingBackendRouteDefinition>;
 }
 
 export interface TableBookingPluginBackendContributionDeps

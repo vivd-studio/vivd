@@ -1,3 +1,5 @@
+import type { ModelSelection } from "./aiModels.js";
+
 export const INITIAL_GENERATION_MANIFEST_VERSION = 1;
 export const INITIAL_GENERATION_MANIFEST_RELATIVE_PATH =
   ".vivd/initial-generation.json";
@@ -39,6 +41,7 @@ export interface ScratchInitialGenerationManifest {
   styleMode?: "exact" | "reference";
   siteTheme?: "dark" | "light";
   referenceUrls?: string[];
+  model?: ModelSelection;
   sessionId?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;

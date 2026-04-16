@@ -55,6 +55,7 @@ export const configRouter = router({
       // Whether the current request host is allowed to access the super-admin panel.
       isSuperAdminHost: ctx.isSuperAdminHost,
       hostKind: ctx.hostKind,
+      trafficSurface: ctx.trafficSurface,
       // When true, org selection is session-based (control-plane hosts).
       canSelectOrganization:
         ctx.canSelectOrganization && instancePolicy.capabilities.multiOrg,

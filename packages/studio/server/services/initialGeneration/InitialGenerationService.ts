@@ -1363,7 +1363,7 @@ async function startInitialGenerationInternal(
       task,
       options.workspaceDir,
       undefined,
-      options.model,
+      options.model ?? manifest.model ?? undefined,
       {
         sessionStartSystemPromptSuffix:
           INITIAL_GENERATION_SESSION_START_SYSTEM_PROMPT_SUFFIX,

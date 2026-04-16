@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vivd/plugin-sdk";
+import type { PluginContribution } from "@vivd/plugin-sdk";
 import { createContactFormPluginBackendHooks } from "./adminHooks";
 import { createEmailFeedbackRouter } from "./http/feedback";
 import { createContactRecipientVerificationRouter } from "./http/recipientVerification";
@@ -21,11 +21,13 @@ import type {
   ContactFormPluginBackendContributionDeps,
 } from "./ports";
 
-export interface ContactFormPluginBackendContribution {
+export interface ContactFormPluginBackendContribution
+  extends PluginContribution<
+    "contact_form",
+    ReturnType<typeof createContactFormPluginBackendHooks>,
+    ContactFormBackendRouteDefinition
+  > {
   service: ContactFormPluginService;
-  module: PluginModule<"contact_form">;
-  hooks: ReturnType<typeof createContactFormPluginBackendHooks>;
-  publicRoutes: ReadonlyArray<ContactFormBackendRouteDefinition>;
 }
 
 export function createContactFormPluginBackendContribution(

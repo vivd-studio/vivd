@@ -6,9 +6,7 @@
     }
 }
 
-import /etc/caddy/sites.d/*.caddy
-
-{$VIVD_CADDY_PRIMARY_HOST} {
+(vivd_platform_routes) {
     handle_path /_vivd_s3/* {
         reverse_proxy minio:9000
     }
@@ -30,7 +28,9 @@ import /etc/caddy/sites.d/*.caddy
     }
 
     import /etc/caddy/runtime.d/*.caddy
+}
 
+(vivd_public_fallback) {
     handle /health {
         respond "OK" 200
     }
@@ -51,4 +51,11 @@ import /etc/caddy/sites.d/*.caddy
             }
         }
     }
+}
+
+import /etc/caddy/sites.d/*.caddy
+
+{$VIVD_CADDY_PRIMARY_HOST} {
+    import vivd_platform_routes
+    import vivd_public_fallback
 }

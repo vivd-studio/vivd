@@ -2,6 +2,7 @@ import type { PluginCliModule } from "./pluginCli.js";
 import type {
   PluginDefinition,
   PluginKind,
+  PluginModule,
   PluginPreviewSupport,
   PluginPublishCheckDefinition,
   PluginSetupGuide,
@@ -87,6 +88,32 @@ export interface ConnectedPluginContribution {
   requiresBackend: true;
 }
 
+export interface PluginRouteDefinition<
+  TRouteHandler = unknown,
+  TRouteDeps = unknown,
+> {
+  routeId: string;
+  mountPath: string;
+  createRouter: (deps: TRouteDeps) => TRouteHandler;
+}
+
+export interface PluginContribution<
+  TPluginId extends string = string,
+  THooks = unknown,
+  TPublicRoute = unknown,
+> {
+  module: PluginModule<TPluginId>;
+  publicRoutes?: readonly TPublicRoute[];
+  hooks?: THooks;
+}
+
+export interface PluginContributionFactory<
+  TDeps = unknown,
+  TContribution extends PluginContribution = PluginContribution,
+> {
+  createContribution: (deps: TDeps) => TContribution;
+}
+
 export interface PluginPackageDescriptor<
   TPluginId extends string = string,
   TFrontend = unknown,
@@ -169,10 +196,23 @@ export type PluginPackageManifest<
   | ExternalEmbedPluginPackageManifest<TPluginId>
   | ConnectedPluginPackageManifest<TPluginId, TFrontend, TBackend>;
 
+export interface NativePluginBackendPackage<
+  TPluginId extends string = string,
+  TBackendDeps = unknown,
+  TBackendContribution extends PluginContribution<TPluginId> = PluginContribution<TPluginId>,
+  TFrontend = unknown,
+> extends NativePluginPackageManifest<
+    TPluginId,
+    TFrontend,
+    PluginContributionFactory<TBackendDeps, TBackendContribution>
+  > {
+  backend: PluginContributionFactory<TBackendDeps, TBackendContribution>;
+}
+
 export interface PluginPackageSurfaceExports {
-  backend: string;
-  frontend: string;
-  cli: string;
+  backend?: string;
+  frontend?: string;
+  cli?: string;
 }
 
 export interface PluginBundleEntry<
@@ -180,7 +220,7 @@ export interface PluginBundleEntry<
 > {
   pluginId: TPluginId;
   manifest: PluginPackageManifest<TPluginId>;
-  surfaceExports: PluginPackageSurfaceExports;
+  surfaceExports?: PluginPackageSurfaceExports;
 }
 
 export type PluginPackageInstallDescriptor<

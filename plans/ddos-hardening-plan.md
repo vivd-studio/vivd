@@ -291,11 +291,26 @@ If one shared origin still creates unacceptable coupling after edge shielding, s
 
 This is an origin-topology decision, not a shield requirement. The shield can still front all three.
 
-## Redis
+## Coordination Backend
 
-Redis can help, but it is not a DDoS shield by itself.
+Vivd should treat rate limiting, cooldowns, bans, and start queues as a coordination concern, not as a Redis-specific feature.
 
-## What Redis is good for
+The interface should be expressed in backend terms such as:
+
+- consume budget,
+- acquire or release lease,
+- set or read cooldown,
+- set or read degraded-mode flags,
+- enqueue scarce work,
+- dedupe repeated expensive actions.
+
+That keeps app policy stable even if the storage backend changes.
+
+## Redis / Valkey
+
+Redis-style infrastructure can help, but it is not a DDoS shield by itself.
+
+## What Redis / Valkey is good for
 
 - distributed rate limiting across multiple backend instances,
 - shared token buckets and cooldowns,
@@ -305,7 +320,7 @@ Redis can help, but it is not a DDoS shield by itself.
 - circuit-breaker state and degraded-mode flags,
 - request dedupe keys for expensive actions.
 
-For Vivd specifically, Redis is most valuable for:
+For Vivd specifically, Redis or Valkey is most valuable for:
 
 - cross-instance `startStudio` / `hardRestartStudio` gating,
 - shared public-endpoint rate limiting,
@@ -313,22 +328,34 @@ For Vivd specifically, Redis is most valuable for:
 - queueing scarce runtime-start work,
 - keeping abuse counters out of the primary relational DB hot path.
 
-## What Redis is not good for
+Recommended posture:
+
+- use Redis or Valkey as the first distributed production backend for more AWS/VPC-style deployments,
+- keep an in-memory backend for local/dev and small single-node installs,
+- leave room for a future Cloudflare-native backend if some coordination moves to the edge.
+
+## What Redis / Valkey is not good for
 
 - absorbing volumetric bandwidth floods,
 - replacing an edge CDN/WAF,
 - protecting the origin if attackers can still reach it directly,
 - solving TLS handshake exhaustion on the public edge by itself.
 
-## Recommendation on Redis
+## Cloudflare-native alternative
 
-Use Redis as an internal coordination and abuse-control component, not as the primary DDoS story.
+If Vivd moves toward a more Cloudflare-heavy architecture, some of the same coordination semantics may be implemented through platform-native primitives instead of Redis.
+
+That does not invalidate the plan. It reinforces the need for a provider-agnostic coordination interface above the storage layer.
+
+## Recommendation on the coordination backend
+
+Use a provider-agnostic coordination interface as the architectural seam, with Redis or Valkey as the first serious distributed backend rather than the only intended implementation.
 
 Recommended sequence:
 
 1. external shield first,
 2. origin separation and lock-down,
-3. Redis-backed distributed rate limits and queues,
+3. coordination-backed distributed rate limits and queues,
 4. route-specific hardening and tuning.
 
 ## Proposed Rollout
@@ -368,7 +395,7 @@ Recommended sequence:
 |---|---|
 | Do we need two Caddies immediately? | No; separate traffic classes first, then split origins only if one origin remains too coupled |
 | Should public preview remain directly reachable? | Prefer off by default; move toward signed short-lived access |
-| Should Redis be introduced? | Yes for distributed rate limiting and queues, but not as a substitute for edge shielding |
+| Should Redis or Valkey be introduced? | Yes as the first distributed coordination backend for rate limiting and queues, but not as a substitute for edge shielding |
 | Should all customer custom domains be forced through shield-managed onboarding? | Preferred long-term direction; fallback path may remain for simpler/self-host scenarios |
 
 ## Success Criteria

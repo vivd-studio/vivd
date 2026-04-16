@@ -50,7 +50,11 @@ import { ensureGitRepositoryHasInitialCommit } from "../../generator/gitUtils";
 import { setProjectVersionStatus } from "../../services/project/ProjectStatusService";
 import {
   getScratchBrandAssetsRelativePath,
+  parseConfiguredModelTiers,
   SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
+  toModelSelection,
+  validateModelSelectionAgainstAvailable,
+  type ModelSelection,
 } from "@vivd/shared";
 
 /**
@@ -202,7 +206,42 @@ function normalizeReferenceUrls(urls?: string[]): string[] | undefined {
   return Array.from(new Set(normalized));
 }
 
+const modelSelectionSchema = z.object({
+  provider: z.string().min(1),
+  modelId: z.string().min(1),
+  variant: z.string().min(1).optional(),
+});
+
+function getScratchAvailableModels() {
+  if (getScratchCreationMode() !== "studio_astro") {
+    return [];
+  }
+  return parseConfiguredModelTiers(process.env);
+}
+
+function normalizeScratchModelSelection(
+  model?: ModelSelection,
+): ModelSelection | undefined {
+  if (!model) {
+    return undefined;
+  }
+
+  const validated = validateModelSelectionAgainstAvailable(
+    model,
+    getScratchAvailableModels(),
+  );
+  if (!validated) {
+    throw new Error("Selected initial-generation model is not available.");
+  }
+
+  return toModelSelection(validated);
+}
+
 export const projectGenerationProcedures = {
+  getScratchAvailableModels: adminProcedure.query(() => {
+    return getScratchAvailableModels();
+  }),
+
   generate: adminProcedure
     .input(
       z.object({
@@ -572,6 +611,7 @@ export const projectGenerationProcedures = {
       z.object({
         slug: z.string().min(1),
         version: z.number().min(1),
+        model: modelSelectionSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -599,6 +639,7 @@ export const projectGenerationProcedures = {
       const draftMeta = JSON.parse(fs.readFileSync(draftMetaPath, "utf-8"));
 
       if (scratchCreationMode === "studio_astro") {
+        const selectedModel = normalizeScratchModelSelection(input.model);
         const generationCtx = await createGenerationContext({
           organizationId,
           source: "scratch",
@@ -632,6 +673,7 @@ export const projectGenerationProcedures = {
                 styleMode: draftMeta.styleMode,
                 siteTheme: draftMeta.siteTheme,
                 referenceUrls: draftMeta.referenceUrls,
+                model: selectedModel,
               }),
               state: "starting_studio",
             },
@@ -654,6 +696,7 @@ export const projectGenerationProcedures = {
             projectSlug: slug,
             version,
             requestHost: ctx.requestHost,
+            model: selectedModel,
           });
 
           await setProjectVersionStatus({

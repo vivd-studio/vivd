@@ -5,6 +5,7 @@ import {
   INITIAL_GENERATION_MANIFEST_RELATIVE_PATH,
   INITIAL_GENERATION_MANIFEST_VERSION,
   type ScratchCreationMode,
+  type ModelSelection,
   type ScratchInitialGenerationManifest,
 } from "@vivd/shared";
 
@@ -52,6 +53,7 @@ export function createScratchInitialGenerationManifest(input: {
   styleMode?: "exact" | "reference";
   siteTheme?: "dark" | "light";
   referenceUrls?: string[];
+  model?: ModelSelection;
 }): ScratchInitialGenerationManifest {
   return {
     version: INITIAL_GENERATION_MANIFEST_VERSION,
@@ -66,6 +68,7 @@ export function createScratchInitialGenerationManifest(input: {
     styleMode: input.styleMode,
     siteTheme: input.siteTheme,
     referenceUrls: input.referenceUrls,
+    model: input.model,
     sessionId: null,
     startedAt: null,
     completedAt: null,

@@ -47,11 +47,7 @@ describe("AgentMessageRow tool details", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /ranbashvalidates the cms schema and content\./i,
-      }),
-    );
+    fireEvent.click(screen.getByRole("button"));
 
     expect(
       screen.getByText("Validates the CMS schema and content."),

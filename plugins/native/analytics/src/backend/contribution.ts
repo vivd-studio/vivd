@@ -1,6 +1,9 @@
 import type express from "express";
 import type { Multer } from "multer";
-import type { PluginModule } from "@vivd/plugin-sdk";
+import type {
+  PluginContribution,
+  PluginRouteDefinition,
+} from "@vivd/plugin-sdk";
 import { createAnalyticsPublicRouter } from "./http/runtime";
 import { createAnalyticsPluginBackendHooks } from "./integrationHooks";
 import { createAnalyticsPluginModule } from "./module";
@@ -15,15 +18,16 @@ export interface AnalyticsBackendRouteDeps {
   upload: Pick<Multer, "none">;
 }
 
-export interface AnalyticsPluginBackendContribution {
+export interface AnalyticsBackendRouteDefinition
+  extends PluginRouteDefinition<express.Router, AnalyticsBackendRouteDeps> {}
+
+export interface AnalyticsPluginBackendContribution
+  extends PluginContribution<
+    "analytics",
+    ReturnType<typeof createAnalyticsPluginBackendHooks>,
+    AnalyticsBackendRouteDefinition
+  > {
   service: AnalyticsPluginService;
-  module: PluginModule<"analytics">;
-  hooks: ReturnType<typeof createAnalyticsPluginBackendHooks>;
-  publicRoutes: ReadonlyArray<{
-    routeId: string;
-    mountPath: string;
-    createRouter: (deps: AnalyticsBackendRouteDeps) => express.Router;
-  }>;
 }
 
 export function createAnalyticsPluginBackendContribution(

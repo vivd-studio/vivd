@@ -1,5 +1,6 @@
 import type express from "express";
 import type { Multer } from "multer";
+import type { PluginRouteDefinition } from "@vivd/plugin-sdk";
 import type {
   TableBookingAgendaPayload,
   TableBookingBookingsPayload,
@@ -235,13 +236,13 @@ export interface TableBookingCancelByTokenResult {
   redirectTarget?: string | null;
 }
 
-export interface TableBookingBackendRouteDefinition {
-  routeId: string;
-  mountPath: string;
-  createRouter: (deps: {
-    upload: Pick<Multer, "none">;
-  }) => express.Router;
-}
+export interface TableBookingBackendRouteDefinition
+  extends PluginRouteDefinition<
+    express.Router,
+    {
+      upload: Pick<Multer, "none">;
+    }
+  > {}
 
 export interface TableBookingPublicRouterDeps {
   upload: Pick<Multer, "none">;

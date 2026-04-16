@@ -1,5 +1,6 @@
 import type express from "express";
 import type { Multer } from "multer";
+import type { PluginRouteDefinition } from "@vivd/plugin-sdk";
 import type {
   ContactRecipientDirectory,
   ContactRecipientVerificationRequestResult,
@@ -208,11 +209,8 @@ export interface ContactFormPluginBackendContributionDeps
   tables: ContactFormPluginBackendTables;
 }
 
-export interface ContactFormBackendRouteDefinition {
-  routeId: string;
-  mountPath: string;
-  createRouter: (deps: ContactFormBackendRouteDeps) => express.Router;
-}
+export interface ContactFormBackendRouteDefinition
+  extends PluginRouteDefinition<express.Router, ContactFormBackendRouteDeps> {}
 
 export interface ContactRecipientVerificationRouterDeps {
   recipientVerificationService: Pick<

@@ -347,6 +347,40 @@ describe("InitialGenerationService", () => {
     expect(completedManifest.sessionId).toBe("sess-1");
   });
 
+  it("falls back to the persisted manifest model when no explicit selection is provided", async () => {
+    writeManifest(tmpDir, {
+      state: "initial_generation_paused",
+      model: {
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      },
+    });
+    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-model" });
+
+    await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    expect(runTaskMock).toHaveBeenCalledWith(
+      expect.stringContaining("Acme Studio"),
+      tmpDir,
+      undefined,
+      {
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      },
+      expect.objectContaining({
+        sessionStartSystemPromptSuffix: expect.stringContaining(
+          "autonomous initial website generation",
+        ),
+      }),
+    );
+  });
+
   it("builds the preview artifact locally after source sync completes", async () => {
     await initialGenerationService.startInitialGeneration({
       projectSlug: "site-1",

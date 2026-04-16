@@ -40,6 +40,11 @@ describe("initial generation helpers", () => {
           description: "A site for Acme",
           businessType: "design studio",
           referenceUrls: ["https://example.com"],
+          model: {
+            provider: "openrouter",
+            modelId: "openai/gpt-5.4",
+            variant: "high",
+          },
         }),
       );
 
@@ -197,13 +202,24 @@ describe("initial generation helpers", () => {
           path.join(tmpDir, ".vivd", "initial-generation.json"),
           "utf-8",
         ),
-      ) as { state?: string; flow?: string; mode?: string; title?: string };
+      ) as {
+        state?: string;
+        flow?: string;
+        mode?: string;
+        title?: string;
+        model?: { provider?: string; modelId?: string; variant?: string };
+      };
 
       expect(manifest).toMatchObject({
         flow: "scratch",
         mode: "studio_astro",
         state: "draft",
         title: "Acme",
+        model: {
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+        },
       });
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

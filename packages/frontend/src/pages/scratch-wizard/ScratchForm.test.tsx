@@ -55,6 +55,21 @@ describe("ScratchForm", () => {
         totalFiles: 0,
       },
       validationError: null,
+      availableModels: [
+        {
+          tier: "standard",
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4-mini",
+          label: "Standard",
+        },
+      ],
+      selectedModel: {
+        tier: "standard",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4-mini",
+        label: "Standard",
+      },
+      setSelectedModel: vi.fn(),
       submit: vi.fn(),
     });
   });
@@ -78,6 +93,9 @@ describe("ScratchForm", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/files to be used on the page/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /select initial generation model/i }),
     ).toBeInTheDocument();
 
     expect(screen.queryByText("Business type")).not.toBeInTheDocument();

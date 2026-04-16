@@ -1,28 +1,14 @@
-export type ToolStatus = "running" | "completed" | "error";
+import {
+  resolveToolActivityLabelParts,
+  type ToolActivityLabelParts,
+  type ToolStatus,
+} from "@/features/opencodeChat/actionLabels";
+
+export type { ToolActivityLabelParts, ToolStatus };
 export type DeltaPartType = "reasoning" | "text";
 export type EventDedupState = { ids: Set<string>; queue: string[] };
-export type ToolActivityLabelParts = { action: string; target?: string };
 const REDACTED_THOUGHT_PATTERN = /\[REDACTED\]/gi;
 const PSEUDO_TOOL_CALL_PATTERN = /\[tool_call:[^[\]]+\]/gi;
-const TOOL_TARGET_INPUT_KEYS = [
-  "path",
-  "filePath",
-  "filepath",
-  "file_path",
-  "filename",
-  "file",
-  "fileName",
-  "name",
-  "target_file",
-  "target",
-  "targetPath",
-  "target_path",
-  "source",
-  "sourcePath",
-  "source_path",
-  "sourceFile",
-  "source_file",
-] as const;
 
 export function normalizeToolStatus(
   part: any,
@@ -91,169 +77,14 @@ export function normalizeMessagePart(part: any): any {
   };
 }
 
-function pathToFilename(pathLike: string): string | undefined {
-  const trimmed = pathLike.trim();
-  if (!trimmed) return undefined;
-
-  const withoutQuery = trimmed.split(/[?#]/)[0] ?? trimmed;
-  const segments = withoutQuery.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] || undefined;
-}
-
-function parseObjectInput(input: unknown): Record<string, unknown> | null {
-  if (!input) return null;
-
-  if (typeof input === "object" && !Array.isArray(input)) {
-    return input as Record<string, unknown>;
-  }
-
-  if (typeof input !== "string") {
-    return null;
-  }
-
-  const trimmed = input.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Ignore invalid JSON.
-  }
-
-  return null;
-}
-
-function extractToolTargetName(input: unknown): string | undefined {
-  if (typeof input === "string") {
-    return pathToFilename(input);
-  }
-
-  const obj = parseObjectInput(input);
-  if (!obj) return undefined;
-
-  for (const key of TOOL_TARGET_INPUT_KEYS) {
-    const value = obj[key];
-    if (typeof value !== "string") continue;
-    const filename = pathToFilename(value);
-    if (filename) return filename;
-  }
-
-  return undefined;
-}
-
-type ToolLabelBuilderContext = { status: ToolStatus; target?: string };
-type ToolLabelBuilder = (context: ToolLabelBuilderContext) => ToolActivityLabelParts;
-
-function createTargetedToolLabelBuilder({
-  runningAction,
-  completedAction,
-  errorAction,
-  fallbackTarget,
-  runningFallbackTarget = fallbackTarget,
-  includeErrorTarget = true,
-}: {
-  runningAction: string;
-  completedAction: string;
-  errorAction: string;
-  fallbackTarget: string;
-  runningFallbackTarget?: string | null;
-  includeErrorTarget?: boolean;
-}): ToolLabelBuilder {
-  return ({ status, target }) => {
-    if (status === "running") {
-      const runningTarget = target ?? runningFallbackTarget;
-      if (!runningTarget) return { action: runningAction };
-      return { action: runningAction, target: `${runningTarget}...` };
-    }
-    if (status === "error") {
-      if (!includeErrorTarget) return { action: errorAction };
-      return { action: errorAction, target: target ?? fallbackTarget };
-    }
-    return { action: completedAction, target: target ?? fallbackTarget };
-  };
-}
-
-function createActionOnlyToolLabelBuilder({
-  runningAction,
-  completedAction,
-  errorAction,
-}: {
-  runningAction: string;
-  completedAction: string;
-  errorAction: string;
-}): ToolLabelBuilder {
-  return ({ status }) => {
-    if (status === "running") return { action: `${runningAction}...` };
-    if (status === "error") return { action: errorAction };
-    return { action: completedAction };
-  };
-}
-
-const TOOL_ACTIVITY_LABEL_BUILDERS: Record<string, ToolLabelBuilder> = {
-  read: createTargetedToolLabelBuilder({
-    runningAction: "Reading",
-    completedAction: "Read",
-    errorAction: "Failed reading",
-    fallbackTarget: "file",
-  }),
-  grep: createTargetedToolLabelBuilder({
-    runningAction: "Exploring",
-    completedAction: "Explored",
-    errorAction: "Failed exploring",
-    fallbackTarget: "files",
-  }),
-  edit: createTargetedToolLabelBuilder({
-    runningAction: "Editing",
-    completedAction: "Edited",
-    errorAction: "Failed editing",
-    fallbackTarget: "file",
-  }),
-  write: createTargetedToolLabelBuilder({
-    runningAction: "Editing",
-    completedAction: "Edited",
-    errorAction: "Failed editing",
-    fallbackTarget: "file",
-    runningFallbackTarget: null,
-  }),
-  glob: createTargetedToolLabelBuilder({
-    runningAction: "Exploring",
-    completedAction: "Explored",
-    errorAction: "Failed exploring",
-    fallbackTarget: "files",
-  }),
-  bash: createTargetedToolLabelBuilder({
-    runningAction: "Running",
-    completedAction: "Ran",
-    errorAction: "Command failed",
-    fallbackTarget: "bash",
-    runningFallbackTarget: "bash",
-    includeErrorTarget: false,
-  }),
-  vivd_image_ai: createActionOnlyToolLabelBuilder({
-    runningAction: "Generating image (this can take a while)",
-    completedAction: "Generated image",
-    errorAction: "Failed generating image",
-  }),
-};
-
 export function getToolActivityLabelParts(part: any): ToolActivityLabelParts {
   const status = normalizeToolStatus(part) ?? "completed";
   const toolName = String(part?.tool ?? "").trim().toLowerCase();
-  const target = extractToolTargetName(part?.input);
-
-  const builder = TOOL_ACTIVITY_LABEL_BUILDERS[toolName];
-  if (builder) {
-    return builder({ status, target });
-  }
-
-  if (status === "running") return { action: "Running", target: "tool..." };
-  if (status === "error") return { action: "Tool failed" };
-  return { action: "Completed", target: "tool action" };
+  return resolveToolActivityLabelParts({
+    toolName,
+    status,
+    toolInput: part?.input ?? part?.state?.input,
+  });
 }
 
 export function getToolActivityLabel(part: any): string {

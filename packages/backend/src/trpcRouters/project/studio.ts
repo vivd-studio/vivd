@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { createStudioBootstrapToken } from "@vivd/shared/studio";
-import { projectMemberProcedure } from "../../trpc";
+import {
+  projectMemberProcedure,
+  studioHardRestartProcedure,
+  studioStartProcedure,
+  studioTouchProcedure,
+} from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
@@ -217,7 +222,7 @@ export const studioProcedures = {
   /**
    * Start a studio instance for a project version.
    */
-  startStudio: projectMemberProcedure
+  startStudio: studioStartProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -313,7 +318,7 @@ export const studioProcedures = {
    * This forces a fresh boot (instead of resuming a suspended snapshot) so the
    * studio entrypoint rehydrates the workspace from object storage again.
    */
-  hardRestartStudio: projectMemberProcedure
+  hardRestartStudio: studioHardRestartProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -416,7 +421,7 @@ export const studioProcedures = {
   /**
    * Keep a studio instance alive while the editor UI is open.
    */
-  touchStudio: projectMemberProcedure
+  touchStudio: studioTouchProcedure
     .input(
       z.object({
         slug: z.string(),

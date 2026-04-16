@@ -36,6 +36,8 @@ export interface AppConfig {
   isSuperAdminHost: boolean;
   /** Host classification from backend routing context. */
   hostKind: "control_plane_host" | "tenant_host" | "published_domain" | "unknown";
+  /** Coarse traffic-surface classification used for public/platform separation. */
+  trafficSurface: "public_site" | "platform" | "public_ingest" | "runtime" | "preview" | "unknown";
   /** Whether org selection comes from session state (not pinned to host). */
   canSelectOrganization: boolean;
   /** Org slug pinned by tenant host, if current host is a tenant host. */
@@ -78,6 +80,7 @@ const defaultConfig: AppConfig = {
   },
   isSuperAdminHost: false,
   hostKind: "unknown",
+  trafficSurface: "unknown",
   canSelectOrganization: false,
   tenantHostOrgSlug: null,
   hostOrganizationId: null,

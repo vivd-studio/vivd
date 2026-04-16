@@ -58,13 +58,14 @@ For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machine
 - The generator outputs plain HTML (`index.html`) by default.
 - Astro projects are also supported and can be built/served by the devserver.
 
-## Package Manager / Self-Host / Config Rules
+## Package Manager / Config Rules
 
 - Install dependencies at repo root.
 - Avoid per-package lockfiles.
 - Run scripts via workspaces, for example `npm run build -w @vivd/backend`.
-- Public self-host/install docs should default to the `solo` profile. Do not casually surface or recommend `platform` or other multi-org/shared-control-plane behavior for general self-host flows.
-- The public `solo` install bundle source of truth is `packages/docs/public/install/docker-compose.yml`.
+- The hosted `platform` posture is the intended supported product shape for now. Treat `solo`, public self-hosting, and operator-only flows as experimental/internal paths unless a task explicitly targets them.
+- Keep public docs and default product copy end-user-focused and platform-first. Operator/self-host guides should stay behind `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES=true`.
+- If a task explicitly touches the experimental self-host install path, the install bundle source of truth remains `packages/docs/public/install/docker-compose.yml`.
 - Add optional config knobs to `.env.example`.
 
 ## DB / Testing / Git

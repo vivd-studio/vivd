@@ -1,4 +1,9 @@
+import type { NativePluginBackendPackage } from "@vivd/plugin-sdk";
 import { tableBookingPluginManifest } from "../manifest";
+import type {
+  TableBookingPluginBackendContribution,
+  TableBookingPluginBackendContributionDeps,
+} from "./contribution";
 import { createTableBookingPluginBackendContribution } from "./contribution";
 
 export const tableBookingBackendPluginPackage = {
@@ -6,6 +11,10 @@ export const tableBookingBackendPluginPackage = {
   backend: {
     createContribution: createTableBookingPluginBackendContribution,
   },
-} as const;
+} as const satisfies NativePluginBackendPackage<
+  "table_booking",
+  TableBookingPluginBackendContributionDeps,
+  TableBookingPluginBackendContribution
+>;
 
 export default tableBookingBackendPluginPackage;

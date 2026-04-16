@@ -1,15 +1,10 @@
 import { studioMachineProvider } from "../studioMachines";
 import { resolveStableStudioMachineEnv } from "../studioMachines/stableRuntimeEnv";
+import type { ModelSelection } from "@vivd/shared";
 
 const STUDIO_READY_TIMEOUT_MS = 120_000;
 const STUDIO_POLL_INTERVAL_MS = 1_000;
 const STUDIO_FETCH_TIMEOUT_MS = 10_000;
-
-type StudioInitialGenerationModelSelection = {
-  provider: string;
-  modelId: string;
-  variant?: string;
-};
 
 type StudioInitialGenerationStartResult = {
   sessionId: string;
@@ -178,7 +173,7 @@ async function tryStartInitialGenerationOnStudio(options: {
   accessToken: string;
   projectSlug: string;
   version: number;
-  model?: StudioInitialGenerationModelSelection;
+  model?: ModelSelection;
 }): Promise<{
   ok: boolean;
   retryable: boolean;
@@ -270,7 +265,7 @@ export async function startStudioInitialGeneration(options: {
   projectSlug: string;
   version: number;
   requestHost?: string | null;
-  model?: StudioInitialGenerationModelSelection;
+  model?: ModelSelection;
 }): Promise<StudioInitialGenerationStartResult> {
   const { studioBaseUrl, accessToken } =
     await ensureStudioRuntimeReadyForHandoff(options);

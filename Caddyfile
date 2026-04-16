@@ -14,6 +14,47 @@
     }
 }
 
+(vivd_platform_routes) {
+    handle /plugins/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /email/v1/feedback/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /vivd-studio/api/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /vivd-studio* {
+        reverse_proxy frontend:80
+    }
+
+    import /etc/caddy/runtime.d/*.caddy
+}
+
+(vivd_public_fallback) {
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle {
+        root * /srv/published
+        try_files {path} {path}/index.html =404
+        file_server
+    }
+
+    handle_errors {
+        @404 expression {err.status_code} == 404
+        handle @404 {
+            root * /srv/default
+            rewrite * /default-404.html
+            file_server
+        }
+    }
+}
+
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
@@ -47,47 +88,6 @@ http://{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, http://api.localhost {
 # Default server - handles studio routes and fallback
 # Only listen on :80 - TLS is handled by external load balancer
 :80 {
-    # Same-host plugin runtime and email feedback routes
-    handle /plugins/* {
-        reverse_proxy backend:3000
-    }
-
-    handle /email/v1/feedback/* {
-        reverse_proxy backend:3000
-    }
-
-    # Vivd Studio API routes - proxy to backend
-    handle /vivd-studio/api/* {
-        reverse_proxy backend:3000
-    }
-
-    # Vivd Studio frontend - proxy to frontend container (handles /vivd-studio and /vivd-studio/*)
-    handle /vivd-studio* {
-        reverse_proxy frontend:80
-    }
-
-    # Active studio runtime routes
-    import /etc/caddy/runtime.d/*.caddy
-
-    # Health check endpoint
-    handle /health {
-        respond "OK" 200
-    }
-
-    # Default: try to serve published site or return 404
-    handle {
-        root * /srv/published
-        try_files {path} {path}/index.html =404
-        file_server
-    }
-
-    # Global 404 handler for the fallback server
-    handle_errors {
-        @404 expression {err.status_code} == 404
-        handle @404 {
-            root * /srv/default
-            rewrite * /default-404.html
-            file_server
-        }
-    }
+    import vivd_platform_routes
+    import vivd_public_fallback
 }

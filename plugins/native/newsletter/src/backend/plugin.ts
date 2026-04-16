@@ -1,4 +1,9 @@
+import type { NativePluginBackendPackage } from "@vivd/plugin-sdk";
 import { newsletterPluginManifest } from "../manifest";
+import type {
+  NewsletterPluginBackendContribution,
+  NewsletterPluginBackendContributionDeps,
+} from "./contribution";
 import { createNewsletterPluginBackendContribution } from "./contribution";
 
 export const newsletterBackendPluginPackage = {
@@ -6,6 +11,10 @@ export const newsletterBackendPluginPackage = {
   backend: {
     createContribution: createNewsletterPluginBackendContribution,
   },
-} as const;
+} as const satisfies NativePluginBackendPackage<
+  "newsletter",
+  NewsletterPluginBackendContributionDeps,
+  NewsletterPluginBackendContribution
+>;
 
 export default newsletterBackendPluginPackage;

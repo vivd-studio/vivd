@@ -13,6 +13,7 @@ import {
 import { useScratchWizard } from "./ScratchWizardContext";
 import { FileAttachmentList, FileDropzone } from "./FileDropzone";
 import { cn } from "@/lib/utils";
+import { ScratchModelSelector } from "./ScratchModelSelector";
 
 const TEXTAREA_MIN_HEIGHT = 84;
 const TEXTAREA_MAX_HEIGHT = 248;
@@ -39,6 +40,9 @@ export function ScratchForm() {
     uploadPhase,
     uploadProgress,
     validationError,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
     submit,
   } = useScratchWizard();
   const titleField = form.register("title");
@@ -151,17 +155,25 @@ export function ScratchForm() {
               Brief, sections, tone, assets.
             </div>
 
-            <Button
-              type="submit"
-              disabled={isDisabled}
-              className="h-10 w-10 shrink-0 rounded-full border-0 bg-primary text-primary-foreground shadow-[0_18px_44px_hsl(var(--primary)/0.34)] hover:bg-primary/90"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowUp className="h-4 w-4" />
-              )}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <ScratchModelSelector
+                models={availableModels}
+                selectedModel={selectedModel}
+                onSelect={setSelectedModel}
+                disabled={isDisabled}
+              />
+              <Button
+                type="submit"
+                disabled={isDisabled}
+                className="h-10 w-10 shrink-0 rounded-full border-0 bg-primary text-primary-foreground shadow-[0_18px_44px_hsl(var(--primary)/0.34)] hover:bg-primary/90"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </InteractiveSurface>
 

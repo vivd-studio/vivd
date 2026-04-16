@@ -1,14 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { resolvePermissionRequestDisplay } from "../actionLabels";
 import type { OpenCodePermissionRequest } from "../types";
-
-function readMetadataText(
-  metadata: Record<string, unknown> | undefined,
-  key: string,
-): string | null {
-  const value = metadata?.[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
 
 function shouldOfferAlways(request: OpenCodePermissionRequest): boolean {
   if (request.always.length === 0) {
@@ -41,13 +34,10 @@ export function PermissionDock({
   const [responding, setResponding] = useState<"once" | "always" | "reject" | null>(
     null,
   );
-  const description = useMemo(() => {
-    return (
-      readMetadataText(request.metadata, "description") ??
-      readMetadataText(request.metadata, "tool") ??
-      request.permission
-    );
-  }, [request.metadata, request.permission]);
+  const display = useMemo(
+    () => resolvePermissionRequestDisplay(request),
+    [request],
+  );
   const showAlways = shouldOfferAlways(request);
 
   const handleRespond = async (response: "once" | "always" | "reject") => {
@@ -72,33 +62,40 @@ export function PermissionDock({
               Explicit approval required
             </div>
             <div className="text-xs text-muted-foreground">
-              Approve or reject this action to let the run continue.
+              {display.summary}
             </div>
           </div>
 
           <div className="mt-4 space-y-2">
-            <div className="text-sm font-semibold text-foreground">{description}</div>
-            <div className="text-xs text-muted-foreground">
-              Permission type: <code>{request.permission}</code>
-            </div>
+            <div className="text-sm font-semibold text-foreground">{display.title}</div>
           </div>
 
-          {request.patterns.length > 0 ? (
-            <div className="mt-4 space-y-2">
-              <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Requested scope
+          {display.showTechnicalDetails ? (
+            <details className="mt-4 rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Technical details
+              </summary>
+              <div className="mt-3 space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Permission type: <code>{display.technicalPermission}</code>
+                </div>
+                {display.technicalPatterns.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                      Requested scope
+                    </div>
+                    {display.technicalPatterns.map((pattern) => (
+                      <code
+                        key={`${request.id}-${pattern}`}
+                        className="block rounded-lg border border-border/60 bg-muted/45 px-3 py-2 text-xs text-foreground break-all"
+                      >
+                        {pattern}
+                      </code>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              <div className="space-y-2">
-                {request.patterns.map((pattern) => (
-                  <code
-                    key={`${request.id}-${pattern}`}
-                    className="block rounded-lg border border-border/60 bg-muted/45 px-3 py-2 text-xs text-foreground break-all"
-                  >
-                    {pattern}
-                  </code>
-                ))}
-              </div>
-            </div>
+            </details>
           ) : null}
 
           <div className="mt-5 flex flex-wrap items-center justify-end gap-2">

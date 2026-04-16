@@ -15,6 +15,11 @@ import { domainService } from "./services/publish/DomainService";
 import { normalizeOrganizationId } from "./lib/organizationIdentifiers";
 import { studioMachineProvider } from "./services/studioMachines";
 import type { StudioRuntimeAuthIdentity } from "./services/studioMachines/types";
+import { trafficSurfaceService } from "./services/system/TrafficSurfaceService";
+import {
+  studioLifecycleGuardService,
+  type StudioLifecycleAction,
+} from "./services/system/StudioLifecycleGuardService";
 import {
   verifyStudioUserActionToken,
   type VerifiedStudioUserActionToken,
@@ -111,6 +116,35 @@ function extractRequestProtocol(
   return null;
 }
 
+function extractRequestIp(
+  req: trpcExpress.CreateExpressContextOptions["req"],
+): string | null {
+  const cfConnectingIp = readForwardedHost(req.headers["cf-connecting-ip"]);
+  if (cfConnectingIp) return cfConnectingIp;
+
+  const xRealIp = readForwardedHost(req.headers["x-real-ip"]);
+  if (xRealIp) return xRealIp;
+
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    const parts = forwarded
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] ?? null : null;
+  }
+
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    for (let index = forwarded.length - 1; index >= 0; index -= 1) {
+      const candidate = forwarded[index]?.trim();
+      if (candidate) return candidate;
+    }
+  }
+
+  const requestIp = req.ip?.trim();
+  return requestIp || null;
+}
+
 export const createContext = async ({
   req,
   res,
@@ -125,7 +159,17 @@ export const createContext = async ({
   });
 
   let session = await getSession(headers);
-  const resolvedHost = await domainService.resolveHost(extractRequestHost(req));
+  const requestHost = extractRequestHost(req);
+  const requestPath = (() => {
+    const rawUrl = typeof req.url === "string" ? req.url : "";
+    if (!rawUrl) return "/";
+    try {
+      return new URL(rawUrl, "http://vivd.local").pathname || "/";
+    } catch {
+      return rawUrl.split("?")[0] || "/";
+    }
+  })();
+  const resolvedHost = await domainService.resolveHost(requestHost);
   const requestedOrganizationId = normalizeOrganizationId(
     headers.get("x-vivd-organization-id"),
   );
@@ -404,10 +448,19 @@ export const createContext = async ({
     );
   }
 
+  const trafficSurface = trafficSurfaceService.classifyRequest({
+    hostKind: resolvedHost.hostKind,
+    requestHost,
+    requestPath,
+    controlPlaneHost:
+      resolvedHost.hostKind === "control_plane_host" ? resolvedHost.requestDomain : null,
+  });
+
   return {
     req,
     res,
     session,
+    requestIp: extractRequestIp(req),
     requestHost: resolvedHost.requestHost,
     requestProtocol: extractRequestProtocol(req),
     requestDomain: resolvedHost.requestDomain,
@@ -420,6 +473,7 @@ export const createContext = async ({
     organizationRole,
     studioRuntimeAuth,
     studioUserActionAuth,
+    trafficSurface,
   };
 };
 
@@ -712,11 +766,52 @@ const enforceStudioUserActionProjectAccess = t.middleware(
   },
 );
 
+function createStudioLifecycleGuardMiddleware(
+  action: StudioLifecycleAction,
+) {
+  return t.middleware(async ({ ctx, getRawInput, next }) => {
+    const rawInput = await getRawInput();
+    const scope = extractStudioUserActionScope(rawInput);
+    const decision = studioLifecycleGuardService.checkAction({
+      action,
+      organizationId: ctx.organizationId,
+      projectSlug: scope.slug,
+      requestIp: ctx.requestIp,
+      userId: ctx.session?.user.id ?? ctx.studioUserActionAuth?.userId ?? null,
+      version: scope.version,
+    });
+
+    if (!decision.allowed) {
+      if (decision.retryAfterSeconds > 0) {
+        ctx.res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+      }
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message:
+          action === "touchStudio"
+            ? "Studio keepalive budget exceeded. Please wait a moment and retry."
+            : "Studio lifecycle budget exceeded. Please wait a moment and retry.",
+      });
+    }
+
+    return next();
+  });
+}
+
 // Project-scoped access: for client_editors, requires an assigned project and enforces slug match.
 export const projectMemberProcedure = orgProcedure.use(
   enforceClientEditorProjectAccess,
 ).use(
   enforceStudioUserActionProjectAccess,
+);
+export const studioStartProcedure = projectMemberProcedure.use(
+  createStudioLifecycleGuardMiddleware("startStudio"),
+);
+export const studioHardRestartProcedure = projectMemberProcedure.use(
+  createStudioLifecycleGuardMiddleware("hardRestartStudio"),
+);
+export const studioTouchProcedure = projectMemberProcedure.use(
+  createStudioLifecycleGuardMiddleware("touchStudio"),
 );
 export const studioProjectProcedure = studioOrgProcedure
   .use(enforceClientEditorProjectAccess)

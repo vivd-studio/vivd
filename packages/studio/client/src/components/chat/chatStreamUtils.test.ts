@@ -157,14 +157,14 @@ describe("chatStreamUtils reasoning sanitization", () => {
     ).toBe("Edited file");
   });
 
-  it("formats bash tool labels as user-friendly actions", () => {
+  it("formats unknown bash tool labels as generic technical actions", () => {
     expect(
       getToolActivityLabel({
         type: "tool",
         tool: "bash",
         status: "running",
       }),
-    ).toBe("Running bash...");
+    ).toBe("Running technical task...");
 
     expect(
       getToolActivityLabel({
@@ -172,7 +172,27 @@ describe("chatStreamUtils reasoning sanitization", () => {
         tool: "bash",
         status: "completed",
       }),
-    ).toBe("Ran bash");
+    ).toBe("Completed technical task");
+  });
+
+  it("formats recognized bash commands with translated argument-aware labels", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "bash",
+        status: "running",
+        input: { command: "vivd publish deploy --domain example.com" },
+      }),
+    ).toBe("Deploying to example.com...");
+
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "bash",
+        status: "completed",
+        input: { command: "vivd publish deploy --domain example.com" },
+      }),
+    ).toBe("Deployed to example.com");
   });
 
   it("formats vivd_image_ai tool labels as image generation states", () => {
