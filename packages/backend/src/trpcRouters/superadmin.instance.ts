@@ -7,11 +7,14 @@ import {
 } from "../services/plugins/registry";
 import {
   installProfileSchema,
-  isExperimentalSoloModeEnabled,
   installProfileService,
   instancePluginDefaultsSchema,
   partialInstanceCapabilityPolicySchema,
 } from "../services/system/InstallProfileService";
+import {
+  isExperimentalSoloModeEnabled,
+  isSelfHostAdminFeaturesEnabled,
+} from "../services/system/FeatureFlagsService";
 import {
   instanceNetworkSettingsService,
   instanceTlsModeSchema,
@@ -45,6 +48,8 @@ const SOLO_CAPABILITIES_LOCK_MESSAGE =
   "Advanced tenancy capabilities are not editable on solo installs.";
 const SOLO_EXPERIMENTAL_MODE_MESSAGE =
   "Solo mode is currently experimental-only and disabled for this installation.";
+const SELF_HOST_ADMIN_FEATURES_MESSAGE =
+  "Experimental self-host admin features are hidden for this installation.";
 
 async function buildInstanceSettingsPayload() {
   const policy = await installProfileService.resolvePolicy();
@@ -140,6 +145,12 @@ export const instanceSuperAdminProcedures = {
         await installProfileService.updateInstanceLimitDefaults(input.limitDefaults);
       }
       if (input.network) {
+        if (!isSelfHostAdminFeaturesEnabled()) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: SELF_HOST_ADMIN_FEATURES_MESSAGE,
+          });
+        }
         if (targetInstallProfile !== "solo") {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -163,6 +174,13 @@ export const instanceSuperAdminProcedures = {
     }),
 
   startInstanceSoftwareUpdate: superAdminProcedure.mutation(async () => {
+    if (!isSelfHostAdminFeaturesEnabled()) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: SELF_HOST_ADMIN_FEATURES_MESSAGE,
+      });
+    }
+
     const policy = await installProfileService.resolvePolicy();
     if (policy.installProfile !== "solo") {
       throw new TRPCError({

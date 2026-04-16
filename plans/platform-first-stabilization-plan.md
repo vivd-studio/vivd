@@ -2,7 +2,7 @@
 
 Date: 2026-04-16  
 Owner: product/platform  
-Status: proposed
+Status: in progress
 
 This document records the current near-term correction for Vivd:
 
@@ -48,9 +48,12 @@ The highest-signal complexity is concentrated in:
 
 ### Plugin-specific finding
 
-The plugin model still hardcodes install-profile policy into plugin definitions through `defaultEnabledByProfile`.
+This was corrected after the first `plugin-sdk` port landed:
 
-That is already a questionable boundary on `main`, and `refactor/open-core` currently keeps that same field inside the new public `packages/plugin-sdk` contracts. That would turn install-profile policy into a public plugin authoring concern, which is the opposite of the simplification we want.
+- `defaultEnabledByProfile` was removed from the SDK/plugin contract surface
+- default plugin availability now lives in backend host policy instead of plugin package definitions
+
+That keeps install-profile policy out of the public plugin authoring boundary, which is the simpler and safer direction for a platform-first product.
 
 ### `refactor/open-core` branch finding
 
@@ -110,7 +113,7 @@ Specifically:
 - remove `defaultEnabledByProfile` from plugin contracts
 - move plugin default availability into host-owned instance policy or installed bundle policy
 - keep plugin packages responsible for capabilities, config, actions, reads, and UI metadata only
-- after the current SDK port lands, schedule an explicit follow-up refactor to remove any copied install-profile policy from the new SDK surface before treating that port as stable
+- keep plugin-specific user messaging generic enough that plugin packages do not have to know which admin navigation shape is active
 
 Hosted-platform recommendation:
 
@@ -118,11 +121,17 @@ Hosted-platform recommendation:
 - if org/project entitlement overrides are still needed for hosted operations, keep them
 - if not, collapse them toward instance default plus per-project enablement
 
-Do not publish or stabilize a public `plugin-sdk` until this policy boundary is corrected.
+Do not publish or stabilize a public `plugin-sdk` until this policy boundary is corrected. That follow-up is now complete in the current repo state.
 
 ### Phase 3: Put solo and self-host operations behind flags
 
 Keep the code bootable internally, but stop treating it as a supported surface.
+
+Feature flags now in use for this correction:
+
+- `VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE`
+- `VIVD_ENABLE_SELF_HOST_ADMIN_FEATURES`
+- `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES`
 
 Targets:
 

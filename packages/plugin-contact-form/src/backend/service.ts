@@ -372,7 +372,7 @@ class ContactFormPluginServiceImpl {
             ]
           : [
               "Contact Form access is currently disabled for this project.",
-              "Ask a super-admin to enable Contact Form in Instance Settings -> Plugins (solo) or Super Admin -> Plugins (platform).",
+              "Ask a super-admin to enable Contact Form in the admin plugin settings for this installation.",
               "After access is enabled, run `vivd plugins contact info` again to get install instructions.",
             ],
       };
@@ -404,7 +404,7 @@ class ContactFormPluginServiceImpl {
         recipients,
         instructions: [
           "Contact Form plugin instance exists, but entitlement is not enabled for this project.",
-          "Ask a super-admin to enable Contact Form in Instance Settings -> Plugins (solo) or Super Admin -> Plugins (platform).",
+          "Ask a super-admin to enable Contact Form in the admin plugin settings for this installation.",
           "Keep the snippet in place; submissions will resume once entitlement is enabled again.",
         ],
       };

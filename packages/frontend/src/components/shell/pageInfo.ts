@@ -43,19 +43,6 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  const legacyAnalyticsMatch = pathname.match(
-    /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
-  );
-  if (legacyAnalyticsMatch) {
-    return {
-      title: formatPluginPageTitle("analytics"),
-      isProjectPage: false,
-      projectSlug: decodeURIComponent(legacyAnalyticsMatch[1]),
-      isProjectPluginPage: true,
-      projectPluginId: "analytics",
-    };
-  }
-
   const projectPluginsMatch = pathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/plugins$/,
   );

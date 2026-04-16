@@ -23,6 +23,18 @@ const pluginRegistry = Object.fromEntries(
   ]),
 ) as unknown as Record<PluginId, PluginDefinition>;
 
+const HOST_OWNED_PLUGIN_DEFAULT_ENABLEMENT_BY_PROFILE: Record<
+  "solo" | "platform",
+  Partial<Record<PluginId, boolean>>
+> = {
+  solo: {
+    contact_form: true,
+    analytics: true,
+    newsletter: true,
+  },
+  platform: {},
+};
+
 export function listPluginDefinitions(): PluginDefinition[] {
   return [...Object.values(pluginRegistry)].sort(
     (left, right) => left.sortOrder - right.sortOrder,
@@ -72,11 +84,11 @@ export function getPluginCatalogEntry(pluginId: PluginId): PluginCatalogEntry {
   };
 }
 
-export function getPluginDefaultEnabledByProfile(
+export function getHostDefaultPluginEnabledForProfile(
   pluginId: PluginId,
   profile: "solo" | "platform",
 ): boolean {
-  return pluginRegistry[pluginId].defaultEnabledByProfile[profile];
+  return HOST_OWNED_PLUGIN_DEFAULT_ENABLEMENT_BY_PROFILE[profile][pluginId] === true;
 }
 
 export const getPluginManifest = getPluginDefinition;

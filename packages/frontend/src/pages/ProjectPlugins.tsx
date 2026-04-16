@@ -16,6 +16,7 @@ import {
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
+import { isExperimentalSoloInstall } from "@/lib/featureFlags";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectPluginUi } from "@/plugins/registry";
 
@@ -40,10 +41,7 @@ function getPluginInstallBadgeLabel(
 
 function getPluginStatusCopy(
   plugin: ProjectPluginCatalogItem,
-  options: {
-    installProfile: "solo" | "platform";
-    experimentalSoloModeEnabled: boolean;
-  },
+  isExperimentalSolo: boolean,
 ): string {
   if (plugin.installState === "enabled") {
     return "Open this plugin to view details, configuration, snippets, and plugin-specific actions.";
@@ -54,7 +52,7 @@ function getPluginStatusCopy(
   if (plugin.installState === "suspended") {
     return "This plugin is suspended for this project.";
   }
-  return options.installProfile === "solo" && options.experimentalSoloModeEnabled
+  return isExperimentalSolo
     ? "This plugin is disabled for this experimental self-host installation."
     : "This plugin is not currently available for this project.";
 }
@@ -93,6 +91,7 @@ export default function ProjectPlugins() {
   const projectTitle =
     projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
   const canManageProjectPlugins = session?.user?.role === "super_admin";
+  const isExperimentalSolo = isExperimentalSoloInstall(config);
 
   useEffect(() => {
     if (!projectSlug) return;
@@ -197,10 +196,7 @@ export default function ProjectPlugins() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    {getPluginStatusCopy(plugin, {
-                      installProfile: config.installProfile,
-                      experimentalSoloModeEnabled: config.experimentalSoloModeEnabled,
-                    })}
+                    {getPluginStatusCopy(plugin, isExperimentalSolo)}
                   </p>
                   {plugin.instanceId ? (
                     <div className="text-xs text-muted-foreground">

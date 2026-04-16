@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "sync:self-host-assets": "node --import tsx ../../scripts/sync-self-host-assets.ts",
-    "prebuild": "npm run sync:self-host-assets",
+    "prepare:operator-guides": "node ./scripts/maybe-sync-self-host-assets.mjs",
+    "prebuild": "npm run prepare:operator-guides",
     "dev": "astro dev --host 0.0.0.0 --port 4321",
     "build": "astro build",
-    "pretypecheck": "npm run sync:self-host-assets",
+    "pretypecheck": "npm run prepare:operator-guides",
     "typecheck": "astro check",
     "preview": "astro preview --host 0.0.0.0 --port 4321"
   },

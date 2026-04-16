@@ -4,7 +4,7 @@ import { analyticsBackendPluginPackage } from "@vivd/plugin-analytics/backend/pl
 import { contactFormBackendPluginPackage } from "@vivd/plugin-contact-form/backend/plugin";
 import { newsletterBackendPluginPackage } from "@vivd/plugin-newsletter/backend/plugin";
 import {
-  installedPluginManifests,
+  mapInstalledPluginsById,
   type InstalledPluginId,
 } from "./index";
 
@@ -17,7 +17,5 @@ const backendPluginPackagesById = {
 } as const satisfies Record<InstalledPluginId, BackendPluginPackage>;
 
 export const installedBackendPluginPackages = definePluginPackageDescriptors(
-  installedPluginManifests.map(
-    (manifest) => backendPluginPackagesById[manifest.pluginId],
-  ) as readonly BackendPluginPackage[],
+  mapInstalledPluginsById(backendPluginPackagesById) as readonly BackendPluginPackage[],
 );

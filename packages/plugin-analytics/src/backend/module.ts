@@ -27,10 +27,6 @@ export const analyticsPluginDefinition = {
   sortOrder: 20,
   configSchema: analyticsPluginConfigSchema,
   defaultConfig: analyticsPluginConfigSchema.parse({}),
-  defaultEnabledByProfile: {
-    solo: true,
-    platform: false,
-  },
   capabilities: {
     supportsInfo: true,
     config: {

@@ -153,6 +153,7 @@ describe("PluginsTab", () => {
       config: {
         installProfile: "platform",
         experimentalSoloModeEnabled: false,
+        selfHostAdminFeaturesEnabled: false,
       },
     });
 

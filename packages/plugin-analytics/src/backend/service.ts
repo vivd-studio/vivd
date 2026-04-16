@@ -1167,12 +1167,12 @@ export function createAnalyticsPluginService(
         instructions: entitled
           ? [
               "Analytics entitlement is enabled, but no plugin instance exists yet for this project.",
-              "Ask a super-admin to enable the Analytics plugin in Super Admin -> Plugins.",
+              "Ask a super-admin to enable the Analytics plugin in the admin plugin settings for this installation.",
               "Then run `vivd plugins analytics info` again to get the project-specific snippet.",
             ]
           : [
               "Analytics plugin access is currently disabled for this project.",
-              "Ask a super-admin to enable Analytics in Super Admin -> Plugins.",
+              "Ask a super-admin to enable Analytics in the admin plugin settings for this installation.",
               "After access is enabled, run `vivd plugins analytics info` again to get install instructions.",
             ],
       };
@@ -1199,7 +1199,7 @@ export function createAnalyticsPluginService(
         }),
         instructions: [
           "Analytics plugin instance exists but is disabled.",
-          "Ask a super-admin to enable Analytics in Super Admin -> Plugins.",
+          "Ask a super-admin to enable Analytics in the admin plugin settings for this installation.",
           "After enabling, keep the script snippet in the page head/body so pageview tracking can run.",
         ],
       };
@@ -1223,7 +1223,7 @@ export function createAnalyticsPluginService(
         }),
         instructions: [
           "Analytics plugin instance exists, but entitlement is not enabled for this project.",
-          "Ask a super-admin to enable Analytics in Super Admin -> Plugins.",
+          "Ask a super-admin to enable Analytics in the admin plugin settings for this installation.",
           "Keep the snippet in place; tracking will resume once entitlement is enabled.",
         ],
       };

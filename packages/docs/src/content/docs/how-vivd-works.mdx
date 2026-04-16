@@ -5,10 +5,11 @@ description: "Understand Vivd's runtime model: isolated Studio machines, OpenCod
 
 import { Aside } from "@astrojs/starlight/components";
 import DocShot from "../../components/DocShot.astro";
+import { showOperatorGuides } from "../../lib/docsFlags";
 
 Vivd is not just a prompt-to-template generator.
 It runs an AI coding agent inside a real website workspace, then keeps preview,
-publishing, and self-hosting much simpler than a typical custom-code setup.
+publishing, and product workflows much simpler than a typical custom-code setup.
 
 <DocShot
   src="/screenshots/docs/theme-aurora-light-new-proj-chat.webp"
@@ -61,8 +62,8 @@ That isolation is one of the main reasons Vivd can be both powerful and safer:
 - runtime state can be stopped and restarted independently
 - edits happen inside a dedicated environment instead of a global shared shell
 
-On scalable setups, these runtimes run as Fly Machines.
-On single-host/self-host setups, the same idea runs through Docker-isolated Studio machines.
+The underlying runtime provider depends on deployment, but the product model stays the
+same: isolated Studio environments around real project workspaces.
 
 <Aside type="note" title="Machine, not just chat">
   The Studio runtime is not only a chat worker. It is the environment where the project
@@ -136,76 +137,77 @@ When work finishes or sync is triggered, it can push the latest workspace state 
 That design makes restart and reuse much more practical because the project does not only
 live on one machine's local disk.
 
-## Out-of-the-box self-hosting
+{showOperatorGuides ? (
+  <>
+    <h2>Out-of-the-box self-hosting</h2>
+    <p>
+      Vivd is opinionated about making self-hosting practical. The solo self-host bundle
+      can bring the whole stack up for you, including Caddy, frontend, backend, scraper,
+      Postgres, a local S3-compatible bucket via MinIO, and Docker-based Studio machines.
+    </p>
+    <p>
+      So if you want everything on your own server, Vivd can provide a full working
+      default without requiring separate managed storage on day one.
+    </p>
 
-Vivd is opinionated about making self-hosting practical.
-The solo self-host bundle can bring the whole stack up for you, including:
+    <h2>Local bucket or external bucket</h2>
+    <p>You have two main storage directions:</p>
 
-- Caddy
-- frontend
-- backend
-- scraper
-- Postgres
-- a local S3-compatible bucket via MinIO
-- Docker-based Studio machines
+    <h3>Bundled local S3-compatible storage</h3>
+    <p>
+      This is the easiest self-host path. It keeps storage inside the stack with the
+      bundled MinIO/local S3-compatible setup.
+    </p>
+    <p>Good fit for:</p>
+    <ul>
+      <li>single-host installs</li>
+      <li>smaller self-host deployments</li>
+      <li>people who want the fewest external dependencies</li>
+    </ul>
 
-So if you want everything on your own server, Vivd can provide a full working default
-without requiring separate managed storage on day one.
+    <h3>External S3-compatible storage</h3>
+    <p>
+      If you want a more scalable or already-standardized storage setup, Vivd can use an
+      external S3-compatible bucket instead.
+    </p>
+    <p>That includes options like:</p>
+    <ul>
+      <li>generic S3-compatible storage</li>
+      <li>Cloudflare R2</li>
+      <li>other external bucket providers exposed through S3-compatible APIs</li>
+    </ul>
+    <p>Good fit for:</p>
+    <ul>
+      <li>larger self-host installs</li>
+      <li>teams that already have object-storage infrastructure</li>
+      <li>setups that want storage independent from the main app host</li>
+    </ul>
 
-## Local bucket or external bucket
+    <h2>Docker or Fly</h2>
+    <p>Vivd supports more than one runtime path for Studio machines.</p>
 
-You have two main storage directions:
+    <h3>Docker provider</h3>
+    <p>
+      The Docker provider is the practical single-host/self-host path. It keeps Studio
+      runtimes on the same machine while still isolating them from the main app process.
+    </p>
 
-### Bundled local S3-compatible storage
+    <h3>Fly provider</h3>
+    <p>
+      The Fly provider is the scalable machine path. It is the production-oriented model
+      when you want Studio runtimes to scale more like dedicated app machines instead of
+      sharing one host.
+    </p>
 
-This is the easiest self-host path.
-It keeps storage inside the stack with the bundled MinIO/local S3-compatible setup.
-
-Good fit for:
-
-- single-host installs
-- smaller self-host deployments
-- people who want the fewest external dependencies
-
-### External S3-compatible storage
-
-If you want a more scalable or already-standardized storage setup, Vivd can use an
-external S3-compatible bucket instead.
-
-That includes options like:
-
-- generic S3-compatible storage
-- Cloudflare R2
-- other external bucket providers exposed through S3-compatible APIs
-
-Good fit for:
-
-- larger self-host installs
-- teams that already have object-storage infrastructure
-- setups that want storage independent from the main app host
-
-## Docker or Fly
-
-Vivd supports more than one runtime path for Studio machines.
-
-### Docker provider
-
-The Docker provider is the practical single-host/self-host path.
-It keeps Studio runtimes on the same machine while still isolating them from the main app
-process.
-
-### Fly provider
-
-The Fly provider is the scalable machine path.
-It is the production-oriented model when you want Studio runtimes to scale more like
-dedicated app machines instead of sharing one host.
-
-The important point is that Vivd keeps a similar product model across both:
-
-- isolated Studio runtime
-- real project workspace
-- object-storage-backed persistence
-- managed preview/publish flow on top
+    <p>The important point is that Vivd keeps a similar product model across both:</p>
+    <ul>
+      <li>isolated Studio runtime</li>
+      <li>real project workspace</li>
+      <li>object-storage-backed persistence</li>
+      <li>managed preview/publish flow on top</li>
+    </ul>
+  </>
+) : null}
 
 ## Why this is powerful
 
@@ -233,7 +235,7 @@ It brings together:
 - isolated runtimes
 - project hydration/sync
 - preview and publish handling
-- domain and self-hosting workflows
+- domain and launch workflows
 - install-time defaults that work out of the box
 
 So the goal is not "developer power at the cost of simplicity."
@@ -241,7 +243,17 @@ The goal is developer-grade flexibility with a much easier path to getting the s
 
 ## Related pages
 
-- Read [Getting Started](/getting-started/) for the quickest first-project path.
-- Read [Self-Hosting](/self-hosting/) for the solo install flow.
-- Read [Instance Settings](/instance-settings/) for install-wide runtime defaults.
-- Read [Domains & Publish Targets](/domains-and-publish-targets/) for domain and launch rules.
+<ul>
+  <li>Read <a href="/getting-started/">Getting Started</a> for the quickest first-project path.</li>
+  <li>
+    Read <a href="/domains-and-publish-targets/">Domains & Publish Targets</a> for
+    domain and launch rules.
+  </li>
+</ul>
+{showOperatorGuides ? (
+  <p>
+    Operator follow-up: read <a href="/self-hosting/">Self-Hosting</a> and
+    <a href="/instance-settings/"> Instance Settings</a> only when you are intentionally
+    working on the experimental self-host/operator path.
+  </p>
+) : null}

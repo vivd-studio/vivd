@@ -1,11 +1,19 @@
 ---
 title: Self-Hosting
 description: Install the solo self-hosted Vivd stack with one public host and Docker-based Studio machines.
+pagefind: false
 ---
 
+import { Aside } from "@astrojs/starlight/components";
 import DocCodeEditor from "../../components/DocCodeEditor.astro";
 import minimalSoloCompose from "../../snippets/self-hosting/docker-compose.minimal.yml?raw";
 import minimalSoloEnv from "../../snippets/self-hosting/solo-minimal.env?raw";
+
+<Aside type="caution" title="Experimental operator guide">
+  This guide is intentionally hidden from the default public docs navigation. It exists
+  for the experimental self-host/operator path and is not the main hosted-product user
+  journey.
+</Aside>
 
 Vivd ships a **solo** self-host install path for one primary host:
 

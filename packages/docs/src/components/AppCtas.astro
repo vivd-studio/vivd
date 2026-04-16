@@ -1,7 +1,9 @@
 ---
+import { showOperatorGuides } from "../lib/docsFlags";
+
 const {
   title = "Start with Vivd",
-  description = "Self-host today, request closed beta access for the hosted product, or browse the public codebase.",
+  description = "Request hosted access, browse the docs, or inspect the public codebase.",
 } = Astro.props;
 ---
 
@@ -12,7 +14,9 @@ const {
     <p>{description}</p>
   </div>
   <div class="app-ctas-links">
-    <a class="button-primary" href="/self-hosting/">Self-hosting</a>
+    <a class="button-primary" href={showOperatorGuides ? "/self-hosting/" : "/getting-started/"}>
+      {showOperatorGuides ? "Operator guides" : "Getting Started"}
+    </a>
     <a class="button-secondary" href="https://vivd.studio/services.html#contact">Request closed beta access</a>
     <a class="button-tertiary" href="https://github.com/vivd-studio/vivd">GitHub</a>
   </div>

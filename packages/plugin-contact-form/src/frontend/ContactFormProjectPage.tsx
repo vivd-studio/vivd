@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/select";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
@@ -233,7 +232,6 @@ export default function ContactFormProjectPage({
   projectSlug,
   isEmbedded = false,
 }: ContactFormProjectPageProps) {
-  const { config } = useAppConfig();
   const utils = trpc.useUtils();
   const { data: session } = authClient.useSession();
   const canManageProjectPlugins = session?.user?.role === "super_admin";
@@ -508,9 +506,7 @@ export default function ContactFormProjectPage({
     ? canManageProjectPlugins
       ? "Contact Form is available for this instance but has not been enabled for this project yet."
       : "Contact Form is available for this instance, but a super-admin still needs to enable it for this project."
-    : config.installProfile === "solo"
-      ? "Contact Form is disabled for this instance. Open Instance Settings -> Plugins to enable it."
-      : "Contact Form access is managed in Super Admin. Ask a super-admin to enable access for this project.";
+    : "Contact Form access is managed in the admin plugin settings. Ask a super-admin to enable access for this project.";
 
   return (
     <SettingsPageShell

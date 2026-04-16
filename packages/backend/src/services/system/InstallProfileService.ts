@@ -6,7 +6,7 @@ import type {
 } from "../plugins/PluginEntitlementService";
 import {
   PLUGIN_IDS,
-  getPluginDefaultEnabledByProfile,
+  getHostDefaultPluginEnabledForProfile,
   type PluginId,
 } from "../plugins/catalog";
 import {
@@ -16,6 +16,7 @@ import {
   setSystemSettingValue,
   SYSTEM_SETTING_KEYS,
 } from "./SystemSettingsService";
+import { isExperimentalSoloModeEnabled } from "./FeatureFlagsService";
 
 export const installProfileSchema = z.enum(["solo", "platform"]);
 export type InstallProfile = z.infer<typeof installProfileSchema>;
@@ -121,16 +122,12 @@ const SOLO_FORCED_DISABLED_CAPABILITIES: Partial<InstanceCapabilityPolicy> = {
   dedicatedPluginHost: false,
 };
 
-function parseBoolean(value: string | undefined): boolean | null {
+function parseOptionalBoolean(value: string | undefined): boolean | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return null;
-}
-
-export function isExperimentalSoloModeEnabled(): boolean {
-  return parseBoolean(process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE) === true;
 }
 
 function normalizeInstallProfileSelection(
@@ -191,7 +188,7 @@ function normalizePluginDefaults(
 
   return Object.fromEntries(
     PLUGIN_IDS.map((pluginId) => {
-      const defaultEnabled = getPluginDefaultEnabledByProfile(pluginId, profile);
+      const defaultEnabled = getHostDefaultPluginEnabledForProfile(pluginId, profile);
       const entry = configured[pluginId];
       const enabled =
         typeof entry?.enabled === "boolean" ? entry.enabled : defaultEnabled;
@@ -285,7 +282,7 @@ class InstallProfileService {
   async isSingleProjectModeEnabled(
     resolvedProfile?: InstallProfile,
   ): Promise<boolean> {
-    const envValue = parseBoolean(process.env.SINGLE_PROJECT_MODE);
+    const envValue = parseOptionalBoolean(process.env.SINGLE_PROJECT_MODE);
     if (envValue !== null) return envValue;
     void resolvedProfile;
     return false;
@@ -368,3 +365,4 @@ class InstallProfileService {
 }
 
 export const installProfileService = new InstallProfileService();
+export { isExperimentalSoloModeEnabled } from "./FeatureFlagsService";

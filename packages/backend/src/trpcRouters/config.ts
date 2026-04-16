@@ -2,8 +2,11 @@ import { protectedProcedure, router } from "../trpc";
 import { domainService } from "../services/publish/DomainService";
 import {
   installProfileService,
-  isExperimentalSoloModeEnabled,
 } from "../services/system/InstallProfileService";
+import {
+  isExperimentalSoloModeEnabled,
+  isSelfHostAdminFeaturesEnabled,
+} from "../services/system/FeatureFlagsService";
 import { emailTemplateBrandingService } from "../services/email/templateBranding";
 
 /**
@@ -39,6 +42,7 @@ export const configRouter = router({
       singleProjectMode: instancePolicy.singleProjectMode,
       installProfile: instancePolicy.installProfile,
       experimentalSoloModeEnabled: isExperimentalSoloModeEnabled(),
+      selfHostAdminFeaturesEnabled: isSelfHostAdminFeaturesEnabled(),
       instanceAdminLabel:
         instancePolicy.installProfile === "solo"
           ? "Instance Settings"

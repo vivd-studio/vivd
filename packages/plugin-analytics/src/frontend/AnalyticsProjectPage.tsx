@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
-import { useAppConfig } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
 import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -161,7 +160,6 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function AnalyticsProjectPage() {
-  const { config } = useAppConfig();
   const { data: session } = authClient.useSession();
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
@@ -374,9 +372,7 @@ export default function AnalyticsProjectPage() {
                     ? canEnableProjectAnalytics
                       ? "Analytics is available for this instance but has not been enabled for this project yet."
                       : "Analytics is available for this instance, but a super-admin still needs to enable it for this project."
-                    : config.installProfile === "solo"
-                      ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."
-                      : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in Super Admin -> Plugins."}
+                    : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in the admin plugin settings."}
                 </span>
                 {analyticsNeedsProjectEnable && canEnableProjectAnalytics ? (
                   <Button

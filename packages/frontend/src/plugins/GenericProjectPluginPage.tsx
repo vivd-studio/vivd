@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
@@ -48,7 +47,6 @@ export default function GenericProjectPluginPage({
   pluginId,
   isEmbedded = false,
 }: GenericProjectPluginPageProps) {
-  const { config } = useAppConfig();
   const utils = trpc.useUtils();
   const { data: session } = authClient.useSession();
   const canManageProjectPlugins = session?.user?.role === "super_admin";
@@ -118,15 +116,8 @@ export default function GenericProjectPluginPage({
     if (pluginInfo.entitlementState === "suspended") {
       return `${pluginInfo.catalog.name} is suspended for this project.`;
     }
-    return config.installProfile === "solo" && config.experimentalSoloModeEnabled
-      ? `${pluginInfo.catalog.name} is disabled for this experimental self-host installation. Open Instance Settings -> Plugins to enable it.`
-      : `${pluginInfo.catalog.name} access is managed in Super Admin. Ask a super-admin to enable it for this project.`;
-  }, [
-    canManageProjectPlugins,
-    config.experimentalSoloModeEnabled,
-    config.installProfile,
-    pluginInfo,
-  ]);
+    return `${pluginInfo.catalog.name} access is managed in the admin plugin settings. Ask a super-admin to enable it for this project.`;
+  }, [canManageProjectPlugins, pluginInfo]);
 
   const handleSaveConfig = () => {
     let parsedConfig: Record<string, unknown>;

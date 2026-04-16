@@ -4,7 +4,7 @@ import { analyticsCliPluginPackage } from "@vivd/plugin-analytics/cli/plugin";
 import { contactFormCliPluginPackage } from "@vivd/plugin-contact-form/cli/plugin";
 import { newsletterCliPluginPackage } from "@vivd/plugin-newsletter/cli/plugin";
 import {
-  installedPluginManifests,
+  mapInstalledPluginsById,
   type InstalledPluginId,
 } from "./index";
 
@@ -17,7 +17,5 @@ const cliPluginPackagesById = {
 } as const satisfies Record<InstalledPluginId, CliPluginPackage>;
 
 export const installedCliPluginDescriptors = definePluginPackageDescriptors(
-  installedPluginManifests.map(
-    (manifest) => cliPluginPackagesById[manifest.pluginId],
-  ) as readonly CliPluginPackage[],
+  mapInstalledPluginsById(cliPluginPackagesById) as readonly CliPluginPackage[],
 );

@@ -2,14 +2,7 @@ import {
   ContactFormPluginNotEnabledError,
   ContactFormRecipientRequiredError,
   ContactFormRecipientVerificationError,
-  type ContactFormPluginInfoPayload,
-  type ContactFormPluginPayload,
 } from "./contactForm/service";
-import {
-  type AnalyticsPluginInfoPayload,
-  type AnalyticsPluginPayload,
-  type AnalyticsSummaryPayload,
-} from "./analytics/service";
 import {
   projectPluginInstanceService,
   type ProjectPluginInstanceSummary,
@@ -164,11 +157,6 @@ class ProjectPluginService {
 
 export const projectPluginService = new ProjectPluginService();
 export type {
-  ContactFormPluginInfoPayload,
-  ContactFormPluginPayload,
-  AnalyticsPluginInfoPayload,
-  AnalyticsPluginPayload,
-  AnalyticsSummaryPayload,
   ProjectPluginReadPayload,
   ProjectPluginInstanceSummary,
 };

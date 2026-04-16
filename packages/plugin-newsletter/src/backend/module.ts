@@ -47,10 +47,6 @@ export const newsletterPluginDefinition = {
   sortOrder: 30,
   configSchema: newsletterPluginConfigSchema,
   defaultConfig: newsletterPluginConfigSchema.parse({}),
-  defaultEnabledByProfile: {
-    solo: true,
-    platform: false,
-  },
   capabilities: {
     supportsInfo: true,
     config: {

@@ -105,16 +105,6 @@ export function getRouteDocumentTitle(pathname: string, search = "") {
     return formatDocumentTitle(`${projectLabel} ${pluginLabel}`);
   }
 
-  const legacyAnalyticsMatch = pathname.match(
-    /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
-  );
-  if (legacyAnalyticsMatch) {
-    const [, slug = ""] = legacyAnalyticsMatch;
-    const projectLabel = formatProjectLabel(decodeURIComponent(slug));
-    const pluginLabel = formatPluginLabel("analytics");
-    return formatDocumentTitle(`${projectLabel} ${pluginLabel}`);
-  }
-
   const projectMatch = pathname.match(
     /^\/vivd-studio\/projects\/([^/]+)(?:\/(plugins|fullscreen|studio-fullscreen))?$/,
   );

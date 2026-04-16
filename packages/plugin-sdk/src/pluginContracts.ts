@@ -69,10 +69,6 @@ export interface PluginDefinition<TPluginId extends string = string> {
   sortOrder: number;
   configSchema: unknown;
   defaultConfig: Record<string, unknown>;
-  defaultEnabledByProfile: {
-    solo: boolean;
-    platform: boolean;
-  };
   capabilities: PluginCapabilityDefinition;
   listUi: PluginListUiDefinition;
 }

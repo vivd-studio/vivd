@@ -1,4 +1,5 @@
 import type { PluginStopFn } from "@vivd/plugin-sdk";
+import { installedPluginManifests } from "@vivd/installed-plugins";
 import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";
@@ -24,14 +25,21 @@ export interface BackendPluginProjectUsageCount {
   count: number;
 }
 
+const backendPluginHooksById = {
+  contact_form: contactFormPluginBackendHooks,
+  analytics: analyticsPluginBackendHooks,
+  newsletter: newsletterPluginBackendHooks,
+} as const satisfies Partial<Record<PluginId, BackendPluginIntegrationHooks>>;
+
 const backendPluginHooks = new Map<
   PluginId,
   BackendPluginIntegrationHooks
->([
-  ["contact_form", contactFormPluginBackendHooks],
-  ["analytics", analyticsPluginBackendHooks],
-  ["newsletter", newsletterPluginBackendHooks],
-]);
+>(
+  installedPluginManifests.flatMap((manifest) => {
+    const hooks = backendPluginHooksById[manifest.pluginId as PluginId];
+    return hooks ? [[manifest.pluginId as PluginId, hooks] as const] : [];
+  }),
+);
 
 const organizationPluginHooks = new Map<
   PluginId,

@@ -109,6 +109,7 @@ describe("InstanceSettingsTab", () => {
       config: {
         installProfile: "platform",
         experimentalSoloModeEnabled: false,
+        selfHostAdminFeaturesEnabled: false,
       },
     });
 
@@ -188,16 +189,11 @@ describe("InstanceSettingsTab", () => {
     });
   });
 
-  it("shows network settings as read-only in platform mode", () => {
+  it("keeps the platform view focused on version and posture details", () => {
     renderTab();
 
     expect(screen.getByText("Multi-org platform profile")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "This shows the currently resolved host and TLS state. Platform host topology stays deployment-managed for now.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
     expect(screen.getByText("1.1.34")).toBeInTheDocument();
     expect(
@@ -206,17 +202,18 @@ describe("InstanceSettingsTab", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /update to/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Public host")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save network" })).toBeDisabled();
     expect(screen.getByText("https://app.example.com")).toBeInTheDocument();
+    expect(screen.queryByText("Network")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save network" })).not.toBeInTheDocument();
   });
 
-  it("hides profile switching and advanced capability editing in solo mode", () => {
+  it("keeps parked self-host admin features hidden in solo compatibility mode", () => {
     useAppConfigMock.mockReturnValue({
       isLoading: false,
       config: {
         installProfile: "solo",
         experimentalSoloModeEnabled: true,
+        selfHostAdminFeaturesEnabled: false,
       },
     });
 
@@ -289,8 +286,12 @@ describe("InstanceSettingsTab", () => {
 
     expect(screen.getByText("Experimental self-host profile")).toBeInTheDocument();
     expect(screen.getByText(/supported posture for normal operation/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/broader self-host admin surface is still parked behind a feature flag/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Apply latest release" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply latest release" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Network")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
     expect(screen.queryByText("Capabilities")).not.toBeInTheDocument();
     expect(
@@ -313,6 +314,7 @@ describe("InstanceSettingsTab", () => {
       config: {
         installProfile: "solo",
         experimentalSoloModeEnabled: true,
+        selfHostAdminFeaturesEnabled: true,
       },
     });
 
@@ -412,6 +414,7 @@ describe("InstanceSettingsTab", () => {
       config: {
         installProfile: "solo",
         experimentalSoloModeEnabled: true,
+        selfHostAdminFeaturesEnabled: true,
       },
     });
 
@@ -512,6 +515,7 @@ describe("InstanceSettingsTab", () => {
       config: {
         installProfile: "solo",
         experimentalSoloModeEnabled: true,
+        selfHostAdminFeaturesEnabled: true,
       },
     });
 

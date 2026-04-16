@@ -2,11 +2,11 @@
 
 # vivd
 
-**Build & Host Websites by Talking to AI**
+**Build Websites by Talking to AI**
 
-An AI-powered website builder and agentic website workflow that turns a brief, a reference site, or a conversation into a live website. Fair-code and self-hostable, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
+An AI-powered website builder and agentic website workflow that turns a brief, a reference site, or a conversation into a live website. Fair-code and platform-first, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
 
-[Public Docs](https://docs.vivd.studio) · [Features](https://docs.vivd.studio/features/) · [Development](#development) · [Self-Hosting](#self-hosting)
+[Public Docs](https://docs.vivd.studio) · [Features](https://docs.vivd.studio/features/) · [Development](#development) · [License](#license)
 
 </div>
 
@@ -24,12 +24,12 @@ You can start from scratch or import an existing website (by scraping or uploadi
 
 Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, and builds on top of [Astro](https://astro.build), so the agent works with real project files and therefore has unlimited potential rather than being trapped in static templates. In Astro-backed projects that means a real Astro workspace with Astro primitives, not a locked black-box builder. That matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, wire plugins into the same project, and solve publishing as part of the same system instead of handing you off to another stack at the end. By adding in the CMS capabilities, the agent can also work with structured content, and the user can edit it over a structured form UI instead of a generic text editor.
 
-Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the product works both as a hosted offering and as your own one-host deployment.
+Vivd still carries an experimental self-host/operator path, but the current product focus is the hosted platform and making the normal build-edit-publish workflow stronger before broadening that operator surface again.
 
 ## Current Product Shape
 
-- Self-host path is publicly available today.
-- The hosted Vivd product is still invite-led / closed-beta rather than broadly open signup.
+- The hosted Vivd product is the current focus and is still invite-led / closed-beta rather than broadly open signup.
+- The self-host/operator path still exists, but it is intentionally being hidden from the default product and docs posture while the hosted workflow is stabilized.
 - Astro and plain HTML are the current website project targets, with Astro content collections acting as the structured CMS source of truth where supported.
 - First-party plugin extraction is underway; Contact Form and Analytics already ship as extracted plugin packages behind generic host contracts.
 - A dedicated artifact-builder runtime exists behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but it remains dark-launched until the end-to-end path is production-verified.
@@ -42,7 +42,7 @@ Public product docs live in `packages/docs`. Internal planning and architecture 
 - import an existing website or ZIP into a first draft
 - refine the project in Studio with AI chat, direct edits, preview, files, assets, and structured CMS flows
 - keep plugins such as Contact Form and Analytics inside the same project flow, with more first-party plugin work in progress
-- publish to the live domain and keep self-hosting as a first-class path instead of a sidecar afterthought
+- publish to the live domain inside the same product workflow
 
 ## What the agent can actually do
 
@@ -147,11 +147,12 @@ Vivd uses npm workspaces with one root `package-lock.json`. Install dependencies
 
 For tests, prefer targeted runs in the areas you changed before reaching for the broader `ci:local` variants.
 
-## Self-Hosting
+## Experimental Self-Host Operator Path
 
-The public self-host install/docs path currently covers `solo` only. The hosted Vivd product is still invite-led rather than broadly open.
+The repo still contains an experimental `solo` self-host/operator path, but it is no
+longer the default product posture.
 
-Vivd currently ships a first-party `solo` self-host path:
+That path currently covers `solo` only:
 
 - one primary public host
 - Studio mounted at `/vivd-studio`
@@ -159,13 +160,18 @@ Vivd currently ships a first-party `solo` self-host path:
 - Docker-based Studio machines by default
 - local S3-compatible project storage by default
 
-The current public install path is:
+The current install command is still:
 
 ```bash
 curl -fsSL https://docs.vivd.studio/install.sh | bash
 ```
 
-For operator-facing details, use the public docs for [Self-Hosting](https://docs.vivd.studio/self-hosting/), [How Vivd Works](https://docs.vivd.studio/how-vivd-works/), [Instance Settings](https://docs.vivd.studio/instance-settings/), and [Domains & Publish Targets](https://docs.vivd.studio/domains-and-publish-targets/).
+Operator-facing details still live in the docs, but that material is being hidden from the
+default public docs path so the hosted product story stays clearer. The operator guides can
+be exposed intentionally for docs builds with `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES=true`.
+The broader in-product self-host admin surface is also parked behind
+`VIVD_ENABLE_SELF_HOST_ADMIN_FEATURES=true` so a plain solo compatibility boot does not
+automatically reintroduce every operator workflow into day-to-day product work.
 
 ## License
 

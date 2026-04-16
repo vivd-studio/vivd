@@ -1,12 +1,13 @@
-import {
-  installedBackendPluginPackages,
-} from "@vivd/installed-plugins/backend";
 import { definePluginPackageDescriptors } from "@vivd/plugin-sdk";
 import type {
   PluginModule as SharedPluginModule,
   PluginPackageDescriptor,
   PluginStopFn,
 } from "@vivd/plugin-sdk";
+import {
+  installedPluginManifests,
+  type InstalledPluginId,
+} from "@vivd/installed-plugins";
 import type express from "express";
 import type { Multer } from "multer";
 import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
@@ -112,23 +113,20 @@ export interface BackendPluginPackageDescriptor
   backend: BackendPluginContribution<string>;
 }
 
-type InstalledBackendPluginId =
-  (typeof installedBackendPluginPackages)[number]["pluginId"];
-
 const backendPluginContributionsById = {
   contact_form: contactFormPluginBackendContribution,
   analytics: analyticsPluginBackendContribution,
   newsletter: newsletterPluginBackendContribution,
 } as const satisfies Record<
-  InstalledBackendPluginId,
+  InstalledPluginId,
   BackendPluginContribution<string>
 >;
 
 export const backendPluginPackageDescriptors =
   definePluginPackageDescriptors([
-    ...installedBackendPluginPackages.map((pluginPackage) => ({
-      ...pluginPackage,
-      backend: backendPluginContributionsById[pluginPackage.pluginId],
+    ...installedPluginManifests.map((manifest) => ({
+      ...manifest,
+      backend: backendPluginContributionsById[manifest.pluginId],
     })),
   ] as const satisfies readonly BackendPluginPackageDescriptor[]);
 

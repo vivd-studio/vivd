@@ -61,6 +61,8 @@ vi.mock("@/lib/AppConfigContext", () => ({
   useAppConfig: () => ({
     config: {
       installProfile: "solo",
+      experimentalSoloModeEnabled: false,
+      selfHostAdminFeaturesEnabled: false,
     },
     isLoading: false,
   }),

@@ -11,7 +11,7 @@ import { analyticsFrontendPluginPackage } from "@vivd/plugin-analytics/frontend/
 import { contactFormFrontendPluginPackage } from "@vivd/plugin-contact-form/frontend/plugin";
 import { newsletterFrontendPluginPackage } from "@vivd/plugin-newsletter/frontend/plugin";
 import {
-  installedPluginManifests,
+  mapInstalledPluginsById,
   type InstalledPluginId,
 } from "./index";
 
@@ -38,9 +38,7 @@ const frontendPluginPackagesById = {
 
 export const installedFrontendPluginDescriptors =
   definePluginPackageDescriptors(
-    installedPluginManifests.map(
-      (manifest) => frontendPluginPackagesById[manifest.pluginId],
-    ) as readonly FrontendPluginPackage[],
+    mapInstalledPluginsById(frontendPluginPackagesById) as readonly FrontendPluginPackage[],
   );
 
 export const installedFrontendSharedProjectPluginUiRegistry =

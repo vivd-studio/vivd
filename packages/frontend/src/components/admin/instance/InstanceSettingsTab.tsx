@@ -24,6 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import {
+  isExperimentalSoloInstall as isExperimentalSoloInstallEnabled,
+  showSelfHostAdminFeatures,
+} from "@/lib/featureFlags";
 
 const CAPABILITY_META = [
   {
@@ -270,7 +274,8 @@ export function InstanceSettingsTab() {
   const isSoloInstall = effectiveInstallProfile === "solo";
   const isPlatformInstall = effectiveInstallProfile === "platform";
   const isExperimentalSoloInstall =
-    isSoloInstall && config.experimentalSoloModeEnabled;
+    isSoloInstall && isExperimentalSoloInstallEnabled(config);
+  const selfHostAdminFeaturesVisible = isSoloInstall && showSelfHostAdminFeatures(config);
   const waitingForUpdate = !!pendingManagedUpdate;
 
   useEffect(() => {
@@ -391,14 +396,14 @@ export function InstanceSettingsTab() {
   }, [settings]);
 
   const networkFieldsDisabled =
-    updateSettings.isPending || settingsQuery.isLoading || !isSoloInstall;
+    updateSettings.isPending || settingsQuery.isLoading || !selfHostAdminFeaturesVisible;
   const currentSoftwareLabel =
     software?.currentVersion || software?.currentImageTag || "Unknown";
   const latestSoftwareLabel =
     software?.latestVersion || software?.latestTag || "Unknown";
   const shortRevision = software?.currentRevision?.slice(0, 12) || null;
   const canTriggerManagedUpdate =
-    isSoloInstall &&
+    selfHostAdminFeaturesVisible &&
     !!software?.managedUpdate.enabled &&
     !!software.latestTag &&
     software.releaseStatus !== "current";
@@ -451,9 +456,9 @@ export function InstanceSettingsTab() {
   };
 
   const handleSaveNetwork = () => {
-    if (!isSoloInstall) {
+    if (!selfHostAdminFeaturesVisible) {
       toast.error(
-        "Network settings are currently editable only for experimental solo self-host installs.",
+        "Experimental self-host network controls are hidden for this installation.",
       );
       return;
     }
@@ -506,6 +511,12 @@ export function InstanceSettingsTab() {
                   self-host path. <code>platform</code> remains the supported posture for
                   normal operation.
                 </p>
+                {!selfHostAdminFeaturesVisible ? (
+                  <p className="text-sm text-muted-foreground">
+                    The broader self-host admin surface is still parked behind a feature
+                    flag so day-to-day platform work stays less distracting.
+                  </p>
+                ) : null}
               </>
             ) : isPlatformInstall ? (
               <>
@@ -539,6 +550,15 @@ export function InstanceSettingsTab() {
               ))}
             </div>
           ) : null}
+
+          {settings?.network.publicOrigin ? (
+            <div className="space-y-2">
+              <Label>Resolved public origin</Label>
+              <div className="max-w-xl rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                {settings.network.publicOrigin}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -550,7 +570,9 @@ export function InstanceSettingsTab() {
           <CardTitle>Software</CardTitle>
           <CardDescription>
             {isExperimentalSoloInstall
-              ? "Review the running experimental self-host bundle version and apply newer releases when the managed updater is configured."
+              ? selfHostAdminFeaturesVisible
+                ? "Review the running experimental self-host bundle version and apply newer releases when the managed updater is configured."
+                : "Review the running experimental self-host bundle version while operator update controls stay parked behind a feature flag."
               : "Review the running deployment version. Platform updates stay deployment-managed for now."}
           </CardDescription>
         </CardHeader>
@@ -607,7 +629,7 @@ export function InstanceSettingsTab() {
             </p>
           ) : null}
 
-          {isSoloInstall && software?.managedUpdate.reason ? (
+          {selfHostAdminFeaturesVisible && software?.managedUpdate.reason ? (
             <p className="text-sm text-muted-foreground">{software.managedUpdate.reason}</p>
           ) : null}
 
@@ -622,6 +644,12 @@ export function InstanceSettingsTab() {
             <p className="text-sm text-muted-foreground">
               This page shows the current platform version only. Applying updates remains a
               deployment-level operation for now.
+            </p>
+          ) : null}
+          {isSoloInstall && !selfHostAdminFeaturesVisible ? (
+            <p className="text-sm text-muted-foreground">
+              Managed self-host update controls are intentionally hidden for now. Re-enable
+              them only when you are actively working on the parked operator path.
             </p>
           ) : null}
 
@@ -668,108 +696,101 @@ export function InstanceSettingsTab() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle>Network</CardTitle>
-          <CardDescription>
-            {isExperimentalSoloInstall
-              ? "Configure the main public host and how HTTPS is handled for this instance."
-              : "This shows the currently resolved host and TLS state. Platform host topology stays deployment-managed for now."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {!isSoloInstall ? (
-            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              Network settings are currently UI-managed only for the experimental{" "}
-              <code>solo</code> self-host path. Keep <code>platform</code> host and TLS
-              topology in deployment config until the platform-specific surface exists.
-            </div>
-          ) : null}
+      {selfHostAdminFeaturesVisible ? (
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle>Network</CardTitle>
+            <CardDescription>
+              Configure the main public host and how HTTPS is handled for this instance.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="instance-network-public-host">Public host</Label>
+                <Input
+                  id="instance-network-public-host"
+                  value={publicHost}
+                  placeholder="example.com or 203.0.113.10"
+                  onChange={(event) => setPublicHost(event.target.value)}
+                  disabled={networkFieldsDisabled}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter the host only. Do not include `http://` or `https://`.
+                </p>
+              </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="instance-network-acme-email">ACME email</Label>
+                <Input
+                  id="instance-network-acme-email"
+                  value={acmeEmail}
+                  placeholder="admin@example.com"
+                  onChange={(event) => setAcmeEmail(event.target.value)}
+                  disabled={networkFieldsDisabled || tlsMode !== "managed"}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Used only when bundled Caddy manages HTTPS certificates directly.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="instance-network-public-host">Public host</Label>
-              <Input
-                id="instance-network-public-host"
-                value={publicHost}
-                placeholder="example.com or 203.0.113.10"
-                onChange={(event) => setPublicHost(event.target.value)}
+              <Label>HTTPS handled by</Label>
+              <Select
+                value={tlsMode}
+                onValueChange={(value) => setTlsMode(value as NetworkTlsMode)}
                 disabled={networkFieldsDisabled}
-              />
+              >
+                <SelectTrigger className="max-w-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="managed">Bundled Caddy</SelectItem>
+                  <SelectItem value="external">External proxy</SelectItem>
+                  <SelectItem value="off">Plain HTTP</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-sm text-muted-foreground">
-                Enter the host only. Do not include `http://` or `https://`.
+                Use `Bundled Caddy` on a VPS that should obtain certificates itself.
+                Use `External proxy` for Dokploy, Traefik, or another upstream TLS
+                terminator.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="instance-network-acme-email">ACME email</Label>
-              <Input
-                id="instance-network-acme-email"
-                value={acmeEmail}
-                placeholder="admin@example.com"
-                onChange={(event) => setAcmeEmail(event.target.value)}
-                disabled={networkFieldsDisabled || tlsMode !== "managed"}
-              />
-              <p className="text-sm text-muted-foreground">
-                Used only when bundled Caddy manages HTTPS certificates directly.
-              </p>
+            <div className="flex flex-wrap gap-2">
+              {settings?.network.publicOrigin ? (
+                <Badge variant="secondary">{settings.network.publicOrigin}</Badge>
+              ) : null}
+              {settings?.network.sources.publicHost === "settings" ? (
+                <Badge variant="secondary">Host from Instance Settings</Badge>
+              ) : null}
+              {settings?.network.sources.publicHost === "bootstrap_env" ? (
+                <Badge variant="secondary">Host from bootstrap env</Badge>
+              ) : null}
+              {settings?.network.deploymentManaged.publicHost ? (
+                <Badge variant="outline">Deployment-managed host override active</Badge>
+              ) : null}
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>HTTPS handled by</Label>
-            <Select
-              value={tlsMode}
-              onValueChange={(value) => setTlsMode(value as NetworkTlsMode)}
-              disabled={networkFieldsDisabled}
-            >
-              <SelectTrigger className="max-w-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="managed">Bundled Caddy</SelectItem>
-                <SelectItem value="external">External proxy</SelectItem>
-                <SelectItem value="off">Plain HTTP</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground">
-              Use `Bundled Caddy` on a VPS that should obtain certificates itself.
-              Use `External proxy` for Dokploy, Traefik, or another upstream TLS terminator.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {settings?.network.publicOrigin ? (
-              <Badge variant="secondary">{settings.network.publicOrigin}</Badge>
-            ) : null}
-            {settings?.network.sources.publicHost === "settings" ? (
-              <Badge variant="secondary">Host from Instance Settings</Badge>
-            ) : null}
-            {settings?.network.sources.publicHost === "bootstrap_env" ? (
-              <Badge variant="secondary">Host from bootstrap env</Badge>
-            ) : null}
             {settings?.network.deploymentManaged.publicHost ? (
-              <Badge variant="outline">Deployment-managed host override active</Badge>
+              <p className="text-sm text-muted-foreground">
+                A deployment-level host override is active, so the saved UI value is treated
+                as fallback state until that override is removed.
+              </p>
             ) : null}
-          </div>
 
-          {settings?.network.deploymentManaged.publicHost ? (
-            <p className="text-sm text-muted-foreground">
-              A deployment-level host override is active, so the saved UI value is treated as
-              fallback state until that override is removed.
-            </p>
-          ) : null}
-
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSaveNetwork}
-              disabled={networkFieldsDisabled}
-            >
-              Save network
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSaveNetwork}
+                disabled={networkFieldsDisabled}
+              >
+                Save network
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {isPlatformInstall ? (
         <Card className="border-border/70 shadow-sm">

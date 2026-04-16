@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import { isExperimentalSoloInstall } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,8 +54,7 @@ function getErrorMessage(error: unknown): string {
 
 export function PluginsTab() {
   const { config } = useAppConfig();
-  const isExperimentalSoloInstall =
-    config.installProfile === "solo" && config.experimentalSoloModeEnabled;
+  const isExperimentalSolo = isExperimentalSoloInstall(config);
 
   return (
     <Card>
@@ -64,20 +64,20 @@ export function PluginsTab() {
           Plugin Access
         </CardTitle>
         <CardDescription>
-          {isExperimentalSoloInstall
+          {isExperimentalSolo
             ? "Experimental self-host defaults for the whole instance. Project-specific plugin configuration still lives on each project."
             : "Central hosted-platform controls for project-level plugin access and rollout."}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isExperimentalSoloInstall ? (
+        {isExperimentalSolo ? (
           <div className="mb-4 rounded-lg border bg-muted/15 p-4 text-sm text-muted-foreground">
             Solo self-host mode is enabled as an internal experimental path. Plugin
             defaults here should be treated as compatibility behavior, not the primary
             product model.
           </div>
         ) : null}
-        {isExperimentalSoloInstall ? (
+        {isExperimentalSolo ? (
           <InstancePluginDefaultsPanel />
         ) : (
           <ProjectsPluginAccessPanel />

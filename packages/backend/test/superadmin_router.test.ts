@@ -23,6 +23,7 @@ const {
   getDefaultTemplateMock,
   resolvePolicyMock,
   isExperimentalSoloModeEnabledMock,
+  isSelfHostAdminFeaturesEnabledMock,
   updateInstallProfileMock,
   updateInstanceCapabilityPolicyMock,
   updateInstancePluginDefaultsMock,
@@ -76,6 +77,7 @@ const {
     getDefaultTemplateMock: vi.fn(),
     resolvePolicyMock: vi.fn(),
     isExperimentalSoloModeEnabledMock: vi.fn(),
+    isSelfHostAdminFeaturesEnabledMock: vi.fn(),
     updateInstallProfileMock: vi.fn(),
     updateInstanceCapabilityPolicyMock: vi.fn(),
     updateInstancePluginDefaultsMock: vi.fn(),
@@ -140,7 +142,6 @@ vi.mock("../src/services/system/InstallProfileService", async () => {
         maxProjects: z.number().int().nonnegative().optional(),
       })
       .strict(),
-    isExperimentalSoloModeEnabled: isExperimentalSoloModeEnabledMock,
     installProfileService: {
       resolvePolicy: resolvePolicyMock,
       updateInstallProfile: updateInstallProfileMock,
@@ -150,6 +151,11 @@ vi.mock("../src/services/system/InstallProfileService", async () => {
     },
   };
 });
+
+vi.mock("../src/services/system/FeatureFlagsService", () => ({
+  isExperimentalSoloModeEnabled: isExperimentalSoloModeEnabledMock,
+  isSelfHostAdminFeaturesEnabled: isSelfHostAdminFeaturesEnabledMock,
+}));
 
 vi.mock("../src/services/system/InstanceNetworkSettingsService", async () => {
   const { z } = await import("zod");
@@ -395,6 +401,7 @@ describe("superadmin router", () => {
     getDefaultTemplateMock.mockReset();
     resolvePolicyMock.mockReset();
     isExperimentalSoloModeEnabledMock.mockReset();
+    isSelfHostAdminFeaturesEnabledMock.mockReset();
     updateInstallProfileMock.mockReset();
     updateInstanceCapabilityPolicyMock.mockReset();
     updateInstancePluginDefaultsMock.mockReset();
@@ -524,6 +531,7 @@ describe("superadmin router", () => {
       pluginRuntime: { mode: "dedicated_host" },
     });
     isExperimentalSoloModeEnabledMock.mockReturnValue(false);
+    isSelfHostAdminFeaturesEnabledMock.mockReturnValue(false);
 
     delete process.env.FLY_STUDIO_IMAGE;
     delete process.env.DOCKER_STUDIO_IMAGE;
@@ -572,6 +580,7 @@ describe("superadmin router", () => {
   });
 
   it("rejects network updates while the effective install profile is platform", async () => {
+    isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     const caller = superAdminRouter.createCaller(makeContext());
 
     await expect(
@@ -584,6 +593,25 @@ describe("superadmin router", () => {
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Instance network settings are currently UI-managed only for solo installs.",
+    });
+
+    expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
+    expect(syncGeneratedCaddyConfigsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects hidden self-host admin feature mutations before applying network changes", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updateInstanceSettings({
+        network: {
+          publicHost: "example.com",
+          tlsMode: "external",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Experimental self-host admin features are hidden for this installation.",
     });
 
     expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
@@ -680,6 +708,7 @@ describe("superadmin router", () => {
 
   it("allows network updates when switching to solo in the same mutation", async () => {
     isExperimentalSoloModeEnabledMock.mockReturnValue(true);
+    isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     resolvePolicyMock
       .mockResolvedValueOnce({
         installProfile: "platform",
@@ -789,6 +818,7 @@ describe("superadmin router", () => {
   });
 
   it("rejects managed instance updates on platform installs", async () => {
+    isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     const caller = superAdminRouter.createCaller(makeContext());
 
     await expect(caller.startInstanceSoftwareUpdate()).rejects.toMatchObject({
@@ -799,7 +829,19 @@ describe("superadmin router", () => {
     expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();
   });
 
+  it("rejects managed instance updates while self-host admin features stay hidden", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(caller.startInstanceSoftwareUpdate()).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Experimental self-host admin features are hidden for this installation.",
+    });
+
+    expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();
+  });
+
   it("starts managed instance updates for solo installs when a newer release exists", async () => {
+    isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     resolvePolicyMock.mockResolvedValue({
       installProfile: "solo",
       singleProjectMode: true,

@@ -4,6 +4,7 @@ description: Move a Vivd project from Studio into a live published website.
 ---
 
 import DocShot from "../../components/DocShot.astro";
+import { showOperatorGuides } from "../../lib/docsFlags";
 
 Publishing is the handoff from draft work inside Studio to the domain your visitors use.
 
@@ -33,9 +34,14 @@ an already-live site still uses the normal publish flow.
 - Check plugin-related setup such as forms or analytics.
 - Make sure the target domain is the one you intend to use.
 
-If you are self-hosting, confirm that the install-level host and HTTPS setup are already
-correct in [Instance Settings](/instance-settings/) before treating a publish issue as a
-project-only problem.
+{showOperatorGuides ? (
+  <p>
+    If you are working on the experimental self-host/operator path, confirm that the
+    install-level host and HTTPS setup are already correct in
+    <a href="/instance-settings/"> Instance Settings</a> before treating a publish issue as
+    a project-only problem.
+  </p>
+) : null}
 If the target domain itself is unclear, blocked, or still unverified, see
 [Domains & Publish Targets](/domains-and-publish-targets/).
 

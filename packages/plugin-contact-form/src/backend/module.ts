@@ -30,10 +30,6 @@ export const contactFormPluginDefinition = {
   sortOrder: 10,
   configSchema: contactFormPluginConfigSchema,
   defaultConfig: contactFormPluginConfigSchema.parse({}),
-  defaultEnabledByProfile: {
-    solo: true,
-    platform: false,
-  },
   capabilities: {
     supportsInfo: true,
     config: {
