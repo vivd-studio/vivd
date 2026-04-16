@@ -5,3 +5,5 @@ export const contactFormCliPluginPackage = {
   ...contactFormPluginManifest,
   cli: contactFormCliModule,
 } as const;
+
+export default contactFormCliPluginPackage;

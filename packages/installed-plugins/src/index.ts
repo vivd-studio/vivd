@@ -25,16 +25,6 @@ export type InstalledPluginId = (typeof INSTALLED_PLUGIN_IDS)[number];
 export type InstalledPluginDescriptor =
   (typeof installedPluginDescriptors)[number];
 
-export function mapInstalledPluginsById<
-  const TById extends Record<InstalledPluginId, unknown>,
->(
-  pluginsById: TById,
-): Array<TById[InstalledPluginId]> {
-  return installedPluginDescriptors.map(
-    (descriptor) => pluginsById[descriptor.pluginId],
-  );
-}
-
 export function listInstalledPluginAgentHints(
   enabledPluginIds?: readonly string[],
 ): string[] {

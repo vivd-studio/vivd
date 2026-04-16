@@ -5,3 +5,5 @@ export const contactFormFrontendPluginPackage = {
   ...contactFormPluginManifest,
   frontend: contactFormFrontendPluginModule,
 } as const;
+
+export default contactFormFrontendPluginPackage;

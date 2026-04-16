@@ -5,3 +5,5 @@ export const newsletterFrontendPluginPackage = {
   ...newsletterPluginManifest,
   frontend: newsletterFrontendPluginModule,
 } as const;
+
+export default newsletterFrontendPluginPackage;

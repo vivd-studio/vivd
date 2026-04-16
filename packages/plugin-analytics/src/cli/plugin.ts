@@ -5,3 +5,5 @@ export const analyticsCliPluginPackage = {
   ...analyticsPluginManifest,
   cli: analyticsCliModule,
 } as const;
+
+export default analyticsCliPluginPackage;

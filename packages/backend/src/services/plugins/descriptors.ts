@@ -4,15 +4,10 @@ import type {
   PluginPackageDescriptor,
   PluginStopFn,
 } from "@vivd/plugin-sdk";
-import {
-  installedPluginManifests,
-  type InstalledPluginId,
-} from "@vivd/installed-plugins";
 import type express from "express";
 import type { Multer } from "multer";
-import { analyticsPluginBackendContribution } from "./analytics/backendContribution";
-import { contactFormPluginBackendContribution } from "./contactForm/backendContribution";
-import { newsletterPluginBackendContribution } from "./newsletter/backendContribution";
+import { installedBackendPluginHostRegistrations } from "./hostRegistry";
+import { pluginEntitlementService } from "./PluginEntitlementService";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -113,20 +108,13 @@ export interface BackendPluginPackageDescriptor
   backend: BackendPluginContribution<string>;
 }
 
-const backendPluginContributionsById = {
-  contact_form: contactFormPluginBackendContribution,
-  analytics: analyticsPluginBackendContribution,
-  newsletter: newsletterPluginBackendContribution,
-} as const satisfies Record<
-  InstalledPluginId,
-  BackendPluginContribution<string>
->;
-
 export const backendPluginPackageDescriptors =
   definePluginPackageDescriptors([
-    ...installedPluginManifests.map((manifest) => ({
+    ...installedBackendPluginHostRegistrations.map(({ manifest, registration }) => ({
       ...manifest,
-      backend: backendPluginContributionsById[manifest.pluginId],
+      backend: registration.createContribution({
+        pluginEntitlementService,
+      }),
     })),
   ] as const satisfies readonly BackendPluginPackageDescriptor[]);
 

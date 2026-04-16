@@ -1,12 +1,9 @@
 import type { PluginStopFn } from "@vivd/plugin-sdk";
-import { installedPluginManifests } from "@vivd/installed-plugins";
 import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";
 import type { BackendPluginIntegrationHooks } from "./descriptors";
-import { analyticsPluginBackendHooks } from "./analytics/backendHooks";
-import { contactFormPluginBackendHooks } from "./contactForm/backendHooks";
-import { newsletterPluginBackendHooks } from "./newsletter/backendHooks";
+import { installedBackendPluginHostRegistrations } from "./hostRegistry";
 
 export interface OrganizationPluginInstanceSnapshot {
   status: string | null;
@@ -25,20 +22,14 @@ export interface BackendPluginProjectUsageCount {
   count: number;
 }
 
-const backendPluginHooksById = {
-  contact_form: contactFormPluginBackendHooks,
-  analytics: analyticsPluginBackendHooks,
-  newsletter: newsletterPluginBackendHooks,
-} as const satisfies Partial<Record<PluginId, BackendPluginIntegrationHooks>>;
-
 const backendPluginHooks = new Map<
   PluginId,
   BackendPluginIntegrationHooks
 >(
-  installedPluginManifests.flatMap((manifest) => {
-    const hooks = backendPluginHooksById[manifest.pluginId as PluginId];
-    return hooks ? [[manifest.pluginId as PluginId, hooks] as const] : [];
-  }),
+  installedBackendPluginHostRegistrations.map(({ manifest, registration }) => [
+    manifest.pluginId as PluginId,
+    registration.hooks,
+  ]),
 );
 
 const organizationPluginHooks = new Map<

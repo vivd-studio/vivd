@@ -7,3 +7,5 @@ export const analyticsBackendPluginPackage = {
     createContribution: createAnalyticsPluginBackendContribution,
   },
 } as const;
+
+export default analyticsBackendPluginPackage;

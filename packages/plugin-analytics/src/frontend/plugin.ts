@@ -5,3 +5,5 @@ export const analyticsFrontendPluginPackage = {
   ...analyticsPluginManifest,
   frontend: analyticsFrontendPluginModule,
 } as const;
+
+export default analyticsFrontendPluginPackage;

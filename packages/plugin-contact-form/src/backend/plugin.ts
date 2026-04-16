@@ -7,3 +7,5 @@ export const contactFormBackendPluginPackage = {
     createContribution: createContactFormPluginBackendContribution,
   },
 } as const;
+
+export default contactFormBackendPluginPackage;

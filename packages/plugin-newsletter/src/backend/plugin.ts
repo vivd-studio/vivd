@@ -7,3 +7,5 @@ export const newsletterBackendPluginPackage = {
     createContribution: createNewsletterPluginBackendContribution,
   },
 } as const;
+
+export default newsletterBackendPluginPackage;

@@ -5,3 +5,5 @@ export const newsletterCliPluginPackage = {
   ...newsletterPluginManifest,
   cli: newsletterCliModule,
 } as const;
+
+export default newsletterCliPluginPackage;
