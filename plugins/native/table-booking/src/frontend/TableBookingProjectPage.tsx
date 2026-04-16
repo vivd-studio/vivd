@@ -437,6 +437,31 @@ function formatStatusLabel(status: TableBookingStatus): string {
   return STATUS_LABELS[status];
 }
 
+function getCalendarDayTitle(schedule: {
+  periods: TableBookingSchedulePeriod[];
+  isClosed: boolean;
+}): string {
+  if (schedule.isClosed) return "Closed";
+  if (schedule.periods.length === 1) {
+    return `${schedule.periods[0]!.startTime} - ${schedule.periods[0]!.endTime}`;
+  }
+  return `${schedule.periods.length} service windows`;
+}
+
+function getCalendarDayCaption(schedule: {
+  periods: TableBookingSchedulePeriod[];
+  isClosed: boolean;
+  hasOverride: boolean;
+}): string {
+  if (schedule.isClosed) {
+    return schedule.hasOverride ? "Date override" : "No service";
+  }
+  if (schedule.periods.length === 1) {
+    return schedule.hasOverride ? "Custom hours" : "Open";
+  }
+  return schedule.hasOverride ? "Custom hours" : "Multiple windows";
+}
+
 function getBookingStatusBadgeVariant(
   status: TableBookingStatus,
 ): "success" | "destructive" | "secondary" | "outline" {
@@ -592,8 +617,8 @@ function PeriodEditor({
 }) {
   return (
     <div className="rounded-lg border bg-background p-3">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <div className="space-y-1.5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Start</Label>
           <Input
             type="time"
@@ -603,7 +628,7 @@ function PeriodEditor({
             }
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">End</Label>
           <Input
             type="time"
@@ -613,7 +638,7 @@ function PeriodEditor({
             }
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Slot every</Label>
           <Input
             type="number"
@@ -628,7 +653,7 @@ function PeriodEditor({
             }
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Max covers</Label>
           <Input
             type="number"
@@ -643,7 +668,7 @@ function PeriodEditor({
             }
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Stay length</Label>
           <Input
             type="number"
@@ -661,7 +686,7 @@ function PeriodEditor({
             }
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Max party</Label>
           <Input
             type="number"
@@ -680,8 +705,8 @@ function PeriodEditor({
           />
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-[28rem] text-xs leading-5 text-muted-foreground">
           {formatScheduleSummary(period, defaultDurationMinutes)}
         </p>
         <Button variant="ghost" size="sm" onClick={onRemove}>
@@ -1517,20 +1542,12 @@ export default function TableBookingProjectPage({
                       </div>
                     }
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline" className="bg-background">
-                        Weekly hours
-                      </Badge>
-                      <Badge variant="outline" className="bg-background">
-                        Date override
-                      </Badge>
-                      <Badge variant="secondary">
-                        Bookings update live every 30s
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>Weekly hours fill the month</span>
+                      <span>Overrides replace a day</span>
+                      <span>Bookings update every 30s</span>
                       {monthlyOverflowCount > 0 ? (
-                        <Badge variant="outline" className="bg-background">
-                          +{monthlyOverflowCount} more bookings this month
-                        </Badge>
+                        <span>+{monthlyOverflowCount} more bookings this month</span>
                       ) : null}
                     </div>
 
@@ -1571,11 +1588,18 @@ export default function TableBookingProjectPage({
                                 setVisibleMonth(day.date.slice(0, 7));
                               }}
                               className={cn(
-                                "min-h-[8.75rem] px-3 py-3 text-left transition-colors",
+                                "flex min-h-[8.75rem] flex-col px-3 py-3 text-left transition-colors",
                                 index % 7 !== 6 && "border-r",
                                 index < calendarDays.length - 7 && "border-b",
                                 !day.inMonth && "bg-muted/15 text-muted-foreground/80",
                                 day.inMonth && "bg-card hover:bg-muted/20",
+                                day.inMonth &&
+                                  !schedule.isClosed &&
+                                  !schedule.hasOverride &&
+                                  "bg-emerald-500/[0.03]",
+                                day.inMonth &&
+                                  schedule.hasOverride &&
+                                  "bg-amber-500/[0.05]",
                                 isSelected && "bg-accent/30",
                                 isToday && "ring-1 ring-primary/30 ring-inset",
                               )}
@@ -1591,33 +1615,29 @@ export default function TableBookingProjectPage({
                                 ) : null}
                               </div>
 
-                              <div className="mt-3 space-y-2">
+                              <div className="mt-3 flex flex-1 flex-col gap-2">
                                 <div className="space-y-1">
-                                  <p className="text-xs font-medium">
-                                    {schedule.isClosed
-                                      ? "Closed"
-                                      : `${schedule.periods.length} service window${schedule.periods.length === 1 ? "" : "s"}`}
-                                  </p>
-                                  {!schedule.isClosed ? (
-                                    <p className="text-xs text-muted-foreground">
-                                      {schedule.periods[0]?.startTime} -{" "}
-                                      {schedule.periods[schedule.periods.length - 1]?.endTime}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                {schedule.hasOverride ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="w-fit bg-background/80"
+                                  <p
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      schedule.isClosed
+                                        ? "text-muted-foreground"
+                                        : "text-foreground",
+                                    )}
                                   >
-                                    Override
-                                  </Badge>
-                                ) : null}
+                                    {getCalendarDayTitle(schedule)}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {getCalendarDayCaption(schedule)}
+                                  </p>
+                                </div>
                                 {dailySummary ? (
-                                  <div className="rounded-md border bg-background/80 px-2 py-1 text-xs">
+                                  <div className="mt-auto rounded-md border bg-background/80 px-2 py-1 text-xs">
                                     {dailySummary.count} bookings · {dailySummary.covers} covers
                                   </div>
-                                ) : null}
+                                ) : (
+                                  <div className="mt-auto" />
+                                )}
                               </div>
                             </button>
                           );
@@ -1626,7 +1646,7 @@ export default function TableBookingProjectPage({
                     </div>
                   </SectionCard>
 
-                  <div className="space-y-5">
+                  <div className="space-y-5 xl:sticky xl:top-5 xl:self-start">
                     <SectionCard
                       title={formatLongDate(selectedDate, timezone)}
                       description={`${WEEKDAY_LABELS[selectedSchedule.dayOfWeek]} template · ${selectedDayCountLabel}`}
@@ -1652,8 +1672,9 @@ export default function TableBookingProjectPage({
                               <div className="flex items-center gap-2">
                                 <Clock3 className="h-4 w-4 text-muted-foreground" />
                                 <p className="text-sm font-medium">
-                                  Guests will follow the weekly hours for{" "}
-                                  {WEEKDAY_LABELS[selectedSchedule.dayOfWeek].toLowerCase()}.
+                                  This date uses the{" "}
+                                  {WEEKDAY_LABELS[selectedSchedule.dayOfWeek].toLowerCase()}{" "}
+                                  weekly schedule.
                                 </p>
                               </div>
                               <SchedulePreview

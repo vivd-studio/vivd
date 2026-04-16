@@ -53,8 +53,8 @@ function getPluginStatusCopy(
     return "Suspended for this project.";
   }
   return isExperimentalSolo
-    ? "Unavailable in this experimental self-host compatibility install."
-    : "Not currently available for this project.";
+    ? "Not active in this experimental self-host compatibility install."
+    : "Not active for this project.";
 }
 
 function formatPluginTimestamp(value?: string | null): string | null {
@@ -152,10 +152,10 @@ export default function ProjectPlugins() {
         },
         {
           key: "attention",
-          title: "Needs attention",
+          title: "Not active",
           description: isExperimentalSolo
-            ? "Currently limited by project or instance policy in experimental solo mode."
-            : "Suspended or unavailable plugins that may need follow-up.",
+            ? "Currently disabled or suspended by project or instance policy in experimental solo mode."
+            : "Disabled or suspended plugins for this project.",
           plugins: plugins.filter(
             (plugin) =>
               plugin.installState === "disabled" || plugin.installState === "suspended",
@@ -228,7 +228,7 @@ export default function ProjectPlugins() {
                   {[
                     { label: "Enabled", value: enabledCount },
                     { label: "Ready to enable", value: availableCount },
-                    { label: "Needs attention", value: attentionCount },
+                    { label: "Not active", value: attentionCount },
                   ].map((stat) => (
                     <div key={stat.label} className="flex items-baseline gap-2">
                       <dt className="text-muted-foreground">{stat.label}</dt>

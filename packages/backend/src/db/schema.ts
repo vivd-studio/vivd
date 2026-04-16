@@ -441,7 +441,7 @@ export const pluginEntitlement = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").notNull().default("project"), // 'organization' | 'project'
     projectSlug: text("project_slug").notNull().default(""), // empty for organization-scope
-    pluginId: text("plugin_id").notNull(), // currently: 'contact_form' | 'analytics' | 'newsletter' | 'table_booking'
+    pluginId: text("plugin_id").notNull(), // currently: 'contact_form' | 'analytics' | 'newsletter' | 'table_booking' | 'google_maps'
     state: text("state").notNull().default("disabled"), // 'disabled' | 'enabled' | 'suspended'
     managedBy: text("managed_by").notNull().default("manual_superadmin"), // 'manual_superadmin' | 'plan' | 'self_serve'
     monthlyEventLimit: integer("monthly_event_limit"),

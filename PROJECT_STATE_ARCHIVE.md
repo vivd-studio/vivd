@@ -2,6 +2,19 @@
 
 ## Progress Log Archive
 
+## 2026-04-17 Compaction Summary
+
+This section captures the main themes removed from `PROJECT_STATE.md` when the active file was shortened. Detailed wording from older active-state entries is no longer kept in the main doc; use this archive plus git history when deeper context is needed.
+
+- 2026-04-17: frontend Tailwind scanning was extended to plugin workspaces, fixing missing utility classes on plugin-owned pages such as the Table Booking calendar view.
+- 2026-04-17: platform-first cleanup continued by pushing resolved behavior and explicit admin/self-host flags through backend and frontend config instead of branching directly on raw `solo` checks.
+- 2026-04-16 to 2026-04-17: Studio UX cleanup focused on calmer plugin pages, more end-user-friendly chat and approval wording, and tighter admin surfaces.
+- 2026-04-16 to 2026-04-17: plugin work centered on SDK/registry cleanup, keeping host policy out of plugin contracts, and continuing the first-party/external plugin split.
+- 2026-04-16: the Table Booking plugin moved toward a real operating surface with a calendar-first admin page and better live dashboard behavior.
+- 2026-04-14 to 2026-04-16: Astro/CMS work focused on Astro-native source of truth, preview-save ownership, asset handling, and CMS editor ergonomics.
+- 2026-04-14 to 2026-04-16: platform hardening work covered Studio lifecycle reliability, public-vs-platform traffic separation, DDoS planning, and platform-first docs cleanup.
+- 2026-04-12 to 2026-04-16: earlier active-file entries also covered CLI/agent guidance cleanup, preview-context refactors, plugin contract hardening, analytics/contact-form extraction, and release smoke improvements.
+
 ## 2026-04-11 Entries Moved From PROJECT_STATE
 
 This section preserves the older progress entries removed when `PROJECT_STATE.md` was compacted to keep only the latest two log entries.
