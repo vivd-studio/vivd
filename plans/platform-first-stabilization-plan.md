@@ -147,6 +147,7 @@ Current progress:
 - stored self-host network mutations and Caddy sync now live in a dedicated `InstanceSelfHostAdminService`
 - the main instance settings mutation no longer accepts hidden self-host network changes
 - explicit experimental procedures now own the parked self-host admin actions instead of leaving them mixed into the general instance settings path
+- the core publish/runtime/admin callers now rely more on resolved control-plane and admin-surface policy (`path_based` vs `host_based`, visible platform sections, effective self-host compatibility) instead of repeatedly branching on the raw `solo` profile string
 
 Near-term rule:
 

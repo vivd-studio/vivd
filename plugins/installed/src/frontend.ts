@@ -9,10 +9,10 @@ import type {
   PluginPackageDescriptor,
   SharedProjectPluginUiDefinition,
 } from "@vivd/plugin-sdk";
-import installedPlugin0 from "@vivd/plugin-contact-form/frontend/plugin";
-import installedPlugin1 from "@vivd/plugin-analytics/frontend/plugin";
-import installedPlugin2 from "@vivd/plugin-newsletter/frontend/plugin";
-import installedPlugin3 from "@vivd/plugin-table-booking/frontend/plugin";
+import installedPlugin1 from "@vivd/plugin-contact-form/frontend/plugin";
+import installedPlugin2 from "@vivd/plugin-analytics/frontend/plugin";
+import installedPlugin3 from "@vivd/plugin-newsletter/frontend/plugin";
+import installedPlugin4 from "@vivd/plugin-table-booking/frontend/plugin";
 
 interface InstalledFrontendPluginModule {
   pluginId: string;
@@ -31,10 +31,10 @@ type FrontendPluginPackage = PluginPackageDescriptor<
 
 export const installedFrontendPluginDescriptors =
   definePluginPackageDescriptors([
-  installedPlugin0,
   installedPlugin1,
   installedPlugin2,
   installedPlugin3,
+  installedPlugin4,
   ] as const satisfies readonly FrontendPluginPackage[]);
 
 export const installedFrontendSharedProjectPluginUiRegistry =

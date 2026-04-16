@@ -59,6 +59,8 @@ services:
         - action: rebuild
           path: ./plugins/sdk/package.json
         - action: rebuild
+          path: ./plugins/external/google-maps/package.json
+        - action: rebuild
           path: ./packages/backend/package.json
         - action: rebuild
           path: ./plugins/native/analytics/package.json
@@ -116,6 +118,8 @@ services:
           path: ./plugins/installed/package.json
         - action: rebuild
           path: ./plugins/sdk/package.json
+        - action: rebuild
+          path: ./plugins/external/google-maps/package.json
         - action: rebuild
           path: ./plugins/native/analytics/package.json
         - action: rebuild

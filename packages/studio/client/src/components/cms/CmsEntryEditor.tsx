@@ -1,8 +1,26 @@
-import { AlertCircle, ArrowDown, ArrowUp, FileCode, Loader2, Save, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  FileCode,
+  Globe,
+  Loader2,
+  MoreHorizontal,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import type {
   CmsFieldDefinition,
   CmsModelRecord,
@@ -10,6 +28,7 @@ import type {
 } from "@vivd/shared/cms";
 import { getEntryTitle, type CmsFieldSegment } from "./helpers";
 import { CmsFieldRenderer } from "./CmsFieldRenderer";
+import { CmsMarkdownBodyEditor } from "./CmsMarkdownBodyEditor";
 
 interface CmsEntryEditorProps {
   projectSlug: string;
@@ -19,6 +38,7 @@ interface CmsEntryEditorProps {
   draftValues: Record<string, unknown> | null;
   defaultLocale: string;
   locales: string[];
+  activeLocale: string | null;
   sidecarDrafts: Record<string, string>;
   canUseAiImages: boolean;
   referenceOptions: Array<{
@@ -35,6 +55,8 @@ interface CmsEntryEditorProps {
   busy: boolean;
   isSaving: boolean;
   loadingSidecars: boolean;
+  markdownBody: string | null;
+  loadingMarkdownBody: boolean;
   setEditingTextFile: (path: string | null) => void;
   applyDraftValue: (fieldPath: CmsFieldSegment[], nextValue: unknown) => void;
   handleRichTextChange: (
@@ -45,6 +67,8 @@ interface CmsEntryEditorProps {
   openAssetReference: (assetPath: string) => void;
   openExplorer: () => void;
   onMoveEntry: (direction: -1 | 1) => void;
+  onMarkdownBodyChange: (value: string) => void;
+  onActiveLocaleChange: (locale: string | null) => void;
   onSaveEntry: () => void;
   onDeleteEntry: () => void;
 }
@@ -57,6 +81,7 @@ export function CmsEntryEditor({
   draftValues,
   defaultLocale,
   locales,
+  activeLocale,
   sidecarDrafts,
   canUseAiImages,
   referenceOptions,
@@ -68,12 +93,16 @@ export function CmsEntryEditor({
   busy,
   isSaving,
   loadingSidecars,
+  markdownBody,
+  loadingMarkdownBody,
   setEditingTextFile,
   applyDraftValue,
   handleRichTextChange,
   openAssetReference,
   openExplorer,
   onMoveEntry,
+  onMarkdownBodyChange,
+  onActiveLocaleChange,
   onSaveEntry,
   onDeleteEntry,
 }: CmsEntryEditorProps) {
@@ -96,6 +125,9 @@ export function CmsEntryEditor({
   const selectedEntryIndex = selectedModel.entries.findIndex(
     (entry) => entry.key === selectedEntry.key,
   );
+  const hasLocalizedFields = Object.values(selectedModel.fields).some(
+    (field) => field.localized,
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -112,59 +144,101 @@ export function CmsEntryEditor({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          {!readOnly ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onMoveEntry(-1)}
-                disabled={busy || selectedEntryIndex <= 0}
-              >
-                <ArrowUp className="mr-2 h-4 w-4" />
-                Up
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onMoveEntry(1)}
-                disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
-              >
-                <ArrowDown className="mr-2 h-4 w-4" />
-                Down
-              </Button>
-            </>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditingTextFile(selectedModel.relativeSchemaPath)}
-          >
-            <FileCode className="mr-2 h-4 w-4" />
-            Schema
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditingTextFile(selectedEntry.relativePath)}
-          >
-            Entry Source
-          </Button>
-          {!readOnly ? (
-            <>
-              <Button size="sm" disabled={!isDirty || busy} onClick={onSaveEntry}>
-                {isSaving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
+          {hasLocalizedFields && locales.length > 1 ? (
+            <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+              <button
+                type="button"
+                onClick={() => onActiveLocaleChange(null)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors",
+                  activeLocale === null
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
-                Save
-              </Button>
-              <Button variant="destructive" size="sm" disabled={busy} onClick={onDeleteEntry}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-            </>
+              >
+                <Globe className="h-3 w-3" />
+                All
+              </button>
+              {locales.map((locale) => (
+                <button
+                  key={locale}
+                  type="button"
+                  onClick={() => onActiveLocaleChange(locale)}
+                  className={cn(
+                    "inline-flex items-center rounded px-2 py-1 text-xs font-medium uppercase transition-colors",
+                    activeLocale === locale
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {locale}
+                </button>
+              ))}
+            </div>
           ) : null}
+          {!readOnly ? (
+            <Button size="sm" disabled={!isDirty || busy} onClick={onSaveEntry}>
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save
+            </Button>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {!readOnly ? (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onMoveEntry(-1)}
+                    disabled={busy || selectedEntryIndex <= 0}
+                  >
+                    <ArrowUp className="mr-2 h-4 w-4" />
+                    Move up
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onMoveEntry(1)}
+                    disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
+                  >
+                    <ArrowDown className="mr-2 h-4 w-4" />
+                    Move down
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+              <DropdownMenuItem
+                onClick={() => setEditingTextFile(selectedModel.relativeSchemaPath)}
+              >
+                <FileCode className="mr-2 h-4 w-4" />
+                View schema
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setEditingTextFile(selectedEntry.relativePath)}
+              >
+                <FileCode className="mr-2 h-4 w-4" />
+                View entry source
+              </DropdownMenuItem>
+              {!readOnly ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    disabled={busy}
+                    onClick={onDeleteEntry}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete entry
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -195,6 +269,7 @@ export function CmsEntryEditor({
                   draftValues={draftValues}
                   defaultLocale={defaultLocale}
                   locales={locales}
+                  activeLocale={activeLocale}
                   selectedEntryRelativePath={selectedEntry.relativePath}
                   selectedEntryKey={selectedEntry.key}
                   selectedModel={selectedModel}
@@ -221,6 +296,7 @@ export function CmsEntryEditor({
                 draftValues={draftValues}
                 defaultLocale={defaultLocale}
                 locales={locales}
+                activeLocale={activeLocale}
                 selectedEntryRelativePath={selectedEntry.relativePath}
                 selectedEntryKey={selectedEntry.key}
                 selectedModel={selectedModel}
@@ -235,6 +311,15 @@ export function CmsEntryEditor({
               />
             ))
           )}
+
+          {markdownBody !== null ? (
+            <CmsMarkdownBodyEditor
+              value={markdownBody}
+              readOnly={readOnly}
+              loading={loadingMarkdownBody}
+              onChange={onMarkdownBodyChange}
+            />
+          ) : null}
 
           {reportErrors.length > 0 ? (
             <>

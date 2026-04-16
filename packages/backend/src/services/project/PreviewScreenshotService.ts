@@ -102,7 +102,7 @@ class PreviewScreenshotService {
       throw new Error("Studio runtime access token unavailable for preview capture");
     }
 
-    const installProfile = await installProfileService.getInstallProfile();
+    const instancePolicy = await installProfileService.resolvePolicy();
     const requestedPath = normalizePreviewScreenshotPath(options.path);
     const width = toPositiveInt(options.width, DEFAULT_CAPTURE_WIDTH);
     const height = toPositiveInt(options.height, DEFAULT_CAPTURE_HEIGHT);
@@ -111,7 +111,7 @@ class PreviewScreenshotService {
     const waitMs = toNonNegativeInt(options.waitMs ?? DEFAULT_CAPTURE_WAIT_MS);
     const format = options.format ?? "png";
     const captureBaseUrl = resolvePreviewScreenshotBaseUrl({
-      installProfile,
+      controlPlaneMode: instancePolicy.controlPlane.mode,
       backendUrl: runtime.backendUrl,
       runtimeUrl: runtime.runtimeUrl,
       compatibilityUrl: runtime.compatibilityUrl,

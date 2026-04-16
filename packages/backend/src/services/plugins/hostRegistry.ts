@@ -7,18 +7,33 @@ import { contactFormBackendHostPlugin } from "./contactForm/hostPlugin";
 import { newsletterBackendHostPlugin } from "./newsletter/hostPlugin";
 import { tableBookingBackendHostPlugin } from "./tableBooking/hostPlugin";
 
+interface BackendPluginHostRegistration {
+  pluginId: InstalledPluginId;
+  createContribution(options: { pluginEntitlementService: unknown }): unknown;
+}
+
 const backendPluginHostRegistrationsById = {
   contact_form: contactFormBackendHostPlugin,
   analytics: analyticsBackendHostPlugin,
   newsletter: newsletterBackendHostPlugin,
   table_booking: tableBookingBackendHostPlugin,
-} as const satisfies Record<InstalledPluginId, unknown>;
+} as const satisfies Partial<
+  Record<InstalledPluginId, BackendPluginHostRegistration>
+>;
 
 export const installedBackendPluginHostRegistrations =
-  installedPluginManifests.map((manifest) => ({
-    manifest,
-    registration:
+  installedPluginManifests.flatMap((manifest) => {
+    const registration =
       backendPluginHostRegistrationsById[
         manifest.pluginId as keyof typeof backendPluginHostRegistrationsById
-      ],
-  }));
+      ];
+
+    return registration
+      ? [
+          {
+            manifest,
+            registration,
+          },
+        ]
+      : [];
+  });

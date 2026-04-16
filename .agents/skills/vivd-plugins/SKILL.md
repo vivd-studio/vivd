@@ -18,12 +18,14 @@ This skill is for:
 
 Vivd is in a mixed state:
 - plugin-owned workspaces now live under `plugins/`
+- curated external/embed providers can now live under `plugins/external/*`
 - first-party native plugins currently live under `plugins/native/*`
 - host apps still own the generic plugin platform, registries, routing, and compatibility layers
 - the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
 - plugin packages now also export safe package descriptors (`src/descriptor.ts`) so host registries can derive plugin-owned definition/UI/CLI metadata from one package-level source instead of repeating separate arrays/maps per surface
 - the installed bundle order now lives in `plugins/installed/registry.config.mjs`; `plugins/installed/src/index.ts` and the generated surface files should be regenerated from that registry instead of edited by hand
 - config-time helpers for registry-driven plugin package matchers and source aliases now live in `plugins/installed/registry.helpers.mjs`, and root plugin-workspace fanout scripts should prefer that helper over repeating plugin package names by hand
+- `external_embed` plugins are still host-managed at runtime: they do not need native backend/frontend/CLI module exports, and backend should synthesize generic info/config/snippet behavior from the manifest instead of forcing a fake `PluginModule`
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
@@ -70,6 +72,9 @@ Start here when orienting:
   - `packages/cli/src/commands.ts`
   - `packages/cli/src/plugins/registry.ts`
 - Extracted plugin package example:
+  - `plugins/external/google-maps/package.json`
+  - `plugins/external/google-maps/src/manifest.ts`
+  - `plugins/external/google-maps/src/descriptor.ts`
   - `plugins/native/analytics/package.json`
   - `plugins/native/analytics/src/descriptor.ts`
   - `plugins/native/analytics/src/backend/config.ts`

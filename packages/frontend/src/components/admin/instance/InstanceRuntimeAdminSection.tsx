@@ -26,7 +26,7 @@ type NetworkTlsMode = "managed" | "external" | "off";
 type InstanceRuntimeAdminSectionProps = {
   isExperimentalSoloInstall: boolean;
   isPlatformInstall: boolean;
-  isSoloInstall: boolean;
+  selfHostCompatibilityEnabled: boolean;
   selfHostAdminFeaturesVisible: boolean;
   software: InstanceSoftware | undefined;
   softwareIsLoading: boolean;
@@ -55,7 +55,7 @@ type InstanceRuntimeAdminSectionProps = {
 export function InstanceRuntimeAdminSection({
   isExperimentalSoloInstall,
   isPlatformInstall,
-  isSoloInstall,
+  selfHostCompatibilityEnabled,
   selfHostAdminFeaturesVisible,
   software,
   softwareIsLoading,
@@ -166,7 +166,7 @@ export function InstanceRuntimeAdminSection({
               deployment-level operation for now.
             </p>
           ) : null}
-          {isSoloInstall && !selfHostAdminFeaturesVisible ? (
+          {selfHostCompatibilityEnabled && !selfHostAdminFeaturesVisible ? (
             <p className="text-sm text-muted-foreground">
               Managed self-host update controls are intentionally hidden for now. Re-enable
               them only when you are actively working on the parked operator path.

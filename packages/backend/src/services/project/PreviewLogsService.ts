@@ -90,10 +90,10 @@ class PreviewLogsService {
       throw new Error("Studio runtime access token unavailable for preview log capture");
     }
 
-    const installProfile = await installProfileService.getInstallProfile();
+    const instancePolicy = await installProfileService.resolvePolicy();
     const requestedPath = normalizePreviewCapturePath(options.path);
     const captureBaseUrl = resolvePreviewCaptureBaseUrl({
-      installProfile,
+      controlPlaneMode: instancePolicy.controlPlane.mode,
       backendUrl: runtime.backendUrl,
       runtimeUrl: runtime.runtimeUrl,
       compatibilityUrl: runtime.compatibilityUrl,

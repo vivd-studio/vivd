@@ -1,8 +1,7 @@
-import type { InstallProfile } from "../system/InstallProfileService";
 import type { StudioMachineProviderKind } from "./types";
 
 interface ResolveStudioBrowserUrlInput {
-  installProfile: InstallProfile;
+  controlPlaneMode: "path_based" | "host_based";
   providerKind: StudioMachineProviderKind;
   requestHost?: string | null;
   requestProtocol?: string | null;
@@ -129,12 +128,12 @@ export function resolveStudioBrowserUrl(
     normalizedCompatibility.origin === request.origin &&
     runtime.origin !== request.origin
   ) {
-    if (input.installProfile !== "platform") {
+    if (input.controlPlaneMode === "path_based") {
       return normalizedCompatibilityUrl;
     }
   }
 
-  if (input.installProfile === "platform") {
+  if (input.controlPlaneMode === "host_based") {
     return directRuntimeUrl;
   }
 

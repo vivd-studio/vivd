@@ -18,6 +18,8 @@
       "@vivd/plugin-analytics/*": ["../native/analytics/src/*"],
       "@vivd/plugin-contact-form": ["../native/contact-form/src/index.ts"],
       "@vivd/plugin-contact-form/*": ["../native/contact-form/src/*"],
+      "@vivd/plugin-google-maps": ["../external/google-maps/src/index.ts"],
+      "@vivd/plugin-google-maps/*": ["../external/google-maps/src/*"],
       "@vivd/plugin-newsletter": ["../native/newsletter/src/index.ts"],
       "@vivd/plugin-newsletter/*": ["../native/newsletter/src/*"],
       "@vivd/plugin-table-booking": ["../native/table-booking/src/index.ts"],

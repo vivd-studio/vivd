@@ -43,10 +43,12 @@ export const configRouter = router({
       installProfile: instancePolicy.installProfile,
       experimentalSoloModeEnabled: isExperimentalSoloModeEnabled(),
       selfHostAdminFeaturesEnabled: isSelfHostAdminFeaturesEnabled(),
-      instanceAdminLabel:
-        instancePolicy.installProfile === "solo"
-          ? "Instance Settings"
-          : "Super Admin",
+      selfHostCompatibilityEnabled: instancePolicy.selfHostCompatibility.enabled,
+      selfHostAdminFeaturesVisible:
+        instancePolicy.selfHostCompatibility.adminFeaturesVisible,
+      instanceAdminLabel: instancePolicy.adminSurface.label,
+      instanceSectionLabel: instancePolicy.adminSurface.instanceSectionLabel,
+      showPlatformAdminSections: instancePolicy.adminSurface.showPlatformSections,
       capabilities: instancePolicy.capabilities,
       controlPlaneMode: instancePolicy.controlPlane.mode,
       pluginRuntime: instancePolicy.pluginRuntime,

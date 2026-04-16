@@ -1,144 +1,62 @@
 ---
 name: vivd-cms-astro
-description: Use when working on Vivd CMS features for Astro-backed projects, including Astro content collection parsing/writing, Studio CMS UI behavior, preview text patching, image-drop persistence, localization ownership, or the local CMS helper/toolkit contract.
+description: Use when working on Vivd CMS support for Astro-backed projects, including Astro content collections, Studio CMS behavior, preview ownership, or page bindings for CMS-owned content.
 ---
 
 # Vivd CMS Astro
 
 Use this skill when the task touches the Astro-backed CMS path in Vivd.
 
-This skill is for:
-- Studio CMS model or entry editing
-- Astro collection parsing or writing
-- `src/content.config.ts` support
-- preview text editing or image drops that should persist to source
-- CMS ownership bindings (`data-cms-*`, `CmsText`, `CmsImage`)
-- localization ownership decisions (`data-i18n` vs CMS-localized fields)
-- starter/generation guidance for Astro CMS projects
+## How The System Works
 
-## Source Of Truth
+Vivd adapts to Astro Content Collections; it does not replace Astro's content model.
+For Astro-backed projects, the project repo should stay Astro-native:
 
-For Astro-backed projects, the project repo stays Astro-native:
-
-- models/schemas: `src/content.config.ts`
-- structured entries: real files under `src/content/**`
+- models and schemas: `src/content.config.ts`
+- entries: real files under `src/content/**`
 - managed local assets: `src/content/media/`
 
-Do not invent or reintroduce:
+Avoid introducing:
 - Vivd YAML shadow schemas
 - generated `.vivd` CMS source mirrors
-- a Vivd-specific runtime content model inside the project repo
+- a second Vivd-specific runtime content model inside the project repo
 
-Vivd adapts to Astro Content Collections internally. The project itself should still look like an Astro project.
+## How The Agent Should Interact With It
 
-## Ownership Decision
+Before editing, classify the visible content first:
 
-Before editing, classify the render point:
+- CMS-owned content: backed by a collection entry field, saved under `src/content/**`, and owned in preview via `data-cms-*`
+- locale UI text: saved to `src/locales/*.json` and owned via `data-i18n`
+- page-owned source content: saved directly in `.astro` source
 
-1. CMS-owned content
-   - value belongs to a collection entry field
-   - persistence target is the entry file under `src/content/**`
-   - preview ownership uses `data-cms-*`
-   - render helpers are `src/lib/cms/CmsText.astro` and `src/lib/cms/CmsImage.astro`
+Rules:
+- Fix ownership or write-path bugs before changing Studio UI.
+- Do not stack `data-cms-*` and `data-i18n` on the same element.
+- If preview persistence is wrong, assume an ownership bug before assuming a patcher bug.
+- Use focused Studio/shared/backend validation for the touched path. Pull in the `testing` skill when a change crosses packages.
 
-2. Locale-dictionary UI text
-   - navigation labels, buttons, placeholders, UI copy not owned by a CMS entry
-   - persistence target is `src/locales/*.json`
-   - preview ownership uses `data-i18n`
+## How It Is Implemented On Pages
 
-3. Page-owned source content
-   - value belongs to page/component source, not a CMS entry
-   - persistence target is `.astro` source
-   - simple Astro image render points can be patched heuristically from preview
-   - text uses Astro/raw fallback only when it is not CMS-owned and not i18n-owned
+CMS ownership on Astro pages is explicit. Rendering `entry.data.*` or `item.data.*` only shows the current value; the visible render point still needs CMS bindings.
 
-Do not stack `data-i18n` and `data-cms-*` on the same element.
+Use:
+- `src/lib/cms/CmsText.astro` for CMS-owned text
+- `src/lib/cms/CmsImage.astro` for CMS-owned images
+- `src/lib/cmsBindings.ts` only when wrapper components are not a good fit
 
-## Patch Priority
+Keep in mind:
+- Bind the actual visible element, including duplicate or derived render points that still represent the same CMS field.
+- `CmsImage` needs the real field value through `src={...}`; metadata alone is not enough.
+- Keep `src/content/media/` as the managed asset root and render preview-safe browser URLs instead of raw project-relative media paths.
 
-Current preview persistence order:
-
-- text: CMS field -> `data-i18n` -> Astro text patch -> raw HTML patch
-- image: CMS field -> simple Astro `<Image>` / `<img>` source patch -> `public/` URL rewrite -> fail clearly
-
-If the wrong persistence path is taken, the bug is usually an ownership bug, not a patcher bug.
-
-## File Map
+## Main Implementation Surfaces
 
 Start in these files:
+- shared Astro CMS adapter: `packages/shared/src/cms/astroCollections.ts` and `packages/shared/src/cms/astroCollections/`
+- Studio CMS UI: `packages/studio/client/src/components/cms/`
+- preview ownership and inline editing: `packages/studio/client/src/lib/cmsPreviewBindings.ts` and `packages/studio/client/src/components/preview/usePreviewInlineEditing.ts`
+- Astro source patching: `packages/studio/server/services/patching/AstroPatchService.ts`
+- Studio CMS mutations: `packages/studio/server/trpcRouters/cms.router.ts`
+- Astro starter bindings: `packages/backend/src/generator/templates/astro-starter/src/lib/cmsBindings.ts`, `packages/backend/src/generator/templates/astro-starter/src/lib/cms/CmsText.astro`, and `packages/backend/src/generator/templates/astro-starter/src/lib/cms/CmsImage.astro`
 
-- Shared CMS adapter/parsing/writing:
-  - `packages/shared/src/cms/index.ts`
-  - `packages/shared/src/cms/astroCollections.ts`
-  - `packages/shared/src/cms/astroCollections/shared.ts`
-  - `packages/shared/src/cms/astroCollections/schema.ts`
-  - `packages/shared/src/cms/astroCollections/entries.ts`
-- Shared agent/platform guidance:
-  - `packages/shared/src/studio/agentInstructions.ts`
-  - `packages/shared/src/studio/cliHelp.ts`
-- Astro starter-local toolkit template:
-  - `packages/backend/src/generator/templates/astro-starter/src/lib/cmsBindings.ts`
-  - `packages/backend/src/generator/templates/astro-starter/src/lib/cms/CmsText.astro`
-  - `packages/backend/src/generator/templates/astro-starter/src/lib/cms/CmsImage.astro`
-  - `packages/backend/src/generator/templates/astro-starter/AGENTS.md`
-- Studio CMS UI:
-  - `packages/studio/client/src/components/cms/`
-- Preview ownership + text patch collection:
-  - `packages/studio/client/src/lib/cmsPreviewBindings.ts`
-  - `packages/studio/client/src/lib/vivdPreviewTextPatching.ts`
-- Preview inline edit/image drop flow:
-  - `packages/studio/client/src/components/preview/usePreviewInlineEditing.ts`
-- Astro source patching:
-  - `packages/studio/server/services/patching/AstroPatchService.ts`
-- Studio CMS mutations:
-  - `packages/studio/server/trpcRouters/cms.router.ts`
-  - `packages/studio/server/trpcRouters/project.ts`
-
-## Default Workflow
-
-1. Identify the source of truth for the requested change.
-2. Inspect the current render point ownership in preview or source.
-3. Change the write path first if persistence is wrong.
-4. Only then change the UI or helper layer.
-5. Validate with focused Studio/shared/backend tests.
-
-## Common Rules
-
-- Prefer `CmsText` and `CmsImage` for collection-owned render points.
-- Use lower-level `cmsBindings.ts` helpers only when wrapper components are not a good fit.
-- Bind every visible occurrence of a CMS-owned field, not just one.
-- For localized CMS values, carry locale through CMS ownership, not `data-i18n`.
-- Keep `src/content/media/` as the canonical managed asset root.
-- Do not point markup at raw `src/content/media/...` filesystem paths.
-- Use `public/` only for deliberate passthrough/framework-public assets.
-
-## When The Issue Is About Preview Edits
-
-Check these first:
-
-- missing `data-cms-*` ownership on the actual render point
-- image field modeled as plain string without enough signal for CMS/image UI affordances
-- `data-i18n` used where the value is actually entry-owned
-- render point is page-owned Astro source, not CMS-owned
-- Astro image expression is too complex for the simple source-backed heuristic
-
-## When The Issue Is About Starter Or Generation
-
-The goal is to bias generated Astro projects toward patch-friendly, CMS-friendly patterns:
-
-- straightforward `src/content.config.ts`
-- real collection entries under `src/content/**`
-- managed assets under `src/content/media/`
-- `astro:assets` for local images
-- `CmsText` / `CmsImage` when the content is explicitly collection-owned
-- `data-i18n` only for locale-dictionary UI strings
-
-Do not push all page copy into CMS by default. Use collections selectively for structured, repeatable, user-managed content.
-
-## Validation
-
-Read:
-- `references/workflows.md`
-- `references/validation.md`
-
-Use the `testing` skill as a companion when the change crosses Studio/backend/shared boundaries.
+For deeper workflow or validation detail, read `references/workflows.md` or `references/validation.md` only when the task needs that extra specificity.

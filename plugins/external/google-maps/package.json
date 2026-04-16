@@ -1,0 +1,20 @@
+{
+  "name": "@vivd/plugin-google-maps",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./manifest": "./src/manifest.ts",
+    "./shared/projectUi": "./src/shared/projectUi.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@vivd/plugin-sdk": "1.0.0",
+    "zod": "^4.1.13"
+  }
+}

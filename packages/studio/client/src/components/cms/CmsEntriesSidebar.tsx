@@ -77,14 +77,19 @@ export function CmsEntriesSidebar({
       !filteredEntries.some((entry) => entry.key === selectedEntryKey),
   );
 
+  const hasUniformStatus = useMemo(() => {
+    if (!selectedModel || selectedModel.entries.length <= 1) return true;
+    const firstStatus = selectedModel.entries[0]?.status ?? "active";
+    return selectedModel.entries.every(
+      (entry) => (entry.status ?? "active") === firstStatus,
+    );
+  }, [selectedModel]);
+
   return (
     <div className="flex h-full min-h-0 max-h-[320px] w-full flex-col overflow-hidden border-b lg:max-h-none lg:border-b-0 lg:border-r">
       <div className="flex items-start justify-between gap-2 px-3 py-3 sm:px-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{selectedModel?.label ?? "Entries"}</h3>
-          <p className="text-xs text-muted-foreground">
-            Active and inactive collection items
-          </p>
         </div>
         {selectedModel && allowCreateEntry ? (
           <Button variant="outline" size="sm" onClick={onToggleCreateEntry}>
@@ -184,12 +189,14 @@ export function CmsEntriesSidebar({
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1 self-center whitespace-nowrap">
-                        <Badge
-                          variant={entry.status === "inactive" ? "outline" : "success"}
-                          className="px-1.5 py-0 text-[11px]"
-                        >
-                          {entry.status ?? "active"}
-                        </Badge>
+                        {!hasUniformStatus ? (
+                          <Badge
+                            variant={entry.status === "inactive" ? "outline" : "success"}
+                            className="px-1.5 py-0 text-[11px]"
+                          >
+                            {entry.status ?? "active"}
+                          </Badge>
+                        ) : null}
                         {typeof entry.sortOrder === "number" ? (
                           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
                             #{entry.sortOrder}

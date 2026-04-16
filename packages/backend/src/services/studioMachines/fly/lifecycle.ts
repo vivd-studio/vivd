@@ -251,6 +251,10 @@ export async function suspendOrStopMachine(options: {
   getMachine: (machineId: string) => Promise<FlyMachine>;
   suspendMachine: (machineId: string) => Promise<void>;
   stopMachine: (machineId: string) => Promise<void>;
+  onFallbackStop?: (details: {
+    machineId: string;
+    lastError: string | null;
+  }) => void | Promise<void>;
   waitForState: (options: {
     machineId: string;
     state: FlyMachineState;
@@ -350,6 +354,10 @@ export async function suspendOrStopMachine(options: {
   console.warn(
     `[FlyMachines] Failed to suspend machine ${options.machineId}: ${lastError || "unknown error"}; falling back to stop.`,
   );
+  await options.onFallbackStop?.({
+    machineId: options.machineId,
+    lastError,
+  });
   try {
     await options.stopMachine(options.machineId);
     await options.waitForState({

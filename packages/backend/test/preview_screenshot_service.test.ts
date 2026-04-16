@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  getInstallProfileMock,
+  resolvePolicyMock,
   getUrlMock,
   captureScreenshotMock,
 } = vi.hoisted(() => ({
-  getInstallProfileMock: vi.fn(),
+  resolvePolicyMock: vi.fn(),
   getUrlMock: vi.fn(),
   captureScreenshotMock: vi.fn(),
 }));
 
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
-    getInstallProfile: getInstallProfileMock,
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -39,11 +39,13 @@ import {
 
 describe("PreviewScreenshotService", () => {
   beforeEach(() => {
-    getInstallProfileMock.mockReset();
+    resolvePolicyMock.mockReset();
     getUrlMock.mockReset();
     captureScreenshotMock.mockReset();
 
-    getInstallProfileMock.mockResolvedValue("solo");
+    resolvePolicyMock.mockResolvedValue({
+      controlPlane: { mode: "path_based" },
+    });
     getUrlMock.mockResolvedValue({
       studioId: "studio-1",
       url: "https://studio.example:4100",
@@ -79,9 +81,9 @@ describe("PreviewScreenshotService", () => {
     ).toBe("preview-pricing-1600x1000-x0-y1200.png");
   });
 
-  it("prefers compatibility routes for solo installs and resolves preview-relative paths under them", () => {
+  it("prefers compatibility routes for path-based installs and resolves preview-relative paths under them", () => {
     const baseUrl = resolvePreviewScreenshotBaseUrl({
-      installProfile: "solo",
+      controlPlaneMode: "path_based",
       backendUrl: null,
       runtimeUrl: "https://studio.example:4100",
       compatibilityUrl: "https://app.example/_studio/runtime-1",
@@ -96,7 +98,7 @@ describe("PreviewScreenshotService", () => {
 
   it("prefers the backend runtime URL when browser-facing preview URLs are local-only", () => {
     const baseUrl = resolvePreviewScreenshotBaseUrl({
-      installProfile: "solo",
+      controlPlaneMode: "path_based",
       backendUrl: "http://studio-site-1-v1-a3f6fad7ba:3100",
       runtimeUrl: "http://app.localhost:4100",
       compatibilityUrl: "http://app.localhost/_studio/runtime-1",

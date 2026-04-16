@@ -136,6 +136,11 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   const { config, isLoading: isConfigLoading } = useAppConfig();
   const location = useLocation();
   const recentProjects = useRecentProjects();
+  const showPlatformAdminSections =
+    config.showPlatformAdminSections ?? (config.installProfile === "platform");
+  const instanceSectionLabel =
+    config.instanceSectionLabel ??
+    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
@@ -339,7 +344,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
         },
         {
           id: "superadmin:instance",
-          label: config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance",
+          label: instanceSectionLabel,
           section: "Super Admin",
           to: `${ROUTES.SUPERADMIN_BASE}?section=instance`,
           keywords: ["instance", "profile", "capabilities", "limits"],
@@ -347,7 +352,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
         },
       );
 
-      if (config.installProfile === "platform") {
+      if (showPlatformAdminSections) {
         items.push(
           {
             id: "superadmin:orgs",
@@ -419,8 +424,9 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   }, [
     isActive,
     isClientEditor,
-    config.installProfile,
     config.instanceAdminLabel,
+    instanceSectionLabel,
+    showPlatformAdminSections,
     isOrgAdmin,
     isOrgOwner,
     isOrgTabActive,

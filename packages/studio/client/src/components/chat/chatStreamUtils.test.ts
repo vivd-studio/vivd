@@ -157,14 +157,14 @@ describe("chatStreamUtils reasoning sanitization", () => {
     ).toBe("Edited file");
   });
 
-  it("formats unknown bash tool labels as generic technical actions", () => {
+  it("formats unknown bash tool labels as softer generic steps", () => {
     expect(
       getToolActivityLabel({
         type: "tool",
         tool: "bash",
         status: "running",
       }),
-    ).toBe("Running technical task...");
+    ).toBe("Working on this step...");
 
     expect(
       getToolActivityLabel({
@@ -172,7 +172,21 @@ describe("chatStreamUtils reasoning sanitization", () => {
         tool: "bash",
         status: "completed",
       }),
-    ).toBe("Completed technical task");
+    ).toBe("Finished this step");
+  });
+
+  it("uses the bash description itself when available", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "bash",
+        status: "completed",
+        input: {
+          command: "npm run cms:validate",
+          description: "Validate the CMS schema and content.",
+        },
+      }),
+    ).toBe("Validate the CMS schema and content.");
   });
 
   it("formats recognized bash commands with translated argument-aware labels", () => {
@@ -183,7 +197,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         status: "running",
         input: { command: "vivd publish deploy --domain example.com" },
       }),
-    ).toBe("Deploying to example.com...");
+    ).toBe("Publishing to example.com...");
 
     expect(
       getToolActivityLabel({
@@ -192,7 +206,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         status: "completed",
         input: { command: "vivd publish deploy --domain example.com" },
       }),
-    ).toBe("Deployed to example.com");
+    ).toBe("Published to example.com");
   });
 
   it("formats vivd_image_ai tool labels as image generation states", () => {

@@ -14,8 +14,16 @@ export interface AppConfig {
   experimentalSoloModeEnabled: boolean;
   /** Whether parked self-host/operator admin features are intentionally exposed. */
   selfHostAdminFeaturesEnabled: boolean;
+  /** Whether experimental self-host compatibility is currently active. */
+  selfHostCompatibilityEnabled: boolean;
+  /** Whether the parked self-host admin tools are currently visible. */
+  selfHostAdminFeaturesVisible: boolean;
   /** Profile-aware label for the instance admin surface. */
   instanceAdminLabel: string;
+  /** Profile-aware label for the main instance tab. */
+  instanceSectionLabel: string;
+  /** Whether platform-only admin sections should be shown. */
+  showPlatformAdminSections: boolean;
   /** Instance capability flags resolved by the backend. */
   capabilities: {
     multiOrg: boolean;
@@ -64,7 +72,11 @@ const defaultConfig: AppConfig = {
   installProfile: "platform",
   experimentalSoloModeEnabled: false,
   selfHostAdminFeaturesEnabled: false,
+  selfHostCompatibilityEnabled: false,
+  selfHostAdminFeaturesVisible: false,
   instanceAdminLabel: "Super Admin",
+  instanceSectionLabel: "Instance",
+  showPlatformAdminSections: true,
   capabilities: {
     multiOrg: true,
     tenantHosts: true,

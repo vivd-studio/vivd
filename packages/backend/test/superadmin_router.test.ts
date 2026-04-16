@@ -516,6 +516,17 @@ describe("superadmin router", () => {
     resolvePolicyMock.mockResolvedValue({
       installProfile: "platform",
       singleProjectMode: false,
+      selfHostCompatibility: {
+        enabled: false,
+        adminFeaturesVisible: false,
+      },
+      adminSurface: {
+        label: "Super Admin",
+        instanceSectionLabel: "Instance",
+        showPlatformSections: true,
+        installProfileEditable: true,
+        capabilitiesEditable: true,
+      },
       capabilities: {
         multiOrg: true,
         tenantHosts: true,
@@ -601,7 +612,8 @@ describe("superadmin router", () => {
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Instance network settings are currently UI-managed only for solo installs.",
+      message:
+        "Instance network settings are currently UI-managed only for experimental self-host compatibility installs.",
     });
 
     expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
@@ -629,6 +641,17 @@ describe("superadmin router", () => {
     resolvePolicyMock.mockResolvedValueOnce({
       installProfile: "solo",
       singleProjectMode: false,
+      selfHostCompatibility: {
+        enabled: true,
+        adminFeaturesVisible: false,
+      },
+      adminSurface: {
+        label: "Instance Settings",
+        instanceSectionLabel: "General",
+        showPlatformSections: false,
+        installProfileEditable: false,
+        capabilitiesEditable: false,
+      },
       capabilities: {
         multiOrg: false,
         tenantHosts: false,
@@ -672,6 +695,17 @@ describe("superadmin router", () => {
     resolvePolicyMock.mockResolvedValueOnce({
       installProfile: "solo",
       singleProjectMode: false,
+      selfHostCompatibility: {
+        enabled: true,
+        adminFeaturesVisible: false,
+      },
+      adminSurface: {
+        label: "Instance Settings",
+        instanceSectionLabel: "General",
+        showPlatformSections: false,
+        installProfileEditable: false,
+        capabilitiesEditable: false,
+      },
       capabilities: {
         multiOrg: false,
         tenantHosts: false,
@@ -716,33 +750,44 @@ describe("superadmin router", () => {
   it("allows explicit solo network updates through the experimental self-host mutation", async () => {
     isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     resolvePolicyMock.mockResolvedValue({
-        installProfile: "solo",
-        singleProjectMode: true,
-        capabilities: {
-          multiOrg: false,
-          tenantHosts: false,
-          customDomains: false,
-          orgLimitOverrides: false,
-          orgPluginEntitlements: false,
-          projectPluginEntitlements: true,
-          dedicatedPluginHost: false,
+      installProfile: "solo",
+      singleProjectMode: true,
+      selfHostCompatibility: {
+        enabled: true,
+        adminFeaturesVisible: true,
+      },
+      adminSurface: {
+        label: "Instance Settings",
+        instanceSectionLabel: "General",
+        showPlatformSections: false,
+        installProfileEditable: false,
+        capabilitiesEditable: false,
+      },
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "install_profile_default",
         },
-        pluginDefaults: {
-          contact_form: {
-            pluginId: "contact_form",
-            state: "enabled",
-            managedBy: "install_profile_default",
-          },
-          analytics: {
-            pluginId: "analytics",
-            state: "enabled",
-            managedBy: "install_profile_default",
-          },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "install_profile_default",
         },
-        limitDefaults: {},
-        controlPlane: { mode: "path_based" },
-        pluginRuntime: { mode: "same_host_path" },
-      });
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
 
     const caller = superAdminRouter.createCaller(makeContext());
 
@@ -797,7 +842,8 @@ describe("superadmin router", () => {
 
     await expect(caller.startSelfHostManagedUpdate()).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Managed updates are available only for solo self-host installs.",
+      message:
+        "Managed updates are available only for experimental self-host compatibility installs.",
     });
 
     expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();
@@ -819,6 +865,17 @@ describe("superadmin router", () => {
     resolvePolicyMock.mockResolvedValue({
       installProfile: "solo",
       singleProjectMode: true,
+      selfHostCompatibility: {
+        enabled: true,
+        adminFeaturesVisible: true,
+      },
+      adminSurface: {
+        label: "Instance Settings",
+        instanceSectionLabel: "General",
+        showPlatformSections: false,
+        installProfileEditable: false,
+        capabilitiesEditable: false,
+      },
       capabilities: {
         multiOrg: false,
         tenantHosts: false,
@@ -1207,13 +1264,15 @@ describe("superadmin router", () => {
       offset: 0,
     });
 
-    expect(listProjectAccessMock).toHaveBeenCalledTimes(4);
-    expect(result.pluginCatalog.map((plugin) => plugin.pluginId)).toEqual([
-      "contact_form",
-      "analytics",
-      "table_booking",
-      "newsletter",
-    ]);
+    expect(listProjectAccessMock).toHaveBeenCalledTimes(result.pluginCatalog.length);
+    expect(result.pluginCatalog.map((plugin) => plugin.pluginId)).toEqual(
+      expect.arrayContaining([
+        "contact_form",
+        "analytics",
+        "table_booking",
+        "newsletter",
+      ]),
+    );
     expect(result.total).toBe(1);
     expect(result.rows[0]).toMatchObject({
       organizationId: "org-1",

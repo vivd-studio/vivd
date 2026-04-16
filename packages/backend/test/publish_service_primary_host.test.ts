@@ -3,10 +3,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-const { getResolvedSettingsMock, normalizeDomainMock, getInstallProfileMock } = vi.hoisted(() => ({
+const { getResolvedSettingsMock, normalizeDomainMock, resolvePolicyMock } = vi.hoisted(() => ({
   getResolvedSettingsMock: vi.fn(),
   normalizeDomainMock: vi.fn(),
-  getInstallProfileMock: vi.fn(),
+  resolvePolicyMock: vi.fn(),
 }));
 
 vi.mock("../src/services/system/InstanceNetworkSettingsService", () => ({
@@ -25,7 +25,7 @@ vi.mock("../src/services/publish/DomainService", () => ({
 
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
-    getInstallProfile: getInstallProfileMock,
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -46,7 +46,7 @@ describe("PublishService primary-host Caddy generation", () => {
     process.env = { ...envSnapshot };
     getResolvedSettingsMock.mockReset();
     normalizeDomainMock.mockReset();
-    getInstallProfileMock.mockReset();
+    resolvePolicyMock.mockReset();
     getResolvedSettingsMock.mockReturnValue({
       publicHost: "solo.example.com",
       tlsMode: "managed",
@@ -57,7 +57,9 @@ describe("PublishService primary-host Caddy generation", () => {
     normalizeDomainMock.mockImplementation((value: string) =>
       normalizeHostLike(value),
     );
-    getInstallProfileMock.mockResolvedValue("solo");
+    resolvePolicyMock.mockResolvedValue({
+      controlPlane: { mode: "path_based" },
+    });
   });
 
   afterEach(() => {
@@ -104,7 +106,9 @@ describe("PublishService primary-host Caddy generation", () => {
 
   it("keeps platform publishes as normal site blocks even when the domain matches the resolved public host", async () => {
     vi.resetModules();
-    getInstallProfileMock.mockResolvedValue("platform");
+    resolvePolicyMock.mockResolvedValue({
+      controlPlane: { mode: "host_based" },
+    });
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-platform-host-"));
     const publishedDir = path.join(tempDir, "published");

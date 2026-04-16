@@ -4,10 +4,11 @@ import {
   definePluginPackageDescriptors,
   extractPluginIds,
 } from "@vivd/plugin-sdk";
-import installedPlugin0 from "@vivd/plugin-contact-form/descriptor";
-import installedPlugin1 from "@vivd/plugin-analytics/descriptor";
-import installedPlugin2 from "@vivd/plugin-newsletter/descriptor";
-import installedPlugin3 from "@vivd/plugin-table-booking/descriptor";
+import installedPlugin0 from "@vivd/plugin-google-maps/descriptor";
+import installedPlugin1 from "@vivd/plugin-contact-form/descriptor";
+import installedPlugin2 from "@vivd/plugin-analytics/descriptor";
+import installedPlugin3 from "@vivd/plugin-newsletter/descriptor";
+import installedPlugin4 from "@vivd/plugin-table-booking/descriptor";
 
 export const installedPluginDescriptors =
   definePluginBundleEntries([
@@ -15,6 +16,7 @@ export const installedPluginDescriptors =
   installedPlugin1,
   installedPlugin2,
   installedPlugin3,
+  installedPlugin4,
   ] as const);
 
 export const installedPluginManifests = definePluginPackageDescriptors(

@@ -557,7 +557,7 @@ export class DomainService {
       ? this.normalizeHost(routing.controlPlaneHost)
       : null;
     if (
-      routing.instancePolicy.installProfile === "solo" &&
+      routing.instancePolicy.controlPlane.mode === "path_based" &&
       implicitPrimaryHost &&
       normalizedDomain === implicitPrimaryHost
     ) {

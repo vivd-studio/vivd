@@ -6,6 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY plugins/installed/package.json plugins/installed/package.json
 COPY plugins/sdk/package.json plugins/sdk/package.json
+COPY plugins/external/google-maps/package.json plugins/external/google-maps/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
@@ -18,7 +19,7 @@ COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/backend -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
 
 # Stage 2: Development
 FROM deps AS dev

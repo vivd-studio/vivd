@@ -270,6 +270,9 @@ function MessagePartBubble({
     const targetText = isRunning
       ? stripTrailingDots(toolLabelParts.target)
       : toolLabelParts.target;
+    const toolLabelText = [actionText, targetText].filter(Boolean).join(" ").trim();
+    const showInlineDescription =
+      !isBashTool && toolDescription && toolDescription !== toolLabelText;
     const toolActionLabel = (
       <span className="inline-flex shrink-0 items-baseline gap-1">
         <span className="font-bold">{actionText}</span>
@@ -285,7 +288,7 @@ function MessagePartBubble({
           ) : (
             <span className="inline-flex min-w-0 max-w-full items-baseline gap-1 whitespace-nowrap">
               {toolActionLabel}
-              {toolDescription && (
+              {showInlineDescription && (
                 <span
                   className="min-w-0 truncate text-muted-foreground/70 font-normal"
                   title={toolDescription}

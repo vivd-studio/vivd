@@ -166,7 +166,7 @@ export interface ExternalEmbedPluginPackageManifest<
     never,
     never,
     never,
-    never,
+    SharedProjectPluginUiDefinition | undefined,
     "external_embed"
   > {
   externalEmbed: ExternalEmbedContribution;

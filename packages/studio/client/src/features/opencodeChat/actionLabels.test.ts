@@ -27,21 +27,24 @@ describe("resolvePermissionRequestDisplay", () => {
       }),
     );
 
-    expect(result.title).toBe("Deploy to example.com");
-    expect(result.summary).toContain("example.com");
+    expect(result.title).toBe("Publish site");
+    expect(result.summary).toBe("This will publish the current version to:");
+    expect(result.destinationLabel).toBe("example.com");
+    expect(result.destinationUrl).toBe("https://example.com");
     expect(result.technicalPatterns).toEqual([
       "vivd publish deploy --domain example.com",
     ]);
   });
 
-  it("falls back to a generic technical-task label for unknown bash commands", () => {
+  it("uses the provided description for unknown bash permissions", () => {
     const result = resolvePermissionRequestDisplay(
       createPermissionRequest({
         patterns: ["npm run cms:validate"],
+        metadata: { description: "Validate the CMS content" },
       }),
     );
 
-    expect(result.title).toBe("Run a technical task");
+    expect(result.title).toBe("Validate the CMS content");
     expect(result.showTechnicalDetails).toBe(true);
   });
 });
@@ -55,7 +58,7 @@ describe("resolveToolActivityLabelParts", () => {
         toolInput: { command: "vivd publish deploy --domain example.com" },
       }),
     ).toEqual({
-      action: "Deploying",
+      action: "Publishing",
       target: "to example.com...",
     });
 
@@ -66,21 +69,23 @@ describe("resolveToolActivityLabelParts", () => {
         toolInput: { command: "vivd publish deploy --domain example.com" },
       }),
     ).toEqual({
-      action: "Deployed",
+      action: "Published",
       target: "to example.com",
     });
   });
 
-  it("uses a generic label for unknown bash commands", () => {
+  it("uses the description itself for unknown bash commands", () => {
     expect(
       resolveToolActivityLabelParts({
         toolName: "bash",
         status: "completed",
-        toolInput: { command: "npm run cms:validate" },
+        toolInput: {
+          command: "npm run cms:validate",
+          description: "Validate the CMS schema and content.",
+        },
       }),
     ).toEqual({
-      action: "Completed",
-      target: "technical task",
+      action: "Validate the CMS schema and content.",
     });
   });
 });

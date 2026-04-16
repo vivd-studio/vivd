@@ -16,6 +16,10 @@ import {
   UnsupportedPluginReadError,
   UnsupportedPluginActionError,
 } from "./core/module";
+import {
+  externalEmbedPluginService,
+  ExternalEmbedPluginNotEnabledError,
+} from "./externalEmbed/service";
 import { pluginEntitlementService } from "./PluginEntitlementService";
 import {
   derivePluginInstallState,
@@ -23,6 +27,7 @@ import {
 } from "./surfaceTypes";
 import {
   listPluginCatalogEntries,
+  getPluginManifest,
   type PluginCatalogEntry,
   type PluginId,
 } from "./catalog";
@@ -90,6 +95,14 @@ class ProjectPluginService {
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<{ instanceId: string; created: boolean; status: string }> {
+    const manifest = getPluginManifest(options.pluginId);
+    if (manifest.kind === "external_embed") {
+      return externalEmbedPluginService.ensurePluginInstance({
+        ...options,
+        manifest,
+      });
+    }
+
     return getPluginModule(options.pluginId).ensureInstance(options);
   }
 
@@ -98,6 +111,17 @@ class ProjectPluginService {
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<ProjectPluginInfoContractPayload> {
+    const manifest = getPluginManifest(options.pluginId);
+    if (manifest.kind === "external_embed") {
+      return buildPluginInfoContractPayload(
+        manifest.definition,
+        await externalEmbedPluginService.getInfoPayload({
+          ...options,
+          manifest,
+        }),
+      );
+    }
+
     const module = getPluginModule(options.pluginId);
     return buildPluginInfoContractPayload(
       module.definition,
@@ -111,6 +135,17 @@ class ProjectPluginService {
     pluginId: PluginId;
     config: Record<string, unknown>;
   }): Promise<ProjectPluginInfoContractPayload> {
+    const manifest = getPluginManifest(options.pluginId);
+    if (manifest.kind === "external_embed") {
+      return buildPluginInfoContractPayload(
+        manifest.definition,
+        await externalEmbedPluginService.updateConfig({
+          ...options,
+          manifest,
+        }),
+      );
+    }
+
     const module = getPluginModule(options.pluginId);
     return buildPluginInfoContractPayload(
       module.definition,
@@ -164,6 +199,7 @@ export {
   ContactFormPluginNotEnabledError,
   ContactFormRecipientRequiredError,
   ContactFormRecipientVerificationError,
+  ExternalEmbedPluginNotEnabledError,
   PluginActionArgumentError,
   UnsupportedPluginReadError,
   UnsupportedPluginActionError,

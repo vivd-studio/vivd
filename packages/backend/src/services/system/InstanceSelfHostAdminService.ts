@@ -139,8 +139,8 @@ export class InstanceSelfHostAdminService {
 
   async syncSelfHostedCaddyConfig(): Promise<boolean> {
     const envOverride = parseBooleanEnv(process.env.VIVD_SELFHOST_CADDY_UI_MANAGED);
-    const enabled =
-      envOverride ?? ((await installProfileService.getInstallProfile()) === "solo");
+    const instancePolicy = await installProfileService.resolvePolicy();
+    const enabled = envOverride ?? instancePolicy.selfHostCompatibility.enabled;
     if (!enabled) {
       return false;
     }

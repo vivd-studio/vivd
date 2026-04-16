@@ -5,7 +5,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("keeps the direct runtime origin for hosted platform installs", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "platform",
+        controlPlaneMode: "host_based",
         providerKind: "fly",
         requestHost: "felix-pahlke.vivd.studio",
         requestProtocol: "https",
@@ -18,7 +18,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("prefers the compatibility route for local platform hosts on non-fly providers", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "platform",
+        controlPlaneMode: "host_based",
         providerKind: "local",
         requestHost: "app.localhost:18080",
         requestProtocol: "http",
@@ -31,7 +31,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("prefers the compatibility route for local-development docker platform hosts", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "platform",
+        controlPlaneMode: "host_based",
         providerKind: "docker",
         requestHost: "app.localhost:18080",
         requestProtocol: "http",
@@ -41,10 +41,10 @@ describe("resolveStudioBrowserUrl", () => {
     ).toBe("http://app.localhost:18080/_studio/runtime-1");
   });
 
-  it("prefers the compatibility route for solo installs when the direct runtime uses a non-default port", () => {
+  it("prefers the compatibility route for path-based installs when the direct runtime uses a non-default port", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "solo",
+        controlPlaneMode: "path_based",
         providerKind: "docker",
         requestHost: "vivd.felixpahlke.de",
         requestProtocol: "https",
@@ -57,7 +57,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("prefers the same-origin compatibility route for local providers when the host uses a different origin than the dev server", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "solo",
+        controlPlaneMode: "path_based",
         providerKind: "local",
         requestHost: "app.localhost:18080",
         requestProtocol: "http",
@@ -70,7 +70,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("keeps the direct runtime origin when the request already targets the local dev server origin", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "solo",
+        controlPlaneMode: "path_based",
         providerKind: "local",
         requestHost: "app.localhost:4100",
         requestProtocol: "http",
@@ -83,7 +83,7 @@ describe("resolveStudioBrowserUrl", () => {
   it("falls back to the compatibility route when no direct runtime origin is available", () => {
     expect(
       resolveStudioBrowserUrl({
-        installProfile: "solo",
+        controlPlaneMode: "path_based",
         providerKind: "docker",
         requestHost: "vivd.felixpahlke.de",
         requestProtocol: "https",

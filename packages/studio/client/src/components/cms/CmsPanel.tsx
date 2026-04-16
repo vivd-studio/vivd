@@ -27,6 +27,7 @@ import {
 import type { CmsFieldDefinition, CmsModelRecord } from "@vivd/shared/cms";
 import {
   buildRichTextReference,
+  extractCmsEntryMarkdownBody,
   normalizeCmsEntryValuesForSave,
   deriveCmsLocales,
   getCmsEntryFileFormat,
@@ -109,14 +110,24 @@ export function CmsPanel({
     null,
   );
   const [sidecarDrafts, setSidecarDrafts] = useState<Record<string, string>>({});
+  const [markdownBodyDraft, setMarkdownBodyDraft] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loadingSidecars, setLoadingSidecars] = useState(false);
+  const [loadingMarkdownBody, setLoadingMarkdownBody] = useState(false);
   const [creatingModel, setCreatingModel] = useState(false);
   const [newModelKey, setNewModelKey] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
   const [newEntryKey, setNewEntryKey] = useState("");
   const [editorMode, setEditorMode] = useState<"entry" | "model">("entry");
+  const [activeLocale, setActiveLocale] = useState<string | null>(() => {
+    try {
+      const stored = localStorage.getItem("cmsPanel.activeLocale");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const collectionsPanel = useResizablePanel({
     storageKey: "cmsPanel.collectionsWidth",
     defaultWidth: 240,
@@ -168,7 +179,11 @@ export function CmsPanel({
     : true;
 
   const serializeEntryContent = useCallback(
-    async (relativePath: string, nextValues: unknown) => {
+    async (
+      relativePath: string,
+      nextValues: unknown,
+      markdownBodyOverride?: string,
+    ) => {
       const format = getCmsEntryFileFormat(relativePath);
       const normalizedValues =
         selectedModel && nextValues && typeof nextValues === "object" && !Array.isArray(nextValues)
@@ -186,7 +201,12 @@ export function CmsPanel({
         }
         currentContent = await response.text();
       }
-      return serializeCmsEntryValues(relativePath, normalizedValues, currentContent);
+      return serializeCmsEntryValues(
+        relativePath,
+        normalizedValues,
+        currentContent,
+        markdownBodyOverride,
+      );
     },
     [projectSlug, report?.sourceKind, selectedModel, version],
   );
@@ -232,8 +252,10 @@ export function CmsPanel({
     if (!selectedModel || !selectedEntry) {
       setDraftValues(null);
       setSidecarDrafts({});
+      setMarkdownBodyDraft(null);
       setIsDirty(false);
       setLoadingSidecars(false);
+      setLoadingMarkdownBody(false);
       return;
     }
 
@@ -277,6 +299,39 @@ export function CmsPanel({
       cancelled = true;
     };
   }, [projectSlug, version, selectedEntry, selectedModel]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedEntry || getCmsEntryFileFormat(selectedEntry.relativePath) !== "markdown") {
+      setMarkdownBodyDraft(null);
+      setLoadingMarkdownBody(false);
+      return;
+    }
+
+    setLoadingMarkdownBody(true);
+    void fetch(buildAssetFileUrl(projectSlug, version, selectedEntry.relativePath))
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load ${selectedEntry.relativePath}`);
+        }
+        return response.text();
+      })
+      .then((content) => {
+        if (cancelled) return;
+        setMarkdownBodyDraft(extractCmsEntryMarkdownBody(content));
+        setLoadingMarkdownBody(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMarkdownBodyDraft("");
+        setLoadingMarkdownBody(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectSlug, selectedEntry, version]);
 
   const refreshCms = useCallback(async () => {
     await statusQuery.refetch();
@@ -390,7 +445,11 @@ export function CmsPanel({
         slug: projectSlug,
         version,
         relativePath: selectedEntry.relativePath,
-        content: await serializeEntryContent(selectedEntry.relativePath, draftValues),
+        content: await serializeEntryContent(
+          selectedEntry.relativePath,
+          draftValues,
+          selectedEntryFormat === "markdown" ? (markdownBodyDraft ?? "") : undefined,
+        ),
       });
 
       const sidecars = collectRichTextSidecars(
@@ -443,10 +502,26 @@ export function CmsPanel({
     serializeEntryContent,
     isSelectedEntryWritable,
     selectedEntry,
+    selectedEntryFormat,
     selectedModel,
     sidecarDrafts,
+    markdownBodyDraft,
     version,
   ]);
+
+  const handleMarkdownBodyChange = useCallback((nextValue: string) => {
+    setMarkdownBodyDraft(nextValue);
+    setIsDirty(true);
+  }, []);
+
+  const handleActiveLocaleChange = useCallback((locale: string | null) => {
+    setActiveLocale(locale);
+    try {
+      localStorage.setItem("cmsPanel.activeLocale", JSON.stringify(locale));
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   const handleDeleteEntry = useCallback(async () => {
     if (!selectedEntry) return;
@@ -948,6 +1023,7 @@ export function CmsPanel({
                 draftValues={draftValues}
                 defaultLocale={defaultLocale}
                 locales={locales}
+                activeLocale={activeLocale}
                 sidecarDrafts={sidecarDrafts}
                 canUseAiImages={canUseAiImages}
                 referenceOptions={referenceOptions}
@@ -963,12 +1039,16 @@ export function CmsPanel({
                 busy={busy}
                 isSaving={isSaving}
                 loadingSidecars={loadingSidecars}
+                markdownBody={selectedEntryFormat === "markdown" ? markdownBodyDraft ?? "" : null}
+                loadingMarkdownBody={loadingMarkdownBody}
                 setEditingTextFile={setEditingTextFile}
                 applyDraftValue={applyDraftValue}
                 handleRichTextChange={handleRichTextChange}
                 openAssetReference={openAssetReference}
                 openExplorer={openExplorer}
                 onMoveEntry={handleMoveEntry}
+                onMarkdownBodyChange={handleMarkdownBodyChange}
+                onActiveLocaleChange={handleActiveLocaleChange}
                 onSaveEntry={() => void handleSaveEntry()}
                 onDeleteEntry={() => void handleDeleteEntry()}
               />

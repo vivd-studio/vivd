@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  getInstallProfileMock,
+  resolvePolicyMock,
   getUrlMock,
   capturePreviewLogsMock,
 } = vi.hoisted(() => ({
-  getInstallProfileMock: vi.fn(),
+  resolvePolicyMock: vi.fn(),
   getUrlMock: vi.fn(),
   capturePreviewLogsMock: vi.fn(),
 }));
 
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
-    getInstallProfile: getInstallProfileMock,
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -33,11 +33,13 @@ import { previewLogsService } from "../src/services/project/PreviewLogsService";
 
 describe("PreviewLogsService", () => {
   beforeEach(() => {
-    getInstallProfileMock.mockReset();
+    resolvePolicyMock.mockReset();
     getUrlMock.mockReset();
     capturePreviewLogsMock.mockReset();
 
-    getInstallProfileMock.mockResolvedValue("solo");
+    resolvePolicyMock.mockResolvedValue({
+      controlPlane: { mode: "path_based" },
+    });
     getUrlMock.mockResolvedValue({
       studioId: "studio-1",
       url: "https://studio.example:4100",

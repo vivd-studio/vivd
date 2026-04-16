@@ -2,6 +2,8 @@
 
 Vivd is an AI-powered website builder: generate a site, preview/edit it in Studio, and publish it via Caddy.
 
+- If a prompt says `Vivid`, interpret it as `Vivd` unless the surrounding context clearly means something else; speech input often transcribes the product name that way.
+
 ## Project State & Roadmap
 
 - See `PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
@@ -18,6 +20,7 @@ Vivd uses npm workspaces with a single root `package.json` and root `package-loc
 - `packages/shared`: shared contracts, types, and cross-runtime helpers.
 - `plugins/sdk`: plugin contract and manifest SDK boundary.
 - `plugins/installed`: instance-level installed plugin registry consumed by backend/frontend/CLI/Studio hosts.
+- `plugins/external/*`: curated external/embed-style plugin packages with host-managed runtime behavior.
 - `plugins/native/*`: extracted first-party plugin packages.
 - `packages/theme`: shared CSS/theme tokens.
 - `packages/docs`: public docs site.

@@ -42,8 +42,11 @@ async function buildInstanceSettingsPayload() {
   return {
     installProfile: policy.installProfile,
     singleProjectMode: policy.singleProjectMode,
-    instanceAdminLabel:
-      policy.installProfile === "solo" ? "Instance Settings" : "Super Admin",
+    selfHostCompatibilityEnabled: policy.selfHostCompatibility.enabled,
+    selfHostAdminFeaturesVisible: policy.selfHostCompatibility.adminFeaturesVisible,
+    instanceAdminLabel: policy.adminSurface.label,
+    instanceSectionLabel: policy.adminSurface.instanceSectionLabel,
+    showPlatformAdminSections: policy.adminSurface.showPlatformSections,
     capabilities: policy.capabilities,
     pluginDefaults: Object.fromEntries(
       PLUGIN_IDS.map((pluginId) => [
@@ -99,14 +102,14 @@ export const instanceSuperAdminProcedures = {
         });
       }
 
-      if (currentPolicy.installProfile === "solo" && input.installProfile) {
+      if (!currentPolicy.adminSurface.installProfileEditable && input.installProfile) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: SOLO_INSTALL_PROFILE_LOCK_MESSAGE,
         });
       }
 
-      if (currentPolicy.installProfile === "solo" && input.capabilities) {
+      if (!currentPolicy.adminSurface.capabilitiesEditable && input.capabilities) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: SOLO_CAPABILITIES_LOCK_MESSAGE,

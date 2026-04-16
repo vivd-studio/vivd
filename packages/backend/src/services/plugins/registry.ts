@@ -53,11 +53,11 @@ export type {
 
 const pluginModules = Object.fromEntries(
   []
-) as Record<PluginId, PluginModule>;
+) as Partial<Record<PluginId, PluginModule>>;
 
 let pluginModulesInitialized = false;
 
-function getPluginModulesRecord(): Record<PluginId, PluginModule> {
+function getPluginModulesRecord(): Partial<Record<PluginId, PluginModule>> {
   if (!pluginModulesInitialized) {
     Object.assign(
       pluginModules,
@@ -76,9 +76,19 @@ function getPluginModulesRecord(): Record<PluginId, PluginModule> {
 
 export function listPluginModules(): PluginModule[] {
   const modules = getPluginModulesRecord();
-  return listPluginDefinitions().map((plugin) => modules[plugin.pluginId]);
+  return listPluginDefinitions().flatMap((plugin) =>
+    modules[plugin.pluginId] ? [modules[plugin.pluginId]!] : [],
+  );
+}
+
+export function getOptionalPluginModule(pluginId: PluginId): PluginModule | null {
+  return getPluginModulesRecord()[pluginId] ?? null;
 }
 
 export function getPluginModule(pluginId: PluginId): PluginModule {
-  return getPluginModulesRecord()[pluginId];
+  const module = getOptionalPluginModule(pluginId);
+  if (!module) {
+    throw new Error(`Plugin ${pluginId} does not expose a backend module`);
+  }
+  return module;
 }

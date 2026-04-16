@@ -20,6 +20,7 @@ export interface CmsFieldRendererProps {
   selectedModel: CmsModelRecord | null;
   sidecarDrafts: Record<string, string>;
   canUseAiImages: boolean;
+  activeLocale?: string | null;
   readOnly?: boolean;
   referenceOptions: Array<{
     value: string;

@@ -50,6 +50,12 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("Do not invent or reintroduce a parallel Vivd YAML schema contract");
     expect(prompt).toContain("Vivd adapts to Astro Content Collections internally");
     expect(prompt).toContain("default to Astro's `Image` component");
+    expect(prompt).toContain("does not create CMS preview ownership");
+    expect(prompt).toContain("Derived or reformatted render points");
+    expect(prompt).toContain("src={entry.data.image}");
+    expect(prompt).toContain("Astro-relative path such as `../media/...`");
+    expect(prompt).toContain("explicit emoji fallbacks such as `Apple Color Emoji`");
+    expect(prompt).toContain("Before finishing a CMS-heavy generation or refactor");
     expect(prompt).toContain("Do not point page markup at raw filesystem-like `src/content/media/...` paths");
     expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");

@@ -263,12 +263,18 @@ export function InstanceSettingsTab() {
   const [pendingManagedUpdate, setPendingManagedUpdate] = useState<PendingManagedUpdate | null>(
     () => readPendingManagedUpdate(),
   );
-  const effectiveInstallProfile = settings?.installProfile ?? null;
-  const isSoloInstall = effectiveInstallProfile === "solo";
-  const isPlatformInstall = effectiveInstallProfile === "platform";
+  const selfHostCompatibilityEnabled = settings
+    ? (settings.selfHostCompatibilityEnabled ?? settings.controlPlane.mode === "path_based")
+    : config.selfHostCompatibilityEnabled;
+  const isPlatformInstall = settings
+    ? (settings.showPlatformAdminSections ?? settings.controlPlane.mode === "host_based")
+    : config.showPlatformAdminSections;
   const isExperimentalSoloInstall =
-    isSoloInstall && isExperimentalSoloInstallEnabled(config);
-  const selfHostAdminFeaturesVisible = isSoloInstall && showSelfHostAdminFeatures(config);
+    selfHostCompatibilityEnabled && isExperimentalSoloInstallEnabled(config);
+  const selfHostAdminFeaturesVisible = settings
+    ? (settings.selfHostAdminFeaturesVisible ??
+      (selfHostCompatibilityEnabled && showSelfHostAdminFeatures(config)))
+    : showSelfHostAdminFeatures(config);
   const waitingForUpdate = !!pendingManagedUpdate;
 
   useEffect(() => {
@@ -502,7 +508,7 @@ export function InstanceSettingsTab() {
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label>Install profile</Label>
-            {isSoloInstall ? (
+            {selfHostCompatibilityEnabled ? (
               <>
                 <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
                   <Badge variant="secondary">Solo</Badge>
@@ -569,7 +575,7 @@ export function InstanceSettingsTab() {
       <InstanceRuntimeAdminSection
         isExperimentalSoloInstall={isExperimentalSoloInstall}
         isPlatformInstall={isPlatformInstall}
-        isSoloInstall={isSoloInstall}
+        selfHostCompatibilityEnabled={selfHostCompatibilityEnabled}
         selfHostAdminFeaturesVisible={selfHostAdminFeaturesVisible}
         software={software}
         softwareIsLoading={softwareQuery.isLoading}

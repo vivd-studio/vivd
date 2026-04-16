@@ -32,11 +32,11 @@ function isLocalDevelopmentPublicOrigin(): boolean {
 }
 
 export function areStudioCompatibilityRoutesEnabled(
-  installProfile: InstallProfile,
+  controlPlaneMode: "path_based" | "host_based",
   providerKind?: StudioMachineProviderKind,
   localDevelopmentOrigin = false,
 ): boolean {
-  if (installProfile === "solo") {
+  if (controlPlaneMode === "path_based") {
     return true;
   }
 
@@ -66,19 +66,24 @@ function readEnvInstallProfileFallback(): InstallProfile {
   return "platform";
 }
 
+function readEnvControlPlaneModeFallback(): "path_based" | "host_based" {
+  return readEnvInstallProfileFallback() === "solo" ? "path_based" : "host_based";
+}
+
 export async function shouldCreateStudioCompatibilityRoutes(
   providerKind?: StudioMachineProviderKind,
 ): Promise<boolean> {
   const localDevelopmentOrigin = isLocalDevelopmentPublicOrigin();
   try {
+    const instancePolicy = await installProfileService.resolvePolicy();
     return areStudioCompatibilityRoutesEnabled(
-      await installProfileService.getInstallProfile(),
+      instancePolicy.controlPlane.mode,
       providerKind,
       localDevelopmentOrigin,
     );
   } catch {
     return areStudioCompatibilityRoutesEnabled(
-      readEnvInstallProfileFallback(),
+      readEnvControlPlaneModeFallback(),
       providerKind,
       localDevelopmentOrigin,
     );

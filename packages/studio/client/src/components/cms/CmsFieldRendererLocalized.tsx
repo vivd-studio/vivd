@@ -28,6 +28,7 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     selectedModel,
     sidecarDrafts,
     canUseAiImages,
+    activeLocale,
     readOnly = false,
     applyDraftValue,
     handleRichTextChange,
@@ -43,11 +44,15 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
       ? (rawValue as Record<string, unknown>)
       : {};
-  const localizedFieldLocales = getLocalizedFieldLocales(
+  const allLocales = getLocalizedFieldLocales(
     locales,
     defaultLocale,
     localizedValue,
   );
+  const localizedFieldLocales =
+    activeLocale && allLocales.includes(activeLocale)
+      ? [activeLocale]
+      : allLocales;
   const fieldId = fieldPath.map(String).join(".");
   const label = getFieldLabel(fieldKey, field);
   const assetPaths = getAssetFieldPaths(selectedModel, selectedEntryKey, localizedValue);
@@ -62,9 +67,9 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
       <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
         <div>
           <Label className="text-sm font-medium">{label}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Markdown sidecars stored next to the entry.
-          </p>
+          {localizedFieldLocales.length > 1 ? (
+            <p className="mt-1 text-xs text-muted-foreground">Multilingual</p>
+          ) : null}
         </div>
         <div className="grid gap-3 xl:grid-cols-2">
           {localizedFieldLocales.map((locale) => {
@@ -107,9 +112,9 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
       <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
         <div>
           <Label className="text-sm font-medium">{label}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Stored per locale as file references in the entry.
-          </p>
+          {localizedFieldLocales.length > 1 ? (
+            <p className="mt-1 text-xs text-muted-foreground">Multilingual</p>
+          ) : null}
         </div>
         <div className="grid gap-3 xl:grid-cols-2">
           {localizedFieldLocales.map((locale) => (
@@ -149,9 +154,9 @@ export function CmsFieldRendererLocalized(props: CmsFieldRendererProps) {
     <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
       <div>
         <Label className="text-sm font-medium">{label}</Label>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Stored per locale in the entry YAML.
-        </p>
+        {allLocales.length > 1 ? (
+          <p className="mt-1 text-xs text-muted-foreground">Multilingual</p>
+        ) : null}
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
         {localizedFieldLocales.map((locale) => (

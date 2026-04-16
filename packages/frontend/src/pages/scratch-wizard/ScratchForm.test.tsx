@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useScratchWizardMock } = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ function createFormMock() {
     formState: {
       errors: {},
     },
+    watch: vi.fn(() => ""),
   };
 }
 
@@ -74,37 +76,38 @@ describe("ScratchForm", () => {
     });
   });
 
-  it("renders the simplified brief-first scratch flow with a subtle optional reference-url section", () => {
-    render(<ScratchForm />);
+  it("renders the prompt-first scratch flow with inline attachment controls", () => {
+    render(<TooltipProvider><ScratchForm /></TooltipProvider>);
 
     expect(screen.getByText("Project name")).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText(/describe the website you want to create/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Design references")).toBeInTheDocument();
-    expect(screen.getByText("Brand assets")).toBeInTheDocument();
-    expect(screen.getByText("Inspiration only")).toBeInTheDocument();
-    expect(screen.getByText("Websites you like")).toBeInTheDocument();
+    // Attachment menu button (paperclip)
     expect(
-      screen.getByText(/optional inspiration urls/i),
+      screen.getByRole("button", { name: /attach files/i }),
     ).toBeInTheDocument();
+    // Reference URLs toggle (link icon)
     expect(
-      screen.getByText(/paste a few sites or design references we should loosely follow/i),
+      screen.getByRole("button", { name: /add reference urls/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/files to be used on the page/i),
-    ).toBeInTheDocument();
+    // Model selector
     expect(
       screen.getByRole("button", { name: /select initial generation model/i }),
     ).toBeInTheDocument();
 
+    // Old separate sections should NOT exist
+    expect(screen.queryByText("Design references")).not.toBeInTheDocument();
+    expect(screen.queryByText("Websites you like")).not.toBeInTheDocument();
     expect(screen.queryByText("Business type")).not.toBeInTheDocument();
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 
   it("keeps the main heading dark-mode agnostic in markup", () => {
-    render(<ScratchForm />);
+    render(<TooltipProvider><ScratchForm /></TooltipProvider>);
 
-    expect(screen.getByRole("heading", { name: "What should we build?" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "What should we build?" }),
+    ).toBeInTheDocument();
   });
 });

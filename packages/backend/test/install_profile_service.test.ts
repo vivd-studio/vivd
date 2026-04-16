@@ -130,6 +130,15 @@ describe("InstallProfileService", () => {
 
     await expect(installProfileService.resolvePolicy()).resolves.toMatchObject({
       installProfile: "solo",
+      selfHostCompatibility: {
+        enabled: true,
+        adminFeaturesVisible: false,
+      },
+      adminSurface: {
+        label: "Instance Settings",
+        instanceSectionLabel: "General",
+        showPlatformSections: false,
+      },
       capabilities: {
         multiOrg: false,
         tenantHosts: false,

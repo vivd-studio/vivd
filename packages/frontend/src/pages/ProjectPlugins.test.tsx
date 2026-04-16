@@ -196,10 +196,12 @@ describe("ProjectPlugins", () => {
       screen.getAllByRole("button", { name: "Enable for this project" }),
     ).toHaveLength(2);
     expect(
-      screen.getAllByText(
-        "This plugin is available for this project but has not been enabled yet.",
-      ),
+      screen.getAllByText("Available in this instance and ready to enable for this project."),
     ).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Contact Form details" })).toHaveAttribute(
+      "href",
+      "/vivd-studio/projects/site-1/plugins/contact_form",
+    );
 
     fireEvent.click(screen.getAllByRole("button", { name: "Enable for this project" })[0]!);
     expect(genericEnsureMutateMock).toHaveBeenCalledWith({
@@ -216,14 +218,23 @@ describe("ProjectPlugins", () => {
     );
 
     expect(screen.getByText("Search Console")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Open this plugin to view details, configuration, snippets, and plugin-specific actions.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open plugin" })).toHaveAttribute(
+    expect(screen.getByText("Configured for this project and ready to open.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Search Console details" })).toHaveAttribute(
       "href",
       "/vivd-studio/projects/site-1/plugins/search_console",
     );
+  });
+
+  it("shows the overview summary and enabled plugin instance metadata", () => {
+    render(
+      <MemoryRouter>
+        <ProjectPlugins />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Overview")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ready to enable" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Enabled" })).toBeInTheDocument();
+    expect(screen.getByText(/Instance enabled/)).toBeInTheDocument();
   });
 });

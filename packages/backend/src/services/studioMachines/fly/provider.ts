@@ -133,6 +133,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   private reconcileInFlight: Promise<FlyStudioMachineReconcileResult> | null = null;
   private lastActivityByStudioKey = new Map<string, number>();
   private idleStopInFlight = new Set<string>();
+  private suspendFallbackReasons = new Map<string, string>();
 
   constructor() {
     // Avoid log spam if Fly isn't configured yet.
@@ -329,13 +330,28 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   }
 
   private async suspendOrStopMachine(machineId: string): Promise<"suspended" | "stopped"> {
-    return suspendOrStopMachine({
+    this.suspendFallbackReasons.delete(machineId);
+    const result = await suspendOrStopMachine({
       machineId,
       getMachine: (id) => this.getMachine(id),
       suspendMachine: (id) => this.apiClient.suspendMachine(id),
       stopMachine: (id) => this.apiClient.stopMachine(id),
+      onFallbackStop: ({ machineId: failedMachineId, lastError }) => {
+        this.suspendFallbackReasons.set(
+          failedMachineId,
+          lastError || "unknown error",
+        );
+      },
       waitForState: (options) => this.waitForState(options),
     });
+    if (result === "suspended") {
+      this.suspendFallbackReasons.delete(machineId);
+    }
+    return result;
+  }
+
+  private getLastSuspendFallbackReason(machineId: string): string | null {
+    return this.suspendFallbackReasons.get(machineId) || null;
   }
 
   private async cleanupRuntimeBeforePark(machine: FlyMachine): Promise<void> {

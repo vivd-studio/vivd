@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@vivd/plugin-google-maps": ["./src/index.ts"],
+      "@vivd/plugin-google-maps/*": ["./src/*"],
+      "@vivd/plugin-sdk": ["../../sdk/src/index.ts"],
+      "@vivd/plugin-sdk/*": ["../../sdk/src/*"]
+    }
+  },
+  "include": ["src"]
+}

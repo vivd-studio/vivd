@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStoredAssetReferencePath,
   buildRelativeReferencePath,
+  extractCmsEntryMarkdownBody,
   deriveCmsLocales,
   buildDefaultFieldValue,
   getCmsEntryFileFormat,
@@ -112,6 +113,45 @@ Body content.
     expect(content).toContain("order: 2");
     expect(content).toContain("# Hello");
     expect(content).toContain("Body content.");
+  });
+
+  it("extracts markdown entry body without frontmatter padding", () => {
+    expect(
+      extractCmsEntryMarkdownBody(`---
+title: Hello
+---
+
+# Heading
+
+Body content.
+`),
+    ).toBe(`# Heading
+
+Body content.
+`);
+  });
+
+  it("serializes markdown entries with an explicit body override", () => {
+    const content = serializeCmsEntryValues(
+      "src/content/blog/post.md",
+      {
+        title: "Updated",
+      },
+      `---
+title: Old
+---
+
+Old body.
+`,
+      `# Fresh body
+
+New content.
+`,
+    );
+
+    expect(content).toContain("title: Updated");
+    expect(content).toContain("# Fresh body");
+    expect(content).not.toContain("Old body.");
   });
 
   it("treats obvious string image fields as image assets in the Studio editor", () => {

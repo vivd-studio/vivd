@@ -6,6 +6,8 @@ export type ToolActivityLabelParts = { action: string; target?: string };
 export interface ResolvedPermissionRequestDisplay {
   title: string;
   summary: string;
+  destinationLabel?: string;
+  destinationUrl?: string;
   technicalPermission: string;
   technicalPatterns: string[];
   showTechnicalDetails: boolean;
@@ -14,6 +16,8 @@ export interface ResolvedPermissionRequestDisplay {
 interface ResolvedCommandAction {
   displayTitle: string;
   displaySummary?: string;
+  destinationLabel?: string;
+  destinationUrl?: string;
   running: ToolActivityLabelParts;
   completed: ToolActivityLabelParts;
   error: ToolActivityLabelParts;
@@ -146,29 +150,31 @@ const COMMAND_ACTION_DEFINITIONS: CommandActionDefinition[] = [
 
       if (domain) {
         return {
-          displayTitle: `Deploy to ${domain}`,
-          displaySummary: `Publish the current version to ${domain}.`,
-          running: { action: "Deploying", target: `to ${domain}...` },
-          completed: { action: "Deployed", target: `to ${domain}` },
+          displayTitle: "Publish site",
+          displaySummary: "This will publish the current version to:",
+          destinationLabel: domain,
+          destinationUrl: toPublicUrl(domain),
+          running: { action: "Publishing", target: `to ${domain}...` },
+          completed: { action: "Published", target: `to ${domain}` },
           error: { action: "Deployment failed" },
         };
       }
 
       if (environment) {
         return {
-          displayTitle: `Deploy to ${environment}`,
+          displayTitle: "Publish site",
           displaySummary: `Publish the current version to the ${environment} environment.`,
-          running: { action: "Deploying", target: `to ${environment}...` },
-          completed: { action: "Deployed", target: `to ${environment}` },
+          running: { action: "Publishing", target: `to ${environment}...` },
+          completed: { action: "Published", target: `to ${environment}` },
           error: { action: "Deployment failed" },
         };
       }
 
       return {
-        displayTitle: "Deploy the site",
+        displayTitle: "Publish site",
         displaySummary: "Publish the current version.",
-        running: { action: "Deploying the site..." },
-        completed: { action: "Deployed the site" },
+        running: { action: "Publishing the site..." },
+        completed: { action: "Published the site" },
         error: { action: "Deployment failed" },
       };
     },
@@ -253,6 +259,8 @@ export function resolvePermissionRequestDisplay(
           metadataSummary ??
           resolvedCommand.displaySummary ??
           "Approve or reject this action to let the run continue.",
+        destinationLabel: resolvedCommand.destinationLabel,
+        destinationUrl: resolvedCommand.destinationUrl,
         technicalPermission: request.permission,
         technicalPatterns,
         showTechnicalDetails: true,
@@ -264,7 +272,7 @@ export function resolvePermissionRequestDisplay(
         title: metadataDescription,
         summary:
           metadataSummary ??
-          "Approve or reject this technical task to let the run continue.",
+          "Approve this step to let the run continue.",
         technicalPermission: request.permission,
         technicalPatterns,
         showTechnicalDetails: true,
@@ -273,7 +281,7 @@ export function resolvePermissionRequestDisplay(
   }
 
   return {
-    title: request.permission === "bash" ? "Run a technical task" : "Approve requested access",
+    title: request.permission === "bash" ? "Approve this step" : "Approve requested access",
     summary:
       metadataSummary ??
       "Approve or reject this action to let the run continue.",
@@ -300,13 +308,18 @@ export function resolveToolActivityLabelParts(input: {
       return resolvedCommand.completed;
     }
 
+    const description = extractDescriptionText(input.toolInput);
+    if (description) {
+      return { action: description };
+    }
+
     if (input.status === "running") {
-      return { action: "Running", target: "technical task..." };
+      return { action: "Working on this step..." };
     }
     if (input.status === "error") {
-      return { action: "Technical task failed" };
+      return { action: "Couldn't finish this step" };
     }
-    return { action: "Completed", target: "technical task" };
+    return { action: "Finished this step" };
   }
 
   const builder = GENERIC_TOOL_LABEL_BUILDERS[
@@ -437,6 +450,16 @@ function extractCommandText(input: unknown): string | undefined {
   return undefined;
 }
 
+function extractDescriptionText(input: unknown): string | undefined {
+  const obj = parseObjectInput(input);
+  if (!obj || typeof obj.description !== "string") {
+    return undefined;
+  }
+
+  const normalized = obj.description.replace(/\s+/g, " ").trim();
+  return normalized || undefined;
+}
+
 function extractToolTargetName(input: unknown): string | undefined {
   if (typeof input === "string") {
     return pathToFilename(input);
@@ -490,4 +513,12 @@ function pathToFilename(pathLike: string): string | undefined {
   const withoutQuery = trimmed.split(/[?#]/)[0] ?? trimmed;
   const segments = withoutQuery.split(/[\\/]/).filter(Boolean);
   return segments[segments.length - 1] || undefined;
+}
+
+function toPublicUrl(value: string): string {
+  const trimmed = value.trim();
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
 }

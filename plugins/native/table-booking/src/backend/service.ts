@@ -131,8 +131,33 @@ function createRawToken(): string {
   return randomBytes(24).toString("hex");
 }
 
-function toIsoString(value: Date | null | undefined): string | null {
-  return value instanceof Date ? value.toISOString() : null;
+function coerceDateValue(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
+
+function toIsoString(value: unknown): string | null {
+  const parsed = coerceDateValue(value);
+  return parsed ? parsed.toISOString() : null;
+}
+
+function toDateTimeDisplayString(value: unknown, fallback: string): string {
+  const isoString = toIsoString(value);
+  if (isoString) return isoString;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return fallback;
+}
+
+function getServiceDateFallback(value: string): string {
+  return toIsoString(`${value}T00:00:00.000Z`) ?? value;
 }
 
 function toCount(value: unknown): number {
@@ -503,8 +528,10 @@ function canGuestCancelReservation(
   now: Date,
 ): boolean {
   if (reservation.status !== "confirmed") return false;
+  const serviceStartAt = coerceDateValue(reservation.serviceStartAt);
+  if (!serviceStartAt) return false;
   return (
-    reservation.serviceStartAt.getTime() - now.getTime() >=
+    serviceStartAt.getTime() - now.getTime() >=
     config.cancellationCutoffMinutes * 60_000
   );
 }
@@ -514,12 +541,19 @@ function toBookingRecord(
   config: TableBookingPluginConfig,
   now: Date,
 ): TableBookingRecord {
+  const serviceDateFallback = getServiceDateFallback(reservation.serviceDate);
   return {
     id: reservation.id,
     status: reservation.status,
     serviceDate: reservation.serviceDate,
-    serviceStartAt: reservation.serviceStartAt.toISOString(),
-    serviceEndAt: reservation.serviceEndAt.toISOString(),
+    serviceStartAt: toDateTimeDisplayString(
+      reservation.serviceStartAt,
+      serviceDateFallback,
+    ),
+    serviceEndAt: toDateTimeDisplayString(
+      reservation.serviceEndAt,
+      serviceDateFallback,
+    ),
     partySize: reservation.partySize,
     guestName: reservation.guestName,
     guestEmail: reservation.guestEmail,
@@ -527,7 +561,7 @@ function toBookingRecord(
     notes: reservation.notes ?? null,
     sourceHost: reservation.sourceHost ?? null,
     sourcePath: reservation.sourcePath ?? null,
-    createdAt: reservation.createdAt.toISOString(),
+    createdAt: toDateTimeDisplayString(reservation.createdAt, serviceDateFallback),
     cancelledAt: toIsoString(reservation.cancelledAt),
     completedAt: toIsoString(reservation.completedAt),
     noShowAt: toIsoString(reservation.noShowAt),
@@ -885,12 +919,18 @@ export function createTableBookingPluginService(
     };
 
     for (const reservation of reservations) {
+      const serviceStartAt = coerceDateValue(reservation.serviceStartAt);
+      const cancelledAt = coerceDateValue(reservation.cancelledAt);
+      const noShowAt = coerceDateValue(reservation.noShowAt);
+      const completedAt = coerceDateValue(reservation.completedAt);
+      const createdAt = coerceDateValue(reservation.createdAt);
+
       if (reservation.status === "confirmed") {
         if (reservation.serviceDate === today) {
           counts.bookingsToday += 1;
           counts.coversToday += reservation.partySize;
         }
-        if (reservation.serviceStartAt >= now) {
+        if (serviceStartAt && serviceStartAt >= now) {
           counts.upcomingBookings += 1;
           counts.upcomingCovers += reservation.partySize;
         }
@@ -899,22 +939,22 @@ export function createTableBookingPluginService(
       if (
         (reservation.status === "cancelled_by_guest" ||
           reservation.status === "cancelled_by_staff") &&
-        reservation.cancelledAt &&
-        reservation.cancelledAt >= startedAt
+        cancelledAt &&
+        cancelledAt >= startedAt
       ) {
         counts.cancelled += 1;
       }
-      if (reservation.status === "no_show" && reservation.noShowAt && reservation.noShowAt >= startedAt) {
+      if (reservation.status === "no_show" && noShowAt && noShowAt >= startedAt) {
         counts.noShow += 1;
       }
       if (
         reservation.status === "completed" &&
-        reservation.completedAt &&
-        reservation.completedAt >= startedAt
+        completedAt &&
+        completedAt >= startedAt
       ) {
         counts.completed += 1;
       }
-      if (reservation.createdAt >= startedAt) {
+      if (createdAt && createdAt >= startedAt) {
         counts.booked += 1;
       }
     }
@@ -1778,7 +1818,10 @@ export function createTableBookingPluginService(
           reservation: {
             guestName: row.reservation.guestName,
             serviceDate: row.reservation.serviceDate,
-            bookingDateTimeLabel: row.reservation.serviceStartAt.toISOString(),
+            bookingDateTimeLabel: toDateTimeDisplayString(
+              row.reservation.serviceStartAt,
+              getServiceDateFallback(row.reservation.serviceDate),
+            ),
             partySize: row.reservation.partySize,
           },
         };

@@ -43,6 +43,7 @@ const HOST_OWNED_PLUGIN_DEFAULT_ENABLEMENT_BY_PROFILE: Record<
   solo: {
     contact_form: true,
     analytics: true,
+    google_maps: true,
     newsletter: true,
     table_booking: true,
   },

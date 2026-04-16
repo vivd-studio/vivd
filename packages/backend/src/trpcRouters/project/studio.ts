@@ -101,10 +101,11 @@ async function resolveRuntimeContractUrls(options: {
   requestHost?: string | null;
   requestProtocol?: string | null;
 }) {
+  const instancePolicy = await installProfileService.resolvePolicy();
   const runtimeUrl = options.runtimeUrl ?? options.url;
   const compatibilityUrl = options.compatibilityUrl ?? null;
   const browserUrl = resolveStudioBrowserUrl({
-    installProfile: await installProfileService.getInstallProfile(),
+    controlPlaneMode: instancePolicy.controlPlane.mode,
     providerKind: studioMachineProvider.kind,
     requestHost: options.requestHost,
     requestProtocol: options.requestProtocol,

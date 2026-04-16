@@ -16,7 +16,7 @@ export function normalizePreviewCapturePath(
 }
 
 export function resolvePreviewCaptureBaseUrl(options: {
-  installProfile: "solo" | "platform";
+  controlPlaneMode: "path_based" | "host_based";
   backendUrl?: string | null;
   runtimeUrl?: string | null;
   compatibilityUrl?: string | null;
@@ -27,7 +27,7 @@ export function resolvePreviewCaptureBaseUrl(options: {
   const compatibilityUrl = options.compatibilityUrl?.trim() || null;
 
   const browserBaseUrl =
-    options.installProfile !== "platform" && compatibilityUrl
+    options.controlPlaneMode === "path_based" && compatibilityUrl
       ? compatibilityUrl
       : runtimeUrl || compatibilityUrl || options.url;
 

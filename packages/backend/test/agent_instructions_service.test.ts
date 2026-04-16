@@ -89,6 +89,14 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("Vivd adapts to Astro Content Collections internally");
     expect(result.instructions).toContain("update `src/content.config.ts`");
     expect(result.instructions).toContain("default to Astro's `Image` component");
+    expect(result.instructions).toContain("does not create CMS preview ownership");
+    expect(result.instructions).toContain("Derived or reformatted render points");
+    expect(result.instructions).toContain(
+      "src={entry.data.image}",
+    );
+    expect(result.instructions).toContain("Astro-relative path such as `../media/...`");
+    expect(result.instructions).toContain("explicit emoji fallbacks such as `Apple Color Emoji`");
+    expect(result.instructions).toContain("Before finishing a CMS-heavy generation or refactor");
     expect(result.instructions).toContain("Do not point page markup at raw filesystem-like `src/content/media/...` paths");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
     expect(result.instructions).toContain("vivd cms validate");

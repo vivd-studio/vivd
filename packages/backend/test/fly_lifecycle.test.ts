@@ -338,4 +338,48 @@ describe("Fly lifecycle helpers", () => {
       timeoutMs: 180_000,
     });
   });
+
+  it("reports the last suspend failure reason before falling back to stop", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi
+      .fn<() => Promise<FlyMachine>>()
+      .mockResolvedValueOnce(machine("started"))
+      .mockResolvedValueOnce(machine("started"))
+      .mockResolvedValueOnce(machine("started"))
+      .mockResolvedValueOnce(machine("started"));
+    const suspendMachine = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const stopMachine = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const onFallbackStop = vi.fn<
+      (details: { machineId: string; lastError: string | null }) => void
+    >();
+    const waitForStateMock = vi.fn<
+      (options: { machineId: string; state: FlyMachine["state"]; timeoutMs: number }) => Promise<void>
+    >().mockImplementation(async (options) => {
+      if (options.state === "stopped") return;
+      throw new Error(
+        "[FlyMachines] Timed out waiting for machine to reach state=suspended (machine-1; lastState=started)",
+      );
+    });
+
+    const resultPromise = suspendOrStopMachine({
+      machineId: "machine-1",
+      getMachine: async () => getMachine(),
+      suspendMachine: async () => suspendMachine(),
+      stopMachine: async () => stopMachine(),
+      onFallbackStop,
+      waitForState: async (options) => waitForStateMock(options),
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(resultPromise).resolves.toBe("stopped");
+
+    expect(suspendMachine).toHaveBeenCalledTimes(3);
+    expect(stopMachine).toHaveBeenCalledTimes(1);
+    expect(onFallbackStop).toHaveBeenCalledWith({
+      machineId: "machine-1",
+      lastError:
+        "[FlyMachines] Timed out waiting for machine to reach state=suspended (machine-1; lastState=started)",
+    });
+  });
 });

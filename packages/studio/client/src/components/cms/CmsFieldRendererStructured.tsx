@@ -38,7 +38,6 @@ export function CmsFieldRendererStructured({
       <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
         <div>
           <Label className="text-sm font-medium">{label}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">Nested structured fields.</p>
         </div>
         <div className="space-y-4">
           {Object.entries(field.fields ?? {}).map(([nestedKey, nestedField]) =>

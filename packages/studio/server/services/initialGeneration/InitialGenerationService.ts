@@ -590,10 +590,17 @@ Keep the project as Astro with the existing Tailwind setup. Do not replace the f
 Use uploaded source assets from \`${preferredAssetRoot}/\` when relevant.
 Treat \`src/content/media/\` as the canonical home for Astro-managed site assets. If the workspace still has legacy scratch assets under \`images/\`, you may reuse them, but prefer keeping final managed assets under \`src/content/media/\`.
 Prefer Astro's \`Image\` component from \`astro:assets\` for almost all images. Use plain \`<img>\` only when \`Image\` is not practical.
+For Astro CMS-backed sections, remember that rendering \`item.data.*\` or \`entry.data.*\` directly only prints the current value and does not create CMS preview ownership. Use \`CmsText\` or \`cmsTextBindingAttrs(...)\` on the actual visible render point for every CMS-owned text occurrence.
+Bind derived CMS display variants too. If a CMS field is shown as initials, badges, ratings, labels, truncated text, or any other computed string, the visible derived output still needs the CMS binding.
+When using \`CmsImage\`, always pass the actual image field value as \`src={entry.data.image}\` or the equivalent field expression; metadata without \`src\` is incomplete.
+If a CMS image field stores an Astro-relative \`../media/...\` path, normalize it through a preview-safe browser URL instead of leaving the raw relative string in markup.
+If you define custom font stacks, include explicit emoji fallbacks such as \`Apple Color Emoji\`, \`Segoe UI Emoji\`, \`Noto Color Emoji\`, and \`sans-serif\`.
+For long-form content such as blog posts, articles, docs, or legal pages, prefer Astro markdown collection entries with structured frontmatter and markdown body content.
 Use \`public/\` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, verification files, or other explicit compatibility cases. Do not default to moving the whole asset library into \`public/images/\`.
 Treat \`references/\` as working material for inspiration and reconstruction, not as public site assets by default.
 Maintain a clean structure in \`src/layouts\`, \`src/components\`, \`src/styles\`, and any additional content/data files you add.
 Proactively update \`AGENTS.md\` so it stays current for this project, especially content locations and editing instructions.
+Before you finish, audit the generated render layer for raw \`item.data.*\` text render points without CMS ownership, missing bindings on duplicate or derived CMS occurrences, \`CmsImage\` usage without \`src\`, and browser-facing \`../media/...\` URLs.
 Preserve a buildable project state when you finish.
 
 ${styleBlock ?? ""}${referenceUrls ? `Reference URLs:\n${referenceUrls}\n\n` : ""}${

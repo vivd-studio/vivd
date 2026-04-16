@@ -7,7 +7,7 @@ const {
   getResolvedBrandingMock,
   projectPluginFindManyMock,
   organizationFindFirstMock,
-  getInstallProfileMock,
+  resolvePolicyMock,
   dbSelectMock,
   dbSelectFromMock,
   dbSelectWhereMock,
@@ -18,7 +18,7 @@ const {
   const getResolvedBrandingMock = vi.fn();
   const projectPluginFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
-  const getInstallProfileMock = vi.fn();
+  const resolvePolicyMock = vi.fn();
   const dbSelectWhereMock = vi.fn().mockResolvedValue([]);
   const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
   const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
@@ -30,7 +30,7 @@ const {
     getResolvedBrandingMock,
     projectPluginFindManyMock,
     organizationFindFirstMock,
-    getInstallProfileMock,
+    resolvePolicyMock,
     dbSelectMock,
     dbSelectFromMock,
     dbSelectWhereMock,
@@ -55,7 +55,7 @@ vi.mock("../src/services/studioMachines/visitStore", () => ({
 
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
-    getInstallProfile: getInstallProfileMock,
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -138,7 +138,7 @@ describe("project studio callback URL wiring", () => {
     getResolvedBrandingMock.mockReset();
     projectPluginFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
-    getInstallProfileMock.mockReset();
+    resolvePolicyMock.mockReset();
     dbSelectMock.mockClear();
     dbSelectFromMock.mockClear();
     dbSelectWhereMock.mockClear();
@@ -152,7 +152,9 @@ describe("project studio callback URL wiring", () => {
     projectPluginFindManyMock.mockResolvedValue([]);
     getResolvedBrandingMock.mockResolvedValue({ supportEmail: null });
     organizationFindFirstMock.mockResolvedValue({ githubRepoPrefix: null });
-    getInstallProfileMock.mockResolvedValue("platform");
+    resolvePolicyMock.mockResolvedValue({
+      controlPlane: { mode: "host_based" },
+    });
     recordStudioVisitMock.mockResolvedValue(undefined);
     ensureRunningMock.mockResolvedValue({
       studioId: "studio-1",
@@ -266,7 +268,9 @@ describe("project studio callback URL wiring", () => {
   });
 
   it("returns the direct browser URL for local platform hosts", async () => {
-    getInstallProfileMock.mockResolvedValueOnce("platform");
+    resolvePolicyMock.mockResolvedValueOnce({
+      controlPlane: { mode: "host_based" },
+    });
     ensureRunningMock.mockResolvedValueOnce({
       studioId: "studio-1",
       url: "http://app.localhost:4100",
@@ -301,7 +305,9 @@ describe("project studio callback URL wiring", () => {
   });
 
   it("returns the compatibility browser URL for solo installs that need same-host routing", async () => {
-    getInstallProfileMock.mockResolvedValueOnce("solo");
+    resolvePolicyMock.mockResolvedValueOnce({
+      controlPlane: { mode: "path_based" },
+    });
     ensureRunningMock.mockResolvedValueOnce({
       studioId: "studio-1",
       url: "https://vivd.felixpahlke.de:4100",

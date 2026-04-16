@@ -142,15 +142,20 @@ export default function SuperAdmin() {
   const { config } = useAppConfig();
   const [searchParams, setSearchParams] = useSearchParams();
   const utils = trpc.useUtils();
+  const platformAdminSectionsVisible =
+    config.showPlatformAdminSections ?? (config.installProfile === "platform");
+  const instanceSectionLabel =
+    config.instanceSectionLabel ??
+    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
 
   const { data: orgData, isLoading: orgsLoading } =
     trpc.superadmin.listOrganizations.useQuery();
   const organizations = orgData?.organizations ?? [];
 
   const visibleSections: SuperAdminSection[] =
-    config.installProfile === "solo"
-      ? ["instance", "plugins", "machines", "email"]
-      : ["instance", "org", "users", "maintenance", "machines", "plugins", "email"];
+    platformAdminSectionsVisible
+      ? ["instance", "org", "users", "maintenance", "machines", "plugins", "email"]
+      : ["instance", "plugins", "machines", "email"];
 
   const rawSection = searchParams.get("section");
   const section: SuperAdminSection =
@@ -258,10 +263,7 @@ export default function SuperAdmin() {
   );
 
   const sectionMeta = SECTION_META[section];
-  const sectionTitle =
-    section === "instance" && config.installProfile === "solo"
-      ? config.instanceAdminLabel
-      : sectionMeta.title;
+  const sectionTitle = section === "instance" ? config.instanceAdminLabel : sectionMeta.title;
 
   const content = (() => {
     if (section === "instance") {
@@ -444,7 +446,7 @@ export default function SuperAdmin() {
 
   return (
     <div className="w-full space-y-8">
-      {!config.experimentalSoloModeEnabled && config.installProfile === "platform" ? (
+      {!config.experimentalSoloModeEnabled && platformAdminSectionsVisible ? (
         <Card className="border-border/70 bg-muted/20 shadow-sm">
           <CardContent className="py-4 text-sm text-muted-foreground">
             Hosted platform mode is the supported posture for this installation. Solo
@@ -453,7 +455,7 @@ export default function SuperAdmin() {
           </CardContent>
         </Card>
       ) : null}
-      {config.installProfile === "solo" && !selfHostAdminFeaturesVisible ? (
+      {config.selfHostCompatibilityEnabled && !selfHostAdminFeaturesVisible ? (
         <Card className="border-border/70 bg-muted/20 shadow-sm">
           <CardContent className="py-4 text-sm text-muted-foreground">
             Solo compatibility is enabled, but the broader self-host admin surface is still
@@ -484,21 +486,21 @@ export default function SuperAdmin() {
         <TabsList className="w-full justify-start">
           <TabsTrigger value="instance" className="gap-2">
             <Shield className="h-4 w-4" />
-            {config.installProfile === "solo" ? "General" : "Instance"}
+            {instanceSectionLabel}
           </TabsTrigger>
-          {config.installProfile === "platform" ? (
+          {platformAdminSectionsVisible ? (
             <TabsTrigger value="org" className="gap-2">
               <Building2 className="h-4 w-4" />
               Organizations
             </TabsTrigger>
           ) : null}
-          {config.installProfile === "platform" ? (
+          {platformAdminSectionsVisible ? (
             <TabsTrigger value="users" className="gap-2">
               <Shield className="h-4 w-4" />
               System Users
             </TabsTrigger>
           ) : null}
-          {config.installProfile === "platform" ? (
+          {platformAdminSectionsVisible ? (
             <TabsTrigger value="maintenance" className="gap-2">
               <Wrench className="h-4 w-4" />
               Maintenance

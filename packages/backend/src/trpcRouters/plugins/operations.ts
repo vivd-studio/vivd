@@ -1,12 +1,16 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  ExternalEmbedPluginNotEnabledError,
   PluginActionArgumentError,
   projectPluginService,
   UnsupportedPluginReadError,
   UnsupportedPluginActionError,
 } from "../../services/plugins/ProjectPluginService";
-import { getPluginModule, type PluginId } from "../../services/plugins/registry";
+import {
+  getOptionalPluginModule,
+  type PluginId,
+} from "../../services/plugins/registry";
 
 type PluginOperationKind = "read" | "updateConfig" | "runAction";
 
@@ -31,7 +35,7 @@ export function throwPluginOperationError(options: {
   actionId?: string;
   readId?: string;
 }): never {
-  const mappedError = getPluginModule(options.pluginId).mapPublicError?.({
+  const mappedError = getOptionalPluginModule(options.pluginId)?.mapPublicError?.({
     operation: options.operation,
     error: options.error,
     actionId: options.actionId,
@@ -49,7 +53,8 @@ export function throwPluginOperationError(options: {
   if (
     options.error instanceof UnsupportedPluginReadError ||
     options.error instanceof UnsupportedPluginActionError ||
-    options.error instanceof PluginActionArgumentError
+    options.error instanceof PluginActionArgumentError ||
+    options.error instanceof ExternalEmbedPluginNotEnabledError
   ) {
     throw new TRPCError({
       code: "BAD_REQUEST",

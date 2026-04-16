@@ -449,6 +449,7 @@ type SuperAdminNavSectionProps = {
     tab: "instance" | "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
   ) => boolean;
   instanceAdminLabel: string;
+  instanceSectionLabel: string;
   showPlatformOnlyEntries: boolean;
 };
 
@@ -456,6 +457,7 @@ function SuperAdminNavSection({
   showSuperAdmin,
   isSuperAdminTabActive,
   instanceAdminLabel,
+  instanceSectionLabel,
   showPlatformOnlyEntries,
 }: SuperAdminNavSectionProps) {
   if (!showSuperAdmin) return null;
@@ -476,7 +478,7 @@ function SuperAdminNavSection({
             >
               <Link to={`${ROUTES.SUPERADMIN_BASE}?section=instance`}>
                 <Shield />
-                <span>{instanceAdminLabel === "Instance Settings" ? "General" : "Instance"}</span>
+                <span>{instanceSectionLabel}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -698,6 +700,11 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
   const showImmersiveSidebarToggle = isCollapsed && isImmersiveDesktop;
   const [showAllProjects, setShowAllProjects] = React.useState(false);
+  const showPlatformAdminSections =
+    config.showPlatformAdminSections ?? (config.installProfile === "platform");
+  const instanceSectionLabel =
+    config.instanceSectionLabel ??
+    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
@@ -870,9 +877,9 @@ export function AppSidebar() {
   };
 
   const docsUrl = buildDocsUrl({
-    publicDocsBaseUrl: config.publicDocsBaseUrl,
+    publicDocsBaseUrl: config.publicDocsBaseUrl ?? null,
     currentHost: window.location.host,
-    controlPlaneHost: config.controlPlaneHost,
+    controlPlaneHost: config.controlPlaneHost ?? null,
     pathname: "/",
   });
 
@@ -988,7 +995,8 @@ export function AppSidebar() {
           showSuperAdmin={showSuperAdmin}
           isSuperAdminTabActive={isSuperAdminTabActive}
           instanceAdminLabel={config.instanceAdminLabel}
-          showPlatformOnlyEntries={config.installProfile === "platform"}
+          instanceSectionLabel={instanceSectionLabel}
+          showPlatformOnlyEntries={showPlatformAdminSections}
         />
       </SidebarContent>
 

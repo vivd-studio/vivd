@@ -16,7 +16,10 @@ import {
   setSystemSettingValue,
   SYSTEM_SETTING_KEYS,
 } from "./SystemSettingsService";
-import { isExperimentalSoloModeEnabled } from "./FeatureFlagsService";
+import {
+  isExperimentalSoloModeEnabled,
+  isSelfHostAdminFeaturesEnabled,
+} from "./FeatureFlagsService";
 
 export const installProfileSchema = z.enum(["solo", "platform"]);
 export type InstallProfile = z.infer<typeof installProfileSchema>;
@@ -85,6 +88,17 @@ export interface ResolvedInstallProfilePolicy {
   capabilities: InstanceCapabilityPolicy;
   pluginDefaults: Record<PluginId, ResolvedInstancePluginEntitlement>;
   limitDefaults: InstanceLimitDefaults;
+  selfHostCompatibility: {
+    enabled: boolean;
+    adminFeaturesVisible: boolean;
+  };
+  adminSurface: {
+    label: "Instance Settings" | "Super Admin";
+    instanceSectionLabel: "General" | "Instance";
+    showPlatformSections: boolean;
+    installProfileEditable: boolean;
+    capabilitiesEditable: boolean;
+  };
   controlPlane: {
     mode: "path_based" | "host_based";
   };
@@ -264,14 +278,30 @@ class InstallProfileService {
       storedLimitDefaults ?? envLimitDefaults,
     );
 
+    const controlPlaneMode =
+      installProfile === "solo" ? ("path_based" as const) : ("host_based" as const);
+    const selfHostCompatibilityEnabled = controlPlaneMode === "path_based";
+
     return {
       installProfile,
       singleProjectMode: await this.isSingleProjectModeEnabled(installProfile),
       capabilities,
       pluginDefaults,
       limitDefaults,
+      selfHostCompatibility: {
+        enabled: selfHostCompatibilityEnabled,
+        adminFeaturesVisible:
+          selfHostCompatibilityEnabled && isSelfHostAdminFeaturesEnabled(),
+      },
+      adminSurface: {
+        label: selfHostCompatibilityEnabled ? "Instance Settings" : "Super Admin",
+        instanceSectionLabel: selfHostCompatibilityEnabled ? "General" : "Instance",
+        showPlatformSections: !selfHostCompatibilityEnabled,
+        installProfileEditable: !selfHostCompatibilityEnabled,
+        capabilitiesEditable: !selfHostCompatibilityEnabled,
+      },
       controlPlane: {
-        mode: installProfile === "solo" ? "path_based" : "host_based",
+        mode: controlPlaneMode,
       },
       pluginRuntime: {
         mode: capabilities.dedicatedPluginHost ? "dedicated_host" : "same_host_path",

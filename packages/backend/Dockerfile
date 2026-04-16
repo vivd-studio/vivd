@@ -29,6 +29,7 @@ FROM devbase AS deps
 COPY package.json package-lock.json ./
 COPY plugins/installed/package.json plugins/installed/package.json
 COPY plugins/sdk/package.json plugins/sdk/package.json
+COPY plugins/external/google-maps/package.json plugins/external/google-maps/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
@@ -43,7 +44,7 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
     && npm cache clean --force
 
 # Stage 2: Development (hot reload)
@@ -95,6 +96,7 @@ LABEL org.opencontainers.image.revision=$VIVD_IMAGE_REVISION
 COPY package.json package-lock.json ./
 COPY plugins/installed/package.json plugins/installed/package.json
 COPY plugins/sdk/package.json plugins/sdk/package.json
+COPY plugins/external/google-maps/package.json plugins/external/google-maps/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
@@ -106,7 +108,7 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/installed-plugins -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/installed-plugins -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/backend --omit=dev --include-workspace-root=false \
     && npm cache clean --force
 
 # Copy built outputs

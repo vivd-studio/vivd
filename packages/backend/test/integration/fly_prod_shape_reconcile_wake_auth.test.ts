@@ -551,6 +551,12 @@ async function collectReconcileFailureDiagnostics(
       ? await bestEffortReadCleanupStatus({ baseUrl, accessToken })
       : "skipped (missing runtime URL or access token)";
   const logs = tryReadFlyLogs(options.machineId);
+  const suspendFallbackReason =
+    typeof (options.provider as any).getLastSuspendFallbackReason === "function"
+      ? ((options.provider as any).getLastSuspendFallbackReason(
+          options.machineId,
+        ) as string | null)
+      : null;
   const message =
     options.error instanceof Error ? options.error.message : String(options.error);
 
@@ -561,6 +567,7 @@ async function collectReconcileFailureDiagnostics(
     `desiredImage=${stripDigest(options.desiredImage)}`,
     `reconcileDuration=${formatDuration(options.reconcileDurationMs)}`,
     `originalError=${message}`,
+    `suspend fallback reason=${suspendFallbackReason || "unknown"}`,
     `machine snapshot:\n${formatMachineSnapshot(machine)}`,
     `machine summary:\n${formatMachineSummary(summary)}`,
     `cleanup status:\n${cleanupStatus}`,

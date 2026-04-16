@@ -27,11 +27,11 @@ export const experimentalInstanceSuperAdminProcedures = {
       }
 
       const policy = await installProfileService.resolvePolicy();
-      if (policy.installProfile !== "solo") {
+      if (!policy.selfHostCompatibility.enabled) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
-            "Instance network settings are currently UI-managed only for solo installs.",
+            "Instance network settings are currently UI-managed only for experimental self-host compatibility installs.",
         });
       }
 
@@ -55,10 +55,11 @@ export const experimentalInstanceSuperAdminProcedures = {
     }
 
     const policy = await installProfileService.resolvePolicy();
-    if (policy.installProfile !== "solo") {
+    if (!policy.selfHostCompatibility.enabled) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "Managed updates are available only for solo self-host installs.",
+        message:
+          "Managed updates are available only for experimental self-host compatibility installs.",
       });
     }
 

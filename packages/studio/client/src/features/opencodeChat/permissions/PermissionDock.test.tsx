@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PermissionDock } from "./PermissionDock";
 
 describe("PermissionDock", () => {
-  it("shows a translated approval title and hides raw commands by default", () => {
+  it("makes the publish destination prominent and keeps raw commands hidden by default", () => {
     render(
       <PermissionDock
         request={{
@@ -19,7 +19,10 @@ describe("PermissionDock", () => {
       />,
     );
 
-    expect(screen.getByText("Deploy to example.com")).toBeInTheDocument();
+    expect(screen.getByText("Publish site")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "example.com" }),
+    ).toHaveAttribute("href", "https://example.com");
     expect(
       screen.getByText("vivd publish deploy --domain example.com"),
     ).not.toBeVisible();

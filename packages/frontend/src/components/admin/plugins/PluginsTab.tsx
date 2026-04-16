@@ -65,16 +65,16 @@ export function PluginsTab() {
         </CardTitle>
         <CardDescription>
           {isExperimentalSolo
-            ? "Experimental self-host defaults for the whole instance. Project-specific plugin configuration still lives on each project."
+            ? "Experimental self-host compatibility defaults for the whole instance. Project-specific plugin configuration still lives on each project."
             : "Central hosted-platform controls for project-level plugin access and rollout."}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {isExperimentalSolo ? (
           <div className="mb-4 rounded-lg border bg-muted/15 p-4 text-sm text-muted-foreground">
-            Solo self-host mode is enabled as an internal experimental path. Plugin
-            defaults here should be treated as compatibility behavior, not the primary
-            product model.
+            Experimental self-host compatibility is enabled as an internal path. Plugin
+            defaults here should be treated as compatibility behavior, not the primary product
+            model.
           </div>
         ) : null}
         {isExperimentalSolo ? (

@@ -265,6 +265,13 @@ describe("InitialGenerationService", () => {
     expect(task).toContain("src/content/media/shared/logo.png");
     expect(task).toContain("canonical home for Astro-managed site assets");
     expect(task).toContain("Prefer Astro's `Image` component from `astro:assets`");
+    expect(task).toContain("does not create CMS preview ownership");
+    expect(task).toContain("Bind derived CMS display variants too");
+    expect(task).toContain("src={entry.data.image}");
+    expect(task).toContain("Astro-relative `../media/...` path");
+    expect(task).toContain("explicit emoji fallbacks such as `Apple Color Emoji`");
+    expect(task).toContain("Before you finish, audit the generated render layer");
+    expect(task).toContain("prefer Astro markdown collection entries");
     expect(task).toContain("https://example.com");
     expect(task).toContain("AGENTS.md");
   });

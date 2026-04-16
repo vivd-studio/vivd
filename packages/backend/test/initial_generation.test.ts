@@ -93,6 +93,24 @@ describe("initial generation helpers", () => {
       expect(
         fs.existsSync(path.join(tmpDir, "AGENTS.md")),
       ).toBe(true);
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "AGENTS.md"),
+          "utf-8",
+        ),
+      ).toContain("does not create CMS ownership");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "AGENTS.md"),
+          "utf-8",
+        ),
+      ).toContain("Derived CMS-backed render points need binding too");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "AGENTS.md"),
+          "utf-8",
+        ),
+      ).toContain("`CmsImage` still needs the actual image field value");
 
       expect(
         fs.readFileSync(

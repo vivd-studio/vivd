@@ -762,7 +762,8 @@ export class PublishService {
   }
 
   private async shouldInlinePrimaryHostPublish(domain: string): Promise<boolean> {
-    if ((await installProfileService.getInstallProfile()) !== "solo") {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (instancePolicy.controlPlane.mode !== "path_based") {
       return false;
     }
     return this.isPrimaryHostDomain(domain);

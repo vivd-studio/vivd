@@ -54,40 +54,52 @@ export function PermissionDock({
     <div className="relative mt-auto px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
       <div className="mx-auto w-full max-w-3xl">
         <div className="rounded-[1.4rem] border border-border/70 bg-background/95 px-4 py-4 shadow-2xl shadow-black/10 backdrop-blur-md supports-[backdrop-filter]:bg-background/82 dark:border-white/10 dark:shadow-black/45 md:px-5 md:py-5">
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
               Agent Permission
             </div>
-            <div className="text-sm font-semibold text-foreground">
+            <div className="text-xs font-semibold text-foreground">
               Explicit approval required
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-[11px] text-muted-foreground">
               {display.summary}
             </div>
           </div>
 
-          <div className="mt-4 space-y-2">
-            <div className="text-sm font-semibold text-foreground">{display.title}</div>
+          <div className="mt-4 space-y-1.5">
+            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {display.title}
+            </div>
+            {display.destinationLabel ? (
+              <a
+                href={display.destinationUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-lg font-semibold text-foreground underline decoration-foreground/35 underline-offset-4 transition-colors hover:text-primary hover:decoration-primary md:text-xl"
+              >
+                {display.destinationLabel}
+              </a>
+            ) : null}
           </div>
 
           {display.showTechnicalDetails ? (
-            <details className="mt-4 rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <details className="mt-3 border-t border-border/50 pt-2">
+              <summary className="cursor-pointer text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Technical details
               </summary>
-              <div className="mt-3 space-y-2">
-                <div className="text-xs text-muted-foreground">
+              <div className="mt-2 space-y-1.5">
+                <div className="text-[11px] text-muted-foreground">
                   Permission type: <code>{display.technicalPermission}</code>
                 </div>
                 {display.technicalPatterns.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                       Requested scope
                     </div>
                     {display.technicalPatterns.map((pattern) => (
                       <code
                         key={`${request.id}-${pattern}`}
-                        className="block rounded-lg border border-border/60 bg-muted/45 px-3 py-2 text-xs text-foreground break-all"
+                        className="block rounded-md border border-border/50 bg-muted/35 px-2 py-1.5 text-[11px] text-foreground break-all"
                       >
                         {pattern}
                       </code>

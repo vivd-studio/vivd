@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import {
-  ArrowUp,
-  ChevronDown,
-  FolderArchive,
-  ImagePlus,
-  Loader2,
-} from "lucide-react";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ArrowUp, Link2, Loader2, X } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
-import { FileAttachmentList, FileDropzone } from "./FileDropzone";
+import {
+  InlineAttachmentArea,
+  AttachmentMenuButton,
+  useDropzone,
+} from "./FileDropzone";
 import { cn } from "@/lib/utils";
 import { ScratchModelSelector } from "./ScratchModelSelector";
 
@@ -49,24 +52,30 @@ export function ScratchForm() {
   const descriptionField = form.register("description");
   const referenceUrlsField = form.register("referenceUrlsText");
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   const isDisabled = isGenerating || !!started;
   const titleError = form.formState.errors.title?.message;
   const descriptionError = form.formState.errors.description?.message;
 
-  const resizeDescription = useCallback((element?: HTMLTextAreaElement | null) => {
-    const textarea = element ?? descriptionRef.current;
-    if (!textarea) return;
+  const totalAttachments = assets.length + referenceImages.length;
 
-    textarea.style.height = "auto";
-    const nextHeight = Math.min(
-      Math.max(textarea.scrollHeight, TEXTAREA_MIN_HEIGHT),
-      TEXTAREA_MAX_HEIGHT,
-    );
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
-  }, []);
+  const resizeDescription = useCallback(
+    (element?: HTMLTextAreaElement | null) => {
+      const textarea = element ?? descriptionRef.current;
+      if (!textarea) return;
+
+      textarea.style.height = "auto";
+      const nextHeight = Math.min(
+        Math.max(textarea.scrollHeight, TEXTAREA_MIN_HEIGHT),
+        TEXTAREA_MAX_HEIGHT,
+      );
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY =
+        textarea.scrollHeight > TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+    },
+    [],
+  );
 
   useEffect(() => {
     resizeDescription();
@@ -97,6 +106,24 @@ export function ScratchForm() {
     return uploadPhase;
   };
 
+  // Drag-and-drop on the entire prompt surface → brand assets by default
+  const handleSurfaceDrop = useCallback(
+    (files: File[]) => {
+      if (!isDisabled) {
+        setAssets((prev) => [...prev, ...files]);
+      }
+    },
+    [isDisabled, setAssets],
+  );
+
+  const {
+    isDragging,
+    onDragEnter,
+    onDragLeave,
+    onDragOver,
+    onDrop,
+  } = useDropzone(handleSurfaceDrop);
+
   return (
     <form
       onSubmit={form.handleSubmit(submit)}
@@ -120,19 +147,41 @@ export function ScratchForm() {
             className="h-12 rounded-full border border-border/60 bg-card/68 px-5 text-center text-base text-foreground shadow-[0_24px_80px_hsl(var(--primary)/0.12)] backdrop-blur-xl placeholder:text-muted-foreground focus-visible:border-primary/24 focus-visible:bg-card/88 focus-visible:ring-primary/16"
           />
           {titleError ? (
-            <div className="text-center text-xs text-destructive">{titleError}</div>
+            <div className="text-center text-xs text-destructive">
+              {titleError}
+            </div>
           ) : null}
         </div>
 
         <InteractiveSurface
           variant="field"
           className={cn(
-            "overflow-hidden rounded-[30px] border border-border/60 bg-card/92 text-foreground shadow-[0_36px_110px_hsl(var(--primary)/0.16)] backdrop-blur-2xl",
+            "relative overflow-hidden rounded-[30px] border border-border/60 bg-card/92 text-foreground shadow-[0_36px_110px_hsl(var(--primary)/0.16)] backdrop-blur-2xl transition-all duration-200",
             isDisabled
               ? "opacity-90"
               : "hover:border-primary/18",
+            isDragging &&
+              "border-primary/55 bg-primary/5 shadow-[0_36px_110px_hsl(var(--primary)/0.24)]",
           )}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
         >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[30px] border-2 border-dashed border-primary/40 bg-primary/5 backdrop-blur-[2px]">
+              <div className="flex flex-col items-center gap-2 text-primary">
+                <div className="rounded-full border border-primary/30 bg-primary/10 p-3">
+                  <ArrowUp className="h-5 w-5" />
+                </div>
+                <span className="text-sm font-medium">
+                  Drop files to attach
+                </span>
+              </div>
+            </div>
+          )}
+
           <textarea
             name={descriptionField.name}
             onBlur={descriptionField.onBlur}
@@ -150,9 +199,80 @@ export function ScratchForm() {
             className="min-h-[84px] max-h-[248px] w-full resize-none overflow-y-hidden bg-transparent px-6 pt-4 text-base leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
           />
 
-          <div className="flex items-center justify-between gap-4 px-4 pb-4 pl-5 sm:px-5 sm:pb-4">
-            <div className="text-left text-xs leading-5 text-muted-foreground">
-              Brief, sections, tone, assets.
+          {/* Inline attachments area */}
+          <InlineAttachmentArea
+            assets={assets}
+            referenceImages={referenceImages}
+            onRemoveAsset={(idx) =>
+              setAssets((prev) => prev.filter((_, i) => i !== idx))
+            }
+            onRemoveReference={(idx) =>
+              setReferenceImages((prev) => prev.filter((_, i) => i !== idx))
+            }
+          />
+
+          {/* Reference URLs inline input */}
+          {showUrlInput && (
+            <div className="border-t border-border/25 px-4 py-2.5">
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  <textarea
+                    {...referenceUrlsField}
+                    rows={2}
+                    disabled={isDisabled}
+                    placeholder={"https://example.com\nhttps://another-example.com"}
+                    className="min-h-[48px] w-full resize-y rounded-xl border border-border/30 bg-background/25 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border/50 focus:bg-background/40 disabled:cursor-not-allowed disabled:opacity-70"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground/60">
+                    Paste inspiration URLs — we'll use them as loose references
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/6 hover:text-foreground"
+                  onClick={() => setShowUrlInput(false)}
+                  aria-label="Close URL input"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Toolbar row */}
+          <div className="flex items-center justify-between gap-2 px-4 pb-4 pl-4 sm:px-5 sm:pb-4">
+            <div className="flex items-center gap-1">
+              <AttachmentMenuButton
+                onAddAssets={(files) =>
+                  setAssets((prev) => [...prev, ...files])
+                }
+                onAddReferences={(files) =>
+                  setReferenceImages((prev) => [...prev, ...files])
+                }
+                disabled={isDisabled}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isDisabled}
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/6 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+                      showUrlInput && "bg-foreground/8 text-foreground",
+                    )}
+                    onClick={() => setShowUrlInput((v) => !v)}
+                    aria-label="Add reference URLs"
+                  >
+                    <Link2 className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Reference URLs</TooltipContent>
+              </Tooltip>
+              {totalAttachments > 0 && (
+                <span className="ml-1 rounded-full bg-foreground/6 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {totalAttachments} file{totalAttachments === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
@@ -210,74 +330,15 @@ export function ScratchForm() {
               ) : null}
               {started?.slug ? (
                 <span>
-                  Project: <span className="font-mono text-foreground/80">{started.slug}</span>
+                  Project:{" "}
+                  <span className="font-mono text-foreground/80">
+                    {started.slug}
+                  </span>
                 </span>
               ) : null}
             </div>
           </div>
         ) : null}
-
-        <div className="grid gap-3 md:grid-cols-2 md:items-start">
-          <FileDropzone
-            className="order-1"
-            title="Design references"
-            hint="Inspiration only"
-            files={referenceImages}
-            onAddFiles={(files) =>
-              setReferenceImages((prev) => [...prev, ...files])
-            }
-            icon={ImagePlus}
-          />
-          <FileDropzone
-            className="order-3 md:order-2"
-            title="Brand assets"
-            hint="Logos, photos, files to be used on the page"
-            files={assets}
-            onAddFiles={(files) => setAssets((prev) => [...prev, ...files])}
-            acceptOnlyImages={false}
-            icon={FolderArchive}
-          />
-          <FileAttachmentList
-            className="order-2 md:order-3"
-            files={referenceImages}
-            onRemoveFile={(idx) =>
-              setReferenceImages((prev) => prev.filter((_, i) => i !== idx))
-            }
-          />
-          <FileAttachmentList
-            className="order-4"
-            files={assets}
-            onRemoveFile={(idx) =>
-              setAssets((prev) => prev.filter((_, i) => i !== idx))
-            }
-          />
-        </div>
-
-        <details className="mx-auto w-full max-w-[42rem] rounded-[18px] border border-border/35 bg-card/22 px-4 py-3 text-left shadow-[0_14px_36px_hsl(var(--primary)/0.04)] backdrop-blur-xl group">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-foreground/88">
-                Websites you like
-              </div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Optional inspiration URLs
-              </p>
-            </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-3 border-t border-border/25 pt-3">
-            <p className="mb-2 text-xs leading-5 text-muted-foreground">
-              Paste a few sites or design references we should loosely follow.
-            </p>
-            <textarea
-              {...referenceUrlsField}
-              rows={2}
-              disabled={isDisabled}
-              placeholder={"https://example.com\nhttps://another-example.com"}
-              className="min-h-[60px] w-full resize-y rounded-[16px] border border-border/35 bg-background/30 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border/55 focus:bg-background/46 disabled:cursor-not-allowed disabled:opacity-70"
-            />
-          </div>
-        </details>
       </div>
     </form>
   );

@@ -87,7 +87,10 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 }));
 
 vi.mock("../src/services/plugins/registry", () => ({
-  PLUGIN_IDS: ["contact_form", "analytics", "newsletter"],
+  PLUGIN_IDS: ["contact_form", "analytics", "newsletter", "google_maps"],
+  getOptionalPluginModule: vi.fn(() => ({
+    mapPublicError: () => null,
+  })),
   getPluginModule: vi.fn(() => ({
     mapPublicError: () => null,
   })),
@@ -223,6 +226,27 @@ describe("plugins.generic router", () => {
       organizationId: "org-1",
       projectSlug: "site-1",
       pluginId: "newsletter",
+    });
+  });
+
+  it("accepts google maps as a generic plugin id", async () => {
+    getPluginInfoContractMock.mockResolvedValueOnce({
+      pluginId: "google_maps",
+      enabled: true,
+    });
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.info({ slug: "site-1", pluginId: "google_maps" }),
+    ).resolves.toMatchObject({
+      pluginId: "google_maps",
+      enabled: true,
+    });
+    expect(getPluginInfoContractMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "google_maps",
     });
   });
 

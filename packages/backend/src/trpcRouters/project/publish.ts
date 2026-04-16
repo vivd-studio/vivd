@@ -272,7 +272,7 @@ export const projectPublishProcedures = {
       ]);
 
       const primaryHost =
-        instancePolicy.installProfile === "solo"
+        instancePolicy.controlPlane.mode === "path_based"
           ? domainService.normalizeDomain(
               instanceNetworkSettingsService.getResolvedSettings().publicHost ?? "",
             ) || null

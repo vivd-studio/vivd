@@ -230,10 +230,19 @@ export function isWritableCmsEntryFile(filePath: string): boolean {
   return getCmsEntryFileFormat(filePath) !== "unsupported";
 }
 
+export function extractCmsEntryMarkdownBody(content: string): string {
+  const existingMatch = content.match(
+    /^---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n)?/,
+  );
+  const body = existingMatch ? content.slice(existingMatch[0].length) : content;
+  return body.replace(/^\r?\n/, "");
+}
+
 export function serializeCmsEntryValues(
   filePath: string,
   value: unknown,
   currentContent = "",
+  markdownBodyOverride?: string,
 ): string {
   const format = getCmsEntryFileFormat(filePath);
   switch (format) {
@@ -243,10 +252,10 @@ export function serializeCmsEntryValues(
       return `${JSON.stringify(value, null, 2)}\n`;
     case "markdown": {
       const frontmatter = stringifyYaml(value).trimEnd();
-      const existingMatch = currentContent.match(
-        /^---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n)?/,
-      );
-      const body = existingMatch ? currentContent.slice(existingMatch[0].length) : currentContent;
+      const body =
+        typeof markdownBodyOverride === "string"
+          ? markdownBodyOverride
+          : extractCmsEntryMarkdownBody(currentContent);
       if (!body.length) {
         return `---\n${frontmatter}\n---\n`;
       }
