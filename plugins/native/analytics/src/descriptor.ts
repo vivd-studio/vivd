@@ -12,3 +12,5 @@ export const analyticsPluginDescriptor =
       cli: "@vivd/plugin-analytics/cli/plugin",
     },
   } as const satisfies PluginBundleEntry<"analytics">);
+
+export default analyticsPluginDescriptor;

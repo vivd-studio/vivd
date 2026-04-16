@@ -12,3 +12,5 @@ export const newsletterPluginDescriptor =
       cli: "@vivd/plugin-newsletter/cli/plugin",
     },
   } as const satisfies PluginBundleEntry<"newsletter">);
+
+export default newsletterPluginDescriptor;

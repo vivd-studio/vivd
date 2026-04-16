@@ -12,3 +12,5 @@ export const tableBookingPluginDescriptor =
       cli: "@vivd/plugin-table-booking/cli/plugin",
     },
   } as const satisfies PluginBundleEntry<"table_booking">);
+
+export default tableBookingPluginDescriptor;

@@ -12,3 +12,5 @@ export const contactFormPluginDescriptor =
       cli: "@vivd/plugin-contact-form/cli/plugin",
     },
   } as const satisfies PluginBundleEntry<"contact_form">);
+
+export default contactFormPluginDescriptor;

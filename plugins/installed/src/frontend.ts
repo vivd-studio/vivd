@@ -3,6 +3,7 @@ import {
   buildSharedProjectPluginUiRegistry,
   definePluginPackageDescriptors,
 } from "@vivd/plugin-sdk";
+import { installedPluginManifests } from "./index";
 import type { ComponentType } from "react";
 import type {
   PluginPackageDescriptor,
@@ -37,7 +38,7 @@ export const installedFrontendPluginDescriptors =
   ] as const satisfies readonly FrontendPluginPackage[]);
 
 export const installedFrontendSharedProjectPluginUiRegistry =
-  buildSharedProjectPluginUiRegistry(installedFrontendPluginDescriptors);
+  buildSharedProjectPluginUiRegistry(installedPluginManifests);
 
 export const installedFrontendPluginModules =
   installedFrontendPluginDescriptors.flatMap((descriptor) =>

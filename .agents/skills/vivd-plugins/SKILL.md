@@ -22,6 +22,7 @@ Vivd is in a mixed state:
 - host apps still own the generic plugin platform, registries, routing, and compatibility layers
 - the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
 - plugin packages now also export safe package descriptors (`src/descriptor.ts`) so host registries can derive plugin-owned definition/UI/CLI metadata from one package-level source instead of repeating separate arrays/maps per surface
+- the installed bundle order now lives in `plugins/installed/registry.config.mjs`; `plugins/installed/src/index.ts` and the generated surface files should be regenerated from that registry instead of edited by hand
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
@@ -44,7 +45,8 @@ Start here when orienting:
   - `packages/shared/src/types/pluginContracts.ts`
   - `packages/shared/src/types/pluginPackages.ts`
 - Installed plugin set:
-  - `plugins/installed/src/index.ts`
+  - `plugins/installed/registry.config.mjs`
+  - `plugins/installed/src/index.ts` (generated)
   - `plugins/installed/src/backend.ts`
   - `plugins/installed/src/frontend.ts`
   - `plugins/installed/src/cli.ts`
