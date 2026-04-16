@@ -44,14 +44,9 @@ RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vi
 
 # Stage 2: Development
 FROM deps AS dev
-COPY plugins/sdk ./plugins/sdk
+COPY plugins ./plugins
 COPY packages/shared ./packages/shared
-COPY plugins/installed ./plugins/installed
 COPY packages/theme ./packages/theme
-COPY plugins/native/analytics ./plugins/native/analytics
-COPY plugins/native/contact-form ./plugins/native/contact-form
-COPY plugins/native/newsletter ./plugins/native/newsletter
-COPY plugins/native/table-booking ./plugins/native/table-booking
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
@@ -72,14 +67,9 @@ CMD ["npm", "run", "dev"]
 
 # Stage 3: Build
 FROM deps AS build
-COPY plugins/sdk ./plugins/sdk
+COPY plugins ./plugins
 COPY packages/shared ./packages/shared
-COPY plugins/installed ./plugins/installed
 COPY packages/theme ./packages/theme
-COPY plugins/native/analytics ./plugins/native/analytics
-COPY plugins/native/contact-form ./plugins/native/contact-form
-COPY plugins/native/newsletter ./plugins/native/newsletter
-COPY plugins/native/table-booking ./plugins/native/table-booking
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 

@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { createInstalledPluginPackageMatchers } from "../../plugins/installed/registry.helpers.mjs";
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -8,9 +9,6 @@ export default defineConfig({
   sourcemap: true,
   noExternal: [
     /^@vivd\/installed-plugins(\/.*)?$/,
-    /^@vivd\/plugin-analytics(\/.*)?$/,
-    /^@vivd\/plugin-contact-form(\/.*)?$/,
-    /^@vivd\/plugin-newsletter(\/.*)?$/,
-    /^@vivd\/plugin-table-booking(\/.*)?$/,
+    ...createInstalledPluginPackageMatchers(),
   ],
 });

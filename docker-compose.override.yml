@@ -44,38 +44,8 @@ services:
             - node_modules/
             - dist/
         - action: sync
-          path: ./plugins/sdk
-          target: /app/plugins/sdk
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/installed
-          target: /app/plugins/installed
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/analytics
-          target: /app/plugins/native/analytics
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/contact-form
-          target: /app/plugins/native/contact-form
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/newsletter
-          target: /app/plugins/native/newsletter
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/table-booking
-          target: /app/plugins/native/table-booking
+          path: ./plugins
+          target: /app/plugins
           ignore:
             - node_modules/
             - dist/
@@ -134,38 +104,8 @@ services:
           ignore:
             - node_modules/
         - action: sync
-          path: ./plugins/installed
-          target: /app/plugins/installed
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/sdk
-          target: /app/plugins/sdk
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/analytics
-          target: /app/plugins/native/analytics
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/contact-form
-          target: /app/plugins/native/contact-form
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/newsletter
-          target: /app/plugins/native/newsletter
-          ignore:
-            - node_modules/
-            - dist/
-        - action: sync
-          path: ./plugins/native/table-booking
-          target: /app/plugins/native/table-booking
+          path: ./plugins
+          target: /app/plugins
           ignore:
             - node_modules/
             - dist/

@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { createInstalledPluginPackageMatchers } from "../../plugins/installed/registry.helpers.mjs";
 
 export default defineConfig({
   entry: ["src/server.ts", "src/db/migrate.ts"],
@@ -7,10 +8,7 @@ export default defineConfig({
   shims: true,
   noExternal: [
     /^@vivd\/installed-plugins(\/.*)?$/,
-    /^@vivd\/plugin-analytics(\/.*)?$/,
-    /^@vivd\/plugin-contact-form(\/.*)?$/,
-    /^@vivd\/plugin-newsletter(\/.*)?$/,
-    /^@vivd\/plugin-table-booking(\/.*)?$/,
+    ...createInstalledPluginPackageMatchers(),
   ],
   // Keep CommonJS-only deps external so Node can load them natively from the ESM bundle.
   external: ["extract-zip", "maxmind"],

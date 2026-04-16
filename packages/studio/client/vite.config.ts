@@ -2,6 +2,7 @@ import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import type { PluginOption } from "vite";
+import { createInstalledPluginSourceAliasObject } from "../../../plugins/installed/registry.helpers.mjs";
 
 export default defineConfig({
   base: "./",
@@ -20,22 +21,10 @@ export default defineConfig({
         __dirname,
         "../../../plugins/sdk/src",
       ),
-      "@vivd/plugin-analytics": path.resolve(
-        __dirname,
-        "../../../plugins/native/analytics/src",
-      ),
-      "@vivd/plugin-contact-form": path.resolve(
-        __dirname,
-        "../../../plugins/native/contact-form/src",
-      ),
-      "@vivd/plugin-newsletter": path.resolve(
-        __dirname,
-        "../../../plugins/native/newsletter/src",
-      ),
-      "@vivd/plugin-table-booking": path.resolve(
-        __dirname,
-        "../../../plugins/native/table-booking/src",
-      ),
+      ...createInstalledPluginSourceAliasObject({
+        configDir: __dirname,
+        repoRoot: path.resolve(__dirname, "../../.."),
+      }),
     },
   },
   build: {
