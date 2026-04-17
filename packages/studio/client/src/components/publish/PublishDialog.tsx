@@ -1063,7 +1063,7 @@ export function PublishDialog({
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
+                variant="destructive"
                 onClick={() => unpublishMutation.mutate({ slug: projectSlug })}
               >
                 Unpublish

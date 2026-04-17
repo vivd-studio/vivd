@@ -203,17 +203,15 @@ describe("InstanceSettingsTab", () => {
     });
   });
 
-  it("keeps the platform view focused on version and posture details", () => {
+  it("keeps the platform view focused on version details", () => {
     renderTab();
 
-    expect(screen.getByText("Multi-org platform profile")).toBeInTheDocument();
+    expect(screen.getByText("Hosted control plane profile")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
     expect(screen.getByText("1.1.34")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Review the running deployment version. Platform updates stay deployment-managed for now.",
-      ),
+      screen.getByText("Review the running deployment version and release status."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /update to/i })).not.toBeInTheDocument();
     expect(screen.getByText("https://app.example.com")).toBeInTheDocument();
@@ -221,7 +219,7 @@ describe("InstanceSettingsTab", () => {
     expect(screen.queryByRole("button", { name: "Save network" })).not.toBeInTheDocument();
   });
 
-  it("keeps parked self-host admin features hidden in solo compatibility mode", () => {
+  it("keeps extra admin features hidden in solo mode", () => {
     useAppConfigMock.mockReturnValue({
       isLoading: false,
       config: {
@@ -298,11 +296,7 @@ describe("InstanceSettingsTab", () => {
 
     renderTab();
 
-    expect(screen.getByText("Experimental self-host profile")).toBeInTheDocument();
-    expect(screen.getByText(/supported posture for normal operation/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/broader self-host admin surface is still parked behind a feature flag/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Internal compatibility profile")).toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply latest release" })).not.toBeInTheDocument();
     expect(screen.queryByText("Network")).not.toBeInTheDocument();

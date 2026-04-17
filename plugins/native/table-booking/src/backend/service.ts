@@ -120,6 +120,12 @@ type LegacyReservationRow = Omit<
   "sourceChannel" | "createdByUserId" | "updatedByUserId"
 >;
 
+type LegacyGuestTokenLookupRow = LegacyReservationRow & {
+  tokenId: string;
+  tokenExpiresAt: Date;
+  tokenUsedAt: Date | null;
+};
+
 type CapacityAdjustmentRow = {
   id: string;
   organizationId: string;
@@ -283,10 +289,6 @@ function warnMissingOperatorCapacityStorage(error: unknown): void {
   );
 }
 
-function getOperatorCapacityMigrationMessage(): string {
-  return "Table Booking storage is out of date. Run `npm run db:migrate -w @vivd/backend` to apply `0028_table_booking_operator_capacity.sql`.";
-}
-
 function buildLegacyReservationSelection(table: any) {
   return {
     id: table.id,
@@ -317,39 +319,6 @@ function buildLegacyReservationSelection(table: any) {
     noShowAt: table.noShowAt,
     createdAt: table.createdAt,
     updatedAt: table.updatedAt,
-  };
-}
-
-function extractLegacyReservationRow(row: Record<string, unknown>): LegacyReservationRow {
-  return {
-    id: row.id as string,
-    organizationId: row.organizationId as string,
-    projectSlug: row.projectSlug as string,
-    pluginInstanceId: row.pluginInstanceId as string,
-    status: row.status as TableBookingStatus,
-    serviceDate: row.serviceDate as string,
-    serviceStartAt: row.serviceStartAt as Date,
-    serviceEndAt: row.serviceEndAt as Date,
-    partySize: row.partySize as number,
-    guestName: row.guestName as string,
-    guestEmail: row.guestEmail as string,
-    guestEmailNormalized: row.guestEmailNormalized as string,
-    guestPhone: row.guestPhone as string,
-    notes: (row.notes as string | null | undefined) ?? null,
-    sourceHost: (row.sourceHost as string | null | undefined) ?? null,
-    sourcePath: (row.sourcePath as string | null | undefined) ?? null,
-    referrerHost: (row.referrerHost as string | null | undefined) ?? null,
-    utmSource: (row.utmSource as string | null | undefined) ?? null,
-    utmMedium: (row.utmMedium as string | null | undefined) ?? null,
-    utmCampaign: (row.utmCampaign as string | null | undefined) ?? null,
-    lastIpHash: (row.lastIpHash as string | null | undefined) ?? null,
-    confirmedAt: (row.confirmedAt as Date | null | undefined) ?? null,
-    cancelledAt: (row.cancelledAt as Date | null | undefined) ?? null,
-    cancelledBy: (row.cancelledBy as string | null | undefined) ?? null,
-    completedAt: (row.completedAt as Date | null | undefined) ?? null,
-    noShowAt: (row.noShowAt as Date | null | undefined) ?? null,
-    createdAt: row.createdAt as Date,
-    updatedAt: row.updatedAt as Date,
   };
 }
 
@@ -1473,14 +1442,12 @@ export function createTableBookingPluginService(
           ),
         )
         .limit(1)
-        .then((result) =>
-          result.map((row) => ({
+        .then((result: LegacyGuestTokenLookupRow[]) =>
+          result.map((row: LegacyGuestTokenLookupRow) => ({
             tokenId: row.tokenId,
             tokenExpiresAt: row.tokenExpiresAt,
             tokenUsedAt: row.tokenUsedAt,
-            reservation: toReservationRowFromLegacy(
-              extractLegacyReservationRow(row as Record<string, unknown>),
-            ),
+            reservation: toReservationRowFromLegacy(row),
           })),
         )) as Array<{
         tokenId: string;

@@ -10,13 +10,13 @@ export interface AppConfig {
   singleProjectMode: boolean;
   /** Active install profile. */
   installProfile: "solo" | "platform";
-  /** Whether the unsupported solo posture is explicitly enabled for this installation. */
+  /** Whether the compatibility-only solo profile is explicitly enabled for this installation. */
   experimentalSoloModeEnabled: boolean;
-  /** Whether parked self-host/operator admin features are intentionally exposed. */
+  /** Whether compatibility-only admin features are intentionally exposed. */
   selfHostAdminFeaturesEnabled: boolean;
-  /** Whether experimental self-host compatibility is currently active. */
+  /** Whether compatibility mode is currently active. */
   selfHostCompatibilityEnabled: boolean;
-  /** Whether the parked self-host admin tools are currently visible. */
+  /** Whether compatibility-only admin tools are currently visible. */
   selfHostAdminFeaturesVisible: boolean;
   /** Profile-aware label for the instance admin surface. */
   instanceAdminLabel: string;

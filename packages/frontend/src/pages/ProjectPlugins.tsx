@@ -16,7 +16,6 @@ import {
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
-import { isExperimentalSoloInstall } from "@/lib/featureFlags";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
   getPluginAccessRequestLabel,
@@ -45,7 +44,6 @@ function getPluginInstallBadgeLabel(
 
 function getPluginStatusCopy(
   plugin: ProjectPluginCatalogItem,
-  isExperimentalSolo: boolean,
   canManageProjectPlugins: boolean,
 ): string {
   if (plugin.installState === "enabled") {
@@ -60,13 +58,9 @@ function getPluginStatusCopy(
       : "Suspended for this project.";
   }
   if (canManageProjectPlugins) {
-    return isExperimentalSolo
-      ? "Not active in this experimental self-host compatibility install. You can enable it here for this project."
-      : "Not active for this project. You can enable it here.";
+    return "Not active for this project. You can enable it here.";
   }
-  return isExperimentalSolo
-    ? "Not active in this experimental self-host compatibility install."
-    : "Not active for this project.";
+  return "Not active for this project.";
 }
 
 function formatPluginTimestamp(value?: string | null): string | null {
@@ -143,7 +137,6 @@ export default function ProjectPlugins() {
   const canManageProjectPlugins = session?.user?.role === "super_admin";
   const canRequestPluginAccess =
     !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
-  const isExperimentalSolo = isExperimentalSoloInstall(config);
   const plugins = catalogQuery.data?.plugins ?? [];
   const enabledCount = plugins.filter((plugin) => plugin.installState === "enabled").length;
   const availableCount = plugins.filter((plugin) => plugin.installState === "available").length;
@@ -190,16 +183,14 @@ export default function ProjectPlugins() {
         {
           key: "attention",
           title: "Not active",
-          description: isExperimentalSolo
-            ? "Currently disabled or suspended by project or instance policy in experimental solo mode."
-            : "Disabled or suspended plugins for this project.",
+          description: "Disabled or suspended plugins for this project.",
           plugins: plugins.filter(
             (plugin) =>
               plugin.installState === "disabled" || plugin.installState === "suspended",
           ),
         },
       ].filter((section) => section.plugins.length > 0),
-    [canManageProjectPlugins, isExperimentalSolo, plugins],
+    [canManageProjectPlugins, plugins],
   );
 
   useEffect(() => {
@@ -285,9 +276,7 @@ export default function ProjectPlugins() {
                   },
                   {
                     label: "Scope",
-                    value: isExperimentalSolo
-                      ? "Experimental self-host compatibility may limit plugin availability."
-                      : "Plugin activation is scoped to this project.",
+                    value: "Plugin activation is scoped to this project.",
                   },
                 ].map((item) => (
                   <div key={item.label} className="space-y-1">
@@ -395,11 +384,7 @@ export default function ProjectPlugins() {
                             </p>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {getPluginStatusCopy(
-                              plugin,
-                              isExperimentalSolo,
-                              canManageProjectPlugins,
-                            )}
+                            {getPluginStatusCopy(plugin, canManageProjectPlugins)}
                           </p>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             {plugin.instanceId ? (

@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import {
-  isExperimentalSoloInstall as isExperimentalSoloInstallEnabled,
   showSelfHostAdminFeatures,
 } from "@/lib/featureFlags";
 import { InstanceRuntimeAdminSection } from "./InstanceRuntimeAdminSection";
@@ -269,8 +268,6 @@ export function InstanceSettingsTab() {
   const isPlatformInstall = settings
     ? (settings.showPlatformAdminSections ?? settings.controlPlane.mode === "host_based")
     : config.showPlatformAdminSections;
-  const isExperimentalSoloInstall =
-    selfHostCompatibilityEnabled && isExperimentalSoloInstallEnabled(config);
   const selfHostAdminFeaturesVisible = settings
     ? (settings.selfHostAdminFeaturesVisible ??
       (selfHostCompatibilityEnabled && showSelfHostAdminFeatures(config)))
@@ -469,9 +466,7 @@ export function InstanceSettingsTab() {
 
   const handleSaveNetwork = () => {
     if (!selfHostAdminFeaturesVisible) {
-      toast.error(
-        "Experimental self-host network controls are hidden for this installation.",
-      );
+      toast.error("Network controls are not available for this installation.");
       return;
     }
 
@@ -499,11 +494,7 @@ export function InstanceSettingsTab() {
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
           <CardTitle>General</CardTitle>
-          <CardDescription>
-            {isExperimentalSoloInstall
-              ? "Review the active experimental self-host posture and routing shape for this instance."
-              : "Review the active platform posture, routing shape, and instance-wide defaults."}
-          </CardDescription>
+          <CardDescription>Review routing, topology, and instance-wide defaults.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -513,36 +504,18 @@ export function InstanceSettingsTab() {
                 <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
                   <Badge variant="secondary">Solo</Badge>
                   <span className="text-sm text-muted-foreground">
-                    Experimental self-host profile
+                    Internal compatibility profile
                   </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  <code>solo</code> is enabled here only as an internal experimental
-                  self-host path. <code>platform</code> remains the supported posture for
-                  normal operation.
-                </p>
-                {!selfHostAdminFeaturesVisible ? (
-                  <p className="text-sm text-muted-foreground">
-                    The broader self-host admin surface is still parked behind a feature
-                    flag so day-to-day platform work stays less distracting.
-                  </p>
-                ) : null}
               </>
             ) : isPlatformInstall ? (
               <>
                 <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
                   <Badge variant="secondary">Platform</Badge>
                   <span className="text-sm text-muted-foreground">
-                    Multi-org platform profile
+                    Hosted control plane profile
                   </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  <code>platform</code> is the supported posture for this installation and
-                  keeps the hosted multi-org control plane active.
-                  {!config.experimentalSoloModeEnabled
-                    ? " Solo self-host stays hidden unless the backend experimental flag is enabled."
-                    : ""}
-                </p>
               </>
             ) : (
               <div className="max-w-xs rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
@@ -573,9 +546,6 @@ export function InstanceSettingsTab() {
       </Card>
 
       <InstanceRuntimeAdminSection
-        isExperimentalSoloInstall={isExperimentalSoloInstall}
-        isPlatformInstall={isPlatformInstall}
-        selfHostCompatibilityEnabled={selfHostCompatibilityEnabled}
         selfHostAdminFeaturesVisible={selfHostAdminFeaturesVisible}
         software={software}
         softwareIsLoading={softwareQuery.isLoading}
@@ -608,7 +578,7 @@ export function InstanceSettingsTab() {
           <CardHeader>
             <CardTitle>Capabilities</CardTitle>
             <CardDescription>
-              Bound the platform surface instead of relying on one large, over-configurable mode.
+              Enable the instance capabilities you want exposed.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

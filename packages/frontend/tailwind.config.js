@@ -6,6 +6,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",
+    "../ui/src/**/*.{ts,tsx,js,jsx}",
     "../../plugins/native/*/src/**/*.{ts,tsx,js,jsx}",
     "../../plugins/external/*/src/**/*.{ts,tsx,js,jsx}",
   ],

@@ -149,34 +149,40 @@ Completed in the first extraction slice:
 - `input`
 - `label`
 
-Likely next candidates because they are still exact or close fits for a neutral shared layer:
+Completed in the second extraction slice:
 
 - `badge`
 - `checkbox`
-- `collapsible`
 - `dialog`
 - `dropdown-menu`
 - `separator`
 - `tooltip`
 
-Defer until there is either stronger shared demand or clearer composition boundaries:
+Completed in the third extraction slice:
 
-- `alert-dialog`
+- `collapsible`
+- `textarea`
 - `avatar`
+- `progress`
+- `skeleton`
+
+Completed in the fourth extraction slice:
+
 - `breadcrumb`
 - `context-menu`
 - `form`
-- `interactive-surface`
 - `password-input`
-- `progress`
 - `scroll-area`
 - `select`
 - `sheet`
-- `skeleton`
 - `tabs`
-- `textarea`
 - `toggle`
 - `toggle-group`
+
+Completed in the fifth extraction slice:
+
+- `alert-dialog`
+- `interactive-surface`
 
 Keep local for now:
 
@@ -186,6 +192,8 @@ Keep local for now:
   frontend-only; no second consumer yet
 - `sidebar`
   frontend-only and too tightly coupled to control-plane shell behavior to treat as a primitive candidate right now
+
+At this point, the duplicated neutral primitive layer has been extracted; the remaining local files are intentional app-owned or divergent components rather than pending exact-match duplicates.
 
 ### Reference validation commands
 
@@ -200,6 +208,8 @@ Use these checks after each shared-primitive slice:
 Note:
 
 - the Table Booking page test needed its TRPC harness updated for `plugins.requestAccess.useMutation` so the reference suite reflects current page behavior instead of a stale mock.
+- once primitives live in `packages/ui`, every consuming app must include `packages/ui/src/**/*` in its Tailwind content scan; otherwise shared dark-mode utility classes can disappear from built CSS even though the local re-export wrappers still compile.
+- destructive confirm actions should prefer `AlertDialogAction variant="destructive"` over copied utility-class blobs so the dark semantic treatment stays primitive-owned.
 
 ## Migration Strategy
 
@@ -231,12 +241,44 @@ Initial likely candidates:
 - `button`
 - `card`
 - `badge`
+- `checkbox`
+- `dialog`
+- `dropdown-menu`
 - `input`
 - `label`
 - `textarea`
 - `separator`
 - `tooltip`
+
+Completed so far:
+
+- `button`
+- `card`
+- `badge`
+- `checkbox`
+- `avatar`
+- `breadcrumb`
+- `collapsible`
+- `context-menu`
 - `dialog`
+- `dropdown-menu`
+- `form`
+- `input`
+- `label`
+- `password-input`
+- `progress`
+- `scroll-area`
+- `select`
+- `separator`
+- `sheet`
+- `skeleton`
+- `tabs`
+- `textarea`
+- `toggle`
+- `toggle-group`
+- `tooltip`
+- `alert-dialog`
+- `interactive-surface`
 
 Implementation rules:
 
@@ -254,6 +296,11 @@ Acceptance bar:
 ### Phase 2: Establish composition layers in the control plane
 
 After the shared primitive package is stable, improve the control plane through composition instead of one-off utility usage.
+
+First pass landed on 2026-04-17:
+
+- Super Admin organizations flow now uses a clearer workspace summary and a more structured settings surface instead of leaning on mini metric cards and ad-hoc field blocks.
+- The first focused regression test for this surface lives in `packages/frontend/src/components/admin/organizations/OrganizationsTab.test.tsx`.
 
 Candidate control-plane composition pieces:
 

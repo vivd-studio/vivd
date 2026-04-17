@@ -13,7 +13,6 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/common";
-import { showSelfHostAdminFeatures } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,8 +50,7 @@ const SECTION_META: Record<
 > = {
   instance: {
     title: "Instance",
-    description:
-      "Review the supported platform posture, capability gates, and instance-wide defaults.",
+    description: "Review routing, capability gates, and instance-wide defaults.",
   },
   org: {
     title: "Organizations",
@@ -187,7 +185,6 @@ export default function SuperAdmin() {
     () => organizations.filter((org) => org.status === "active").length,
     [organizations],
   );
-  const selfHostAdminFeaturesVisible = showSelfHostAdminFeatures(config);
 
   const createOrg = trpc.superadmin.createOrganization.useMutation({
     onSuccess: async (result, variables) => {
@@ -446,24 +443,6 @@ export default function SuperAdmin() {
 
   return (
     <div className="w-full space-y-8">
-      {!config.experimentalSoloModeEnabled && platformAdminSectionsVisible ? (
-        <Card className="border-border/70 bg-muted/20 shadow-sm">
-          <CardContent className="py-4 text-sm text-muted-foreground">
-            Hosted platform mode is the supported posture for this installation. Solo
-            self-host compatibility and parked operator tooling stay hidden unless the
-            backend feature flags are enabled.
-          </CardContent>
-        </Card>
-      ) : null}
-      {config.selfHostCompatibilityEnabled && !selfHostAdminFeaturesVisible ? (
-        <Card className="border-border/70 bg-muted/20 shadow-sm">
-          <CardContent className="py-4 text-sm text-muted-foreground">
-            Solo compatibility is enabled, but the broader self-host admin surface is still
-            parked behind a feature flag so platform work stays the default path.
-          </CardContent>
-        </Card>
-      ) : null}
-
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">

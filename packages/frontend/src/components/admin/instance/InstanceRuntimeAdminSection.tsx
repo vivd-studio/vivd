@@ -24,9 +24,6 @@ type InstanceNetwork = RouterOutputs["superadmin"]["getInstanceSettings"]["netwo
 type NetworkTlsMode = "managed" | "external" | "off";
 
 type InstanceRuntimeAdminSectionProps = {
-  isExperimentalSoloInstall: boolean;
-  isPlatformInstall: boolean;
-  selfHostCompatibilityEnabled: boolean;
   selfHostAdminFeaturesVisible: boolean;
   software: InstanceSoftware | undefined;
   softwareIsLoading: boolean;
@@ -53,9 +50,6 @@ type InstanceRuntimeAdminSectionProps = {
 };
 
 export function InstanceRuntimeAdminSection({
-  isExperimentalSoloInstall,
-  isPlatformInstall,
-  selfHostCompatibilityEnabled,
   selfHostAdminFeaturesVisible,
   software,
   softwareIsLoading,
@@ -88,13 +82,7 @@ export function InstanceRuntimeAdminSection({
       >
         <CardHeader>
           <CardTitle>Software</CardTitle>
-          <CardDescription>
-            {isExperimentalSoloInstall
-              ? selfHostAdminFeaturesVisible
-                ? "Review the running experimental self-host bundle version and apply newer releases when the managed updater is configured."
-                : "Review the running experimental self-host bundle version while operator update controls stay parked behind a feature flag."
-              : "Review the running deployment version. Platform updates stay deployment-managed for now."}
-          </CardDescription>
+          <CardDescription>Review the running deployment version and release status.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
@@ -157,19 +145,6 @@ export function InstanceRuntimeAdminSection({
             <p className="text-sm text-muted-foreground">
               Update to {waitingTargetLabel} is running. This page will stay locked until the
               backend reports the new version after restart.
-            </p>
-          ) : null}
-
-          {isPlatformInstall ? (
-            <p className="text-sm text-muted-foreground">
-              This page shows the current platform version only. Applying updates remains a
-              deployment-level operation for now.
-            </p>
-          ) : null}
-          {selfHostCompatibilityEnabled && !selfHostAdminFeaturesVisible ? (
-            <p className="text-sm text-muted-foreground">
-              Managed self-host update controls are intentionally hidden for now. Re-enable
-              them only when you are actively working on the parked operator path.
             </p>
           ) : null}
 

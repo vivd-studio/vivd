@@ -1085,11 +1085,7 @@ export function ChatProvider({
               {confirmDialog.cancelLabel ?? "Cancel"}
             </AlertDialogCancel>
             <AlertDialogAction
-              className={
-                confirmDialog.destructive
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : undefined
-              }
+              variant={confirmDialog.destructive ? "destructive" : undefined}
               onClick={() => resolveConfirm(true)}
             >
               {confirmDialog.confirmLabel ?? "Confirm"}

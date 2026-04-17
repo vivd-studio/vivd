@@ -2,6 +2,7 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { darkSemanticButtonTones } from "./semanticTones";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
@@ -10,11 +11,11 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow hover:bg-primary/90 dark:border dark:border-primary/40 dark:bg-primary/12 dark:text-primary dark:shadow-none dark:hover:bg-primary/18 dark:hover:border-primary/55",
+          `bg-primary text-primary-foreground shadow hover:bg-primary/90 ${darkSemanticButtonTones.default}`,
         success:
-          "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 dark:border dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300 dark:shadow-none dark:hover:bg-emerald-500/16 dark:hover:border-emerald-500/55",
+          `bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 ${darkSemanticButtonTones.success}`,
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55",
+          `bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 ${darkSemanticButtonTones.destructive}`,
         outline:
           "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
         secondary:

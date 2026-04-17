@@ -255,7 +255,7 @@ export class InstanceSoftwareService {
     if (options.installProfile !== "solo") {
       return {
         started: false,
-        error: "Managed updates are available only for solo self-host installs.",
+        error: "Managed updates are not available for this installation.",
         targetTag: null,
       };
     }

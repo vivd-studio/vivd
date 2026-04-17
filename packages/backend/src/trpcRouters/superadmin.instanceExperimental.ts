@@ -13,7 +13,7 @@ import { reloadCaddyConfig } from "../services/system/CaddyAdminService";
 import { publishService } from "../services/publish/PublishService";
 
 const SELF_HOST_ADMIN_FEATURES_MESSAGE =
-  "Experimental self-host admin features are hidden for this installation.";
+  "These admin controls are not available for this installation.";
 
 export const experimentalInstanceSuperAdminProcedures = {
   updateSelfHostNetworkSettings: superAdminProcedure
@@ -30,8 +30,7 @@ export const experimentalInstanceSuperAdminProcedures = {
       if (!policy.selfHostCompatibility.enabled) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message:
-            "Instance network settings are currently UI-managed only for experimental self-host compatibility installs.",
+          message: "Network controls are not available for this installation.",
         });
       }
 
@@ -58,8 +57,7 @@ export const experimentalInstanceSuperAdminProcedures = {
     if (!policy.selfHostCompatibility.enabled) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message:
-          "Managed updates are available only for experimental self-host compatibility installs.",
+        message: "Managed updates are not available for this installation.",
       });
     }
 

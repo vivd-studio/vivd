@@ -21,20 +21,48 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@studio/shared/*": ["../shared/*"],
-      "@vivd/installed-plugins": ["../../../plugins/installed/src/index.ts"],
-      "@vivd/installed-plugins/*": ["../../../plugins/installed/src/*"],
-      "@vivd/plugin-analytics/*": ["../../../plugins/native/analytics/src/*"],
-      "@vivd/plugin-contact-form/*": ["../../../plugins/native/contact-form/src/*"],
-      "@vivd/plugin-newsletter/*": ["../../../plugins/native/newsletter/src/*"],
-      "@vivd/plugin-table-booking/*": ["../../../plugins/native/table-booking/src/*"],
-      "@vivd/plugin-sdk": ["../../../plugins/sdk/src/index.ts"],
-      "@vivd/plugin-sdk/*": ["../../../plugins/sdk/src/*"],
-      "@vivd/shared": ["../../shared/src/index.ts"],
-      "@vivd/shared/*": ["../../shared/src/*"],
-      "@vivd/ui": ["../../ui/src/index.ts"],
-      "@vivd/ui/*": ["../../ui/src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@studio/shared/*": [
+        "../shared/*"
+      ],
+      "@vivd/installed-plugins": [
+        "../../../plugins/installed/src/index.ts"
+      ],
+      "@vivd/installed-plugins/*": [
+        "../../../plugins/installed/src/*"
+      ],
+      "@vivd/plugin-sdk": [
+        "../../../plugins/sdk/src/index.ts"
+      ],
+      "@vivd/plugin-sdk/*": [
+        "../../../plugins/sdk/src/*"
+      ],
+      "@vivd/shared": [
+        "../../shared/src/index.ts"
+      ],
+      "@vivd/shared/*": [
+        "../../shared/src/*"
+      ],
+      "@vivd/ui": [
+        "../../ui/src/index.ts"
+      ],
+      "@vivd/ui/*": [
+        "../../ui/src/*"
+      ],
+      "@vivd/plugin-analytics/*": [
+        "../../../plugins/native/analytics/src/*"
+      ],
+      "@vivd/plugin-contact-form/*": [
+        "../../../plugins/native/contact-form/src/*"
+      ],
+      "@vivd/plugin-newsletter/*": [
+        "../../../plugins/native/newsletter/src/*"
+      ],
+      "@vivd/plugin-table-booking/*": [
+        "../../../plugins/native/table-booking/src/*"
+      ]
     }
   },
   "include": ["src", "../shared"]

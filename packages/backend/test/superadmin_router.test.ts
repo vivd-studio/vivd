@@ -612,8 +612,7 @@ describe("superadmin router", () => {
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message:
-        "Instance network settings are currently UI-managed only for experimental self-host compatibility installs.",
+      message: "Network controls are not available for this installation.",
     });
 
     expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
@@ -630,7 +629,7 @@ describe("superadmin router", () => {
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Experimental self-host admin features are hidden for this installation.",
+      message: "These admin controls are not available for this installation.",
     });
 
     expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
@@ -747,7 +746,7 @@ describe("superadmin router", () => {
     expect(updateInstanceCapabilityPolicyMock).not.toHaveBeenCalled();
   });
 
-  it("allows explicit solo network updates through the experimental self-host mutation", async () => {
+  it("allows explicit solo network updates through the compatibility admin mutation", async () => {
     isSelfHostAdminFeaturesEnabledMock.mockReturnValue(true);
     resolvePolicyMock.mockResolvedValue({
       installProfile: "solo",
@@ -842,8 +841,7 @@ describe("superadmin router", () => {
 
     await expect(caller.startSelfHostManagedUpdate()).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message:
-        "Managed updates are available only for experimental self-host compatibility installs.",
+      message: "Managed updates are not available for this installation.",
     });
 
     expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();
@@ -854,7 +852,7 @@ describe("superadmin router", () => {
 
     await expect(caller.startSelfHostManagedUpdate()).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Experimental self-host admin features are hidden for this installation.",
+      message: "These admin controls are not available for this installation.",
     });
 
     expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();

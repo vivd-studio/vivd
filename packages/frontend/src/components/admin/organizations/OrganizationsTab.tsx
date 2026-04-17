@@ -1,12 +1,13 @@
+import type { ReactNode } from "react";
 import { FolderKanban, Globe2, Users } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { UsageLimitsPanel } from "./components/UsageLimitsPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DomainsPanel } from "./components/DomainsPanel";
 import { MembersPanel } from "./components/MembersPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { DomainsPanel } from "./components/DomainsPanel";
+import { UsageLimitsPanel } from "./components/UsageLimitsPanel";
 import { useOrganizationsAdmin } from "./useOrganizationsAdmin";
 import { toLimitsPatch } from "./utils";
 
@@ -17,33 +18,49 @@ type Props = {
   onOrgDeleted?: (fallbackId: string) => void;
 };
 
-type OverviewMetricCardProps = {
+type OverviewMetaItemProps = {
+  label: string;
+  value: ReactNode;
+  helper: string;
+};
+
+type OverviewStatRowProps = {
   label: string;
   value: string;
   helper: string;
   icon: typeof Users;
 };
 
-function OverviewMetricCard({
+function OverviewMetaItem({ label, value, helper }: OverviewMetaItemProps) {
+  return (
+    <div className="rounded-lg border bg-background/80 px-4 py-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-foreground">{value}</dd>
+      <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
+    </div>
+  );
+}
+
+function OverviewStatRow({
   label,
   value,
   helper,
   icon: Icon,
-}: OverviewMetricCardProps) {
+}: OverviewStatRowProps) {
   return (
-    <div className="rounded-xl border bg-background/80 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            {label}
-          </p>
-          <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        </div>
-        <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-          <Icon className="size-4" />
-        </div>
+    <div className="flex items-start gap-3 rounded-lg border bg-background/80 px-4 py-3">
+      <div className="rounded-md bg-muted p-2 text-muted-foreground">
+        <Icon className="size-4" />
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">{helper}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-sm text-muted-foreground">{label}</dt>
+          <dd className="text-lg font-semibold tracking-tight text-foreground">
+            {value}
+          </dd>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+      </div>
     </div>
   );
 }
@@ -69,90 +86,137 @@ export function OrganizationsTab({
   }
 
   if (!admin.selectedOrg) {
-    return (
-      <div className="text-muted-foreground">Organization not found.</div>
-    );
+    return <div className="text-muted-foreground">Organization not found.</div>;
   }
+
+  const repoPrefix = admin.selectedOrg.githubRepoPrefix?.trim();
 
   return (
     <div className="space-y-6">
       <Card className="border-border/70 shadow-sm">
-        <CardContent className="space-y-6 p-6">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant={
-                    admin.selectedOrg.status === "active"
-                      ? "default"
-                      : "destructive"
-                  }
-                >
-                  {admin.selectedOrg.status}
-                </Badge>
-                {admin.usage?.limits.blocked ? (
-                  <Badge variant="destructive">Credits blocked</Badge>
-                ) : null}
-                {admin.usage?.limits.imageGenBlocked ? (
-                  <Badge variant="secondary">Image generation blocked</Badge>
-                ) : null}
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    {admin.selectedOrg.name}
-                  </h2>
-                  {admin.selectedOrg.id === "default" ? (
-                    <Badge variant="secondary">Default organization</Badge>
-                  ) : null}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-mono text-foreground/80">
-                    {admin.selectedOrg.slug}
-                  </span>{" "}
-                  manages member access, domain policy, and organization-wide
-                  resource limits.
-                </p>
-              </div>
+        <CardContent className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={
+                  admin.selectedOrg.status === "active" ? "default" : "destructive"
+                }
+              >
+                {admin.selectedOrg.status}
+              </Badge>
+              {admin.usage?.limits.blocked ? (
+                <Badge variant="destructive">Credits blocked</Badge>
+              ) : null}
+              {admin.usage?.limits.imageGenBlocked ? (
+                <Badge variant="secondary">Image generation blocked</Badge>
+              ) : null}
+              {admin.selectedOrg.id === "default" ? (
+                <Badge variant="outline">Default organization</Badge>
+              ) : null}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[520px] xl:grid-cols-3">
-              <OverviewMetricCard
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                {admin.selectedOrg.name}
+              </h2>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Manage members, domains, usage budgets, and repository defaults for{" "}
+                <span className="font-mono text-foreground/80">
+                  {admin.selectedOrg.slug}
+                </span>
+                .
+              </p>
+            </div>
+
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <OverviewMetaItem
+                label="Slug"
+                value={
+                  <span className="font-mono text-sm">{admin.selectedOrg.slug}</span>
+                }
+                helper="Used in URLs, org switching, and tenant scoping."
+              />
+              <OverviewMetaItem
+                label="Organization ID"
+                value={
+                  <span className="font-mono text-sm">{admin.selectedOrg.id}</span>
+                }
+                helper="Stable internal identifier for admin and backend workflows."
+              />
+              <OverviewMetaItem
+                label="Repository prefix"
+                value={
+                  repoPrefix ? (
+                    <span className="font-mono text-sm">{repoPrefix}</span>
+                  ) : (
+                    "Uses slug fallback"
+                  )
+                }
+                helper={
+                  repoPrefix
+                    ? "Applied to auto-created GitHub repositories for this organization."
+                    : "New repositories default to the organization slug."
+                }
+              />
+              <OverviewMetaItem
+                label="Scope"
+                value={
+                  admin.selectedOrg.id === "default"
+                    ? "Platform fallback organization"
+                    : "Tenant organization"
+                }
+                helper={
+                  admin.selectedOrg.id === "default"
+                    ? "This stays available as the default tenant and cannot be deleted."
+                    : "Standard org with its own members, projects, domains, and limits."
+                }
+              />
+            </dl>
+          </div>
+
+          <div className="rounded-lg border bg-muted/10 p-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium">Workspace summary</h3>
+              <p className="text-sm text-muted-foreground">
+                Current footprint for this organization.
+              </p>
+            </div>
+            <dl className="mt-4 space-y-2">
+              <OverviewStatRow
                 label="Members"
                 value={String(admin.selectedOrg.memberCount)}
-                helper="People with access to this organization."
+                helper="People who currently have access to this organization."
                 icon={Users}
               />
-              <OverviewMetricCard
+              <OverviewStatRow
                 label="Projects"
                 value={admin.projectsLoading ? "..." : String(admin.projects.length)}
-                helper="Projects currently assigned to this org."
+                helper="Projects assigned to this org right now."
                 icon={FolderKanban}
               />
-              <OverviewMetricCard
+              <OverviewStatRow
                 label="Domains"
                 value={admin.domainsLoading ? "..." : String(admin.domains.length)}
                 helper="Managed tenant hosts and publish targets."
                 icon={Globe2}
               />
-            </div>
+            </dl>
           </div>
         </CardContent>
       </Card>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="usage">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="usage" className="shrink-0">
             Usage & Limits
           </TabsTrigger>
-          <TabsTrigger value="members">
+          <TabsTrigger value="members" className="shrink-0">
             Members
           </TabsTrigger>
-          <TabsTrigger value="domains">
+          <TabsTrigger value="domains" className="shrink-0">
             Domains
           </TabsTrigger>
-          <TabsTrigger value="settings">
+          <TabsTrigger value="settings" className="shrink-0">
             Settings
           </TabsTrigger>
         </TabsList>
@@ -256,7 +320,7 @@ export function OrganizationsTab({
           />
         </TabsContent>
 
-        <TabsContent value="settings" className="mt-6 max-w-3xl space-y-4">
+        <TabsContent value="settings" className="mt-6 space-y-4">
           <SettingsPanel
             selectedOrg={admin.selectedOrg}
             orgNameForm={admin.orgNameForm}
