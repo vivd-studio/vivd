@@ -1,33 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { useAppConfig } from "@/lib/AppConfigContext";
-import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
+import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
   getPluginAccessRequestLabel,
@@ -38,115 +17,38 @@ import {
   NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
-  type NewsletterCampaignsPayload,
-  type NewsletterSubscribersPayload,
-  type NewsletterSummaryPayload,
 } from "../shared/summary";
+import { NewsletterCampaignsCard } from "./newsletterProjectPage/CampaignsCard";
+import { NewsletterDialogs } from "./newsletterProjectPage/Dialogs";
+import { NewsletterInstallCard } from "./newsletterProjectPage/InstallCard";
+import { NewsletterSettingsCard } from "./newsletterProjectPage/SettingsCard";
+import { StatCard } from "./newsletterProjectPage/shared";
+import { NewsletterSubscribersCard } from "./newsletterProjectPage/SubscribersCard";
+import type {
+  NewsletterCampaignAudience,
+  NewsletterCampaigns,
+  NewsletterPluginIcon,
+  NewsletterPluginInfo,
+  NewsletterProjectPageProps,
+  NewsletterSubscribers,
+  NewsletterSummary,
+} from "./newsletterProjectPage/types";
+import {
+  downloadCsv,
+  formatListInput,
+  parseListInput,
+} from "./newsletterProjectPage/utils";
 
-type NewsletterProjectPageProps = {
-  projectSlug: string;
-  isEmbedded?: boolean;
-};
+type NewsletterSubscriberStatus =
+  | "all"
+  | "pending"
+  | "confirmed"
+  | "unsubscribed"
+  | "bounced"
+  | "complained";
 
-type NewsletterPluginConfig = {
-  mode: "newsletter" | "waitlist";
-  collectName: boolean;
-  sourceHosts: string[];
-  redirectHostAllowlist: string[];
-};
-
-type NewsletterCampaignAudience = "all_confirmed" | "mode_confirmed";
-
-function getCampaignAudienceLabel(
-  audience: NewsletterCampaignAudience,
-  currentMode: "newsletter" | "waitlist",
-): string {
-  return audience === "mode_confirmed"
-    ? `Confirmed (${currentMode})`
-    : "All confirmed";
-}
-
-function parseListInput(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split("\n")
-        .flatMap((line) => line.split(","))
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function formatListInput(values: string[]): string {
-  return values.join("\n");
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return "n/a";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "n/a";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
-  const keys = Array.from(
-    rows.reduce((set, row) => {
-      for (const key of Object.keys(row)) set.add(key);
-      return set;
-    }, new Set<string>()),
-  );
-  const escape = (value: unknown) => {
-    const text = value == null ? "" : String(value);
-    return `"${text.replace(/"/g, '""')}"`;
-  };
-  const content = [
-    keys.join(","),
-    ...rows.map((row) => keys.map((key) => escape(row[key])).join(",")),
-  ].join("\n");
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function StatCard({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: string;
-  caption?: string;
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-      {caption ? <p className="mt-1 text-xs text-muted-foreground">{caption}</p> : null}
-    </div>
-  );
-}
+const SUBSCRIBER_PAGE_SIZE = 100;
+const CAMPAIGN_PAGE_SIZE = 20;
 
 export default function NewsletterProjectPage({
   projectSlug,
@@ -179,14 +81,11 @@ export default function NewsletterProjectPage({
   const [testSendEmail, setTestSendEmail] = useState("");
   const [sendCampaignId, setSendCampaignId] = useState<string | null>(null);
   const [cancelSendCampaignId, setCancelSendCampaignId] = useState<string | null>(null);
-  const [subscriberStatus, setSubscriberStatus] = useState<
-    "all" | "pending" | "confirmed" | "unsubscribed" | "bounced" | "complained"
-  >("all");
+  const [subscriberStatus, setSubscriberStatus] =
+    useState<NewsletterSubscriberStatus>("all");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [unsubscribeEmail, setUnsubscribeEmail] = useState<string | null>(null);
-  const limit = 100;
-  const campaignLimit = 20;
 
   const projectListQuery = trpc.project.list.useQuery(undefined, {
     enabled: !!projectSlug,
@@ -211,7 +110,7 @@ export default function NewsletterProjectPage({
       readId: NEWSLETTER_CAMPAIGNS_READ_ID,
       input: {
         status: "all",
-        limit: campaignLimit,
+        limit: CAMPAIGN_PAGE_SIZE,
         offset: campaignOffset,
       },
     },
@@ -225,21 +124,25 @@ export default function NewsletterProjectPage({
       input: {
         status: subscriberStatus,
         search,
-        limit,
+        limit: SUBSCRIBER_PAGE_SIZE,
         offset,
       },
     },
     { enabled: !!projectSlug },
   );
 
+  const invalidatePluginData = async () => {
+    await Promise.all([
+      utils.plugins.catalog.invalidate({ slug: projectSlug }),
+      utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
+      utils.plugins.read.invalidate(),
+    ]);
+  };
+
   const ensureMutation = trpc.plugins.ensure.useMutation({
     onSuccess: async () => {
       toast.success("Newsletter plugin enabled");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug: projectSlug }),
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginData();
     },
     onError: (error) => {
       toast.error("Failed to enable Newsletter", {
@@ -251,10 +154,7 @@ export default function NewsletterProjectPage({
   const saveConfigMutation = trpc.plugins.updateConfig.useMutation({
     onSuccess: async () => {
       toast.success("Newsletter settings saved");
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginData();
     },
     onError: (error) => {
       toast.error("Failed to save settings", {
@@ -266,10 +166,7 @@ export default function NewsletterProjectPage({
   const actionMutation = trpc.plugins.action.useMutation({
     onSuccess: async () => {
       toast.success("Newsletter subscriber updated");
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginData();
     },
     onError: (error) => {
       toast.error("Subscriber action failed", {
@@ -314,10 +211,7 @@ export default function NewsletterProjectPage({
             : undefined,
         });
       } else if (result.actionId === "send_campaign") {
-        const payload = result.result as {
-          campaignId?: string;
-          recipientCount?: number;
-        };
+        const payload = result.result as { campaignId?: string; recipientCount?: number };
         setSendCampaignId(null);
         if (payload.campaignId) {
           setEditingNewCampaign(false);
@@ -335,10 +229,7 @@ export default function NewsletterProjectPage({
         toast.success("Campaign canceled");
       }
 
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginData();
     },
     onError: (error) => {
       toast.error("Campaign action failed", {
@@ -347,42 +238,29 @@ export default function NewsletterProjectPage({
     },
   });
 
-  const pluginInfo = pluginInfoQuery.data as
-    | (RouterOutputs["plugins"]["info"] & {
-        config: NewsletterPluginConfig | null;
-        usage: {
-          subscribeEndpoint: string;
-          confirmEndpoint: string;
-          unsubscribeEndpoint: string;
-          expectedFields: string[];
-          optionalFields: string[];
-          inferredAutoSourceHosts: string[];
-        } | null;
-        snippets: {
-          html: string;
-          astro: string;
-        } | null;
-        details: {
-          counts?: NewsletterSummaryPayload["counts"];
-        } | null;
-      })
-    | undefined;
-  const summary = summaryQuery.data?.result as NewsletterSummaryPayload | undefined;
-  const campaigns = campaignsQuery.data?.result as
-    | NewsletterCampaignsPayload
-    | undefined;
-  const subscribers = subscribersQuery.data?.result as
-    | NewsletterSubscribersPayload
-    | undefined;
+  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
+    onSuccess: async () => {
+      toast.success("Access request sent");
+      await pluginInfoQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to send access request", {
+        description: error.message,
+      });
+    },
+  });
+
+  const pluginInfo = pluginInfoQuery.data as NewsletterPluginInfo;
+  const summary = summaryQuery.data?.result as NewsletterSummary;
+  const campaigns = campaignsQuery.data?.result as NewsletterCampaigns;
+  const subscribers = subscribersQuery.data?.result as NewsletterSubscribers;
 
   useEffect(() => {
     if (!pluginInfo?.config) return;
     setMode(pluginInfo.config.mode);
     setCollectName(Boolean(pluginInfo.config.collectName));
     setSourceHostsInput(formatListInput(pluginInfo.config.sourceHosts ?? []));
-    setRedirectHostsInput(
-      formatListInput(pluginInfo.config.redirectHostAllowlist ?? []),
-    );
+    setRedirectHostsInput(formatListInput(pluginInfo.config.redirectHostAllowlist ?? []));
   }, [pluginInfo?.config]);
 
   useEffect(() => {
@@ -400,9 +278,7 @@ export default function NewsletterProjectPage({
 
   useEffect(() => {
     if (!campaigns?.rows) return;
-    if (editingNewCampaign) {
-      return;
-    }
+    if (editingNewCampaign) return;
 
     if (campaigns.rows.length === 0) {
       if (!selectedCampaignId) {
@@ -444,32 +320,20 @@ export default function NewsletterProjectPage({
       campaigns.rows.length === 0 &&
       campaignOffset >= campaigns.total
     ) {
-      setCampaignOffset(Math.max(0, campaignOffset - campaignLimit));
+      setCampaignOffset(Math.max(0, campaignOffset - CAMPAIGN_PAGE_SIZE));
     }
-  }, [campaignLimit, campaignOffset, campaigns]);
+  }, [campaignOffset, campaigns]);
 
+  const pluginEnabled = !!pluginInfo?.enabled;
+  const pluginEntitled = pluginInfo?.entitled ?? false;
+  const needsEnable = pluginEntitled && !pluginEnabled && !pluginInfo?.instanceId;
+  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
+  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const isLoading =
     pluginInfoQuery.isLoading ||
     summaryQuery.isLoading ||
     campaignsQuery.isLoading ||
     subscribersQuery.isLoading;
-  const pluginEnabled = !!pluginInfo?.enabled;
-  const pluginEntitled = pluginInfo?.entitled ?? false;
-  const needsEnable = pluginEntitled && !pluginEnabled && !pluginInfo?.instanceId;
-  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
-  const PluginIcon = pluginPresentation.icon;
-  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
-    onSuccess: async () => {
-      toast.success("Access request sent");
-      await pluginInfoQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error("Failed to send access request", {
-        description: error.message,
-      });
-    },
-  });
-  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
 
   const projectTitle =
     projectListQuery.data?.projects?.find((project) => project.slug === projectSlug)?.title ??
@@ -484,17 +348,19 @@ export default function NewsletterProjectPage({
 
   const pageCount = useMemo(() => {
     const total = subscribers?.total ?? 0;
-    return Math.max(1, Math.ceil(total / limit));
+    return Math.max(1, Math.ceil(total / SUBSCRIBER_PAGE_SIZE));
   }, [subscribers?.total]);
-
-  const currentPage = useMemo(() => Math.floor(offset / limit) + 1, [offset]);
+  const currentPage = useMemo(
+    () => Math.floor(offset / SUBSCRIBER_PAGE_SIZE) + 1,
+    [offset],
+  );
   const campaignPageCount = useMemo(() => {
     const total = campaigns?.total ?? 0;
-    return Math.max(1, Math.ceil(total / campaignLimit));
-  }, [campaignLimit, campaigns?.total]);
+    return Math.max(1, Math.ceil(total / CAMPAIGN_PAGE_SIZE));
+  }, [campaigns?.total]);
   const currentCampaignPage = useMemo(
-    () => Math.floor(campaignOffset / campaignLimit) + 1,
-    [campaignLimit, campaignOffset],
+    () => Math.floor(campaignOffset / CAMPAIGN_PAGE_SIZE) + 1,
+    [campaignOffset],
   );
   const selectedCampaign = useMemo(
     () => campaigns?.rows.find((row) => row.id === selectedCampaignId) ?? null,
@@ -513,6 +379,13 @@ export default function NewsletterProjectPage({
     campaignAudience === "mode_confirmed"
       ? (campaigns?.audienceOptions.modeConfirmed ?? 0)
       : (campaigns?.audienceOptions.allConfirmed ?? 0);
+
+  const refreshPluginReads = () => {
+    pluginInfoQuery.refetch();
+    summaryQuery.refetch();
+    campaignsQuery.refetch();
+    subscribersQuery.refetch();
+  };
 
   const saveConfig = () => {
     saveConfigMutation.mutate({
@@ -594,6 +467,34 @@ export default function NewsletterProjectPage({
     );
   };
 
+  const updateSubscriberStatus = (value: NewsletterSubscriberStatus) => {
+    setSubscriberStatus(value);
+    setOffset(0);
+  };
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    setOffset(0);
+  };
+
+  const resendConfirmation = (email: string) => {
+    actionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "resend_confirmation",
+      args: [email],
+    });
+  };
+
+  const markConfirmed = (email: string) => {
+    actionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "mark_confirmed",
+      args: [email],
+    });
+  };
+
   const confirmUnsubscribe = () => {
     if (!unsubscribeEmail) return;
     actionMutation.mutate(
@@ -656,66 +557,25 @@ export default function NewsletterProjectPage({
     >
       <div className="space-y-6">
         {needsEnable ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
-                  <PluginIcon className="h-4 w-4" />
-                </span>
-                <span>Enable plugin</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Newsletter is entitled for this project but not enabled yet.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {canEnablePlugin ? (
-                  <Button
-                    onClick={() =>
-                      ensureMutation.mutate({ slug: projectSlug, pluginId: typedPluginId })
-                    }
-                    disabled={ensureMutation.isPending}
-                  >
-                    {ensureMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Enabling
-                      </>
-                    ) : (
-                      "Enable Newsletter"
-                    )}
-                  </Button>
-                ) : null}
-                {canRequestPluginAccess ? (
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      requestAccessMutation.mutate({
-                        slug: projectSlug,
-                        pluginId: typedPluginId,
-                      })
-                    }
-                    disabled={isRequestPending || requestAccessMutation.isPending}
-                  >
-                    {requestAccessMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      getPluginAccessRequestLabel(pluginInfo?.accessRequest)
-                    )}
-                  </Button>
-                ) : null}
-              </div>
-              {!canEnablePlugin && !isSessionPending ? (
-                <p className="text-xs text-muted-foreground">
-                  Only super-admin users can enable plugins directly.
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
+          <NewsletterAccessCard
+            pluginInfo={pluginInfo}
+            pluginIcon={pluginPresentation.icon}
+            canEnablePlugin={canEnablePlugin}
+            canRequestPluginAccess={canRequestPluginAccess}
+            isSessionPending={isSessionPending}
+            isRequestPending={isRequestPending}
+            isEnablePending={ensureMutation.isPending}
+            isRequestPendingAction={requestAccessMutation.isPending}
+            onEnable={() =>
+              ensureMutation.mutate({ slug: projectSlug, pluginId: typedPluginId })
+            }
+            onRequestAccess={() =>
+              requestAccessMutation.mutate({
+                slug: projectSlug,
+                pluginId: typedPluginId,
+              })
+            }
+          />
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -736,724 +596,187 @@ export default function NewsletterProjectPage({
           />
         </section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Campaigns</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Prepare broadcast drafts for confirmed subscribers.
-              </p>
-            </div>
-            <Button variant="outline" onClick={startNewCampaignDraft}>
-              New draft
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Drafts can now be test-sent and queued for background delivery. Start with
-              a test send before queueing a live broadcast.
-            </p>
-            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Campaigns</p>
-                  <Badge variant="secondary">{campaigns?.total ?? 0}</Badge>
-                </div>
-                {campaigns?.rows.length ? (
-                  <div className="space-y-2">
-                    {campaigns.rows.map((row) => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        className={`w-full rounded-lg border p-3 text-left transition ${
-                          row.id === selectedCampaignId && !editingNewCampaign
-                            ? "border-primary bg-muted/40"
-                            : "hover:bg-muted/30"
-                        }`}
-                        onClick={() => openCampaignFromList(row.id)}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="truncate font-medium">{row.subject}</p>
-                          <Badge variant="outline">{row.status}</Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {getCampaignAudienceLabel(row.audience, row.mode)}
-                          {` • ${row.recipientCount || row.estimatedRecipientCount} recipients`}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {row.deliveryCounts.sent} sent • {row.deliveryCounts.failed} failed •{" "}
-                          {row.deliveryCounts.skipped} skipped • {row.deliveryCounts.queued} queued
-                        </p>
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                          {row.body}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No campaigns yet.
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-2 border-t pt-3">
-                  <p className="text-xs text-muted-foreground">
-                    {campaigns?.total ?? 0} campaigns total, page {currentCampaignPage} of{" "}
-                    {campaignPageCount}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        goToCampaignPage(Math.max(0, campaignOffset - campaignLimit))
-                      }
-                      disabled={campaignOffset === 0}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => goToCampaignPage(campaignOffset + campaignLimit)}
-                      disabled={!campaigns || campaignOffset + campaignLimit >= campaigns.total}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              </div>
+        <NewsletterCampaignsCard
+          campaigns={campaigns}
+          mode={mode}
+          currentCampaignPage={currentCampaignPage}
+          campaignPageCount={campaignPageCount}
+          campaignOffset={campaignOffset}
+          campaignLimit={CAMPAIGN_PAGE_SIZE}
+          selectedCampaignId={selectedCampaignId}
+          selectedCampaign={selectedCampaign}
+          editingNewCampaign={editingNewCampaign}
+          campaignIsEditable={campaignIsEditable}
+          campaignHasUnsavedEdits={campaignHasUnsavedEdits}
+          currentCampaignRecipientEstimate={currentCampaignRecipientEstimate}
+          campaignSubject={campaignSubject}
+          campaignBody={campaignBody}
+          campaignAudience={campaignAudience}
+          testSendEmail={testSendEmail}
+          isPending={campaignActionMutation.isPending}
+          onNewDraft={startNewCampaignDraft}
+          onOpenCampaign={openCampaignFromList}
+          onGoToPage={goToCampaignPage}
+          onSubjectChange={setCampaignSubject}
+          onBodyChange={setCampaignBody}
+          onAudienceChange={setCampaignAudience}
+          onSaveDraft={saveCampaignDraft}
+          onDeleteDraft={() => setDeleteCampaignId(selectedCampaignId)}
+          onTestSendEmailChange={setTestSendEmail}
+          onSendTest={sendCampaignTest}
+          onQueueSend={() => setSendCampaignId(selectedCampaign?.id ?? null)}
+          onCancelSend={() => setCancelSendCampaignId(selectedCampaign?.id ?? null)}
+        />
 
-              <div className="space-y-4 rounded-lg border p-4">
-                {selectedCampaign && !editingNewCampaign ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{selectedCampaign.status}</Badge>
-                    <span>
-                      {selectedCampaign.recipientCount || selectedCampaign.estimatedRecipientCount}{" "}
-                      recipients
-                    </span>
-                    <span>{selectedCampaign.deliveryCounts.sent} sent</span>
-                    <span>{selectedCampaign.deliveryCounts.failed} failed</span>
-                    <span>{selectedCampaign.deliveryCounts.skipped} skipped</span>
-                    {selectedCampaign.testSentAt ? (
-                      <span>Last test {formatDateTime(selectedCampaign.testSentAt)}</span>
-                    ) : null}
-                    {selectedCampaign.completedAt ? (
-                      <span>Completed {formatDateTime(selectedCampaign.completedAt)}</span>
-                    ) : selectedCampaign.queuedAt ? (
-                      <span>Queued {formatDateTime(selectedCampaign.queuedAt)}</span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedCampaign && !editingNewCampaign && !campaignIsEditable ? (
-                  <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                    This campaign is {selectedCampaign.status}. Create a new draft to make
-                    content edits.
-                  </div>
-                ) : null}
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="space-y-2">
-                    <Label>Subject</Label>
-                    <Input
-                      value={campaignSubject}
-                      placeholder="April launch update"
-                      disabled={!campaignIsEditable}
-                      onChange={(event) => setCampaignSubject(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Audience</Label>
-                    <Select
-                      value={campaignAudience}
-                      onValueChange={(value) =>
-                        setCampaignAudience(value as NewsletterCampaignAudience)
-                      }
-                    >
-                      <SelectTrigger disabled={!campaignIsEditable}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all_confirmed">All confirmed</SelectItem>
-                        <SelectItem value="mode_confirmed">
-                          Confirmed ({campaigns?.currentMode ?? mode})
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+        <NewsletterSubscribersCard
+          projectSlug={projectSlug}
+          subscribers={subscribers}
+          isLoading={isLoading}
+          subscriberStatus={subscriberStatus}
+          search={search}
+          offset={offset}
+          limit={SUBSCRIBER_PAGE_SIZE}
+          currentPage={currentPage}
+          pageCount={pageCount}
+          actionPending={actionMutation.isPending}
+          onStatusChange={updateSubscriberStatus}
+          onSearchChange={updateSearch}
+          onExport={exportCurrentRows}
+          onRefresh={refreshPluginReads}
+          onOffsetChange={setOffset}
+          onResend={resendConfirmation}
+          onMarkConfirmed={markConfirmed}
+          onStartUnsubscribe={setUnsubscribeEmail}
+        />
 
-                <div className="space-y-2">
-                  <Label>Body</Label>
-                  <Textarea
-                    value={campaignBody}
-                    disabled={!campaignIsEditable}
-                    onChange={(event) => setCampaignBody(event.target.value)}
-                    placeholder="Write the announcement you want to send to confirmed subscribers."
-                    rows={10}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>
-                      {editingNewCampaign || !selectedCampaign
-                        ? "New draft"
-                        : campaignIsEditable
-                          ? `Editing draft updated ${formatDate(selectedCampaign.updatedAt)}`
-                          : `Viewing campaign updated ${formatDate(selectedCampaign.updatedAt)}`}
-                    </span>
-                    <span>
-                      {currentCampaignRecipientEstimate} confirmed recipients currently
-                      match this audience
-                    </span>
-                  </div>
-                </div>
+        <NewsletterInstallCard pluginInfo={pluginInfo} />
 
-                {selectedCampaign?.lastError ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                    Last delivery error: {selectedCampaign.lastError}
-                  </div>
-                ) : null}
-                {campaignHasUnsavedEdits ? (
-                  <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Save this draft before sending a test or queueing delivery so the
-                    saved campaign matches what will be sent.
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap gap-2">
-                  {campaignIsEditable ? (
-                    <Button
-                      onClick={saveCampaignDraft}
-                      disabled={
-                        campaignActionMutation.isPending ||
-                        !campaignSubject.trim() ||
-                        !campaignBody.trim()
-                      }
-                    >
-                      {campaignActionMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Saving draft
-                        </>
-                      ) : selectedCampaignId && !editingNewCampaign ? (
-                        "Save draft"
-                      ) : (
-                        "Create draft"
-                      )}
-                    </Button>
-                  ) : null}
-                  {selectedCampaignId && !editingNewCampaign && campaignIsEditable ? (
-                    <Button
-                      variant="outline"
-                      disabled={campaignActionMutation.isPending}
-                      onClick={() => setDeleteCampaignId(selectedCampaignId)}
-                    >
-                      Delete draft
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 rounded-lg border border-dashed p-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-                  <div className="space-y-2">
-                    <Label>Test send email</Label>
-                    <Input
-                      value={testSendEmail}
-                      placeholder="you@example.com"
-                      onChange={(event) => setTestSendEmail(event.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="self-end"
-                    disabled={
-                      campaignActionMutation.isPending ||
-                      !selectedCampaignId ||
-                      !testSendEmail.trim() ||
-                      campaignHasUnsavedEdits
-                    }
-                    onClick={sendCampaignTest}
-                  >
-                    Send test
-                  </Button>
-                  {selectedCampaign?.status === "draft" && !editingNewCampaign ? (
-                    <Button
-                      className="self-end"
-                      disabled={
-                        campaignActionMutation.isPending || campaignHasUnsavedEdits
-                      }
-                      onClick={() => setSendCampaignId(selectedCampaign.id)}
-                    >
-                      Queue send
-                    </Button>
-                  ) : selectedCampaign &&
-                    (selectedCampaign.status === "queued" ||
-                      selectedCampaign.status === "sending") ? (
-                    <Button
-                      variant="outline"
-                      className="self-end"
-                      disabled={campaignActionMutation.isPending}
-                      onClick={() => setCancelSendCampaignId(selectedCampaign.id)}
-                    >
-                      Cancel send
-                    </Button>
-                  ) : (
-                    <div className="self-end text-xs text-muted-foreground">
-                      Save a draft to send it.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Subscribers</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Search, review, and export the current audience list.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={exportCurrentRows}>
-                Export current rows
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  pluginInfoQuery.refetch();
-                  summaryQuery.refetch();
-                  campaignsQuery.refetch();
-                  subscribersQuery.refetch();
-                }}
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={subscriberStatus}
-                  onValueChange={(value) => {
-                    setSubscriberStatus(
-                      value as
-                        | "all"
-                        | "pending"
-                        | "confirmed"
-                        | "unsubscribed"
-                        | "bounced"
-                        | "complained",
-                    );
-                    setOffset(0);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
-                    <SelectItem value="bounced">Bounced</SelectItem>
-                    <SelectItem value="complained">Complained</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Search</Label>
-                <Input
-                  value={search}
-                  placeholder="Search email or name"
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    setOffset(0);
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Subscriber</th>
-                    <th className="px-3 py-2 text-left font-medium">Status</th>
-                    <th className="px-3 py-2 text-left font-medium">Source</th>
-                    <th className="px-3 py-2 text-left font-medium">Updated</th>
-                    <th className="px-3 py-2 text-left font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subscribers?.rows.length ? (
-                    subscribers.rows.map((row) => (
-                      <tr key={row.id} className="border-t">
-                        <td className="px-3 py-3 align-top">
-                          <div className="font-medium">{row.email}</div>
-                          {row.name ? (
-                            <div className="text-xs text-muted-foreground">{row.name}</div>
-                          ) : null}
-                          {row.utmSource || row.utmCampaign ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {row.utmSource || "direct"}
-                              {row.utmCampaign ? ` / ${row.utmCampaign}` : ""}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-3 align-top">
-                          <Badge variant="secondary">{row.status}</Badge>
-                        </td>
-                        <td className="px-3 py-3 align-top text-muted-foreground">
-                          <div>{row.sourceHost || "n/a"}</div>
-                          {row.sourcePath ? (
-                            <div className="text-xs">{row.sourcePath}</div>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-3 align-top text-muted-foreground">
-                          {formatDate(row.updatedAt)}
-                        </td>
-                        <td className="px-3 py-3 align-top">
-                          <div className="flex flex-wrap gap-2">
-                            {row.status === "pending" ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={actionMutation.isPending}
-                                  onClick={() =>
-                                    actionMutation.mutate({
-                                      slug: projectSlug,
-                                      pluginId: typedPluginId,
-                                      actionId: "resend_confirmation",
-                                      args: [row.email],
-                                    })
-                                  }
-                                >
-                                  Resend
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={actionMutation.isPending}
-                                  onClick={() =>
-                                    actionMutation.mutate({
-                                      slug: projectSlug,
-                                      pluginId: typedPluginId,
-                                      actionId: "mark_confirmed",
-                                      args: [row.email],
-                                    })
-                                  }
-                                >
-                                  Confirm
-                                </Button>
-                              </>
-                            ) : null}
-                            {row.status !== "unsubscribed" ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={actionMutation.isPending}
-                                onClick={() => setUnsubscribeEmail(row.email)}
-                              >
-                                Unsubscribe
-                              </Button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-3 py-10 text-center text-sm text-muted-foreground"
-                      >
-                        {isLoading ? "Loading subscribers..." : "No subscribers found."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">
-                {subscribers?.total ?? 0} rows total, page {currentPage} of {pageCount}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setOffset(offset + limit)}
-                  disabled={!subscribers || offset + limit >= subscribers.total}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Install</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-sm font-medium">HTML</p>
-                <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-                  {pluginInfo?.snippets?.html || "Enable the plugin to generate a snippet."}
-                </pre>
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium">Astro</p>
-                <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-                  {pluginInfo?.snippets?.astro || "Enable the plugin to generate a snippet."}
-                </pre>
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Subscribe endpoint</p>
-                <p className="text-sm font-medium break-all">
-                  {pluginInfo?.usage?.subscribeEndpoint || "n/a"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Expected fields</p>
-                <p className="text-sm font-medium">
-                  {pluginInfo?.usage?.expectedFields?.join(", ") || "n/a"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Auto source hosts</p>
-                <p className="text-sm font-medium break-words">
-                  {pluginInfo?.usage?.inferredAutoSourceHosts?.join(", ") || "n/a"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Mode</Label>
-                <Select
-                  value={mode}
-                  onValueChange={(value) =>
-                    setMode(value as "newsletter" | "waitlist")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newsletter">Newsletter</SelectItem>
-                    <SelectItem value="waitlist">Waitlist</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Collect name</Label>
-                <Select
-                  value={collectName ? "yes" : "no"}
-                  onValueChange={(value) => setCollectName(value === "yes")}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="no">Email only</SelectItem>
-                    <SelectItem value="yes">Email + name</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Source hosts</Label>
-                <Textarea
-                  value={sourceHostsInput}
-                  onChange={(event) => setSourceHostsInput(event.target.value)}
-                  placeholder="example.com"
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Comma- or newline-separated allowlist. Leave empty to use inferred project hosts.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Redirect allowlist</Label>
-                <Textarea
-                  value={redirectHostsInput}
-                  onChange={(event) => setRedirectHostsInput(event.target.value)}
-                  placeholder="example.com"
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Allowed hosts for `_redirect` and confirmation page redirects.
-                </p>
-              </div>
-            </div>
-            <Button onClick={saveConfig} disabled={saveConfigMutation.isPending}>
-              {saveConfigMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving
-                </>
-              ) : (
-                "Save settings"
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+        <NewsletterSettingsCard
+          mode={mode}
+          collectName={collectName}
+          sourceHostsInput={sourceHostsInput}
+          redirectHostsInput={redirectHostsInput}
+          isPending={saveConfigMutation.isPending}
+          onModeChange={setMode}
+          onCollectNameChange={setCollectName}
+          onSourceHostsChange={setSourceHostsInput}
+          onRedirectHostsChange={setRedirectHostsInput}
+          onSave={saveConfig}
+        />
       </div>
-      <AlertDialog
-        open={Boolean(deleteCampaignId)}
-        onOpenChange={(open) => {
+
+      <NewsletterDialogs
+        selectedCampaign={selectedCampaign}
+        deleteCampaignId={deleteCampaignId}
+        unsubscribeEmail={unsubscribeEmail}
+        sendCampaignId={sendCampaignId}
+        cancelSendCampaignId={cancelSendCampaignId}
+        isActionPending={actionMutation.isPending}
+        isCampaignActionPending={campaignActionMutation.isPending}
+        onDeleteCampaignOpenChange={(open) => {
           if (!open && !campaignActionMutation.isPending) {
             setDeleteCampaignId(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete campaign draft?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This only removes the saved draft. No subscriber emails have been sent by
-              this draft yet.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={campaignActionMutation.isPending || !deleteCampaignId}
-              onClick={(event) => {
-                event.preventDefault();
-                confirmDeleteCampaign();
-              }}
-            >
-              {campaignActionMutation.isPending ? "Deleting..." : "Delete draft"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={Boolean(unsubscribeEmail)}
-        onOpenChange={(open) => {
+        onUnsubscribeOpenChange={(open) => {
           if (!open && !actionMutation.isPending) {
             setUnsubscribeEmail(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unsubscribe subscriber?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {unsubscribeEmail
-                ? `${unsubscribeEmail} will be marked as unsubscribed immediately. If they want back in, they will need to submit the signup form again and confirm from their email.`
-                : "This subscriber will be marked as unsubscribed immediately."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={actionMutation.isPending || !unsubscribeEmail}
-              onClick={(event) => {
-                event.preventDefault();
-                confirmUnsubscribe();
-              }}
-            >
-              {actionMutation.isPending ? "Unsubscribing..." : "Unsubscribe"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={Boolean(sendCampaignId)}
-        onOpenChange={(open) => {
+        onSendCampaignOpenChange={(open) => {
           if (!open && !campaignActionMutation.isPending) {
             setSendCampaignId(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Queue campaign send?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedCampaign
-                ? `${selectedCampaign.subject} will be queued for background delivery to ${selectedCampaign.estimatedRecipientCount} currently matching confirmed recipients.`
-                : "This campaign will be queued for background delivery."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={campaignActionMutation.isPending || !sendCampaignId}
-              onClick={(event) => {
-                event.preventDefault();
-                confirmQueueCampaignSend();
-              }}
-            >
-              {campaignActionMutation.isPending ? "Queueing..." : "Queue send"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={Boolean(cancelSendCampaignId)}
-        onOpenChange={(open) => {
+        onCancelSendOpenChange={(open) => {
           if (!open && !campaignActionMutation.isPending) {
             setCancelSendCampaignId(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel campaign send?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Queued deliveries that have not started yet will be canceled. Any email
-              already being processed may still complete.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
-              Keep sending
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={campaignActionMutation.isPending || !cancelSendCampaignId}
-              onClick={(event) => {
-                event.preventDefault();
-                confirmCancelCampaignSend();
-              }}
-            >
-              {campaignActionMutation.isPending ? "Canceling..." : "Cancel send"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onConfirmDeleteCampaign={confirmDeleteCampaign}
+        onConfirmUnsubscribe={confirmUnsubscribe}
+        onConfirmQueueSend={confirmQueueCampaignSend}
+        onConfirmCancelSend={confirmCancelCampaignSend}
+      />
     </SettingsPageShell>
+  );
+}
+
+function NewsletterAccessCard(props: {
+  pluginInfo: NewsletterPluginInfo;
+  pluginIcon: NewsletterPluginIcon;
+  canEnablePlugin: boolean;
+  canRequestPluginAccess: boolean;
+  isSessionPending: boolean;
+  isRequestPending: boolean;
+  isEnablePending: boolean;
+  isRequestPendingAction: boolean;
+  onEnable: () => void;
+  onRequestAccess: () => void;
+}) {
+  const {
+    pluginInfo,
+    pluginIcon: PluginIcon,
+    canEnablePlugin,
+    canRequestPluginAccess,
+    isSessionPending,
+    isRequestPending,
+    isEnablePending,
+    isRequestPendingAction,
+    onEnable,
+    onRequestAccess,
+  } = props;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+            <PluginIcon className="h-4 w-4" />
+          </span>
+          <span>Enable plugin</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Newsletter is entitled for this project but not enabled yet.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {canEnablePlugin ? (
+            <Button onClick={onEnable} disabled={isEnablePending}>
+              {isEnablePending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enabling
+                </>
+              ) : (
+                "Enable Newsletter"
+              )}
+            </Button>
+          ) : null}
+          {canRequestPluginAccess ? (
+            <Button
+              variant="outline"
+              onClick={onRequestAccess}
+              disabled={isRequestPending || isRequestPendingAction}
+            >
+              {isRequestPendingAction ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                getPluginAccessRequestLabel(pluginInfo?.accessRequest)
+              )}
+            </Button>
+          ) : null}
+        </div>
+        {!canEnablePlugin && !isSessionPending ? (
+          <p className="text-xs text-muted-foreground">
+            Only super-admin users can enable plugins directly.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
