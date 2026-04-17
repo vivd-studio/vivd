@@ -40,6 +40,7 @@ The Contact Form plugin is for projects that need lead capture on the published 
 - If the form is visible but messages never arrive, re-check the configured recipients.
 - If recipients are correct but delivery still looks wrong, review the transactional email configuration for the current deployment.
 - If you changed the form structure, run a fresh end-to-end test before publishing.
+- Leave `Allowed source hosts` empty unless you explicitly need a manual allowlist. Setting values there overrides Vivd's auto-detected published, tenant, and Studio preview hosts, which can cause Turnstile hostname-authorization failures in preview if the list is too narrow.
 - If the live site behaves differently from Studio, see [Troubleshooting](/troubleshooting/).
 
 {showOperatorGuides ? (

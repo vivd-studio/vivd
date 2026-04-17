@@ -230,6 +230,21 @@ export interface NewsletterCampaignRecord {
   audience: NewsletterCampaignAudience;
   mode: "newsletter" | "waitlist";
   estimatedRecipientCount: number;
+  recipientCount: number;
+  deliveryCounts: {
+    queued: number;
+    sending: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    canceled: number;
+  };
+  testSentAt: string | null;
+  queuedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  canceledAt: string | null;
+  lastError: string | null;
   createdAt: string;
   updatedAt: string;
 }

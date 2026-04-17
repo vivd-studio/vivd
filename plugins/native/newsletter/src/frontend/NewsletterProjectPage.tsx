@@ -93,6 +93,19 @@ function formatDate(value: string | null): string {
   }).format(date);
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return "n/a";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   const keys = Array.from(
     rows.reduce((set, row) => {
@@ -163,6 +176,9 @@ export default function NewsletterProjectPage({
   const [editingNewCampaign, setEditingNewCampaign] = useState(false);
   const [campaignOffset, setCampaignOffset] = useState(0);
   const [deleteCampaignId, setDeleteCampaignId] = useState<string | null>(null);
+  const [testSendEmail, setTestSendEmail] = useState("");
+  const [sendCampaignId, setSendCampaignId] = useState<string | null>(null);
+  const [cancelSendCampaignId, setCancelSendCampaignId] = useState<string | null>(null);
   const [subscriberStatus, setSubscriberStatus] = useState<
     "all" | "pending" | "confirmed" | "unsubscribed" | "bounced" | "complained"
   >("all");
@@ -290,6 +306,33 @@ export default function NewsletterProjectPage({
           setCampaignAudience("all_confirmed");
         }
         toast.success("Campaign draft deleted");
+      } else if (result.actionId === "test_send_campaign") {
+        const payload = result.result as { email?: string };
+        toast.success("Campaign test sent", {
+          description: payload.email
+            ? `A test copy was sent to ${payload.email}.`
+            : undefined,
+        });
+      } else if (result.actionId === "send_campaign") {
+        const payload = result.result as {
+          campaignId?: string;
+          recipientCount?: number;
+        };
+        setSendCampaignId(null);
+        if (payload.campaignId) {
+          setEditingNewCampaign(false);
+          setCampaignSelectionMode("manual");
+          setSelectedCampaignId(payload.campaignId);
+        }
+        toast.success("Campaign queued", {
+          description:
+            typeof payload.recipientCount === "number"
+              ? `${payload.recipientCount} deliveries were queued for background sending.`
+              : undefined,
+        });
+      } else if (result.actionId === "cancel_campaign") {
+        setCancelSendCampaignId(null);
+        toast.success("Campaign canceled");
       }
 
       await Promise.all([
@@ -341,6 +384,19 @@ export default function NewsletterProjectPage({
       formatListInput(pluginInfo.config.redirectHostAllowlist ?? []),
     );
   }, [pluginInfo?.config]);
+
+  useEffect(() => {
+    const sessionEmail =
+      typeof session?.user === "object" &&
+      session?.user &&
+      "email" in session.user &&
+      typeof session.user.email === "string"
+        ? session.user.email
+        : "";
+    if (!testSendEmail && sessionEmail) {
+      setTestSendEmail(sessionEmail);
+    }
+  }, [session, testSendEmail]);
 
   useEffect(() => {
     if (!campaigns?.rows) return;
@@ -443,6 +499,15 @@ export default function NewsletterProjectPage({
   const selectedCampaign = useMemo(
     () => campaigns?.rows.find((row) => row.id === selectedCampaignId) ?? null,
     [campaigns?.rows, selectedCampaignId],
+  );
+  const campaignIsEditable =
+    editingNewCampaign || !selectedCampaign || selectedCampaign.status === "draft";
+  const campaignHasUnsavedEdits = Boolean(
+    selectedCampaign &&
+      !editingNewCampaign &&
+      (selectedCampaign.subject !== campaignSubject ||
+        selectedCampaign.body !== campaignBody ||
+        selectedCampaign.audience !== campaignAudience),
   );
   const currentCampaignRecipientEstimate =
     campaignAudience === "mode_confirmed"
@@ -554,6 +619,36 @@ export default function NewsletterProjectPage({
     });
   };
 
+  const sendCampaignTest = () => {
+    if (!selectedCampaignId || !testSendEmail.trim()) return;
+    campaignActionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "test_send_campaign",
+      args: [selectedCampaignId, testSendEmail.trim()],
+    });
+  };
+
+  const confirmQueueCampaignSend = () => {
+    if (!sendCampaignId) return;
+    campaignActionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "send_campaign",
+      args: [sendCampaignId],
+    });
+  };
+
+  const confirmCancelCampaignSend = () => {
+    if (!cancelSendCampaignId) return;
+    campaignActionMutation.mutate({
+      slug: projectSlug,
+      pluginId: typedPluginId,
+      actionId: "cancel_campaign",
+      args: [cancelSendCampaignId],
+    });
+  };
+
   return (
     <SettingsPageShell
       title="Newsletter / Waitlist"
@@ -655,13 +750,13 @@ export default function NewsletterProjectPage({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              This slice adds draft preparation and audience sizing only. Batched send
-              execution is still the next broadcasting step.
+              Drafts can now be test-sent and queued for background delivery. Start with
+              a test send before queueing a live broadcast.
             </p>
             <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
               <div className="space-y-3 rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Saved drafts</p>
+                  <p className="text-sm font-medium">Campaigns</p>
                   <Badge variant="secondary">{campaigns?.total ?? 0}</Badge>
                 </div>
                 {campaigns?.rows.length ? (
@@ -683,7 +778,11 @@ export default function NewsletterProjectPage({
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {getCampaignAudienceLabel(row.audience, row.mode)}
-                          {` • ${row.estimatedRecipientCount} recipients`}
+                          {` • ${row.recipientCount || row.estimatedRecipientCount} recipients`}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {row.deliveryCounts.sent} sent • {row.deliveryCounts.failed} failed •{" "}
+                          {row.deliveryCounts.skipped} skipped • {row.deliveryCounts.queued} queued
                         </p>
                         <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                           {row.body}
@@ -693,12 +792,12 @@ export default function NewsletterProjectPage({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No campaign drafts yet.
+                    No campaigns yet.
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-2 border-t pt-3">
                   <p className="text-xs text-muted-foreground">
-                    {campaigns?.total ?? 0} drafts total, page {currentCampaignPage} of{" "}
+                    {campaigns?.total ?? 0} campaigns total, page {currentCampaignPage} of{" "}
                     {campaignPageCount}
                   </p>
                   <div className="flex gap-2">
@@ -710,7 +809,7 @@ export default function NewsletterProjectPage({
                       }
                       disabled={campaignOffset === 0}
                     >
-                      Previous drafts
+                      Previous
                     </Button>
                     <Button
                       variant="outline"
@@ -718,19 +817,46 @@ export default function NewsletterProjectPage({
                       onClick={() => goToCampaignPage(campaignOffset + campaignLimit)}
                       disabled={!campaigns || campaignOffset + campaignLimit >= campaigns.total}
                     >
-                      Next drafts
+                      Next
                     </Button>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-4 rounded-lg border p-4">
+                {selectedCampaign && !editingNewCampaign ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <Badge variant="outline">{selectedCampaign.status}</Badge>
+                    <span>
+                      {selectedCampaign.recipientCount || selectedCampaign.estimatedRecipientCount}{" "}
+                      recipients
+                    </span>
+                    <span>{selectedCampaign.deliveryCounts.sent} sent</span>
+                    <span>{selectedCampaign.deliveryCounts.failed} failed</span>
+                    <span>{selectedCampaign.deliveryCounts.skipped} skipped</span>
+                    {selectedCampaign.testSentAt ? (
+                      <span>Last test {formatDateTime(selectedCampaign.testSentAt)}</span>
+                    ) : null}
+                    {selectedCampaign.completedAt ? (
+                      <span>Completed {formatDateTime(selectedCampaign.completedAt)}</span>
+                    ) : selectedCampaign.queuedAt ? (
+                      <span>Queued {formatDateTime(selectedCampaign.queuedAt)}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedCampaign && !editingNewCampaign && !campaignIsEditable ? (
+                  <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                    This campaign is {selectedCampaign.status}. Create a new draft to make
+                    content edits.
+                  </div>
+                ) : null}
                 <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="space-y-2">
                     <Label>Subject</Label>
                     <Input
                       value={campaignSubject}
                       placeholder="April launch update"
+                      disabled={!campaignIsEditable}
                       onChange={(event) => setCampaignSubject(event.target.value)}
                     />
                   </div>
@@ -742,7 +868,7 @@ export default function NewsletterProjectPage({
                         setCampaignAudience(value as NewsletterCampaignAudience)
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger disabled={!campaignIsEditable}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -759,6 +885,7 @@ export default function NewsletterProjectPage({
                   <Label>Body</Label>
                   <Textarea
                     value={campaignBody}
+                    disabled={!campaignIsEditable}
                     onChange={(event) => setCampaignBody(event.target.value)}
                     placeholder="Write the announcement you want to send to confirmed subscribers."
                     rows={10}
@@ -767,7 +894,9 @@ export default function NewsletterProjectPage({
                     <span>
                       {editingNewCampaign || !selectedCampaign
                         ? "New draft"
-                        : `Editing draft updated ${formatDate(selectedCampaign.updatedAt)}`}
+                        : campaignIsEditable
+                          ? `Editing draft updated ${formatDate(selectedCampaign.updatedAt)}`
+                          : `Viewing campaign updated ${formatDate(selectedCampaign.updatedAt)}`}
                     </span>
                     <span>
                       {currentCampaignRecipientEstimate} confirmed recipients currently
@@ -776,27 +905,41 @@ export default function NewsletterProjectPage({
                   </div>
                 </div>
 
+                {selectedCampaign?.lastError ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    Last delivery error: {selectedCampaign.lastError}
+                  </div>
+                ) : null}
+                {campaignHasUnsavedEdits ? (
+                  <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Save this draft before sending a test or queueing delivery so the
+                    saved campaign matches what will be sent.
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={saveCampaignDraft}
-                    disabled={
-                      campaignActionMutation.isPending ||
-                      !campaignSubject.trim() ||
-                      !campaignBody.trim()
-                    }
-                  >
-                    {campaignActionMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving draft
-                      </>
-                    ) : selectedCampaignId && !editingNewCampaign ? (
-                      "Save draft"
-                    ) : (
-                      "Create draft"
-                    )}
-                  </Button>
-                  {selectedCampaignId && !editingNewCampaign ? (
+                  {campaignIsEditable ? (
+                    <Button
+                      onClick={saveCampaignDraft}
+                      disabled={
+                        campaignActionMutation.isPending ||
+                        !campaignSubject.trim() ||
+                        !campaignBody.trim()
+                      }
+                    >
+                      {campaignActionMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving draft
+                        </>
+                      ) : selectedCampaignId && !editingNewCampaign ? (
+                        "Save draft"
+                      ) : (
+                        "Create draft"
+                      )}
+                    </Button>
+                  ) : null}
+                  {selectedCampaignId && !editingNewCampaign && campaignIsEditable ? (
                     <Button
                       variant="outline"
                       disabled={campaignActionMutation.isPending}
@@ -805,6 +948,56 @@ export default function NewsletterProjectPage({
                       Delete draft
                     </Button>
                   ) : null}
+                </div>
+
+                <div className="grid gap-3 rounded-lg border border-dashed p-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+                  <div className="space-y-2">
+                    <Label>Test send email</Label>
+                    <Input
+                      value={testSendEmail}
+                      placeholder="you@example.com"
+                      onChange={(event) => setTestSendEmail(event.target.value)}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="self-end"
+                    disabled={
+                      campaignActionMutation.isPending ||
+                      !selectedCampaignId ||
+                      !testSendEmail.trim() ||
+                      campaignHasUnsavedEdits
+                    }
+                    onClick={sendCampaignTest}
+                  >
+                    Send test
+                  </Button>
+                  {selectedCampaign?.status === "draft" && !editingNewCampaign ? (
+                    <Button
+                      className="self-end"
+                      disabled={
+                        campaignActionMutation.isPending || campaignHasUnsavedEdits
+                      }
+                      onClick={() => setSendCampaignId(selectedCampaign.id)}
+                    >
+                      Queue send
+                    </Button>
+                  ) : selectedCampaign &&
+                    (selectedCampaign.status === "queued" ||
+                      selectedCampaign.status === "sending") ? (
+                    <Button
+                      variant="outline"
+                      className="self-end"
+                      disabled={campaignActionMutation.isPending}
+                      onClick={() => setCancelSendCampaignId(selectedCampaign.id)}
+                    >
+                      Cancel send
+                    </Button>
+                  ) : (
+                    <div className="self-end text-xs text-muted-foreground">
+                      Save a draft to send it.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1192,6 +1385,71 @@ export default function NewsletterProjectPage({
               }}
             >
               {actionMutation.isPending ? "Unsubscribing..." : "Unsubscribe"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(sendCampaignId)}
+        onOpenChange={(open) => {
+          if (!open && !campaignActionMutation.isPending) {
+            setSendCampaignId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Queue campaign send?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedCampaign
+                ? `${selectedCampaign.subject} will be queued for background delivery to ${selectedCampaign.estimatedRecipientCount} currently matching confirmed recipients.`
+                : "This campaign will be queued for background delivery."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={campaignActionMutation.isPending || !sendCampaignId}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmQueueCampaignSend();
+              }}
+            >
+              {campaignActionMutation.isPending ? "Queueing..." : "Queue send"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(cancelSendCampaignId)}
+        onOpenChange={(open) => {
+          if (!open && !campaignActionMutation.isPending) {
+            setCancelSendCampaignId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel campaign send?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Queued deliveries that have not started yet will be canceled. Any email
+              already being processed may still complete.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={campaignActionMutation.isPending}>
+              Keep sending
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={campaignActionMutation.isPending || !cancelSendCampaignId}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmCancelCampaignSend();
+              }}
+            >
+              {campaignActionMutation.isPending ? "Canceling..." : "Cancel send"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

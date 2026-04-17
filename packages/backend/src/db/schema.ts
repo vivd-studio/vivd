@@ -754,6 +754,13 @@ export const newsletterCampaign = pgTable(
     estimatedRecipientCount: integer("estimated_recipient_count")
       .notNull()
       .default(0),
+    recipientCount: integer("recipient_count").notNull().default(0),
+    testSentAt: timestamp("test_sent_at"),
+    queuedAt: timestamp("queued_at"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    canceledAt: timestamp("canceled_at"),
+    lastError: text("last_error"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -774,6 +781,60 @@ export const newsletterCampaign = pgTable(
     index("newsletter_campaign_plugin_updated_idx").on(
       table.pluginInstanceId,
       table.updatedAt,
+    ),
+  ],
+);
+
+export const newsletterCampaignDelivery = pgTable(
+  "newsletter_campaign_delivery",
+  {
+    id: text("id").primaryKey(),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => newsletterCampaign.id, { onDelete: "cascade" }),
+    subscriberId: text("subscriber_id")
+      .notNull()
+      .references(() => newsletterSubscriber.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    emailNormalized: text("email_normalized").notNull(),
+    recipientName: text("recipient_name"),
+    status: text("status").notNull().default("queued"),
+    provider: text("provider"),
+    providerMessageId: text("provider_message_id"),
+    skipReason: text("skip_reason"),
+    failureReason: text("failure_reason"),
+    sentAt: timestamp("sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("newsletter_campaign_delivery_campaign_subscriber_unique").on(
+      table.campaignId,
+      table.subscriberId,
+    ),
+    index("newsletter_campaign_delivery_campaign_status_idx").on(
+      table.campaignId,
+      table.status,
+      table.updatedAt,
+    ),
+    index("newsletter_campaign_delivery_plugin_status_created_idx").on(
+      table.pluginInstanceId,
+      table.status,
+      table.createdAt,
     ),
   ],
 );
@@ -799,6 +860,7 @@ export const tableBookingReservation = pgTable(
     guestEmailNormalized: text("guest_email_normalized").notNull(),
     guestPhone: text("guest_phone").notNull(),
     notes: text("notes"),
+    sourceChannel: text("source_channel").notNull().default("online"),
     sourceHost: text("source_host"),
     sourcePath: text("source_path"),
     referrerHost: text("referrer_host"),
@@ -806,6 +868,8 @@ export const tableBookingReservation = pgTable(
     utmMedium: text("utm_medium"),
     utmCampaign: text("utm_campaign"),
     lastIpHash: text("last_ip_hash"),
+    createdByUserId: text("created_by_user_id"),
+    updatedByUserId: text("updated_by_user_id"),
     confirmedAt: timestamp("confirmed_at"),
     cancelledAt: timestamp("cancelled_at"),
     cancelledBy: text("cancelled_by"),
@@ -837,6 +901,11 @@ export const tableBookingReservation = pgTable(
       table.pluginInstanceId,
       table.guestEmailNormalized,
       table.createdAt,
+    ),
+    index("table_booking_reservation_plugin_source_service_idx").on(
+      table.pluginInstanceId,
+      table.sourceChannel,
+      table.serviceStartAt,
     ),
   ],
 );
@@ -871,6 +940,49 @@ export const tableBookingActionToken = pgTable(
   ],
 );
 
+export const tableBookingCapacityAdjustment = pgTable(
+  "table_booking_capacity_adjustment",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    serviceDate: text("service_date").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    mode: text("mode").notNull(),
+    capacityValue: integer("capacity_value"),
+    reason: text("reason"),
+    createdByUserId: text("created_by_user_id"),
+    updatedByUserId: text("updated_by_user_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("table_booking_capacity_adjustment_plugin_date_idx").on(
+      table.pluginInstanceId,
+      table.serviceDate,
+      table.startTime,
+    ),
+    index("table_booking_capacity_adjustment_org_project_date_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.serviceDate,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
@@ -883,6 +995,7 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   newsletterCampaigns: many(newsletterCampaign),
   tableBookingReservations: many(tableBookingReservation),
   tableBookingActionTokens: many(tableBookingActionToken),
+  tableBookingCapacityAdjustments: many(tableBookingCapacityAdjustment),
 }));
 
 export const projectTagRelations = relations(projectTag, ({ one }) => ({
@@ -960,6 +1073,7 @@ export const projectPluginInstanceRelations = relations(
     newsletterSubscribers: many(newsletterSubscriber),
     newsletterCampaigns: many(newsletterCampaign),
     tableBookingReservations: many(tableBookingReservation),
+    tableBookingCapacityAdjustments: many(tableBookingCapacityAdjustment),
   }),
 );
 
@@ -1080,6 +1194,23 @@ export const tableBookingActionTokenRelations = relations(
     reservation: one(tableBookingReservation, {
       fields: [tableBookingActionToken.reservationId],
       references: [tableBookingReservation.id],
+    }),
+  }),
+);
+
+export const tableBookingCapacityAdjustmentRelations = relations(
+  tableBookingCapacityAdjustment,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [
+        tableBookingCapacityAdjustment.organizationId,
+        tableBookingCapacityAdjustment.projectSlug,
+      ],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [tableBookingCapacityAdjustment.pluginInstanceId],
+      references: [projectPluginInstance.id],
     }),
   }),
 );

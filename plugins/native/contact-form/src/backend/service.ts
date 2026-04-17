@@ -16,6 +16,11 @@ import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./config";
+import {
+  DEFAULT_CONTACT_FORM_TURNSTILE_MAX_DOMAINS,
+  resolveEffectiveSourceHosts,
+  toTurnstileDomains,
+} from "./hostUtils";
 import type {
   ContactRecipientDirectory,
   ContactRecipientVerificationRequestResult,
@@ -56,7 +61,10 @@ export interface ContactFormPluginInfoPayload {
     submitEndpoint: string;
     expectedFields: string[];
     optionalFields: string[];
+    configuredSourceHosts: string[];
     inferredAutoSourceHosts: string[];
+    effectiveSourceHosts: string[];
+    turnstileExpectedDomains: string[];
     turnstileEnabled: boolean;
     turnstileConfigured: boolean;
   };
@@ -70,6 +78,22 @@ function normalizeContactFormConfig(configJson: unknown): ContactFormPluginConfi
   return contactFormPluginConfigSchema.parse({});
 }
 
+function normalizeListForComparison(values: string[]): string[] {
+  return Array.from(
+    new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean)),
+  ).sort();
+}
+
+function didSourceHostConfigChange(
+  previousSourceHosts: string[],
+  nextSourceHosts: string[],
+): boolean {
+  return (
+    JSON.stringify(normalizeListForComparison(previousSourceHosts)) !==
+    JSON.stringify(normalizeListForComparison(nextSourceHosts))
+  );
+}
+
 function buildUsage(input: {
   submitEndpoint: string;
   config: ContactFormPluginConfig | null;
@@ -78,6 +102,11 @@ function buildUsage(input: {
   turnstileConfigured: boolean;
 }) {
   const configuredFields = input.config?.formFields ?? DEFAULT_CONTACT_FORM_FIELDS;
+  const configuredSourceHosts = input.config?.sourceHosts ?? [];
+  const effectiveSourceHosts = resolveEffectiveSourceHosts(
+    configuredSourceHosts,
+    input.inferredAutoSourceHosts,
+  );
   const optionalFields = ["_redirect", "_subject", "_honeypot"];
   if (input.turnstileEnabled) {
     optionalFields.push("cf-turnstile-response");
@@ -87,7 +116,13 @@ function buildUsage(input: {
     submitEndpoint: input.submitEndpoint,
     expectedFields: ["token", ...configuredFields.map((field) => field.key)],
     optionalFields,
+    configuredSourceHosts,
     inferredAutoSourceHosts: input.inferredAutoSourceHosts,
+    effectiveSourceHosts,
+    turnstileExpectedDomains: toTurnstileDomains(
+      effectiveSourceHosts,
+      DEFAULT_CONTACT_FORM_TURNSTILE_MAX_DOMAINS,
+    ),
     turnstileEnabled: input.turnstileEnabled,
     turnstileConfigured: input.turnstileConfigured,
   };
@@ -234,6 +269,11 @@ class ContactFormPluginServiceImpl {
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
     });
+    const previousConfig = normalizeContactFormConfig(row.configJson);
+    const sourceHostsChanged = didSourceHostConfigChange(
+      previousConfig.sourceHosts,
+      parsedConfig.sourceHosts,
+    );
 
     const updated =
       await this.deps.projectPluginInstanceService.updatePluginInstance({
@@ -242,6 +282,13 @@ class ContactFormPluginServiceImpl {
         status: "enabled",
         updatedAt: new Date(),
       });
+
+    if (sourceHostsChanged) {
+      await this.deps.syncProjectTurnstileWidget?.({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+      });
+    }
 
     if (updated) return await this.toPayload(updated, false);
 
@@ -477,7 +524,7 @@ class ContactFormPluginServiceImpl {
                   ? "Turnstile protection is enabled by super-admin; keep the widget block and script from the snippet."
                   : "Turnstile is enabled by super-admin but still syncing configuration. Snippets include it once ready."
                 : "Turnstile protection is currently disabled for this project (can be enabled by super-admin).",
-              "If source hosts are empty, Vivd auto-uses project first-party hosts (published + tenant hosts) when available.",
+              "Leave source hosts empty unless you explicitly need a manual allowlist. Setting values there overrides Vivd's auto-detected published, tenant, and Studio preview hosts.",
               "Optionally pass _redirect for success redirect; it must match redirect allowlist (or effective source hosts when redirect allowlist is empty).",
               "Verify by submitting once from preview/published domain and checking recipient inbox.",
             ]

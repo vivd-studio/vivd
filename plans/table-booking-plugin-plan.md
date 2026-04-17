@@ -2,7 +2,30 @@
 
 Date: 2026-04-16  
 Owner: plugins/product/backend/frontend  
-Status: plan (no implementation in this doc)
+Status: core v1 shipped; next operator-capacity block planned  
+Last updated: 2026-04-17
+
+## Implementation Note
+
+The initial v1 is now live enough to cover the public booking path and a usable operator surface:
+
+- extracted `plugins/native/table-booking` package
+- public availability, booking, and guest-cancel endpoints
+- weekly schedule plus date-override configuration
+- calendar-first project page with booking search and basic status actions
+- transactional guest/staff emails and generated install snippets
+
+That said, the current dashboard still manages the **online booking flow** better than the venue's **full working capacity**.
+
+The biggest remaining production gaps are:
+
+- no manual staff-entered reservations for phone or walk-in demand
+- no edit/reschedule flow when a guest calls the restaurant
+- no capacity adjustments that let operators hold back or reduce covers without rewriting the base schedule
+- no occupancy-first view of booked vs remaining covers per service window
+- no CSV export or equivalent operational handoff from the booking list
+
+The recommended next implementation block should close those operator-capacity gaps before moving on to waitlist, reminders, multi-room inventory, or external sync.
 
 ## Goal
 
@@ -675,10 +698,186 @@ Focused contract tests:
 - document launch workflow and troubleshooting
 - verify published-site snippet behavior on HTML and Astro projects
 
+## Recommended Next Work Block: Operator Capacity Desk
+
+Treat the next slice as the first full **capacity-operations** release for Table Booking, not as a jump to table maps or hospitality-suite complexity.
+
+Status: implemented on 2026-04-17 as the current operator-capacity desk release.
+
+### Goal
+
+Let project operators manage the venue's real working capacity from inside Vivd:
+
+- include reservations that did not come from the website
+- edit or move bookings without breaking capacity correctness
+- reduce or hold back capacity for real-world operating constraints
+- see remaining covers clearly enough to run service from the dashboard
+
+This is the missing layer between "online booking widget" and "production-ready reservation operations".
+
+### Why this should be next
+
+- the current plugin already covers public booking, guest cancellation, and a decent calendar/search surface
+- what it still cannot represent well is the offline demand that many restaurants handle by phone, walk-in holds, or staff-entered reservations
+- as long as those bookings and capacity reductions live outside Vivd, the plugin does not actually show the restaurant's full availability picture
+- this is the next meaningful product step that keeps the model simple enough to ship without drifting into floor plans, POS sync, or multi-room inventory
+
+### In Scope
+
+#### 1. Operator reservation management
+
+- manual reservation create from the dashboard
+- edit guest details, notes, party size, and reservation time
+- reschedule a reservation using the same capacity and booking-window checks as the public flow
+- cancel from the detail surface without leaving the calendar/list workflow
+- track reservation source/channel such as `online`, `phone`, `walk_in`, or `staff_manual`
+- optional guest-notification toggle for staff-created or staff-edited reservations so operators can send a confirmation/update only when appropriate
+
+#### 2. Capacity controls
+
+- add date/time-range capacity adjustments without rewriting the weekly base schedule
+- reduce or hold back covers for staff shortages, private events, or walk-in reserve
+- allow a service window to be temporarily closed from the same operator workspace
+- store a short internal reason/note on each capacity adjustment
+- make capacity changes immediately affect availability, occupancy, and booking validations
+
+#### 3. Dashboard / operator controls
+
+Add enough control-plane UX that the page becomes a real service desk instead of just a booking log.
+
+Recommended additions:
+
+- `Calendar / Day view`
+  - occupancy summary for the selected date
+  - booked covers vs effective capacity vs remaining covers per service window
+  - visible capacity adjustments alongside date overrides
+- `Reservation detail`
+  - editable reservation form/drawer
+  - change history context such as source, created-at, and last operator update
+- `Bookings`
+  - existing search/status filters
+  - add source-channel filter
+  - add CSV export of the filtered booking list
+- `Overview`
+  - covers booked today vs effective capacity
+  - upcoming fully booked or near-capacity service windows
+
+This is the part that makes the dashboard feel complete enough to manage the venue's real day-to-day capacity.
+
+#### 4. Backend / architecture plan
+
+- keep the booking logic plugin-owned and reuse the same transactional capacity checks for public and staff-entered reservations
+- add structured plugin-owned mutations for:
+  - `createReservation`
+  - `updateReservation`
+  - `rescheduleReservation`
+  - `cancelReservation`
+  - `createCapacityAdjustment`
+  - `updateCapacityAdjustment`
+  - `deleteCapacityAdjustment`
+- do **not** broaden the generic host `ensure/info/config/read/action` contract yet just for this slice
+- instead, use a thin table-booking compatibility router/adapter in the backend host while the mutation pattern is still plugin-specific
+
+### Explicitly Out of Scope
+
+- table maps or drag-and-drop floor plans
+- multiple rooms/areas/sections with separate inventory
+- waitlist queues
+- reminder campaigns or SMS
+- payments, deposits, or card holds
+- OpenTable/Google/Apple/POS synchronization
+- multi-venue support inside one project
+
+### Proposed minimal data model
+
+Keep the current reservation table as the main source of truth, but extend it for operator workflows:
+
+- add reservation source/channel metadata
+- add operator-owned audit fields such as `createdByUserId` / `updatedByUserId` when available
+- support edited/rescheduled timestamps cleanly enough for UI history and notifications
+
+Add a `table_booking_capacity_adjustment` table:
+
+- `id text primary key`
+- `organization_id text not null`
+- `project_slug text not null`
+- `plugin_instance_id text not null`
+- `service_date text not null`
+- `start_time text not null`
+- `end_time text not null`
+- `mode text not null` (`delta | override | closed`)
+- `capacity_value integer null`
+- `reason text null`
+- `created_by_user_id text null`
+- `created_at timestamp not null default now()`
+- `updated_at timestamp not null default now()`
+
+This keeps the capacity model simple:
+
+- weekly schedule remains the baseline
+- date overrides still replace a whole day when needed
+- capacity adjustments become the operator tool for partial reductions/holds without forcing a table-map engine
+
+### Backend plan
+
+- extend the plugin service with manual reservation create/update/reschedule flows
+- run the same validation stack for staff edits as for public bookings:
+  - timezone-aware schedule resolution
+  - party-size validation
+  - lead-time / horizon checks where appropriate
+  - transaction-safe overlap and cover checks
+- allow staff-created reservations to bypass public source-host checks and guest-cancel token generation where that does not make sense
+- add optional email behaviors:
+  - send confirmation on staff create
+  - send updated confirmation on staff reschedule/edit
+  - keep email sending non-transactional so booking state remains the source of truth
+
+### Frontend / operator plan
+
+Extend the existing `TableBookingProjectPage` rather than replacing it.
+
+Recommended surface changes:
+
+- keep the calendar as the primary entry point
+- add a proper selected-booking detail/editor workflow instead of read-only rows
+- show slot/service-window occupancy bars or compact cover meters in the day panel
+- add a dedicated capacity-adjustment editor from the selected day
+- add booking export from the filtered list
+- keep schedule setup and snippet/install flows in the same page so the plugin still feels like one control room
+
+### CLI / agent plan
+
+Keep generic info/read/config flows, but add operator-facing guidance for the new structured mutation surface.
+
+The agent should:
+
+- keep using generated snippets and config flows for site install/setup
+- treat manual reservation creation and capacity adjustments as authenticated operator actions, never as public widget behavior
+- prefer staff-entered reservations over telling operators to keep a parallel spreadsheet once this slice lands
+
+## Exit Criteria For This Work Block
+
+This block is done when all of the following are true:
+
+1. A project operator can add a phone or walk-in reservation from the Vivd dashboard and see it immediately affect remaining capacity.
+2. A reservation can be edited or rescheduled from the dashboard with the same overbooking protection as the public booking flow.
+3. A project operator can reduce, hold back, or close capacity for a specific service window without rewriting the base weekly schedule.
+4. The dashboard shows enough occupancy state to manage a service day: booked covers, effective capacity, remaining covers, and filtered booking export.
+5. The plugin still deliberately stops short of table maps, multi-room inventory, waitlists, reminders, and third-party reservation sync.
+
+## Recommended Future Work After This Block
+
+- reminder emails
+- waitlist mode
+- multiple rooms/areas with separate capacity pools
+- table-map / floor-plan UI
+- external reservation-system sync
+- deposits/payments and no-show protection
+- multi-venue support
+
 ## Deferred V2
 
 - approval-based `request_only` mode
-- manual booking create/edit/reschedule
 - reminder emails
 - waitlist support
 - multiple rooms/areas with separate capacity

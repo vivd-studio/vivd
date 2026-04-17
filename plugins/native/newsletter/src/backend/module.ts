@@ -147,6 +147,51 @@ export const newsletterPluginDefinition = {
           },
         ],
       },
+      {
+        actionId: "test_send_campaign",
+        title: "Send campaign test",
+        description: "Send a test copy of a campaign draft to a single email address.",
+        arguments: [
+          {
+            name: "campaignId",
+            type: "string",
+            required: true,
+            description: "Campaign id to preview.",
+          },
+          {
+            name: "email",
+            type: "email",
+            required: true,
+            description: "Email address to receive the test copy.",
+          },
+        ],
+      },
+      {
+        actionId: "send_campaign",
+        title: "Queue campaign send",
+        description: "Queue a draft campaign for background delivery.",
+        arguments: [
+          {
+            name: "campaignId",
+            type: "string",
+            required: true,
+            description: "Campaign draft id to queue.",
+          },
+        ],
+      },
+      {
+        actionId: "cancel_campaign",
+        title: "Cancel campaign send",
+        description: "Cancel a queued or in-flight campaign send.",
+        arguments: [
+          {
+            name: "campaignId",
+            type: "string",
+            required: true,
+            description: "Campaign id to cancel.",
+          },
+        ],
+      },
     ],
     reads: [
       newsletterSummaryReadDefinition,
@@ -256,6 +301,33 @@ export interface NewsletterPluginBackendRuntime {
     campaignId: string;
     status: "deleted";
   }>;
+  testSendCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+    email: string;
+  }): Promise<{
+    campaignId: string;
+    status: "test_sent";
+    email: string;
+  }>;
+  sendCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "queued";
+    recipientCount: number;
+  }>;
+  cancelCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "canceled";
+  }>;
   mapPublicError?(
     context: PluginPublicErrorContext,
   ): { code: "BAD_REQUEST" | "UNAUTHORIZED" | "INTERNAL_SERVER_ERROR"; message: string } | null;
@@ -288,7 +360,10 @@ async function runNewsletterAction(
     options.actionId !== "mark_confirmed" &&
     options.actionId !== "unsubscribe" &&
     options.actionId !== "save_campaign_draft" &&
-    options.actionId !== "delete_campaign_draft"
+    options.actionId !== "delete_campaign_draft" &&
+    options.actionId !== "test_send_campaign" &&
+    options.actionId !== "send_campaign" &&
+    options.actionId !== "cancel_campaign"
   ) {
     throw new UnsupportedPluginActionError("newsletter", options.actionId);
   }
@@ -347,6 +422,74 @@ async function runNewsletterAction(
       pluginId: "newsletter",
       actionId: options.actionId,
       summary: "Deleted campaign draft.",
+      result,
+    };
+  }
+
+  if (options.actionId === "test_send_campaign") {
+    const campaignId = options.args[0]?.trim();
+    const email = options.args[1]?.trim();
+    if (!campaignId || !email) {
+      throw new PluginActionArgumentError(
+        'Plugin action "test_send_campaign" requires campaignId and email arguments.',
+      );
+    }
+
+    const result = await runtime.testSendCampaign({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      campaignId,
+      email,
+    });
+
+    return {
+      pluginId: "newsletter",
+      actionId: options.actionId,
+      summary: "Sent campaign test email.",
+      result,
+    };
+  }
+
+  if (options.actionId === "send_campaign") {
+    const campaignId = options.args[0]?.trim();
+    if (!campaignId) {
+      throw new PluginActionArgumentError(
+        'Plugin action "send_campaign" requires a campaignId argument.',
+      );
+    }
+
+    const result = await runtime.sendCampaign({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      campaignId,
+    });
+
+    return {
+      pluginId: "newsletter",
+      actionId: options.actionId,
+      summary: "Queued campaign for background delivery.",
+      result,
+    };
+  }
+
+  if (options.actionId === "cancel_campaign") {
+    const campaignId = options.args[0]?.trim();
+    if (!campaignId) {
+      throw new PluginActionArgumentError(
+        'Plugin action "cancel_campaign" requires a campaignId argument.',
+      );
+    }
+
+    const result = await runtime.cancelCampaign({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      campaignId,
+    });
+
+    return {
+      pluginId: "newsletter",
+      actionId: options.actionId,
+      summary: "Canceled campaign delivery.",
       result,
     };
   }

@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   ilike,
   or,
   sql,
@@ -60,6 +61,14 @@ type NewsletterCampaignStatus =
   | "failed"
   | "canceled";
 
+type NewsletterCampaignDeliveryStatus =
+  | "queued"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "skipped"
+  | "canceled";
+
 function normalizeNewsletterConfig(configJson: unknown): NewsletterPluginConfig {
   const parsed = newsletterPluginConfigSchema.safeParse(configJson ?? {});
   if (parsed.success) return parsed.data;
@@ -97,6 +106,20 @@ function toCount(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function createEmptyDeliveryCounts(): Record<
+  NewsletterCampaignDeliveryStatus,
+  number
+> {
+  return {
+    queued: 0,
+    sending: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    canceled: 0,
+  };
 }
 
 function stripDefaultPort(host: string): string {
@@ -357,6 +380,13 @@ export class NewsletterConfirmationDeliveryError extends Error {
   }
 }
 
+export class NewsletterCampaignDeliveryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NewsletterCampaignDeliveryError";
+  }
+}
+
 export class NewsletterSignupRateLimitError extends Error {
   constructor(message: string) {
     super(message);
@@ -454,6 +484,7 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
     newsletterSubscriber,
     newsletterActionToken,
     newsletterCampaign,
+    newsletterCampaignDelivery,
     projectPluginInstance,
   } =
     tables;
@@ -527,6 +558,158 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
       );
 
     return toCount(countRows[0]?.count);
+  }
+
+  async function loadSubscriberById(subscriberId: string) {
+    return db.query.newsletterSubscriber.findFirst({
+      where: eq(newsletterSubscriber.id, subscriberId),
+    });
+  }
+
+  async function listAudienceSubscribers(options: {
+    organizationId: string;
+    projectSlug: string;
+    mode: "newsletter" | "waitlist";
+    audience: NewsletterCampaignAudience;
+  }) {
+    return db.query.newsletterSubscriber.findMany({
+      where: and(
+        eq(newsletterSubscriber.organizationId, options.organizationId),
+        eq(newsletterSubscriber.projectSlug, options.projectSlug),
+        eq(newsletterSubscriber.status, "confirmed"),
+        options.audience === "mode_confirmed"
+          ? eq(newsletterSubscriber.mode, options.mode)
+          : undefined,
+      ),
+      orderBy: [asc(newsletterSubscriber.email)],
+    });
+  }
+
+  async function issueUnsubscribeToken(options: {
+    subscriberId: string;
+    organizationId: string;
+    projectSlug: string;
+  }) {
+    const token = createRawToken();
+    const now = new Date();
+
+    await db
+      .delete(newsletterActionToken)
+      .where(
+        and(
+          eq(newsletterActionToken.subscriberId, options.subscriberId),
+          eq(newsletterActionToken.kind, "unsubscribe"),
+        ),
+      );
+
+    await db.insert(newsletterActionToken).values({
+      id: randomUUID(),
+      subscriberId: options.subscriberId,
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      kind: "unsubscribe",
+      tokenHash: hashToken(token),
+      expiresAt: new Date(now.getTime() + UNSUBSCRIBE_TOKEN_TTL_MS),
+      usedAt: null,
+    });
+
+    return token;
+  }
+
+  async function buildCampaignDeliveryCountMap(campaignIds: string[]) {
+    const countsByCampaignId = new Map<
+      string,
+      Record<NewsletterCampaignDeliveryStatus, number>
+    >();
+    if (campaignIds.length === 0) return countsByCampaignId;
+
+    const rows = await db
+      .select({
+        campaignId: newsletterCampaignDelivery.campaignId,
+        status: newsletterCampaignDelivery.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(newsletterCampaignDelivery)
+      .where(inArray(newsletterCampaignDelivery.campaignId, campaignIds))
+      .groupBy(
+        newsletterCampaignDelivery.campaignId,
+        newsletterCampaignDelivery.status,
+      );
+
+    for (const campaignId of campaignIds) {
+      countsByCampaignId.set(campaignId, createEmptyDeliveryCounts());
+    }
+
+    for (const row of rows as Array<{
+      campaignId: string;
+      status: NewsletterCampaignDeliveryStatus;
+      count: number;
+    }>) {
+      const counts =
+        countsByCampaignId.get(row.campaignId) ?? createEmptyDeliveryCounts();
+      if (
+        row.status === "queued" ||
+        row.status === "sending" ||
+        row.status === "sent" ||
+        row.status === "failed" ||
+        row.status === "skipped" ||
+        row.status === "canceled"
+      ) {
+        counts[row.status] = toCount(row.count);
+      }
+      countsByCampaignId.set(row.campaignId, counts);
+    }
+
+    return countsByCampaignId;
+  }
+
+  async function refreshCampaignState(campaignId: string) {
+    const campaign = await db.query.newsletterCampaign.findFirst({
+      where: eq(newsletterCampaign.id, campaignId),
+    });
+    if (!campaign) return null;
+
+    const countsMap = await buildCampaignDeliveryCountMap([campaignId]);
+    const counts = countsMap.get(campaignId) ?? createEmptyDeliveryCounts();
+    const now = new Date();
+
+    if (campaign.status === "canceled") {
+      await db
+        .update(newsletterCampaign)
+        .set({
+          updatedAt: now,
+          completedAt:
+            counts.queued === 0 && counts.sending === 0
+              ? (campaign.completedAt ?? now)
+              : campaign.completedAt,
+        })
+        .where(eq(newsletterCampaign.id, campaignId));
+      return { ...campaign, status: "canceled" as const, counts };
+    }
+
+    if (counts.queued > 0 || counts.sending > 0) {
+      await db
+        .update(newsletterCampaign)
+        .set({
+          status: "sending",
+          startedAt: campaign.startedAt ?? now,
+          updatedAt: now,
+        })
+        .where(eq(newsletterCampaign.id, campaignId));
+      return { ...campaign, status: "sending" as const, counts };
+    }
+
+    const finalStatus = counts.failed > 0 ? "failed" : "sent";
+    await db
+      .update(newsletterCampaign)
+      .set({
+        status: finalStatus,
+        completedAt: campaign.completedAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(newsletterCampaign.id, campaignId));
+
+    return { ...campaign, status: finalStatus, counts };
   }
 
   async function rotateActionTokens(options: {
@@ -734,6 +917,54 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
         result.error || "Failed to send confirmation email.",
       );
     }
+  }
+
+  async function sendCampaignEmail(options: {
+    organizationId: string;
+    projectSlug: string;
+    projectTitle: string;
+    campaignId: string;
+    subject: string;
+    body: string;
+    email: string;
+    recipientName?: string | null;
+    unsubscribeUrl?: string | null;
+    mode: "newsletter" | "waitlist";
+    isTest?: boolean;
+  }) {
+    const email = await emailTemplates.buildCampaignEmail({
+      projectTitle: options.projectTitle,
+      recipientName: options.recipientName,
+      subject: options.subject,
+      body: options.body,
+      unsubscribeUrl: options.unsubscribeUrl,
+      mode: options.mode,
+      isTest: options.isTest,
+    });
+
+    const result = await emailDeliveryService.send({
+      to: [options.email],
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+      metadata: {
+        category: options.isTest
+          ? "newsletter.broadcast.test"
+          : "newsletter.broadcast",
+        plugin: "newsletter",
+        organization: options.organizationId,
+        project: options.projectSlug,
+        campaign: options.campaignId,
+      },
+    });
+
+    if (!result.accepted) {
+      throw new NewsletterCampaignDeliveryError(
+        result.error || "Failed to send campaign email.",
+      );
+    }
+
+    return result;
   }
 
   class NewsletterPluginServiceImpl {
@@ -1439,6 +1670,9 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
           audience: "mode_confirmed",
         }),
       ]);
+      const deliveryCountsByCampaignId = await buildCampaignDeliveryCountMap(
+        rowResults.map((row: any) => row.id),
+      );
 
       return {
         pluginId: "newsletter",
@@ -1452,25 +1686,37 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
           allConfirmed,
           modeConfirmed,
         },
-        rows: rowResults.map((row: any) => ({
-          id: row.id,
-          subject: row.subject,
-          body: row.body,
-          status:
-            (row.status as NewsletterCampaignStatus) === "draft" ||
-            row.status === "queued" ||
-            row.status === "sending" ||
-            row.status === "sent" ||
-            row.status === "failed" ||
-            row.status === "canceled"
-              ? row.status
-              : "draft",
-          audience: row.audience === "mode_confirmed" ? "mode_confirmed" : "all_confirmed",
-          mode: row.mode === "waitlist" ? "waitlist" : "newsletter",
-          estimatedRecipientCount: toCount(row.estimatedRecipientCount),
-          createdAt: row.createdAt.toISOString(),
-          updatedAt: row.updatedAt.toISOString(),
-        })),
+        rows: rowResults.map((row: any) => {
+          const deliveryCounts =
+            deliveryCountsByCampaignId.get(row.id) ?? createEmptyDeliveryCounts();
+          return {
+            id: row.id,
+            subject: row.subject,
+            body: row.body,
+            status:
+              (row.status as NewsletterCampaignStatus) === "draft" ||
+              row.status === "queued" ||
+              row.status === "sending" ||
+              row.status === "sent" ||
+              row.status === "failed" ||
+              row.status === "canceled"
+                ? row.status
+                : "draft",
+            audience: row.audience === "mode_confirmed" ? "mode_confirmed" : "all_confirmed",
+            mode: row.mode === "waitlist" ? "waitlist" : "newsletter",
+            estimatedRecipientCount: toCount(row.estimatedRecipientCount),
+            recipientCount: toCount(row.recipientCount),
+            deliveryCounts,
+            testSentAt: toIsoString(row.testSentAt),
+            queuedAt: toIsoString(row.queuedAt),
+            startedAt: toIsoString(row.startedAt),
+            completedAt: toIsoString(row.completedAt),
+            canceledAt: toIsoString(row.canceledAt),
+            lastError: row.lastError ?? null,
+            createdAt: row.createdAt.toISOString(),
+            updatedAt: row.updatedAt.toISOString(),
+          };
+        }),
       };
     }
 
@@ -1605,6 +1851,415 @@ export function createNewsletterPluginService(deps: NewsletterPluginServiceDeps)
         campaignId: options.campaignId,
         status: "deleted",
       };
+    }
+
+    async testSendCampaign(options: {
+      organizationId: string;
+      projectSlug: string;
+      campaignId: string;
+      email: string;
+    }): Promise<{
+      campaignId: string;
+      status: "test_sent";
+      email: string;
+    }> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        throw new NewsletterPluginNotEnabledError();
+      }
+
+      const campaign = await loadCampaignById({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        campaignId: options.campaignId,
+      });
+      if (!campaign) {
+        throw new NewsletterCampaignNotFoundError(options.campaignId);
+      }
+      const recipientEmail = confirmEmailSchema.parse(options.email);
+      const projectTitle = await readProjectTitle(deps, options);
+
+      await sendCampaignEmail({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        projectTitle,
+        campaignId: campaign.id,
+        subject: campaign.subject,
+        body: campaign.body,
+        email: recipientEmail,
+        mode: campaign.mode === "waitlist" ? "waitlist" : "newsletter",
+        isTest: true,
+      });
+
+      await db
+        .update(newsletterCampaign)
+        .set({
+          testSentAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(newsletterCampaign.id, options.campaignId));
+
+      return {
+        campaignId: campaign.id,
+        status: "test_sent",
+        email: recipientEmail,
+      };
+    }
+
+    async sendCampaign(options: {
+      organizationId: string;
+      projectSlug: string;
+      campaignId: string;
+    }): Promise<{
+      campaignId: string;
+      status: "queued";
+      recipientCount: number;
+    }> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        throw new NewsletterPluginNotEnabledError();
+      }
+
+      const campaign = await loadCampaignById({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        campaignId: options.campaignId,
+      });
+      if (!campaign) {
+        throw new NewsletterCampaignNotFoundError(options.campaignId);
+      }
+      if (campaign.status !== "draft") {
+        throw new NewsletterCampaignStateError(
+          "Only draft campaigns can be queued right now.",
+        );
+      }
+
+      const subscribers = await listAudienceSubscribers({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        mode: campaign.mode === "waitlist" ? "waitlist" : "newsletter",
+        audience:
+          campaign.audience === "mode_confirmed"
+            ? "mode_confirmed"
+            : "all_confirmed",
+      });
+
+      if (subscribers.length === 0) {
+        throw new NewsletterCampaignStateError(
+          "No confirmed subscribers currently match this campaign audience.",
+        );
+      }
+
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        const [queuedCampaign] = await tx
+          .update(newsletterCampaign)
+          .set({
+            status: "queued",
+            recipientCount: subscribers.length,
+            queuedAt: now,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            lastError: null,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(newsletterCampaign.id, options.campaignId),
+              eq(newsletterCampaign.status, "draft"),
+            ),
+          )
+          .returning();
+
+        if (!queuedCampaign) {
+          throw new NewsletterCampaignStateError(
+            "Only draft campaigns can be queued right now.",
+          );
+        }
+
+        await tx
+          .delete(newsletterCampaignDelivery)
+          .where(eq(newsletterCampaignDelivery.campaignId, options.campaignId));
+
+        await tx.insert(newsletterCampaignDelivery).values(
+          subscribers.map((subscriber: any) => ({
+            id: randomUUID(),
+            campaignId: options.campaignId,
+            subscriberId: subscriber.id,
+            organizationId: options.organizationId,
+            projectSlug: options.projectSlug,
+            pluginInstanceId: existing.id,
+            email: subscriber.email,
+            emailNormalized: subscriber.emailNormalized,
+            recipientName: subscriber.name ?? null,
+            status: "queued",
+          })),
+        );
+      });
+
+      return {
+        campaignId: options.campaignId,
+        status: "queued",
+        recipientCount: subscribers.length,
+      };
+    }
+
+    async cancelCampaign(options: {
+      organizationId: string;
+      projectSlug: string;
+      campaignId: string;
+    }): Promise<{
+      campaignId: string;
+      status: "canceled";
+    }> {
+      const existing = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "newsletter",
+      });
+      if (!existing || existing.status !== "enabled") {
+        throw new NewsletterPluginNotEnabledError();
+      }
+
+      const campaign = await loadCampaignById({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        campaignId: options.campaignId,
+      });
+      if (!campaign) {
+        throw new NewsletterCampaignNotFoundError(options.campaignId);
+      }
+      if (campaign.status !== "queued" && campaign.status !== "sending") {
+        throw new NewsletterCampaignStateError(
+          "Only queued or sending campaigns can be canceled right now.",
+        );
+      }
+
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        const [updatedCampaign] = await tx
+          .update(newsletterCampaign)
+          .set({
+            status: "canceled",
+            canceledAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(newsletterCampaign.id, options.campaignId),
+              or(
+                eq(newsletterCampaign.status, "queued"),
+                eq(newsletterCampaign.status, "sending"),
+              ),
+            ),
+          )
+          .returning();
+
+        if (!updatedCampaign) {
+          throw new NewsletterCampaignStateError(
+            "Only queued or sending campaigns can be canceled right now.",
+          );
+        }
+
+        await tx
+          .update(newsletterCampaignDelivery)
+          .set({
+            status: "canceled",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(newsletterCampaignDelivery.campaignId, options.campaignId),
+              eq(newsletterCampaignDelivery.status, "queued"),
+            ),
+          );
+      });
+
+      await refreshCampaignState(options.campaignId);
+
+      return {
+        campaignId: options.campaignId,
+        status: "canceled",
+      };
+    }
+
+    async processQueuedCampaigns(): Promise<number> {
+      const nextCampaign = await db.query.newsletterCampaign.findFirst({
+        where: or(
+          eq(newsletterCampaign.status, "queued"),
+          eq(newsletterCampaign.status, "sending"),
+        ),
+        orderBy: [asc(newsletterCampaign.queuedAt), asc(newsletterCampaign.updatedAt)],
+      });
+
+      if (!nextCampaign) return 0;
+
+      const now = new Date();
+      const activeCampaign =
+        nextCampaign.status === "queued"
+          ? (
+              await db
+                .update(newsletterCampaign)
+                .set({
+                  status: "sending",
+                  startedAt: nextCampaign.startedAt ?? now,
+                  updatedAt: now,
+                })
+                .where(
+                  and(
+                    eq(newsletterCampaign.id, nextCampaign.id),
+                    eq(newsletterCampaign.status, "queued"),
+                  ),
+                )
+                .returning()
+            )[0] ?? null
+          : nextCampaign;
+
+      if (!activeCampaign) return 0;
+
+      const queuedDeliveries = await db.query.newsletterCampaignDelivery.findMany({
+        where: and(
+          eq(newsletterCampaignDelivery.campaignId, activeCampaign.id),
+          eq(newsletterCampaignDelivery.status, "queued"),
+        ),
+        limit: 25,
+        orderBy: [asc(newsletterCampaignDelivery.createdAt)],
+      });
+
+      if (queuedDeliveries.length === 0) {
+        await refreshCampaignState(activeCampaign.id);
+        return 0;
+      }
+
+      const [projectTitle, endpoints] = await Promise.all([
+        readProjectTitle(deps, {
+          organizationId: activeCampaign.organizationId,
+          projectSlug: activeCampaign.projectSlug,
+        }),
+        resolvePublicEndpoints(),
+      ]);
+
+      let processedCount = 0;
+
+      for (const delivery of queuedDeliveries as any[]) {
+        const latestCampaign = await loadCampaignById({
+          organizationId: activeCampaign.organizationId,
+          projectSlug: activeCampaign.projectSlug,
+          campaignId: activeCampaign.id,
+        });
+        if (!latestCampaign || latestCampaign.status === "canceled") {
+          break;
+        }
+
+        const claimedDelivery = (
+          await db
+            .update(newsletterCampaignDelivery)
+            .set({
+              status: "sending",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(newsletterCampaignDelivery.id, delivery.id),
+                eq(newsletterCampaignDelivery.status, "queued"),
+              ),
+            )
+            .returning()
+        )[0];
+
+        if (!claimedDelivery) {
+          continue;
+        }
+
+        processedCount += 1;
+
+        try {
+          const subscriber = await loadSubscriberById(claimedDelivery.subscriberId);
+          const modeMatches =
+            latestCampaign.audience !== "mode_confirmed" ||
+            subscriber?.mode === latestCampaign.mode;
+          if (!subscriber || subscriber.status !== "confirmed" || !modeMatches) {
+            await db
+              .update(newsletterCampaignDelivery)
+              .set({
+                status: "skipped",
+                skipReason: !subscriber
+                  ? "Subscriber record no longer exists."
+                  : subscriber.status !== "confirmed"
+                    ? "Subscriber is no longer confirmed."
+                    : "Subscriber no longer matches the campaign mode filter.",
+                updatedAt: new Date(),
+              })
+              .where(eq(newsletterCampaignDelivery.id, claimedDelivery.id));
+            continue;
+          }
+
+          const unsubscribeToken = await issueUnsubscribeToken({
+            subscriberId: subscriber.id,
+            organizationId: latestCampaign.organizationId,
+            projectSlug: latestCampaign.projectSlug,
+          });
+          const unsubscribeUrl = `${endpoints.unsubscribeEndpoint}?token=${encodeURIComponent(
+            unsubscribeToken,
+          )}`;
+          const deliveryResult = await sendCampaignEmail({
+            organizationId: latestCampaign.organizationId,
+            projectSlug: latestCampaign.projectSlug,
+            projectTitle,
+            campaignId: latestCampaign.id,
+            subject: latestCampaign.subject,
+            body: latestCampaign.body,
+            email: claimedDelivery.email,
+            recipientName: claimedDelivery.recipientName ?? null,
+            unsubscribeUrl,
+            mode: latestCampaign.mode === "waitlist" ? "waitlist" : "newsletter",
+          });
+
+          await db
+            .update(newsletterCampaignDelivery)
+            .set({
+              status: "sent",
+              provider: deliveryResult.provider,
+              providerMessageId: deliveryResult.messageId ?? null,
+              sentAt: new Date(),
+              skipReason: null,
+              failureReason: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(newsletterCampaignDelivery.id, claimedDelivery.id));
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Failed to send campaign email.";
+          await db
+            .update(newsletterCampaignDelivery)
+            .set({
+              status: "failed",
+              failureReason: message,
+              updatedAt: new Date(),
+            })
+            .where(eq(newsletterCampaignDelivery.id, claimedDelivery.id));
+          await db
+            .update(newsletterCampaign)
+            .set({
+              lastError: message,
+              updatedAt: new Date(),
+            })
+            .where(eq(newsletterCampaign.id, latestCampaign.id));
+        }
+      }
+
+      await refreshCampaignState(activeCampaign.id);
+
+      return processedCount;
     }
 
     async listSubscribers(options: {

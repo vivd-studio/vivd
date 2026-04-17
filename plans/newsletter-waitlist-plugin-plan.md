@@ -1,7 +1,7 @@
 # Newsletter / Waitlist Plugin Plan (MVP-First)
 
-Status: Initial v1 implemented; phase-2 draft foundation started  
-Last updated: 2026-04-16
+Status: Initial v1 implemented; broadcast execution slice partly implemented; further ops controls planned  
+Last updated: 2026-04-17
 
 ## Implementation Note
 
@@ -13,17 +13,29 @@ The initial shipped scope matches the core audience-capture plan:
 - project operator UI for list/search/export and small manual actions
 - generic CLI/backend/frontend/Studio plugin integration
 
-The next broadcasting slice has now started with campaign-draft foundations:
+The current implementation now covers the first real broadcast-execution slice:
 
 - draft campaign storage for newsletter broadcasts
 - campaign read/action surface through the generic plugin APIs
 - project-page UI for drafting subject/body/audience and sizing the current confirmed audience
+- test-send action from the dashboard and generic action API
+- queued background send execution with per-recipient delivery rows
+- cancel control for queued or in-flight campaigns
+- campaign history/status/delivery aggregate counts in the project UI
+
+The remaining recommended work in the broader **broadcast operations** phase is now narrower:
+
+- expand the project dashboard so operators can see audience health and usage/capacity, not just raw subscriber rows
+- add richer delivery-detail reads/views and failure drill-down
+- add subscriber mode/source filters and segmented exports
+- keep the scope to one-off broadcasts plus delivery observability, without drifting into automations or ESP-style complexity
 
 Still intentionally not shipped in this slice:
 
-- real batched outbound send execution
-- test-send delivery
-- per-recipient delivery rows and send-state processing
+- monthly signup usage/capacity cards
+- subscriber mode/source-host filters
+- dedicated delivery-detail read/API surface
+- scheduling, automations, rich segmentation, or ESP sync
 
 One planned abuse-control item is intentionally deferred from this first cut:
 
@@ -491,37 +503,98 @@ Exit criteria:
 
 - the plugin is safe enough to expose on public launch pages without obvious spam or compliance gaps
 
-## Proposed Phase 2: Outbound Sending
+## Recommended Next Work Block: Broadcast Operations
 
-Treat sending as a narrow follow-up phase, not a jump to “full ESP”.
+Treat this as the first complete outbound release for the plugin, not as a jump to “full ESP”.
 
 ### Goal
 
-Let project operators send one-off broadcast emails to confirmed subscribers from inside Vivd, while keeping the product surface operationally simple and deliverability-safe.
+Let project operators manage the full practical lifecycle of a newsletter or waitlist announcement from inside Vivd:
 
-### What Phase 2 should include
+- understand current audience health and usage/capacity
+- prepare or revise a campaign draft
+- send a test message
+- launch a one-off broadcast safely
+- monitor progress/results from the same dashboard
+- cancel remaining queued delivery when needed
+
+### Why this should be the next block
+
+- the plugin already has real audience capture and the beginnings of campaign authoring
+- the next meaningful product step is to make the campaign side actually operational
+- this is also the point where the dashboard should stop being “list + draft form” and become a small control room for the plugin
+- this scope is large enough to be truly useful in production, but still narrow enough to avoid turning the plugin into a full marketing suite
+
+### In Scope
+
+#### 1. Campaign send lifecycle
 
 - one-off broadcasts to `confirmed` subscribers only
-- a draft -> review -> send flow
-- test-send to operator email before the real send
+- explicit `draft -> review -> test-send -> queued -> sending -> sent/failed/canceled` lifecycle
+- test-send to the operator’s own email before the real send
+- send confirmation step that shows the final frozen recipient count before launch
+- cancel action that stops future unsent batches, even if part of the campaign has already gone out
+
+#### 2. Safe delivery execution
+
 - batch/background delivery instead of sending inline from an HTTP request
-- per-campaign counts for queued, sent, failed, bounced, complained, unsubscribed
-- automatic unsubscribe link/footer on every campaign
+- frozen recipient snapshot at send time by materializing delivery rows before sending
 - suppression of `unsubscribed`, `bounced`, and `complained` recipients
+- unsubscribe footer/link on every campaign
+- plain-text fallback alongside HTML output
 - provider-neutral delivery through the existing backend `EmailDeliveryService`
 
-### What Phase 2 should still exclude
+#### 3. Dashboard / operator controls
+
+Add enough dashboard control that a project owner can run the plugin day to day without exporting to spreadsheets first.
+
+Recommended additions:
+
+- `Overview`
+  - confirmed subscribers
+  - pending confirmations
+  - suppressed subscribers
+  - monthly signup usage vs entitlement limit
+  - recent campaign count / last send status
+- `Campaigns`
+  - draft list plus send history
+  - test-send action
+  - send confirmation dialog
+  - live counts for queued / sent / failed / skipped / canceled
+  - campaign detail view with failure samples/reasons
+- `Subscribers`
+  - existing status filter
+  - add `mode` filter (`newsletter` vs `waitlist`)
+  - add `source host` filter
+  - add segmented export actions for confirmed / pending / suppressed slices
+
+This is the part that makes the dashboard feel complete enough to actually operate the plugin.
+
+#### 4. Campaign observability
+
+- per-campaign aggregate counts for queued, sent, failed, skipped, canceled
+- last error summary and sample failure reasons
+- sent-at / completed-at timestamps
+- campaign detail read surface for the dashboard and CLI
+
+### Explicitly Out of Scope
 
 - drip/automation builders
 - visual email builders
-- segmentation beyond small explicit filters
+- segmentation beyond `all_confirmed` and `mode_confirmed`
 - A/B testing
-- send-time optimization or scheduling systems
+- scheduled sends or send-time optimization
 - external ESP sync as a required dependency
+- CSV import of external lists
+- multi-list management inside one project
+- manual reactivation of suppressed subscribers from the dashboard
+- webhook-driven bounce/complaint synchronization if that cannot be generalized cheaply from the existing email stack
 
 ### Proposed minimal data model
 
-Add a `newsletter_campaign` table:
+Extend the current `newsletter_campaign` draft foundation rather than replacing it.
+
+Recommended additional fields:
 
 - `id text primary key`
 - `organization_id text not null`
@@ -530,14 +603,17 @@ Add a `newsletter_campaign` table:
 - `mode text not null` (`newsletter | waitlist`)
 - `status text not null` (`draft | queued | sending | sent | failed | canceled`)
 - `subject text not null`
-- `body_json jsonb not null`
+- `body text not null` for the editable source body already in place
 - `body_html text null`
 - `body_text text null`
-- `recipient_filter jsonb not null`
+- `audience text not null` (`all_confirmed | mode_confirmed`)
 - `recipient_count integer not null default 0`
+- `test_sent_at timestamp null`
 - `queued_at timestamp null`
 - `started_at timestamp null`
 - `completed_at timestamp null`
+- `canceled_at timestamp null`
+- `last_error text null`
 - `created_by_user_id text null`
 - `created_at timestamp not null default now()`
 - `updated_at timestamp not null default now()`
@@ -549,75 +625,116 @@ Add a `newsletter_campaign_delivery` table:
 - `subscriber_id text not null`
 - `organization_id text not null`
 - `project_slug text not null`
-- `status text not null` (`queued | sent | failed | bounced | complained | skipped`)
+- `status text not null` (`queued | sending | sent | failed | skipped | canceled`)
 - `provider_message_id text null`
+- `skip_reason text null`
 - `failure_reason text null`
 - `sent_at timestamp null`
+- `created_at timestamp not null default now()`
 - `updated_at timestamp not null default now()`
 - unique `(campaign_id, subscriber_id)`
 
 ### Backend plan
 
-- add plugin-owned campaign create/list/get/send/cancel service methods
-- reuse the existing email template/footer system so branding and unsubscribe behavior stay consistent
-- enqueue delivery rows when a campaign is sent, then process them in batches from a plugin-owned background job
-- send only to a frozen recipient snapshot for that campaign, not to the live list mid-send
-- stop sending to recipients who become suppressed before their batch is processed
-- feed bounce/complaint signals back into both deliverability state and subscriber suppression
+- keep campaign authoring plugin-owned and extend the existing service/module rather than adding host-specific side routes
+- add plugin-owned service methods for:
+  - `testSendCampaign`
+  - `sendCampaign`
+  - `cancelCampaign`
+  - `getCampaign`
+  - `listCampaignDeliveries`
+- build HTML + text payloads from the stored draft body using the shared branded email template/footer system
+- when a campaign is sent:
+  - compute the current eligible recipients
+  - create frozen delivery rows immediately
+  - store the final `recipient_count`
+  - transition the campaign to `queued`
+- process deliveries in bounded background batches
+- update campaign aggregate counts after each batch so the dashboard can poll for progress
+- skip recipients who become suppressed before their batch actually sends
+- keep real post-send bounce/complaint webhook synchronization as a follow-up if the feedback path cannot be reused cleanly; do not block this work block on that integration
 
 ### Frontend / operator plan
 
 Add a `Campaigns` section to the existing Newsletter project page:
 
-- campaign list with status and counts
-- new draft form with subject + body
-- small audience selector:
-  - all confirmed subscribers
-  - confirmed subscribers for the current `mode`
+- campaign list with status, recipient count, timestamps, and outcome counts
+- existing draft form with subject + body
+- existing audience selector:
+  - `all confirmed`
+  - `confirmed for current mode`
 - test-send action
 - send confirmation step showing final recipient count
 - delivery detail view with failure counts/reasons
+- cancel control for queued/sending campaigns
+
+Extend the rest of the project page with small but important operating controls:
+
+- overview cards for audience health and monthly signup usage/capacity
+- subscriber filters for `mode` and `source host`
+- segmented exports for confirmed / pending / suppressed
+- clearer sent-history vs draft-history separation so operators do not lose track of what actually went out
 
 ### CLI / agent plan
 
 Keep the same generic plugin surface:
 
 - `vivd plugins read newsletter campaigns`
+- `vivd plugins read newsletter campaign_deliveries --file input.json`
+- `vivd plugins action newsletter test_send_campaign <campaignId>`
 - `vivd plugins action newsletter send_campaign <campaignId>`
 - `vivd plugins action newsletter cancel_campaign <campaignId>`
 
-The agent should only generate/send campaigns after confirming the user actually wants Vivd to own outbound sending instead of exporting to an external tool.
+The agent should:
+
+- continue defaulting to `mode=waitlist` snippets when the user asked for a waitlist
+- default campaign audience to `mode_confirmed` when the project itself is in waitlist mode unless the user asks otherwise
+- treat `send_campaign` and `cancel_campaign` as ask-first, clearly operational actions
 
 ## Testing Plan
 
 Backend:
 
-- subscribe route tests for token validation, origin validation, quota handling, hard stop, Turnstile, and idempotency
-- confirm/unsubscribe token tests
-- service tests for lifecycle transitions
-- summary/list/export query tests
-- entitlement usage aggregation tests
+- service tests for `testSendCampaign`, `sendCampaign`, `cancelCampaign`, frozen recipient snapshot creation, and aggregate count updates
+- batch-processor tests for retry-safe progression and partial-send cancellation
+- delivery query tests for status filtering and failure/skip reporting
+- existing lifecycle tests for subscribe/confirm/unsubscribe should stay green
 
 Frontend:
 
-- project page loading/error/empty states
-- filter/search/pagination tests
-- row-action mutation tests
+- campaign flow tests for draft -> test-send -> send confirmation -> progress/history
+- overview/usage card rendering tests
+- subscriber mode/source filter tests
+- sent-history pagination/detail tests
 
 CLI:
 
-- help and alias coverage
-- info/config/action/read renderers
+- help and formatter coverage for campaign reads/actions
+- send/cancel/test-send renderers
 
 Integration:
 
-- public plugin contract tests for HTML form and JSON submit flows
-- focused end-to-end test proving signup -> confirm -> visible in list -> export row
+- focused end-to-end path: signup -> confirm -> visible in audience -> campaign test-send -> real send -> delivery counts visible in dashboard
+- focused end-to-end path: queued campaign canceled mid-run stops future batches cleanly
 
-## Recommended Future Work After V1
+## Exit Criteria For This Work Block
+
+This block is done when all of the following are true:
+
+1. A project operator can create a draft, send a test email, and launch a one-off broadcast entirely from the Vivd dashboard.
+2. A sent campaign creates a frozen recipient snapshot and runs in batches outside the request path.
+3. The dashboard shows enough operational state to manage the plugin in production: audience health, monthly signup usage/capacity, campaign history, and delivery outcomes.
+4. A queued or partially processed campaign can be canceled without corrupting campaign state.
+5. The plugin still deliberately stops short of automations, scheduling, complex segmentation, and ESP sync.
+
+## Recommended Future Work After This Block
 
 - CSV import for existing lists
 - provider syncs or outbound webhooks on confirmed signup/unsubscribe
+- webhook-driven bounce/complaint sync if not already generalized
+- richer audience segments/tags
+- scheduled or recurring campaigns
+- automation/drip sequences
 - list segmentation/tags
 - basic acquisition reporting and analytics integration
 - waitlist rank/invite flows

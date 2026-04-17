@@ -116,6 +116,10 @@ export interface ContactFormPluginServiceDeps {
   listVerifiedOrganizationMemberEmails(options: {
     organizationId: string;
   }): Promise<string[]>;
+  syncProjectTurnstileWidget?(options: {
+    organizationId: string;
+    projectSlug: string;
+  }): Promise<void>;
 }
 
 export interface ContactFormRecipientVerificationDatabase {

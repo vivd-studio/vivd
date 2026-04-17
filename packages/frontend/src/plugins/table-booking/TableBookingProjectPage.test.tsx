@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { createContext, useContext, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TableBookingProjectPage from "@vivd/plugin-table-booking/frontend/TableBookingProjectPage";
 import {
@@ -13,16 +13,28 @@ const {
   ensureUseMutationMock,
   infoUseQueryMock,
   actionUseMutationMock,
+  dayCapacityUseQueryMock,
+  deleteCapacityAdjustmentUseMutationMock,
+  exportBookingsUseMutationMock,
   projectListUseQueryMock,
   readUseQueryMock,
+  requestAccessUseMutationMock,
+  saveCapacityAdjustmentUseMutationMock,
+  saveReservationUseMutationMock,
   updateConfigUseMutationMock,
   useUtilsMock,
 } = vi.hoisted(() => ({
   ensureUseMutationMock: vi.fn(),
   infoUseQueryMock: vi.fn(),
   actionUseMutationMock: vi.fn(),
+  dayCapacityUseQueryMock: vi.fn(),
+  deleteCapacityAdjustmentUseMutationMock: vi.fn(),
+  exportBookingsUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   readUseQueryMock: vi.fn(),
+  requestAccessUseMutationMock: vi.fn(),
+  saveCapacityAdjustmentUseMutationMock: vi.fn(),
+  saveReservationUseMutationMock: vi.fn(),
   updateConfigUseMutationMock: vi.fn(),
   useUtilsMock: vi.fn(),
 }));
@@ -99,6 +111,61 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/tabs", () => {
+  const TabsContext = createContext<{
+    value: string;
+    onValueChange?: (value: string) => void;
+  } | null>(null);
+
+  return {
+    Tabs: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value: string;
+      onValueChange?: (value: string) => void;
+      children: ReactNode;
+    }) => (
+      <TabsContext.Provider value={{ value, onValueChange }}>
+        <div>{children}</div>
+      </TabsContext.Provider>
+    ),
+    TabsList: ({ children }: { children: ReactNode }) => (
+      <div role="tablist">{children}</div>
+    ),
+    TabsTrigger: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => {
+      const context = useContext(TabsContext);
+      return (
+        <button
+          role="tab"
+          aria-selected={context?.value === value}
+          onClick={() => context?.onValueChange?.(value)}
+        >
+          {children}
+        </button>
+      );
+    },
+    TabsContent: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => {
+      const context = useContext(TabsContext);
+      if (context?.value !== value) return null;
+      return <div role="tabpanel">{children}</div>;
+    },
+  };
+});
+
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: useUtilsMock,
@@ -115,8 +182,28 @@ vi.mock("@/lib/trpc", () => ({
       ensure: {
         useMutation: ensureUseMutationMock,
       },
+      requestAccess: {
+        useMutation: requestAccessUseMutationMock,
+      },
       updateConfig: {
         useMutation: updateConfigUseMutationMock,
+      },
+      tableBooking: {
+        dayCapacity: {
+          useQuery: dayCapacityUseQueryMock,
+        },
+        saveReservation: {
+          useMutation: saveReservationUseMutationMock,
+        },
+        saveCapacityAdjustment: {
+          useMutation: saveCapacityAdjustmentUseMutationMock,
+        },
+        deleteCapacityAdjustment: {
+          useMutation: deleteCapacityAdjustmentUseMutationMock,
+        },
+        exportBookings: {
+          useMutation: exportBookingsUseMutationMock,
+        },
       },
     },
     project: {
@@ -165,6 +252,7 @@ const bookingsPayload: TableBookingBookingsPayload = {
   pluginId: "table_booking",
   enabled: true,
   status: "all",
+  sourceChannel: "all",
   search: "",
   startDate: null,
   endDate: null,
@@ -175,6 +263,7 @@ const bookingsPayload: TableBookingBookingsPayload = {
     {
       id: "booking-1",
       status: "confirmed",
+      sourceChannel: "staff_manual",
       serviceDate: "2026-04-17",
       serviceStartAt: "2026-04-17T17:30:00.000Z",
       serviceEndAt: "2026-04-17T19:00:00.000Z",
@@ -194,6 +283,7 @@ const bookingsPayload: TableBookingBookingsPayload = {
     {
       id: "booking-2",
       status: "confirmed",
+      sourceChannel: "online",
       serviceDate: "2026-04-17",
       serviceStartAt: "2026-04-17T19:00:00.000Z",
       serviceEndAt: "2026-04-17T20:30:00.000Z",
@@ -213,6 +303,29 @@ const bookingsPayload: TableBookingBookingsPayload = {
   ],
 };
 
+const dayCapacityPayload = {
+  pluginId: "table_booking",
+  enabled: true,
+  serviceDate: "2026-04-16",
+  timeZone: "Europe/Berlin",
+  windows: [
+    {
+      key: "2026-04-16-17:00-21:00-0",
+      startTime: "17:00",
+      endTime: "21:00",
+      slotIntervalMinutes: 30,
+      durationMinutes: 90,
+      baseCapacity: 28,
+      effectiveCapacity: 24,
+      bookedCovers: 6,
+      remainingCovers: 18,
+      isClosed: false,
+      adjustments: [],
+    },
+  ],
+  adjustments: [],
+};
+
 function createMutationResult() {
   return {
     mutate: vi.fn(),
@@ -230,7 +343,13 @@ describe("TableBookingProjectPage", () => {
     infoUseQueryMock.mockReset();
     readUseQueryMock.mockReset();
     actionUseMutationMock.mockReset();
+    dayCapacityUseQueryMock.mockReset();
+    deleteCapacityAdjustmentUseMutationMock.mockReset();
     ensureUseMutationMock.mockReset();
+    exportBookingsUseMutationMock.mockReset();
+    requestAccessUseMutationMock.mockReset();
+    saveCapacityAdjustmentUseMutationMock.mockReset();
+    saveReservationUseMutationMock.mockReset();
     updateConfigUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
     useUtilsMock.mockReset();
@@ -253,6 +372,11 @@ describe("TableBookingProjectPage", () => {
         },
         read: {
           invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+        tableBooking: {
+          dayCapacity: {
+            invalidate: vi.fn().mockResolvedValue(undefined),
+          },
         },
       },
     });
@@ -313,7 +437,19 @@ describe("TableBookingProjectPage", () => {
     });
 
     actionUseMutationMock.mockReturnValue(createMutationResult());
+    dayCapacityUseQueryMock.mockReturnValue({
+      data: dayCapacityPayload,
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue(undefined),
+    });
+    deleteCapacityAdjustmentUseMutationMock.mockReturnValue(createMutationResult());
     ensureUseMutationMock.mockReturnValue(createMutationResult());
+    exportBookingsUseMutationMock.mockReturnValue(createMutationResult());
+    requestAccessUseMutationMock.mockReturnValue(createMutationResult());
+    saveCapacityAdjustmentUseMutationMock.mockReturnValue(createMutationResult());
+    saveReservationUseMutationMock.mockReturnValue(createMutationResult());
     updateConfigUseMutationMock.mockReturnValue(createMutationResult());
   });
 
@@ -377,6 +513,7 @@ describe("TableBookingProjectPage", () => {
     );
 
     expect(screen.getByText("Schedule calendar")).toBeInTheDocument();
+    expect(screen.getByText("Service-window capacity")).toBeInTheDocument();
     expect(screen.getByText("2 bookings · 4 covers")).toBeInTheDocument();
 
     const monthCall = readUseQueryMock.mock.calls.find(
@@ -466,5 +603,77 @@ describe("TableBookingProjectPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("No bookings found")).not.toBeInTheDocument();
+  });
+
+  it("exposes booking export and source-channel badges in booking search", () => {
+    const exportMutate = vi.fn();
+    exportBookingsUseMutationMock.mockReturnValue({
+      mutate: exportMutate,
+      isPending: false,
+      variables: undefined,
+    });
+
+    readUseQueryMock.mockImplementation(
+      ({
+        readId,
+        input,
+      }: {
+        readId: string;
+        input?: {
+          startDate?: string;
+          endDate?: string;
+          sourceChannel?: string;
+        };
+      }) => {
+        if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
+          return {
+            data: { result: summaryPayload },
+            error: null,
+            isLoading: false,
+            refetch: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        if (
+          input?.startDate === "2026-04-01" &&
+          input?.endDate === "2026-04-30"
+        ) {
+          return {
+            data: { result: bookingsPayload },
+            error: null,
+            isLoading: false,
+            refetch: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        return {
+          data: { result: bookingsPayload },
+          error: null,
+          isLoading: false,
+          refetch: vi.fn().mockResolvedValue(undefined),
+        };
+      },
+    );
+
+    render(
+      <TableBookingProjectPage
+        projectSlug="nudels-without-pesto"
+        isEmbedded={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Booking search" }));
+
+    expect(screen.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
+    expect(screen.getAllByText("Staff")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+
+    expect(exportMutate).toHaveBeenCalledWith({
+      slug: "nudels-without-pesto",
+      status: "all",
+      sourceChannel: "all",
+      search: "",
+      startDate: undefined,
+      endDate: undefined,
+    });
   });
 });

@@ -31,6 +31,33 @@ const newsletterCampaignTable = pgTable("newsletter_campaign_test", {
   subject: text("subject"),
   body: text("body"),
   estimatedRecipientCount: integer("estimated_recipient_count"),
+  recipientCount: integer("recipient_count"),
+  testSentAt: timestamp("test_sent_at"),
+  queuedAt: timestamp("queued_at"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  canceledAt: timestamp("canceled_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+const newsletterCampaignDeliveryTable = pgTable("newsletter_campaign_delivery_test", {
+  id: text("id"),
+  campaignId: text("campaign_id"),
+  subscriberId: text("subscriber_id"),
+  organizationId: text("organization_id"),
+  projectSlug: text("project_slug"),
+  pluginInstanceId: text("plugin_instance_id"),
+  email: text("email"),
+  emailNormalized: text("email_normalized"),
+  recipientName: text("recipient_name"),
+  status: text("status"),
+  provider: text("provider"),
+  providerMessageId: text("provider_message_id"),
+  skipReason: text("skip_reason"),
+  failureReason: text("failure_reason"),
+  sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -47,6 +74,26 @@ const projectPluginInstanceTable = pgTable("project_plugin_instance_test", {
   status: text("status"),
 });
 
+type StoredDeliveryRow = {
+  id: string;
+  campaignId: string;
+  subscriberId: string;
+  organizationId: string;
+  projectSlug: string;
+  pluginInstanceId: string;
+  email: string;
+  emailNormalized: string;
+  recipientName: string | null;
+  status: "queued" | "sending" | "sent" | "failed" | "skipped" | "canceled";
+  provider: string | null;
+  providerMessageId: string | null;
+  skipReason: string | null;
+  failureReason: string | null;
+  sentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type StoredCampaignRow = {
   id: string;
   organizationId: string;
@@ -58,6 +105,13 @@ type StoredCampaignRow = {
   subject: string;
   body: string;
   estimatedRecipientCount: number;
+  recipientCount: number;
+  testSentAt: Date | null;
+  queuedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  canceledAt: Date | null;
+  lastError: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -140,6 +194,7 @@ function createHarness(options?: {
     newsletterSubscriber: newsletterSubscriberTable,
     newsletterActionToken: newsletterActionTokenTable,
     newsletterCampaign: newsletterCampaignTable,
+    newsletterCampaignDelivery: newsletterCampaignDeliveryTable,
     projectMeta: projectMetaTable,
     projectPluginInstance: projectPluginInstanceTable,
   } as const;
@@ -173,14 +228,23 @@ function createHarness(options?: {
     subject: row.subject ?? `Campaign ${index + 1}`,
     body: row.body ?? `Body ${index + 1}`,
     estimatedRecipientCount: row.estimatedRecipientCount ?? 0,
+    recipientCount: row.recipientCount ?? 0,
+    testSentAt: row.testSentAt ?? null,
+    queuedAt: row.queuedAt ?? null,
+    startedAt: row.startedAt ?? null,
+    completedAt: row.completedAt ?? null,
+    canceledAt: row.canceledAt ?? null,
+    lastError: row.lastError ?? null,
     createdAt: row.createdAt ?? now,
     updatedAt: row.updatedAt ?? now,
     ...row,
   }));
+  const storedDeliveries: StoredDeliveryRow[] = [];
 
   function getRowsForTable(table: unknown): Array<Record<string, unknown>> {
     if (table === tables.newsletterCampaign) return storedCampaigns;
     if (table === tables.newsletterSubscriber) return storedSubscribers;
+    if (table === tables.newsletterCampaignDelivery) return storedDeliveries;
     return [];
   }
 
@@ -209,9 +273,33 @@ function createHarness(options?: {
     },
     select: vi.fn(() => ({
       from: vi.fn((table) => ({
-        where: vi.fn(async (where?: unknown) => [
-          { count: getRowsForTable(table).filter((row) => matchesWhere(row, where)).length },
-        ]),
+        where: vi.fn((where?: unknown) => ({
+          groupBy: vi.fn(async () => {
+            if (table !== tables.newsletterCampaignDelivery) return [];
+            const grouped = new Map<string, { campaignId: string; status: string; count: number }>();
+            for (const row of storedDeliveries.filter((entry) => matchesWhere(entry, where))) {
+              const key = `${row.campaignId}:${row.status}`;
+              const existing = grouped.get(key);
+              if (existing) {
+                existing.count += 1;
+              } else {
+                grouped.set(key, {
+                  campaignId: row.campaignId,
+                  status: row.status,
+                  count: 1,
+                });
+              }
+            }
+            return [...grouped.values()];
+          }),
+          then(onFulfilled: (value: unknown) => unknown) {
+            return Promise.resolve([
+              {
+                count: getRowsForTable(table).filter((row) => matchesWhere(row, where)).length,
+              },
+            ]).then(onFulfilled);
+          },
+        })),
       })),
     })),
     insert: vi.fn((table) => ({
@@ -291,6 +379,7 @@ function createHarness(options?: {
     },
     emailTemplates: {
       buildConfirmationEmail: vi.fn(),
+      buildCampaignEmail: vi.fn(),
     },
   });
 

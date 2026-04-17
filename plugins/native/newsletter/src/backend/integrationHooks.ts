@@ -1,6 +1,39 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { NewsletterPluginIntegrationHooksDeps } from "./ports";
 
+const DEFAULT_NEWSLETTER_CAMPAIGN_POLL_INTERVAL_MS = 15_000;
+
+function startNewsletterCampaignProcessingJob(
+  processQueuedCampaigns: () => Promise<number>,
+): () => void {
+  let running = false;
+
+  const runTick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await processQueuedCampaigns();
+    } catch (error) {
+      console.error(
+        "[NewsletterCampaigns] Failed to process queued campaign deliveries:",
+        error,
+      );
+    } finally {
+      running = false;
+    }
+  };
+
+  void runTick();
+
+  const timer = setInterval(() => {
+    void runTick();
+  }, DEFAULT_NEWSLETTER_CAMPAIGN_POLL_INTERVAL_MS);
+
+  return () => {
+    clearInterval(timer);
+  };
+}
+
 export function createNewsletterPluginBackendHooks(
   deps: NewsletterPluginIntegrationHooksDeps,
 ) {
@@ -96,11 +129,34 @@ export function createNewsletterPluginBackendHooks(
         )
         .returning({ id: deps.tables.newsletterCampaign.id });
 
+      const updatedDeliveries = await options.tx
+        .update(deps.tables.newsletterCampaignDelivery)
+        .set({ projectSlug: options.newSlug, updatedAt: new Date() })
+        .where(
+          and(
+            eq(
+              deps.tables.newsletterCampaignDelivery.organizationId,
+              options.organizationId,
+            ),
+            eq(
+              deps.tables.newsletterCampaignDelivery.projectSlug,
+              options.oldSlug,
+            ),
+          ),
+        )
+        .returning({ id: deps.tables.newsletterCampaignDelivery.id });
+
       return (
         updatedSubscribers.length +
         updatedActionTokens.length +
-        updatedCampaigns.length
+        updatedCampaigns.length +
+        updatedDeliveries.length
       );
+    },
+
+    startBackgroundJobs() {
+      if (!deps.processQueuedCampaigns) return;
+      return startNewsletterCampaignProcessingJob(deps.processQueuedCampaigns);
     },
   };
 }

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { contactFormPluginConfigSchema } from "./config";
-import { resolveEffectiveSourceHosts, toTurnstileDomains } from "./hostUtils";
+import {
+  DEFAULT_CONTACT_FORM_TURNSTILE_MAX_DOMAINS,
+  resolveEffectiveSourceHosts,
+  toTurnstileDomains,
+} from "./hostUtils";
 import type {
   ContactFormTurnstileServiceDeps,
   ContactFormTurnstileWidgetCredentials,
@@ -11,7 +15,6 @@ import type {
 const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const DEFAULT_WIDGET_NAME_PREFIX = "vivd-contact-form";
-const DEFAULT_MAX_DOMAINS_PER_WIDGET = 10;
 const DEFAULT_VERIFY_TIMEOUT_MS = 6_000;
 const DEFAULT_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -63,7 +66,7 @@ function getAutomationConfig(): TurnstileAutomationConfig | null {
     apiToken,
     widgetNamePrefix: DEFAULT_WIDGET_NAME_PREFIX,
     widgetMode: "managed",
-    maxDomainsPerWidget: DEFAULT_MAX_DOMAINS_PER_WIDGET,
+    maxDomainsPerWidget: DEFAULT_CONTACT_FORM_TURNSTILE_MAX_DOMAINS,
     syncIntervalMs: DEFAULT_SYNC_INTERVAL_MS,
   };
 }

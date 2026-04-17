@@ -34,12 +34,18 @@ import {
 import { getTableBookingSnippets } from "./snippets";
 import type {
   TableBookingAvailabilityInput,
+  TableBookingCapacityAdjustmentInput,
+  TableBookingCapacityAdjustmentMode,
+  TableBookingCapacityAdjustmentRecord,
   TableBookingCancelByTokenResult,
   TableBookingCancelPreviewResult,
+  TableBookingDayCapacityPayload,
   TableBookingPluginInstanceRow,
   TableBookingPluginServiceDeps,
   TableBookingReservationMutationInput,
   TableBookingReservationMutationResult,
+  TableBookingSourceChannel,
+  TableBookingStaffReservationInput,
 } from "./ports";
 import type {
   TableBookingAgendaPayload,
@@ -52,6 +58,17 @@ const emailSchema = z.string().trim().email();
 const phoneSchema = z.string().trim().min(3).max(64);
 const guestNameSchema = z.string().trim().min(1).max(120);
 const partySizeSchema = z.number().int().min(1).max(50);
+const sourceChannelSchema = z.enum([
+  "online",
+  "phone",
+  "walk_in",
+  "staff_manual",
+]);
+const capacityAdjustmentModeSchema = z.enum([
+  "cover_holdback",
+  "effective_capacity_override",
+  "closed",
+]);
 const TOKEN_RATE_LIMIT_PER_MINUTE = 30;
 const IP_RATE_LIMIT_PER_HOUR = 25;
 const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
@@ -79,6 +96,7 @@ type ReservationRow = {
   guestEmailNormalized: string;
   guestPhone: string;
   notes: string | null;
+  sourceChannel: TableBookingSourceChannel;
   sourceHost: string | null;
   sourcePath: string | null;
   referrerHost: string | null;
@@ -86,11 +104,35 @@ type ReservationRow = {
   utmMedium: string | null;
   utmCampaign: string | null;
   lastIpHash: string | null;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
   confirmedAt: Date | null;
   cancelledAt: Date | null;
   cancelledBy: string | null;
   completedAt: Date | null;
   noShowAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type LegacyReservationRow = Omit<
+  ReservationRow,
+  "sourceChannel" | "createdByUserId" | "updatedByUserId"
+>;
+
+type CapacityAdjustmentRow = {
+  id: string;
+  organizationId: string;
+  projectSlug: string;
+  pluginInstanceId: string;
+  serviceDate: string;
+  startTime: string;
+  endTime: string;
+  mode: TableBookingCapacityAdjustmentMode;
+  capacityValue: number | null;
+  reason: string | null;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -164,6 +206,160 @@ function toCount(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type ErrorWithCause = {
+  message?: unknown;
+  code?: unknown;
+  cause?: unknown;
+};
+
+let hasWarnedAboutMissingOperatorCapacityStorage = false;
+
+function collectErrorChain(error: unknown): ErrorWithCause[] {
+  const chain: ErrorWithCause[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    chain.push(current as ErrorWithCause);
+    current = (current as ErrorWithCause).cause;
+  }
+
+  return chain;
+}
+
+function getErrorMessage(error: ErrorWithCause | null | undefined): string {
+  return typeof error?.message === "string" ? error.message : "";
+}
+
+function getErrorCode(error: ErrorWithCause | null | undefined): string {
+  return typeof error?.code === "string" ? error.code.toUpperCase() : "";
+}
+
+function isMissingOperatorCapacityStorageError(error: unknown): boolean {
+  const chain = collectErrorChain(error);
+
+  return chain.some((entry) => {
+    const message = getErrorMessage(entry).toLowerCase();
+    const code = getErrorCode(entry);
+    const isMissingStorageMessage =
+      message.includes("does not exist") ||
+      message.includes("undefined column") ||
+      message.includes("undefined table");
+
+    if (
+      (code === "42703" || isMissingStorageMessage) &&
+      (message.includes("source_channel") ||
+        message.includes("created_by_user_id") ||
+        message.includes("updated_by_user_id"))
+    ) {
+      return true;
+    }
+
+    if (
+      (code === "42P01" || isMissingStorageMessage) &&
+      message.includes("table_booking_capacity_adjustment")
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+function warnMissingOperatorCapacityStorage(error: unknown): void {
+  if (hasWarnedAboutMissingOperatorCapacityStorage) return;
+  hasWarnedAboutMissingOperatorCapacityStorage = true;
+
+  const detail =
+    collectErrorChain(error)
+      .map((entry) => getErrorMessage(entry).trim())
+      .find((message) => message.length > 0) ?? "unknown error";
+
+  console.warn(
+    `[Table Booking] operator-capacity storage is unavailable or out of date; falling back to legacy reservation reads. Run backend db:migrate to apply migration 0028_table_booking_operator_capacity.sql. Error: ${detail}`,
+  );
+}
+
+function getOperatorCapacityMigrationMessage(): string {
+  return "Table Booking storage is out of date. Run `npm run db:migrate -w @vivd/backend` to apply `0028_table_booking_operator_capacity.sql`.";
+}
+
+function buildLegacyReservationSelection(table: any) {
+  return {
+    id: table.id,
+    organizationId: table.organizationId,
+    projectSlug: table.projectSlug,
+    pluginInstanceId: table.pluginInstanceId,
+    status: table.status,
+    serviceDate: table.serviceDate,
+    serviceStartAt: table.serviceStartAt,
+    serviceEndAt: table.serviceEndAt,
+    partySize: table.partySize,
+    guestName: table.guestName,
+    guestEmail: table.guestEmail,
+    guestEmailNormalized: table.guestEmailNormalized,
+    guestPhone: table.guestPhone,
+    notes: table.notes,
+    sourceHost: table.sourceHost,
+    sourcePath: table.sourcePath,
+    referrerHost: table.referrerHost,
+    utmSource: table.utmSource,
+    utmMedium: table.utmMedium,
+    utmCampaign: table.utmCampaign,
+    lastIpHash: table.lastIpHash,
+    confirmedAt: table.confirmedAt,
+    cancelledAt: table.cancelledAt,
+    cancelledBy: table.cancelledBy,
+    completedAt: table.completedAt,
+    noShowAt: table.noShowAt,
+    createdAt: table.createdAt,
+    updatedAt: table.updatedAt,
+  };
+}
+
+function extractLegacyReservationRow(row: Record<string, unknown>): LegacyReservationRow {
+  return {
+    id: row.id as string,
+    organizationId: row.organizationId as string,
+    projectSlug: row.projectSlug as string,
+    pluginInstanceId: row.pluginInstanceId as string,
+    status: row.status as TableBookingStatus,
+    serviceDate: row.serviceDate as string,
+    serviceStartAt: row.serviceStartAt as Date,
+    serviceEndAt: row.serviceEndAt as Date,
+    partySize: row.partySize as number,
+    guestName: row.guestName as string,
+    guestEmail: row.guestEmail as string,
+    guestEmailNormalized: row.guestEmailNormalized as string,
+    guestPhone: row.guestPhone as string,
+    notes: (row.notes as string | null | undefined) ?? null,
+    sourceHost: (row.sourceHost as string | null | undefined) ?? null,
+    sourcePath: (row.sourcePath as string | null | undefined) ?? null,
+    referrerHost: (row.referrerHost as string | null | undefined) ?? null,
+    utmSource: (row.utmSource as string | null | undefined) ?? null,
+    utmMedium: (row.utmMedium as string | null | undefined) ?? null,
+    utmCampaign: (row.utmCampaign as string | null | undefined) ?? null,
+    lastIpHash: (row.lastIpHash as string | null | undefined) ?? null,
+    confirmedAt: (row.confirmedAt as Date | null | undefined) ?? null,
+    cancelledAt: (row.cancelledAt as Date | null | undefined) ?? null,
+    cancelledBy: (row.cancelledBy as string | null | undefined) ?? null,
+    completedAt: (row.completedAt as Date | null | undefined) ?? null,
+    noShowAt: (row.noShowAt as Date | null | undefined) ?? null,
+    createdAt: row.createdAt as Date,
+    updatedAt: row.updatedAt as Date,
+  };
+}
+
+function toReservationRowFromLegacy(row: LegacyReservationRow): ReservationRow {
+  return {
+    ...row,
+    sourceChannel: "online",
+    createdByUserId: null,
+    updatedByUserId: null,
+  };
 }
 
 function normalizeHostWithUtils(
@@ -510,8 +706,8 @@ async function listReservationsForDate(
   pluginInstanceId: string,
   serviceDate: string,
 ): Promise<ReservationRow[]> {
-  return dbLike
-    .select()
+  const rows = await dbLike
+    .select(buildLegacyReservationSelection(tables.tableBookingReservation))
     .from(tables.tableBookingReservation)
     .where(
       and(
@@ -520,6 +716,8 @@ async function listReservationsForDate(
       ),
     )
     .orderBy(asc(tables.tableBookingReservation.serviceStartAt));
+
+  return ((rows ?? []) as LegacyReservationRow[]).map(toReservationRowFromLegacy);
 }
 
 function canGuestCancelReservation(
@@ -545,6 +743,7 @@ function toBookingRecord(
   return {
     id: reservation.id,
     status: reservation.status,
+    sourceChannel: reservation.sourceChannel,
     serviceDate: reservation.serviceDate,
     serviceStartAt: toDateTimeDisplayString(
       reservation.serviceStartAt,
@@ -567,6 +766,272 @@ function toBookingRecord(
     noShowAt: toIsoString(reservation.noShowAt),
     canGuestCancel: canGuestCancelReservation(reservation, config, now),
   };
+}
+
+function toCapacityAdjustmentRecord(
+  adjustment: CapacityAdjustmentRow,
+): TableBookingCapacityAdjustmentRecord {
+  return {
+    id: adjustment.id,
+    serviceDate: adjustment.serviceDate,
+    startTime: adjustment.startTime,
+    endTime: adjustment.endTime,
+    mode: adjustment.mode,
+    capacityValue: adjustment.capacityValue ?? null,
+    reason: adjustment.reason ?? null,
+    createdAt:
+      toIsoString(adjustment.createdAt) ??
+      `${adjustment.serviceDate}T00:00:00.000Z`,
+    updatedAt:
+      toIsoString(adjustment.updatedAt) ??
+      `${adjustment.serviceDate}T00:00:00.000Z`,
+  };
+}
+
+function validateStaffReservationInput(options: {
+  input: TableBookingStaffReservationInput;
+  config: TableBookingPluginConfig;
+}) {
+  validateAvailabilityInput({
+    date: options.input.date,
+    partySize: options.input.partySize,
+    config: options.config,
+  });
+
+  if (!tableBookingTimeStringSchema.safeParse(options.input.time).success) {
+    throw new TableBookingValidationError("Time must use HH:MM format.");
+  }
+  if (!emailSchema.safeParse(options.input.email).success) {
+    throw new TableBookingValidationError("A valid email address is required.");
+  }
+  if (!phoneSchema.safeParse(options.input.phone).success) {
+    throw new TableBookingValidationError("A valid phone number is required.");
+  }
+  if (!guestNameSchema.safeParse(options.input.name).success) {
+    throw new TableBookingValidationError("Guest name is required.");
+  }
+  if (!partySizeSchema.safeParse(options.input.partySize).success) {
+    throw new TableBookingValidationError("Party size must be a whole number.");
+  }
+  if (!sourceChannelSchema.safeParse(options.input.sourceChannel).success) {
+    throw new TableBookingValidationError("Choose a valid reservation source.");
+  }
+}
+
+function validateCapacityAdjustmentInput(
+  input: TableBookingCapacityAdjustmentInput,
+) {
+  if (!tableBookingIsoDateSchema.safeParse(input.serviceDate).success) {
+    throw new TableBookingValidationError("Date must use YYYY-MM-DD format.");
+  }
+  if (!tableBookingTimeStringSchema.safeParse(input.startTime).success) {
+    throw new TableBookingValidationError("Start time must use HH:MM format.");
+  }
+  if (!tableBookingTimeStringSchema.safeParse(input.endTime).success) {
+    throw new TableBookingValidationError("End time must use HH:MM format.");
+  }
+  if (input.startTime >= input.endTime) {
+    throw new TableBookingValidationError("Adjustment end time must be after start time.");
+  }
+  if (!capacityAdjustmentModeSchema.safeParse(input.mode).success) {
+    throw new TableBookingValidationError("Choose a valid capacity adjustment mode.");
+  }
+  const capacityValue =
+    typeof input.capacityValue === "number" ? input.capacityValue : null;
+  if (input.mode === "closed") {
+    return;
+  }
+  if (!Number.isInteger(capacityValue) || (capacityValue ?? 0) <= 0) {
+    throw new TableBookingValidationError("Capacity value must be a whole number above zero.");
+  }
+}
+
+async function listCapacityAdjustmentsForDate(
+  dbLike: {
+    select(...args: any[]): any;
+  },
+  tables: TableBookingPluginServiceDeps["tables"],
+  pluginInstanceId: string,
+  serviceDate: string,
+): Promise<CapacityAdjustmentRow[]> {
+  try {
+    return await dbLike
+      .select()
+      .from(tables.tableBookingCapacityAdjustment)
+      .where(
+        and(
+          eq(tables.tableBookingCapacityAdjustment.pluginInstanceId, pluginInstanceId),
+          eq(tables.tableBookingCapacityAdjustment.serviceDate, serviceDate),
+        ),
+      )
+      .orderBy(
+        asc(tables.tableBookingCapacityAdjustment.startTime),
+        asc(tables.tableBookingCapacityAdjustment.endTime),
+        asc(tables.tableBookingCapacityAdjustment.createdAt),
+      );
+  } catch (error) {
+    if (!isMissingOperatorCapacityStorageError(error)) {
+      throw error;
+    }
+
+    warnMissingOperatorCapacityStorage(error);
+    return [];
+  }
+}
+
+function overlapsTimeRangeForDate(options: {
+  date: string;
+  startAt: Date;
+  endAt: Date;
+  adjustment: Pick<CapacityAdjustmentRow, "startTime" | "endTime">;
+  timeZone: string;
+}) {
+  const adjustmentStartAt = zonedDateTimeToUtc(
+    options.date,
+    options.adjustment.startTime,
+    options.timeZone,
+  );
+  const adjustmentEndAt = zonedDateTimeToUtc(
+    options.date,
+    options.adjustment.endTime,
+    options.timeZone,
+  );
+  return overlaps(
+    adjustmentStartAt,
+    adjustmentEndAt,
+    options.startAt,
+    options.endAt,
+  );
+}
+
+function getEffectiveCapacityForRange(options: {
+  baseCapacity: number;
+  adjustments: CapacityAdjustmentRow[];
+  date: string;
+  startAt: Date;
+  endAt: Date;
+  timeZone: string;
+}): number {
+  const overlappingAdjustments = options.adjustments.filter((adjustment) =>
+    overlapsTimeRangeForDate({
+      date: options.date,
+      startAt: options.startAt,
+      endAt: options.endAt,
+      adjustment,
+      timeZone: options.timeZone,
+    }),
+  );
+
+  if (overlappingAdjustments.some((adjustment) => adjustment.mode === "closed")) {
+    return 0;
+  }
+
+  const overrideValues = overlappingAdjustments
+    .filter((adjustment) => adjustment.mode === "effective_capacity_override")
+    .map((adjustment) => adjustment.capacityValue ?? options.baseCapacity);
+  const holdbackValue = overlappingAdjustments
+    .filter((adjustment) => adjustment.mode === "cover_holdback")
+    .reduce((sum, adjustment) => sum + (adjustment.capacityValue ?? 0), 0);
+
+  const overriddenCapacity =
+    overrideValues.length > 0
+      ? Math.min(options.baseCapacity, ...overrideValues)
+      : options.baseCapacity;
+
+  return Math.max(0, overriddenCapacity - holdbackValue);
+}
+
+function getPeakBookedCovers(options: {
+  reservations: ReservationRow[];
+  startAt: Date;
+  endAt: Date;
+}): number {
+  const events: Array<{ at: number; delta: number }> = [];
+  for (const reservation of options.reservations) {
+    if (reservation.status !== "confirmed") continue;
+    if (
+      !overlaps(
+        reservation.serviceStartAt,
+        reservation.serviceEndAt,
+        options.startAt,
+        options.endAt,
+      )
+    ) {
+      continue;
+    }
+
+    const overlapStart = Math.max(
+      reservation.serviceStartAt.getTime(),
+      options.startAt.getTime(),
+    );
+    const overlapEnd = Math.min(
+      reservation.serviceEndAt.getTime(),
+      options.endAt.getTime(),
+    );
+    events.push({ at: overlapStart, delta: reservation.partySize });
+    events.push({ at: overlapEnd, delta: -reservation.partySize });
+  }
+
+  events.sort((left, right) =>
+    left.at === right.at ? left.delta - right.delta : left.at - right.at,
+  );
+
+  let current = 0;
+  let peak = 0;
+  for (const event of events) {
+    current += event.delta;
+    peak = Math.max(peak, current);
+  }
+  return peak;
+}
+
+function escapeCsvCell(value: string): string {
+  if (/["\n,]/.test(value)) {
+    return `"${value.replace(/"/g, "\"\"")}"`;
+  }
+  return value;
+}
+
+function buildBookingsCsv(rows: TableBookingRecord[]): string {
+  const header = [
+    "booking_id",
+    "status",
+    "source_channel",
+    "service_date",
+    "service_start_at",
+    "service_end_at",
+    "party_size",
+    "guest_name",
+    "guest_email",
+    "guest_phone",
+    "notes",
+    "source_host",
+    "source_path",
+    "created_at",
+  ];
+
+  const lines = rows.map((row) =>
+    [
+      row.id,
+      row.status,
+      row.sourceChannel,
+      row.serviceDate,
+      row.serviceStartAt,
+      row.serviceEndAt,
+      String(row.partySize),
+      row.guestName,
+      row.guestEmail,
+      row.guestPhone,
+      row.notes ?? "",
+      row.sourceHost ?? "",
+      row.sourcePath ?? "",
+      row.createdAt,
+    ]
+      .map((value) => escapeCsvCell(value))
+      .join(","),
+  );
+
+  return [header.join(","), ...lines].join("\n");
 }
 
 function validateBookingWindow(options: {
@@ -682,22 +1147,28 @@ async function sendBookingCreatedEmails(
     config: TableBookingPluginConfig;
     reservation: ReservationRow;
     cancelUrl: string;
+    notifyGuest?: boolean;
+    notifyStaff?: boolean;
   },
 ) {
   const bookingDateTimeLabel = formatDateTimeLabelInTimeZone(
     options.reservation.serviceStartAt,
     options.config.timezone,
   );
+  const notifyGuest = options.notifyGuest ?? true;
+  const notifyStaff = options.notifyStaff ?? true;
 
   const [guestEmail, staffEmail] = await Promise.all([
-    deps.emailTemplates.buildGuestConfirmationEmail({
-      projectTitle: options.projectTitle,
-      guestName: options.reservation.guestName,
-      partySize: options.reservation.partySize,
-      bookingDateTimeLabel,
-      cancelUrl: options.cancelUrl,
-    }),
-    options.config.notificationRecipientEmails.length > 0
+    notifyGuest
+      ? deps.emailTemplates.buildGuestConfirmationEmail({
+          projectTitle: options.projectTitle,
+          guestName: options.reservation.guestName,
+          partySize: options.reservation.partySize,
+          bookingDateTimeLabel,
+          cancelUrl: options.cancelUrl,
+        })
+      : Promise.resolve(null),
+    notifyStaff && options.config.notificationRecipientEmails.length > 0
       ? deps.emailTemplates.buildStaffNewBookingEmail({
           projectTitle: options.projectTitle,
           bookingDateTimeLabel,
@@ -711,18 +1182,20 @@ async function sendBookingCreatedEmails(
   ]);
 
   await Promise.all([
-    sendTransactionalEmail(deps, {
-      to: [options.reservation.guestEmail],
-      subject: guestEmail.subject,
-      text: guestEmail.text,
-      html: guestEmail.html,
-      metadata: {
-        plugin: "table_booking",
-        flow: "guest_confirmation",
-        project: options.reservation.projectSlug,
-        organization: options.reservation.organizationId,
-      },
-    }),
+    guestEmail
+      ? sendTransactionalEmail(deps, {
+          to: [options.reservation.guestEmail],
+          subject: guestEmail.subject,
+          text: guestEmail.text,
+          html: guestEmail.html,
+          metadata: {
+            plugin: "table_booking",
+            flow: "guest_confirmation",
+            project: options.reservation.projectSlug,
+            organization: options.reservation.organizationId,
+          },
+        })
+      : Promise.resolve(),
     staffEmail
       ? sendTransactionalEmail(deps, {
           to: options.config.notificationRecipientEmails,
@@ -820,8 +1293,93 @@ export function createTableBookingPluginService(
   const {
     tableBookingReservation,
     tableBookingActionToken,
+    tableBookingCapacityAdjustment,
     projectPluginInstance,
   } = tables;
+
+  async function selectLegacyReservations(options: {
+    dbLike: {
+      select(...args: any[]): any;
+    };
+    where: any;
+    orderBy?: any[];
+    limit?: number;
+    offset?: number;
+  }): Promise<ReservationRow[]> {
+    let query = options.dbLike
+      .select(buildLegacyReservationSelection(tableBookingReservation))
+      .from(tableBookingReservation)
+      .where(options.where);
+
+    if (options.orderBy?.length) {
+      query = query.orderBy(...options.orderBy);
+    }
+    if (typeof options.limit === "number") {
+      query = query.limit(options.limit);
+    }
+    if (typeof options.offset === "number" && options.offset > 0) {
+      query = query.offset(options.offset);
+    }
+
+    const rows = (await query) as LegacyReservationRow[];
+    return (rows ?? []).map(toReservationRowFromLegacy);
+  }
+
+  async function findManyReservationsCompat(options: {
+    where: any;
+    orderBy?: any[];
+    limit?: number;
+    offset?: number;
+  }): Promise<ReservationRow[]> {
+    try {
+      const rows = (await db.query.tableBookingReservation?.findMany?.({
+        where: options.where,
+        orderBy: options.orderBy,
+        limit: options.limit,
+        offset: options.offset,
+      })) as ReservationRow[] | undefined;
+      return rows ?? [];
+    } catch (error) {
+      if (!isMissingOperatorCapacityStorageError(error)) {
+        throw error;
+      }
+
+      warnMissingOperatorCapacityStorage(error);
+      return selectLegacyReservations({
+        dbLike: db,
+        where: options.where,
+        orderBy: options.orderBy,
+        limit: options.limit,
+        offset: options.offset,
+      });
+    }
+  }
+
+  async function findFirstReservationCompat(options: {
+    where: any;
+    orderBy?: any[];
+  }): Promise<ReservationRow | null> {
+    try {
+      const row = (await db.query.tableBookingReservation?.findFirst?.({
+        where: options.where,
+        orderBy: options.orderBy,
+      })) as ReservationRow | undefined;
+      return row ?? null;
+    } catch (error) {
+      if (!isMissingOperatorCapacityStorageError(error)) {
+        throw error;
+      }
+
+      warnMissingOperatorCapacityStorage(error);
+      const rows = await selectLegacyReservations({
+        dbLike: db,
+        where: options.where,
+        orderBy: options.orderBy,
+        limit: 1,
+      });
+      return rows[0] ?? null;
+    }
+  }
 
   async function resolvePublicEndpoints() {
     const baseUrl = await getPublicPluginApiBaseUrl();
@@ -847,7 +1405,7 @@ export function createTableBookingPluginService(
     projectSlug: string;
     bookingId: string;
   }): Promise<ReservationRow | null> {
-    return db.query.tableBookingReservation?.findFirst?.({
+    return findFirstReservationCompat({
       where: and(
         eq(tableBookingReservation.id, options.bookingId),
         eq(tableBookingReservation.organizationId, options.organizationId),
@@ -858,25 +1416,79 @@ export function createTableBookingPluginService(
 
   async function findReservationByGuestToken(token: string) {
     const tokenHash = hashToken(token);
-    const rows = await db
-      .select({
-        tokenId: tableBookingActionToken.id,
-        tokenExpiresAt: tableBookingActionToken.expiresAt,
-        tokenUsedAt: tableBookingActionToken.usedAt,
-        reservation: tableBookingReservation,
-      })
-      .from(tableBookingActionToken)
-      .innerJoin(
-        tableBookingReservation,
-        eq(tableBookingActionToken.reservationId, tableBookingReservation.id),
-      )
-      .where(
-        and(
-          eq(tableBookingActionToken.kind, "guest_cancel"),
-          eq(tableBookingActionToken.tokenHash, tokenHash),
-        ),
-      )
-      .limit(1);
+    let rows: Array<{
+      tokenId: string;
+      tokenExpiresAt: Date;
+      tokenUsedAt: Date | null;
+      reservation: ReservationRow;
+    }>;
+
+    try {
+      rows = (await db
+        .select({
+          tokenId: tableBookingActionToken.id,
+          tokenExpiresAt: tableBookingActionToken.expiresAt,
+          tokenUsedAt: tableBookingActionToken.usedAt,
+          reservation: tableBookingReservation,
+        })
+        .from(tableBookingActionToken)
+        .innerJoin(
+          tableBookingReservation,
+          eq(tableBookingActionToken.reservationId, tableBookingReservation.id),
+        )
+        .where(
+          and(
+            eq(tableBookingActionToken.kind, "guest_cancel"),
+            eq(tableBookingActionToken.tokenHash, tokenHash),
+          ),
+        )
+        .limit(1)) as Array<{
+        tokenId: string;
+        tokenExpiresAt: Date;
+        tokenUsedAt: Date | null;
+        reservation: ReservationRow;
+      }>;
+    } catch (error) {
+      if (!isMissingOperatorCapacityStorageError(error)) {
+        throw error;
+      }
+
+      warnMissingOperatorCapacityStorage(error);
+      rows = (await db
+        .select({
+          tokenId: tableBookingActionToken.id,
+          tokenExpiresAt: tableBookingActionToken.expiresAt,
+          tokenUsedAt: tableBookingActionToken.usedAt,
+          ...buildLegacyReservationSelection(tableBookingReservation),
+        })
+        .from(tableBookingActionToken)
+        .innerJoin(
+          tableBookingReservation,
+          eq(tableBookingActionToken.reservationId, tableBookingReservation.id),
+        )
+        .where(
+          and(
+            eq(tableBookingActionToken.kind, "guest_cancel"),
+            eq(tableBookingActionToken.tokenHash, tokenHash),
+          ),
+        )
+        .limit(1)
+        .then((result) =>
+          result.map((row) => ({
+            tokenId: row.tokenId,
+            tokenExpiresAt: row.tokenExpiresAt,
+            tokenUsedAt: row.tokenUsedAt,
+            reservation: toReservationRowFromLegacy(
+              extractLegacyReservationRow(row as Record<string, unknown>),
+            ),
+          })),
+        )) as Array<{
+        tokenId: string;
+        tokenExpiresAt: Date;
+        tokenUsedAt: Date | null;
+        reservation: ReservationRow;
+      }>;
+    }
 
     const row = rows[0];
     if (!row) return null;
@@ -898,14 +1510,13 @@ export function createTableBookingPluginService(
     const today = formatDateInTimeZone(now, options.config.timezone);
     const startedAt = new Date(now.getTime() - options.rangeDays * 24 * 60 * 60 * 1000);
 
-    const rows = (await db.query.tableBookingReservation?.findMany?.({
+    const reservations = await findManyReservationsCompat({
       where: and(
         eq(tableBookingReservation.organizationId, options.organizationId),
         eq(tableBookingReservation.projectSlug, options.projectSlug),
       ),
       orderBy: [desc(tableBookingReservation.serviceStartAt)],
-    })) as ReservationRow[] | undefined;
-    const reservations = rows ?? [];
+    });
 
     const counts = {
       bookingsToday: 0,
@@ -1078,6 +1689,12 @@ export function createTableBookingPluginService(
       options.pluginInstance.id,
       options.date,
     );
+    const capacityAdjustments = await listCapacityAdjustmentsForDate(
+      db,
+      tables,
+      options.pluginInstance.id,
+      options.date,
+    );
 
     return candidates
       .filter((candidate) => {
@@ -1104,7 +1721,16 @@ export function createTableBookingPluginService(
           )
           .reduce((sum, reservation) => sum + reservation.partySize, 0);
 
-        return overlappingCovers + options.partySize <= candidate.maxConcurrentCovers;
+        const effectiveCapacity = getEffectiveCapacityForRange({
+          baseCapacity: candidate.maxConcurrentCovers,
+          adjustments: capacityAdjustments,
+          date: options.date,
+          startAt: candidate.startAt,
+          endAt: candidate.endAt,
+          timeZone: options.config.timezone,
+        });
+
+        return overlappingCovers + options.partySize <= effectiveCapacity;
       })
       .map((candidate) => ({
         time: candidate.time,
@@ -1145,6 +1771,101 @@ export function createTableBookingPluginService(
     if (toCount(currentMonthRows[0]?.count) >= options.entitlement.monthlyEventLimit) {
       throw new TableBookingQuotaExceededError();
     }
+  }
+
+  function buildBookingsConditions(options: {
+    organizationId: string;
+    projectSlug: string;
+    status: "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed";
+    sourceChannel?: "all" | TableBookingSourceChannel;
+    search: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const searchPattern = `%${options.search.replace(/\s+/g, "%")}%`;
+
+    return and(
+      eq(tableBookingReservation.organizationId, options.organizationId),
+      eq(tableBookingReservation.projectSlug, options.projectSlug),
+      options.status === "all"
+        ? undefined
+        : eq(tableBookingReservation.status, options.status),
+      options.sourceChannel && options.sourceChannel !== "all"
+        ? eq(tableBookingReservation.sourceChannel, options.sourceChannel)
+        : undefined,
+      options.startDate
+        ? gte(tableBookingReservation.serviceDate, options.startDate)
+        : undefined,
+      options.endDate
+        ? lte(tableBookingReservation.serviceDate, options.endDate)
+        : undefined,
+      options.search
+        ? or(
+            ilike(tableBookingReservation.guestName, searchPattern),
+            ilike(tableBookingReservation.guestEmail, searchPattern),
+            ilike(tableBookingReservation.guestPhone, searchPattern),
+          )
+        : undefined,
+    );
+  }
+
+  async function ensureGuestCancelToken(options: {
+    tx: any;
+    reservationId: string;
+    organizationId: string;
+    projectSlug: string;
+    serviceEndAt: Date;
+  }) {
+    const existingRows = await options.tx
+      .select()
+      .from(tableBookingActionToken)
+      .where(
+        and(
+          eq(tableBookingActionToken.reservationId, options.reservationId),
+          eq(tableBookingActionToken.kind, "guest_cancel"),
+        ),
+      )
+      .limit(1);
+
+    const existing = existingRows[0] as
+      | {
+          id: string;
+          expiresAt: Date;
+        }
+      | undefined;
+
+    const rawCancelToken = createRawToken();
+    const expiresAt = new Date(
+      Math.max(
+        Date.now() + CANCEL_TOKEN_TTL_MS,
+        options.serviceEndAt.getTime() + 24 * 60 * 60 * 1000,
+      ),
+    );
+
+    if (existing) {
+      await options.tx
+        .update(tableBookingActionToken)
+        .set({
+          tokenHash: hashToken(rawCancelToken),
+          expiresAt,
+          usedAt: null,
+        })
+        .where(eq(tableBookingActionToken.id, existing.id));
+      return rawCancelToken;
+    }
+
+    await options.tx.insert(tableBookingActionToken).values({
+      id: randomUUID(),
+      reservationId: options.reservationId,
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      kind: "guest_cancel",
+      tokenHash: hashToken(rawCancelToken),
+      expiresAt,
+      usedAt: null,
+    });
+
+    return rawCancelToken;
   }
 
   return {
@@ -1281,6 +2002,7 @@ export function createTableBookingPluginService(
       organizationId: string;
       projectSlug: string;
       status: "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed";
+      sourceChannel?: "all" | TableBookingSourceChannel;
       search?: string;
       startDate?: string;
       endDate?: string;
@@ -1297,6 +2019,7 @@ export function createTableBookingPluginService(
           pluginId: "table_booking",
           enabled: false,
           status: options.status,
+          sourceChannel: options.sourceChannel ?? "all",
           search: options.search?.trim() || "",
           startDate: options.startDate ?? null,
           endDate: options.endDate ?? null,
@@ -1311,43 +2034,89 @@ export function createTableBookingPluginService(
       const search = options.search?.trim() || "";
       const limit = Math.max(1, Math.min(200, options.limit ?? 50));
       const offset = Math.max(0, options.offset ?? 0);
-      const searchPattern = `%${search.replace(/\s+/g, "%")}%`;
-      const conditions = and(
-        eq(tableBookingReservation.organizationId, options.organizationId),
-        eq(tableBookingReservation.projectSlug, options.projectSlug),
-        options.status === "all"
-          ? undefined
-          : eq(tableBookingReservation.status, options.status),
-        options.startDate
-          ? gte(tableBookingReservation.serviceDate, options.startDate)
-          : undefined,
-        options.endDate
-          ? lte(tableBookingReservation.serviceDate, options.endDate)
-          : undefined,
-        search
-          ? or(
-              ilike(tableBookingReservation.guestName, searchPattern),
-              ilike(tableBookingReservation.guestEmail, searchPattern),
-              ilike(tableBookingReservation.guestPhone, searchPattern),
-            )
-          : undefined,
-      );
+      const sourceChannel = options.sourceChannel ?? "all";
+      const conditions = buildBookingsConditions({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        status: options.status,
+        sourceChannel,
+        search,
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
 
-      const [countRows, rows] = await Promise.all([
-        db
-          .select({ count: sql<number>`count(*)` })
-          .from(tableBookingReservation)
-          .where(conditions),
-        db.query.tableBookingReservation?.findMany?.({
-          where: conditions,
-          orderBy: [
-            asc(tableBookingReservation.serviceDate),
-            asc(tableBookingReservation.serviceStartAt),
-          ],
-          limit,
-          offset,
-        }) as Promise<ReservationRow[]>,
-      ]);
+      let total = 0;
+      let rows: ReservationRow[] = [];
+
+      try {
+        const [countRows, reservationRows] = await Promise.all([
+          db
+            .select({ count: sql<number>`count(*)` })
+            .from(tableBookingReservation)
+            .where(conditions),
+          findManyReservationsCompat({
+            where: conditions,
+            orderBy: [
+              asc(tableBookingReservation.serviceDate),
+              asc(tableBookingReservation.serviceStartAt),
+            ],
+            limit,
+            offset,
+          }),
+        ]);
+        total = toCount(countRows[0]?.count);
+        rows = reservationRows;
+      } catch (error) {
+        if (!isMissingOperatorCapacityStorageError(error)) {
+          throw error;
+        }
+
+        warnMissingOperatorCapacityStorage(error);
+
+        if (sourceChannel !== "all" && sourceChannel !== "online") {
+          return {
+            pluginId: "table_booking",
+            enabled: true,
+            status: options.status,
+            sourceChannel,
+            search,
+            startDate: options.startDate ?? null,
+            endDate: options.endDate ?? null,
+            total: 0,
+            limit,
+            offset,
+            rows: [],
+          };
+        }
+
+        const legacyConditions = buildBookingsConditions({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          status: options.status,
+          sourceChannel: "all",
+          search,
+          startDate: options.startDate,
+          endDate: options.endDate,
+        });
+        const [countRows, reservationRows] = await Promise.all([
+          db
+            .select({ count: sql<number>`count(*)` })
+            .from(tableBookingReservation)
+            .where(legacyConditions),
+          selectLegacyReservations({
+            dbLike: db,
+            where: legacyConditions,
+            orderBy: [
+              asc(tableBookingReservation.serviceDate),
+              asc(tableBookingReservation.serviceStartAt),
+            ],
+            limit,
+            offset,
+          }),
+        ]);
+        total = toCount(countRows[0]?.count);
+        rows = reservationRows;
+      }
 
       const now = new Date();
 
@@ -1355,13 +2124,513 @@ export function createTableBookingPluginService(
         pluginId: "table_booking",
         enabled: true,
         status: options.status,
+        sourceChannel,
         search,
         startDate: options.startDate ?? null,
         endDate: options.endDate ?? null,
-        total: toCount(countRows[0]?.count),
+        total,
         limit,
         offset,
         rows: (rows ?? []).map((row) => toBookingRecord(row, config, now)),
+      };
+    },
+
+    async exportBookings(options: {
+      organizationId: string;
+      projectSlug: string;
+      status: "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed";
+      sourceChannel?: "all" | TableBookingSourceChannel;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+    }) {
+      const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "table_booking",
+      });
+      const filename = `${options.projectSlug}-table-bookings-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+
+      if (!pluginInstance || pluginInstance.status !== "enabled") {
+        return {
+          filename,
+          csv: buildBookingsCsv([]),
+          total: 0,
+        };
+      }
+
+      const config = normalizeTableBookingConfig(pluginInstance.configJson);
+      const search = options.search?.trim() || "";
+      const conditions = buildBookingsConditions({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        status: options.status,
+        sourceChannel: options.sourceChannel ?? "all",
+        search,
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
+      let rows: ReservationRow[] = [];
+      try {
+        rows = await findManyReservationsCompat({
+          where: conditions,
+          orderBy: [
+            asc(tableBookingReservation.serviceDate),
+            asc(tableBookingReservation.serviceStartAt),
+          ],
+        });
+      } catch (error) {
+        if (!isMissingOperatorCapacityStorageError(error)) {
+          throw error;
+        }
+
+        warnMissingOperatorCapacityStorage(error);
+
+        if (
+          options.sourceChannel &&
+          options.sourceChannel !== "all" &&
+          options.sourceChannel !== "online"
+        ) {
+          return {
+            filename,
+            csv: buildBookingsCsv([]),
+            total: 0,
+          };
+        }
+
+        const legacyConditions = buildBookingsConditions({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          status: options.status,
+          sourceChannel: "all",
+          search,
+          startDate: options.startDate,
+          endDate: options.endDate,
+        });
+        rows = await selectLegacyReservations({
+          dbLike: db,
+          where: legacyConditions,
+          orderBy: [
+            asc(tableBookingReservation.serviceDate),
+            asc(tableBookingReservation.serviceStartAt),
+          ],
+        });
+      }
+      const now = new Date();
+      const records = rows.map((row) => toBookingRecord(row, config, now));
+
+      return {
+        filename,
+        csv: buildBookingsCsv(records),
+        total: records.length,
+      };
+    },
+
+    async getDayCapacity(options: {
+      organizationId: string;
+      projectSlug: string;
+      serviceDate: string;
+    }): Promise<TableBookingDayCapacityPayload> {
+      const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "table_booking",
+      });
+      if (!pluginInstance || pluginInstance.status !== "enabled") {
+        return {
+          pluginId: "table_booking",
+          enabled: false,
+          serviceDate: options.serviceDate,
+          timeZone: null,
+          windows: [],
+          adjustments: [],
+        };
+      }
+
+      const config = normalizeTableBookingConfig(pluginInstance.configJson);
+      const [reservations, adjustments] = await Promise.all([
+        listReservationsForDate(db, tables, pluginInstance.id, options.serviceDate),
+        listCapacityAdjustmentsForDate(
+          db,
+          tables,
+          pluginInstance.id,
+          options.serviceDate,
+        ),
+      ]);
+      const periods = resolveServicePeriodsForDate(config, options.serviceDate);
+
+      return {
+        pluginId: "table_booking",
+        enabled: true,
+        serviceDate: options.serviceDate,
+        timeZone: config.timezone,
+        windows: periods.map((period, index) => {
+          const durationMinutes =
+            period.durationMinutes ?? config.defaultDurationMinutes;
+          const startAt = zonedDateTimeToUtc(
+            options.serviceDate,
+            period.startTime,
+            config.timezone,
+          );
+          const endAt = zonedDateTimeToUtc(
+            options.serviceDate,
+            period.endTime,
+            config.timezone,
+          );
+          const windowAdjustments = adjustments.filter((adjustment) =>
+            overlapsTimeRangeForDate({
+              date: options.serviceDate,
+              startAt,
+              endAt,
+              adjustment,
+              timeZone: config.timezone,
+            }),
+          );
+          const effectiveCapacity = getEffectiveCapacityForRange({
+            baseCapacity: period.maxConcurrentCovers,
+            adjustments,
+            date: options.serviceDate,
+            startAt,
+            endAt,
+            timeZone: config.timezone,
+          });
+          const bookedCovers = getPeakBookedCovers({
+            reservations,
+            startAt,
+            endAt,
+          });
+
+          return {
+            key: `${options.serviceDate}-${period.startTime}-${period.endTime}-${index}`,
+            startTime: period.startTime,
+            endTime: period.endTime,
+            slotIntervalMinutes: period.slotIntervalMinutes,
+            durationMinutes,
+            baseCapacity: period.maxConcurrentCovers,
+            effectiveCapacity,
+            bookedCovers,
+            remainingCovers: Math.max(0, effectiveCapacity - bookedCovers),
+            isClosed: effectiveCapacity === 0,
+            adjustments: windowAdjustments.map(toCapacityAdjustmentRecord),
+          };
+        }),
+        adjustments: adjustments.map(toCapacityAdjustmentRecord),
+      };
+    },
+
+    async upsertCapacityAdjustment(
+      options: TableBookingCapacityAdjustmentInput,
+    ): Promise<TableBookingCapacityAdjustmentRecord> {
+      validateCapacityAdjustmentInput(options);
+
+      const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "table_booking",
+      });
+      if (!pluginInstance || pluginInstance.status !== "enabled") {
+        throw new TableBookingPluginNotEnabledError();
+      }
+
+      if (options.adjustmentId) {
+        const existing = await db.query.tableBookingCapacityAdjustment?.findFirst?.({
+          where: and(
+            eq(tableBookingCapacityAdjustment.id, options.adjustmentId),
+            eq(tableBookingCapacityAdjustment.organizationId, options.organizationId),
+            eq(tableBookingCapacityAdjustment.projectSlug, options.projectSlug),
+          ),
+        });
+        if (!existing) {
+          throw new TableBookingValidationError("Capacity adjustment not found.");
+        }
+
+        const [updated] = await db
+          .update(tableBookingCapacityAdjustment)
+          .set({
+            serviceDate: options.serviceDate,
+            startTime: options.startTime,
+            endTime: options.endTime,
+            mode: options.mode,
+            capacityValue:
+              options.mode === "closed" ? null : options.capacityValue ?? null,
+            reason: normalizeOptionalText(options.reason, 400),
+            updatedByUserId: options.requestedByUserId ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(tableBookingCapacityAdjustment.id, options.adjustmentId))
+          .returning();
+
+        return toCapacityAdjustmentRecord(updated as CapacityAdjustmentRow);
+      }
+
+      const [inserted] = await db
+        .insert(tableBookingCapacityAdjustment)
+        .values({
+          id: randomUUID(),
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          pluginInstanceId: pluginInstance.id,
+          serviceDate: options.serviceDate,
+          startTime: options.startTime,
+          endTime: options.endTime,
+          mode: options.mode,
+          capacityValue:
+            options.mode === "closed" ? null : options.capacityValue ?? null,
+          reason: normalizeOptionalText(options.reason, 400),
+          createdByUserId: options.requestedByUserId ?? null,
+          updatedByUserId: options.requestedByUserId ?? null,
+        })
+        .returning();
+
+      return toCapacityAdjustmentRecord(inserted as CapacityAdjustmentRow);
+    },
+
+    async deleteCapacityAdjustment(options: {
+      organizationId: string;
+      projectSlug: string;
+      adjustmentId: string;
+    }) {
+      const existing = await db.query.tableBookingCapacityAdjustment?.findFirst?.({
+        where: and(
+          eq(tableBookingCapacityAdjustment.id, options.adjustmentId),
+          eq(tableBookingCapacityAdjustment.organizationId, options.organizationId),
+          eq(tableBookingCapacityAdjustment.projectSlug, options.projectSlug),
+        ),
+      });
+      if (!existing) {
+        throw new TableBookingValidationError("Capacity adjustment not found.");
+      }
+
+      await db
+        .delete(tableBookingCapacityAdjustment)
+        .where(eq(tableBookingCapacityAdjustment.id, options.adjustmentId));
+
+      return { adjustmentId: options.adjustmentId };
+    },
+
+    async upsertStaffReservation(options: TableBookingStaffReservationInput) {
+      const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "table_booking",
+      });
+      if (!pluginInstance || pluginInstance.status !== "enabled") {
+        throw new TableBookingPluginNotEnabledError();
+      }
+
+      const config = normalizeTableBookingConfig(pluginInstance.configJson);
+      validateStaffReservationInput({ input: options, config });
+
+      const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        pluginId: "table_booking",
+      });
+      if (entitlement.state !== "enabled") {
+        throw new TableBookingPluginNotEnabledError();
+      }
+
+      const existingReservation = options.bookingId
+        ? await findReservationById({
+            organizationId: options.organizationId,
+            projectSlug: options.projectSlug,
+            bookingId: options.bookingId,
+          })
+        : null;
+      if (options.bookingId && !existingReservation) {
+        throw new TableBookingReservationNotFoundError(options.bookingId);
+      }
+      if (
+        existingReservation &&
+        existingReservation.status !== "confirmed"
+      ) {
+        throw new TableBookingValidationError(
+          "Only confirmed bookings can be edited or rescheduled.",
+        );
+      }
+
+      if (!options.bookingId) {
+        await enforceMonthlyLimit({ pluginInstance, entitlement });
+      }
+
+      const matchingPeriod = resolveServicePeriodsForDate(
+        config,
+        options.date,
+      ).find(
+        (period) =>
+          period.startTime <= options.time &&
+          period.endTime > options.time &&
+          (!period.maxPartySize || options.partySize <= period.maxPartySize),
+      );
+      if (!matchingPeriod) {
+        throw new TableBookingValidationError(
+          "That time is outside the configured service windows.",
+        );
+      }
+
+      const serviceStartAt = zonedDateTimeToUtc(
+        options.date,
+        options.time,
+        config.timezone,
+      );
+      const durationMinutes =
+        matchingPeriod.durationMinutes ?? config.defaultDurationMinutes;
+      const serviceEndAt = new Date(
+        serviceStartAt.getTime() + durationMinutes * 60_000,
+      );
+
+      const normalizedGuestName = normalizeRequiredText(options.name, 120);
+      const normalizedGuestEmail = normalizeRequiredText(options.email, 320);
+      const normalizedGuestEmailLower = normalizeEmailAddress(options.email);
+      const normalizedGuestPhone = normalizeRequiredText(options.phone, 64);
+      const normalizedNotes = normalizeOptionalText(options.notes, 2000);
+      const sendGuestNotification = Boolean(options.sendGuestNotification);
+      const projectTitle = await readProjectTitle(deps, {
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+      });
+      const endpoints = await resolvePublicEndpoints();
+      const capacityAdjustments = await listCapacityAdjustmentsForDate(
+        db,
+        tables,
+        pluginInstance.id,
+        options.date,
+      );
+
+      const result = await db.transaction(async (tx: any) => {
+        const sameDayReservations = await listReservationsForDate(
+          tx,
+          tables,
+          pluginInstance.id,
+          options.date,
+        );
+        const overlappingCovers = sameDayReservations
+          .filter((reservation) => reservation.status === "confirmed")
+          .filter((reservation) => reservation.id !== options.bookingId)
+          .filter((reservation) =>
+            overlaps(
+              reservation.serviceStartAt,
+              reservation.serviceEndAt,
+              serviceStartAt,
+              serviceEndAt,
+            ),
+          )
+          .reduce((sum, reservation) => sum + reservation.partySize, 0);
+        const effectiveCapacity = getEffectiveCapacityForRange({
+          baseCapacity: matchingPeriod.maxConcurrentCovers,
+          adjustments: capacityAdjustments,
+          date: options.date,
+          startAt: serviceStartAt,
+          endAt: serviceEndAt,
+          timeZone: config.timezone,
+        });
+        if (overlappingCovers + options.partySize > effectiveCapacity) {
+          throw new TableBookingCapacityError();
+        }
+
+        if (options.bookingId && existingReservation) {
+          const [updated] = await tx
+            .update(tableBookingReservation)
+            .set({
+              serviceDate: options.date,
+              serviceStartAt,
+              serviceEndAt,
+              partySize: options.partySize,
+              guestName: normalizedGuestName,
+              guestEmail: normalizedGuestEmail,
+              guestEmailNormalized: normalizedGuestEmailLower,
+              guestPhone: normalizedGuestPhone,
+              notes: normalizedNotes,
+              sourceChannel: options.sourceChannel,
+              updatedByUserId: options.requestedByUserId ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(tableBookingReservation.id, options.bookingId))
+            .returning();
+
+          const rawCancelToken = sendGuestNotification
+            ? await ensureGuestCancelToken({
+                tx,
+                reservationId: options.bookingId,
+                organizationId: options.organizationId,
+                projectSlug: options.projectSlug,
+                serviceEndAt,
+              })
+            : null;
+
+          return {
+            reservation: updated as ReservationRow,
+            rawCancelToken,
+          };
+        }
+
+        const reservationId = randomUUID();
+        const [inserted] = await tx
+          .insert(tableBookingReservation)
+          .values({
+            id: reservationId,
+            organizationId: options.organizationId,
+            projectSlug: options.projectSlug,
+            pluginInstanceId: pluginInstance.id,
+            status: "confirmed",
+            serviceDate: options.date,
+            serviceStartAt,
+            serviceEndAt,
+            partySize: options.partySize,
+            guestName: normalizedGuestName,
+            guestEmail: normalizedGuestEmail,
+            guestEmailNormalized: normalizedGuestEmailLower,
+            guestPhone: normalizedGuestPhone,
+            notes: normalizedNotes,
+            sourceChannel: options.sourceChannel,
+            sourceHost: null,
+            sourcePath: null,
+            referrerHost: null,
+            utmSource: null,
+            utmMedium: null,
+            utmCampaign: null,
+            lastIpHash: null,
+            createdByUserId: options.requestedByUserId ?? null,
+            updatedByUserId: options.requestedByUserId ?? null,
+            confirmedAt: new Date(),
+          })
+          .returning();
+
+        const rawCancelToken = sendGuestNotification
+          ? await ensureGuestCancelToken({
+              tx,
+              reservationId,
+              organizationId: options.organizationId,
+              projectSlug: options.projectSlug,
+              serviceEndAt,
+            })
+          : null;
+
+        return {
+          reservation: inserted as ReservationRow,
+          rawCancelToken,
+        };
+      });
+
+      if (sendGuestNotification && result.rawCancelToken) {
+        const cancelUrl = `${endpoints.cancelEndpoint}?token=${encodeURIComponent(
+          result.rawCancelToken,
+        )}`;
+        await sendBookingCreatedEmails(deps, {
+          projectTitle,
+          config,
+          reservation: result.reservation,
+          cancelUrl,
+          notifyGuest: true,
+          notifyStaff: false,
+        });
+      }
+
+      return {
+        bookingId: result.reservation.id,
+        status: "confirmed" as const,
       };
     },
 
@@ -1387,7 +2656,7 @@ export function createTableBookingPluginService(
       const config = normalizeTableBookingConfig(pluginInstance.configJson);
       const now = new Date();
       const upperBound = endOfRangeFromDate(now, options.rangeDays);
-      const rows = ((await db.query.tableBookingReservation?.findMany?.({
+      const rows = await findManyReservationsCompat({
         where: and(
           eq(tableBookingReservation.organizationId, options.organizationId),
           eq(tableBookingReservation.projectSlug, options.projectSlug),
@@ -1399,7 +2668,7 @@ export function createTableBookingPluginService(
           asc(tableBookingReservation.serviceDate),
           asc(tableBookingReservation.serviceStartAt),
         ],
-      })) ?? []) as ReservationRow[];
+      });
 
       const groups = new Map<string, TableBookingRecord[]>();
       for (const reservation of rows) {
@@ -1749,6 +3018,7 @@ export function createTableBookingPluginService(
             guestEmailNormalized: normalizedGuestEmailLower,
             guestPhone: normalizedGuestPhone,
             notes: normalizedNotes,
+            sourceChannel: "online",
             sourceHost: options.sourceHost,
             sourcePath: referer.path,
             referrerHost: referer.host,
@@ -1756,6 +3026,8 @@ export function createTableBookingPluginService(
             utmMedium: referer.utmMedium,
             utmCampaign: referer.utmCampaign,
             lastIpHash: ipHash,
+            createdByUserId: null,
+            updatedByUserId: null,
             confirmedAt: now,
           })
           .returning();

@@ -29,7 +29,10 @@ type ContactInfoResponse = {
     submitEndpoint: string;
     expectedFields: string[];
     optionalFields: string[];
+    configuredSourceHosts: string[];
     inferredAutoSourceHosts: string[];
+    effectiveSourceHosts: string[];
+    turnstileExpectedDomains: string[];
     turnstileEnabled: boolean;
     turnstileConfigured: boolean;
   };
@@ -49,8 +52,8 @@ type ContactInfoResponse = {
 
 const CONTACT_CONFIG_TEMPLATE = {
   recipientEmails: ["team@example.com"],
-  sourceHosts: ["example.com"],
-  redirectHostAllowlist: ["example.com"],
+  sourceHosts: [],
+  redirectHostAllowlist: [],
   formFields: [
     {
       key: "name",
@@ -142,9 +145,24 @@ function formatContactPluginReport(input: ContactInfoResponse): string {
     `Submit endpoint: ${input.usage.submitEndpoint}`,
     `Expected fields: ${input.usage.expectedFields.length > 0 ? input.usage.expectedFields.join(", ") : "none"}`,
     `Optional fields: ${input.usage.optionalFields.length > 0 ? input.usage.optionalFields.join(", ") : "none"}`,
+    `Configured source hosts: ${
+      input.usage.configuredSourceHosts.length > 0
+        ? input.usage.configuredSourceHosts.join(", ")
+        : "none (auto)"
+    }`,
     `Inferred auto-source hosts: ${
       input.usage.inferredAutoSourceHosts.length > 0
         ? input.usage.inferredAutoSourceHosts.join(", ")
+        : "none"
+    }`,
+    `Effective source hosts: ${
+      input.usage.effectiveSourceHosts.length > 0
+        ? input.usage.effectiveSourceHosts.join(", ")
+        : "none"
+    }`,
+    `Turnstile expected domains: ${
+      input.usage.turnstileExpectedDomains.length > 0
+        ? input.usage.turnstileExpectedDomains.join(", ")
         : "none"
     }`,
     `Turnstile: ${
@@ -192,6 +210,7 @@ function formatContactConfigTemplateReport(input: typeof CONTACT_CONFIG_TEMPLATE
     "Contact config template",
     formatJson(input),
     "",
+    "Leave `sourceHosts` empty unless you explicitly need a manual allowlist. Setting values there overrides Vivd's auto-detected published, tenant, and Studio preview hosts.",
     "Pipe this into `vivd plugins contact config apply --file -` or save it to a JSON file first.",
   ].join("\n");
 }
@@ -312,6 +331,7 @@ export const contactFormCliModule: PluginCliModule = {
       "Use --file - to read JSON config from stdin.",
       "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
       "Use `vivd plugins snippets contact_form [html|astro]` to print the full install snippet.",
+      "Leave `sourceHosts` empty unless you explicitly need a manual allowlist; setting it overrides Vivd's auto-detected published, tenant, and Studio preview hosts.",
     ],
   },
   renderInfo(info) {

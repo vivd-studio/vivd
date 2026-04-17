@@ -81,7 +81,11 @@ type ContactRecipientDirectory = {
 };
 
 type ContactFormUsage = {
+  configuredSourceHosts?: string[];
   inferredAutoSourceHosts: string[];
+  effectiveSourceHosts?: string[];
+  turnstileExpectedDomains?: string[];
+  turnstileEnabled?: boolean;
 };
 
 type ContactFormSnippets = {
@@ -338,6 +342,8 @@ export default function ContactFormProjectPage({
   const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const snippets = pluginInfo?.snippets;
   const inferredAutoSourceHosts = pluginInfo?.usage?.inferredAutoSourceHosts || [];
+  const effectiveSourceHosts = pluginInfo?.usage?.effectiveSourceHosts || [];
+  const turnstileExpectedDomains = pluginInfo?.usage?.turnstileExpectedDomains || [];
   const recipientDirectory = pluginInfo?.details?.recipients;
   const recipientOptions = recipientDirectory?.options ?? [];
   const pendingRecipients = recipientDirectory?.pending ?? [];
@@ -349,6 +355,7 @@ export default function ContactFormProjectPage({
   const [formFieldsInput, setFormFieldsInput] = useState<EditableContactFormField[]>(
     DEFAULT_CONTACT_FORM_FIELDS,
   );
+  const manualSourceHostsConfigured = parseListInput(sourceHostsInput).length > 0;
 
   useEffect(() => {
     if (!projectSlug) return;
@@ -919,7 +926,9 @@ export default function ContactFormProjectPage({
                         Allowed source hosts
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        Leave empty to automatically use your project's domains.
+                        Leave empty to automatically use published, tenant, and Studio
+                        preview hosts. Entering values here overrides that auto-detected
+                        list.
                       </p>
                       <Textarea
                         id="contact-source-hosts"
@@ -931,6 +940,23 @@ export default function ContactFormProjectPage({
                       {inferredAutoSourceHosts.length > 0 ? (
                         <p className="text-xs text-muted-foreground">
                           Auto-detected: {inferredAutoSourceHosts.join(", ")}
+                        </p>
+                      ) : null}
+                      {manualSourceHostsConfigured ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                          Manual override active. Submission and Turnstile host checks now
+                          use only the hosts above until you clear this field.
+                        </p>
+                      ) : null}
+                      {effectiveSourceHosts.length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Effective submit hosts: {effectiveSourceHosts.join(", ")}
+                        </p>
+                      ) : null}
+                      {turnstileExpectedDomains.length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Expected Turnstile domains:{" "}
+                          {turnstileExpectedDomains.join(", ")}
                         </p>
                       ) : null}
                     </div>

@@ -3,6 +3,8 @@ export interface SourceHeaders {
   referer?: string | null;
 }
 
+export const DEFAULT_CONTACT_FORM_TURNSTILE_MAX_DOMAINS = 10;
+
 function normalizeHostInput(input: string): string {
   return input.trim().toLowerCase();
 }

@@ -132,14 +132,22 @@ function formatNewsletterConfigReport(input: {
 
 function formatNewsletterActionReport(input: {
   actionId: string;
-  email: string;
+  email?: string;
+  campaignId?: string;
   status: string;
+  recipientCount?: number;
 }): string {
-  return [
-    `Action: ${input.actionId}`,
-    `Subscriber: ${input.email}`,
-    `Status: ${input.status}`,
-  ].join("\n");
+  const lines = [`Action: ${input.actionId}`, `Status: ${input.status}`];
+  if (input.email) {
+    lines.splice(1, 0, `Subscriber: ${input.email}`);
+  }
+  if (input.campaignId) {
+    lines.splice(1, 0, `Campaign: ${input.campaignId}`);
+  }
+  if (typeof input.recipientCount === "number") {
+    lines.push(`Recipients: ${input.recipientCount}`);
+  }
+  return lines.join("\n");
 }
 
 export const newsletterCliModule: PluginCliModule = {
@@ -180,6 +188,21 @@ export const newsletterCliModule: PluginCliModule = {
       target: { kind: "action", actionId: "unsubscribe" },
       renderMode: "plugin",
     },
+    {
+      tokens: ["newsletter", "test-send"],
+      target: { kind: "action", actionId: "test_send_campaign" },
+      renderMode: "plugin",
+    },
+    {
+      tokens: ["newsletter", "send"],
+      target: { kind: "action", actionId: "send_campaign" },
+      renderMode: "plugin",
+    },
+    {
+      tokens: ["newsletter", "cancel-send"],
+      target: { kind: "action", actionId: "cancel_campaign" },
+      renderMode: "plugin",
+    },
   ],
   help: {
     topic: "newsletter",
@@ -196,10 +219,13 @@ export const newsletterCliModule: PluginCliModule = {
       "  vivd plugins action newsletter resend_confirmation <email>",
       "  vivd plugins action newsletter mark_confirmed <email>",
       "  vivd plugins action newsletter unsubscribe <email>",
+      "  vivd plugins action newsletter test_send_campaign <campaignId> <email>",
+      "  vivd plugins action newsletter send_campaign <campaignId>",
+      "  vivd plugins action newsletter cancel_campaign <campaignId>",
       "  vivd plugins read newsletter summary --file input.json",
       "  vivd plugins read newsletter subscribers --file input.json",
       "  vivd plugins read newsletter campaigns --file input.json",
-      "Campaign drafts are currently easiest to manage from the project UI.",
+      "Campaign drafting and send controls are available from the project UI.",
       ...(newsletterPluginDefinition.agentHints ?? []).map(
         (hint) => `Note: ${hint}`,
       ),
@@ -254,13 +280,20 @@ export const newsletterCliModule: PluginCliModule = {
     };
   },
   renderAction(action: PluginCliActionResultPayload) {
-    const result = action.result as { email?: string; status?: string };
+    const result = action.result as {
+      email?: string;
+      status?: string;
+      campaignId?: string;
+      recipientCount?: number;
+    };
     return {
       data: action.result,
       human: formatNewsletterActionReport({
         actionId: action.actionId,
-        email: result.email || "n/a",
+        email: result.email,
+        campaignId: result.campaignId,
         status: result.status || "ok",
+        recipientCount: result.recipientCount,
       }),
     };
   },

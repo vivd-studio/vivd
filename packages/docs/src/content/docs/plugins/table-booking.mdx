@@ -13,6 +13,8 @@ widget and a simple booking admin inside Vivd.
 - Define the weekly schedule and any date-specific overrides.
 - Add the recipient email addresses that should receive booking notifications.
 - Review the allowed source hosts and redirect hosts before embedding the widget.
+- Use the operator calendar to capture phone or walk-in bookings and adjust
+  service-window capacity when you need held-back or reduced covers.
 - Use the generated snippet or `vivd plugins snippets table_booking [html|astro]`
   instead of rebuilding the booking form manually.
 
@@ -21,7 +23,10 @@ widget and a simple booking admin inside Vivd.
 - instant-confirm table bookings
 - a generated HTML/Astro booking widget
 - a calendar-first booking admin with monthly schedule visibility, typed weekly hours,
-  date overrides, and reservation status actions in the project UI
+  date overrides, service-window capacity visibility, manual operator reservations,
+  and reservation status actions in the project UI
+- capacity adjustments for closed windows, effective-capacity overrides, and held-back covers
+- CSV export plus status/source filtering for booking operations
 - guest confirmation and cancellation emails
 - staff notification emails for new bookings and cancellations
 
@@ -31,12 +36,14 @@ widget and a simple booking admin inside Vivd.
 2. Create a real test booking from the published page.
 3. Confirm the guest confirmation email and staff notification email both arrive.
 4. Open the cancel link from the guest email and verify the booking state updates.
-5. Re-check the live site after publishing to confirm slots and form behavior still match.
+5. Add a manual test reservation or capacity holdback in the dashboard and confirm
+   the remaining covers update for the selected service window.
+6. Re-check the live site after publishing to confirm slots and form behavior still match.
 
 ## Current v1 limits
 
 - no floor plan or table-map management
-- no manual booking create/edit/reschedule flow from admin
+- no waitlist, reminder, or queue management
 - no deposits or payments
 - no POS or external reservation sync
 

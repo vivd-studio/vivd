@@ -16,6 +16,7 @@ const {
   actionUseMutationMock,
   projectListUseQueryMock,
   readUseQueryMock,
+  requestAccessUseMutationMock,
   updateConfigUseMutationMock,
   useUtilsMock,
 } = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const {
   actionUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   readUseQueryMock: vi.fn(),
+  requestAccessUseMutationMock: vi.fn(),
   updateConfigUseMutationMock: vi.fn(),
   useUtilsMock: vi.fn(),
 }));
@@ -113,6 +115,9 @@ vi.mock("@/lib/trpc", () => ({
       ensure: {
         useMutation: ensureUseMutationMock,
       },
+      requestAccess: {
+        useMutation: requestAccessUseMutationMock,
+      },
       updateConfig: {
         useMutation: updateConfigUseMutationMock,
       },
@@ -161,8 +166,10 @@ function createCampaignPayload(options: {
 
 describe("NewsletterProjectPage", () => {
   let campaignsByOffset: Record<number, NewsletterCampaignsPayload>;
+  let mutationCalls: any[];
 
   beforeEach(() => {
+    mutationCalls = [];
     campaignsByOffset = {
       0: createCampaignPayload({
         offset: 0,
@@ -176,6 +183,21 @@ describe("NewsletterProjectPage", () => {
             audience: "all_confirmed",
             mode: "newsletter",
             estimatedRecipientCount: 25,
+            recipientCount: 0,
+            deliveryCounts: {
+              queued: 0,
+              sending: 0,
+              sent: 0,
+              failed: 0,
+              skipped: 0,
+              canceled: 0,
+            },
+            testSentAt: null,
+            queuedAt: null,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            lastError: null,
             createdAt: "2026-04-15T10:00:00.000Z",
             updatedAt: "2026-04-15T10:00:00.000Z",
           },
@@ -188,6 +210,7 @@ describe("NewsletterProjectPage", () => {
     readUseQueryMock.mockReset();
     actionUseMutationMock.mockReset();
     ensureUseMutationMock.mockReset();
+    requestAccessUseMutationMock.mockReset();
     updateConfigUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
     useUtilsMock.mockReset();
@@ -324,6 +347,7 @@ describe("NewsletterProjectPage", () => {
 
     actionUseMutationMock.mockImplementation((options: any) => ({
       mutate: (variables: any, mutateOptions?: { onSettled?: () => void }) => {
+        mutationCalls.push(variables);
         if (variables.actionId === "save_campaign_draft") {
           options.onSuccess?.({
             pluginId: "newsletter",
@@ -355,6 +379,12 @@ describe("NewsletterProjectPage", () => {
     }));
 
     ensureUseMutationMock.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      variables: undefined,
+    });
+
+    requestAccessUseMutationMock.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       variables: undefined,
@@ -407,6 +437,21 @@ describe("NewsletterProjectPage", () => {
             audience: "all_confirmed",
             mode: "newsletter",
             estimatedRecipientCount: 25,
+            recipientCount: 0,
+            deliveryCounts: {
+              queued: 0,
+              sending: 0,
+              sent: 0,
+              failed: 0,
+              skipped: 0,
+              canceled: 0,
+            },
+            testSentAt: null,
+            queuedAt: null,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            lastError: null,
             createdAt: "2026-04-15T10:00:00.000Z",
             updatedAt: "2026-04-15T10:00:00.000Z",
           },
@@ -424,6 +469,21 @@ describe("NewsletterProjectPage", () => {
             audience: "mode_confirmed",
             mode: "newsletter",
             estimatedRecipientCount: 20,
+            recipientCount: 0,
+            deliveryCounts: {
+              queued: 0,
+              sending: 0,
+              sent: 0,
+              failed: 0,
+              skipped: 0,
+              canceled: 0,
+            },
+            testSentAt: null,
+            queuedAt: null,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            lastError: null,
             createdAt: "2026-04-16T10:00:00.000Z",
             updatedAt: "2026-04-16T10:00:00.000Z",
           },
@@ -435,9 +495,29 @@ describe("NewsletterProjectPage", () => {
 
     await waitFor(() => expect(screen.getByDisplayValue("Campaign 1")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Next drafts" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Next" })[0]!);
 
     await waitFor(() => expect(screen.getByDisplayValue("Campaign 21")).toBeInTheDocument());
     expect(screen.getByText(/page 2 of 2/i)).toBeInTheDocument();
+  });
+
+  it("queues a saved draft for sending from the project page", async () => {
+    render(<NewsletterProjectPage projectSlug="site-1" />);
+
+    await waitFor(() => expect(screen.getByDisplayValue("Old draft")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Queue send" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Queue campaign send?")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Queue send" })[1]!);
+
+    await waitFor(() =>
+      expect(
+        mutationCalls.some((call) => call.actionId === "send_campaign"),
+      ).toBe(true),
+    );
   });
 });

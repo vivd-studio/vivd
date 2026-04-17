@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { createTableBookingPluginBackendHooks } from "@vivd/plugin-table-booking/backend/integrationHooks";
+import { createTableBookingPluginService } from "@vivd/plugin-table-booking/backend/service";
 import { tableBookingPluginDefinition } from "@vivd/plugin-table-booking/backend/module";
 import { tableBookingBackendPluginPackage } from "@vivd/plugin-table-booking/backend/plugin";
 import type { TableBookingPluginEntitlementServicePort } from "@vivd/plugin-table-booking/backend/ports";
@@ -8,6 +9,7 @@ import {
   projectMeta,
   projectPluginInstance,
   tableBookingActionToken,
+  tableBookingCapacityAdjustment,
   tableBookingReservation,
 } from "../../../db/schema";
 import {
@@ -35,17 +37,19 @@ export const tableBookingBackendPluginHooks =
     tables: {
       tableBookingReservation,
       tableBookingActionToken,
+      tableBookingCapacityAdjustment,
     },
   });
 
-export function createTableBookingBackendHostPluginContribution(options: {
+export function createTableBookingBackendHostServiceDeps(options: {
   pluginEntitlementService: TableBookingPluginEntitlementServicePort;
 }) {
-  const contribution = tableBookingBackendPluginPackage.backend.createContribution({
+  return {
     db,
     tables: {
       tableBookingReservation,
       tableBookingActionToken,
+      tableBookingCapacityAdjustment,
       projectMeta,
       projectPluginInstance,
     },
@@ -147,7 +151,23 @@ export function createTableBookingBackendHostPluginContribution(options: {
         return buildStaffBookingCancellationEmail(hostOptions);
       },
     },
-  });
+  } as const;
+}
+
+export function createTableBookingBackendHostService(options: {
+  pluginEntitlementService: TableBookingPluginEntitlementServicePort;
+}) {
+  return createTableBookingPluginService(
+    createTableBookingBackendHostServiceDeps(options),
+  );
+}
+
+export function createTableBookingBackendHostPluginContribution(options: {
+  pluginEntitlementService: TableBookingPluginEntitlementServicePort;
+}) {
+  const contribution = tableBookingBackendPluginPackage.backend.createContribution(
+    createTableBookingBackendHostServiceDeps(options),
+  );
 
   return {
     ...contribution,

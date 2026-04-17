@@ -24,10 +24,13 @@ FROM base AS deps
 
 # Install deps for just the studio workspace (+ theme) via root workspaces/lockfile
 COPY package.json package-lock.json ./
+COPY scripts/workspace/sourceAliases.mjs scripts/workspace/sourceAliases.mjs
+COPY scripts/workspace/sourceAliases.d.mts scripts/workspace/sourceAliases.d.mts
 COPY plugins/installed/package.json plugins/installed/package.json
 COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY plugins/external/google-maps/package.json plugins/external/google-maps/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/ui/package.json packages/ui/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
 COPY plugins/native/contact-form/package.json plugins/native/contact-form/package.json
@@ -39,7 +42,7 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/ui -w @vivd/installed-plugins -w @vivd/theme -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
@@ -47,6 +50,7 @@ RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vi
 FROM deps AS dev
 COPY plugins ./plugins
 COPY packages/shared ./packages/shared
+COPY packages/ui ./packages/ui
 COPY packages/theme ./packages/theme
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
@@ -70,6 +74,7 @@ CMD ["npm", "run", "dev"]
 FROM deps AS build
 COPY plugins ./plugins
 COPY packages/shared ./packages/shared
+COPY packages/ui ./packages/ui
 COPY packages/theme ./packages/theme
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
@@ -93,6 +98,7 @@ COPY plugins/installed/package.json plugins/installed/package.json
 COPY plugins/sdk/package.json plugins/sdk/package.json
 COPY plugins/external/google-maps/package.json plugins/external/google-maps/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/ui/package.json packages/ui/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY plugins/native/analytics/package.json plugins/native/analytics/package.json
 COPY plugins/native/contact-form/package.json plugins/native/contact-form/package.json
@@ -104,7 +110,7 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/installed-plugins -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-sdk -w @vivd/shared -w @vivd/ui -w @vivd/installed-plugins -w @vivd/plugin-google-maps -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/plugin-newsletter -w @vivd/plugin-table-booking -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 

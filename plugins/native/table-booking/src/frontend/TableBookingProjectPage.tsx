@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ChangeEvent, ComponentType, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -65,6 +65,14 @@ type TableBookingProjectPageProps = {
 
 type TableBookingStatus =
   TableBookingBookingsPayload["rows"][number]["status"];
+type TableBookingSourceChannel =
+  TableBookingBookingsPayload["rows"][number]["sourceChannel"];
+type TableBookingDayCapacityPayload =
+  RouterOutputs["plugins"]["tableBooking"]["dayCapacity"];
+type TableBookingCapacityAdjustmentRecord =
+  TableBookingDayCapacityPayload["adjustments"][number];
+type TableBookingCapacityMode =
+  TableBookingCapacityAdjustmentRecord["mode"];
 
 type SettingsTab = "calendar" | "bookings" | "setup" | "install";
 
@@ -107,6 +115,19 @@ const STATUS_LABELS: Record<TableBookingStatus, string> = {
   completed: "Completed",
 };
 
+const SOURCE_CHANNEL_LABELS: Record<TableBookingSourceChannel, string> = {
+  online: "Online",
+  phone: "Phone",
+  walk_in: "Walk-in",
+  staff_manual: "Staff",
+};
+
+const CAPACITY_MODE_LABELS: Record<TableBookingCapacityMode, string> = {
+  cover_holdback: "Cover holdback",
+  effective_capacity_override: "Effective capacity",
+  closed: "Closed window",
+};
+
 function parseListInput(value: string): string[] {
   return Array.from(
     new Set(
@@ -143,6 +164,17 @@ function formatTime(value: string, timeZone: string): string {
     timeZone,
     hour: "numeric",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatTimeInputValue(value: string, timeZone: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "17:00";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   }).format(date);
 }
 
@@ -443,6 +475,20 @@ function formatStatusLabel(status: TableBookingStatus): string {
   return STATUS_LABELS[status];
 }
 
+function formatSourceChannelLabel(sourceChannel: TableBookingSourceChannel): string {
+  return SOURCE_CHANNEL_LABELS[sourceChannel];
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function getCalendarDayTitle(schedule: {
   periods: TableBookingSchedulePeriod[];
   isClosed: boolean;
@@ -629,7 +675,7 @@ function PeriodEditor({
           <Input
             type="time"
             value={period.startTime}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({ ...period, startTime: event.target.value })
             }
           />
@@ -639,7 +685,7 @@ function PeriodEditor({
           <Input
             type="time"
             value={period.endTime}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({ ...period, endTime: event.target.value })
             }
           />
@@ -651,7 +697,7 @@ function PeriodEditor({
             min={5}
             max={180}
             value={period.slotIntervalMinutes}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
                 slotIntervalMinutes: Number.parseInt(event.target.value || "0", 10),
@@ -666,7 +712,7 @@ function PeriodEditor({
             min={1}
             max={500}
             value={period.maxConcurrentCovers}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
                 maxConcurrentCovers: Number.parseInt(event.target.value || "0", 10),
@@ -682,7 +728,7 @@ function PeriodEditor({
             max={480}
             placeholder={String(defaultDurationMinutes)}
             value={period.durationMinutes ?? ""}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
                 durationMinutes: event.target.value
@@ -700,7 +746,7 @@ function PeriodEditor({
             max={50}
             placeholder="No cap"
             value={period.maxPartySize ?? ""}
-            onChange={(event) =>
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
                 maxPartySize: event.target.value
@@ -728,6 +774,7 @@ function BookingRow({
   booking,
   timeZone,
   actionPending,
+  onEdit,
   onCancel,
   onMarkNoShow,
   onMarkCompleted,
@@ -735,6 +782,7 @@ function BookingRow({
   booking: TableBookingRecord;
   timeZone: string;
   actionPending: boolean;
+  onEdit?: () => void;
   onCancel: () => void;
   onMarkNoShow: () => void;
   onMarkCompleted: () => void;
@@ -753,6 +801,9 @@ function BookingRow({
             </p>
             <Badge variant={getBookingStatusBadgeVariant(booking.status)}>
               {formatStatusLabel(booking.status)}
+            </Badge>
+            <Badge variant="outline">
+              {formatSourceChannelLabel(booking.sourceChannel)}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -773,6 +824,11 @@ function BookingRow({
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {onEdit ? (
+            <Button size="sm" variant="outline" onClick={onEdit}>
+              Edit
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="outline"
@@ -799,6 +855,68 @@ function BookingRow({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CapacityWindowCard({
+  window,
+}: {
+  window: TableBookingDayCapacityPayload["windows"][number];
+}) {
+  const ratio =
+    window.effectiveCapacity > 0
+      ? Math.min(100, Math.round((window.bookedCovers / window.effectiveCapacity) * 100))
+      : 0;
+
+  return (
+    <div className="rounded-lg border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium">
+              {window.startTime} - {window.endTime}
+            </p>
+            {window.isClosed ? (
+              <Badge variant="secondary">Closed</Badge>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {window.bookedCovers} booked · {window.effectiveCapacity} effective ·{" "}
+            {window.remainingCovers} remaining
+          </p>
+        </div>
+        <div className="min-w-[7rem] text-right text-xs text-muted-foreground">
+          Base {window.baseCapacity}
+          <br />
+          Every {window.slotIntervalMinutes} min
+        </div>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width]",
+            window.isClosed
+              ? "bg-muted-foreground/50"
+              : ratio >= 100
+                ? "bg-destructive"
+                : ratio >= 75
+                  ? "bg-amber-500"
+                  : "bg-emerald-500",
+          )}
+          style={{ width: `${window.isClosed ? 100 : ratio}%` }}
+        />
+      </div>
+      {window.adjustments.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {window.adjustments.map((adjustment) => (
+            <Badge key={adjustment.id} variant="outline" className="bg-card">
+              {CAPACITY_MODE_LABELS[adjustment.mode]}
+              {adjustment.capacityValue ? ` ${adjustment.capacityValue}` : ""}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -868,10 +986,31 @@ export default function TableBookingProjectPage({
   const [bookingStatus, setBookingStatus] = useState<
     "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed"
   >("all");
+  const [bookingSourceChannel, setBookingSourceChannel] = useState<
+    "all" | TableBookingSourceChannel
+  >("all");
   const [bookingSearch, setBookingSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [bookingOffset, setBookingOffset] = useState(0);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [reservationDate, setReservationDate] = useState(selectedDate);
+  const [reservationTime, setReservationTime] = useState("17:00");
+  const [reservationPartySize, setReservationPartySize] = useState("2");
+  const [reservationName, setReservationName] = useState("");
+  const [reservationEmail, setReservationEmail] = useState("");
+  const [reservationPhone, setReservationPhone] = useState("");
+  const [reservationNotes, setReservationNotes] = useState("");
+  const [reservationSourceChannel, setReservationSourceChannel] =
+    useState<TableBookingSourceChannel>("phone");
+  const [sendGuestNotification, setSendGuestNotification] = useState(false);
+  const [editingAdjustmentId, setEditingAdjustmentId] = useState<string | null>(null);
+  const [adjustmentStartTime, setAdjustmentStartTime] = useState("17:00");
+  const [adjustmentEndTime, setAdjustmentEndTime] = useState("19:00");
+  const [adjustmentMode, setAdjustmentMode] =
+    useState<TableBookingCapacityMode>("cover_holdback");
+  const [adjustmentCapacityValue, setAdjustmentCapacityValue] = useState("4");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
   const limit = 100;
 
   const projectListQuery = trpc.project.list.useQuery(undefined, {
@@ -938,6 +1077,17 @@ export default function TableBookingProjectPage({
       refetchInterval: pluginReadQueriesEnabled ? 30_000 : false,
     },
   );
+  const dayCapacityQuery = trpc.plugins.tableBooking.dayCapacity.useQuery(
+    {
+      slug: projectSlug,
+      serviceDate: selectedDate,
+    },
+    {
+      enabled: pluginReadQueriesEnabled && Boolean(selectedDate),
+      refetchOnWindowFocus: true,
+      refetchInterval: pluginReadQueriesEnabled ? 30_000 : false,
+    },
+  );
   const bookingsQuery = trpc.plugins.read.useQuery(
     {
       slug: projectSlug,
@@ -945,6 +1095,7 @@ export default function TableBookingProjectPage({
       readId: TABLE_BOOKING_BOOKINGS_READ_ID,
       input: {
         status: bookingStatus,
+        sourceChannel: bookingSourceChannel,
         search: bookingSearch,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
@@ -1005,6 +1156,84 @@ export default function TableBookingProjectPage({
     },
   });
 
+  const saveReservationMutation = trpc.plugins.tableBooking.saveReservation.useMutation({
+    onSuccess: async (_, variables) => {
+      toast.success(
+        variables.bookingId ? "Reservation updated" : "Reservation created",
+      );
+      setEditingBookingId(null);
+      await Promise.all([
+        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
+        utils.plugins.read.invalidate(),
+        utils.plugins.tableBooking.dayCapacity.invalidate({
+          slug: projectSlug,
+          serviceDate: variables.date,
+        }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error("Could not save reservation", {
+        description: error.message,
+      });
+    },
+  });
+
+  const saveCapacityAdjustmentMutation =
+    trpc.plugins.tableBooking.saveCapacityAdjustment.useMutation({
+      onSuccess: async (_, variables) => {
+        toast.success(
+          variables.adjustmentId
+            ? "Capacity adjustment updated"
+            : "Capacity adjustment saved",
+        );
+        setEditingAdjustmentId(null);
+        await Promise.all([
+          utils.plugins.read.invalidate(),
+          utils.plugins.tableBooking.dayCapacity.invalidate({
+            slug: projectSlug,
+            serviceDate: variables.serviceDate,
+          }),
+        ]);
+      },
+      onError: (error) => {
+        toast.error("Could not save capacity adjustment", {
+          description: error.message,
+        });
+      },
+    });
+
+  const deleteCapacityAdjustmentMutation =
+    trpc.plugins.tableBooking.deleteCapacityAdjustment.useMutation({
+      onSuccess: async () => {
+        toast.success("Capacity adjustment removed");
+        setEditingAdjustmentId(null);
+        await Promise.all([
+          utils.plugins.read.invalidate(),
+          utils.plugins.tableBooking.dayCapacity.invalidate({
+            slug: projectSlug,
+            serviceDate: selectedDate,
+          }),
+        ]);
+      },
+      onError: (error) => {
+        toast.error("Could not remove capacity adjustment", {
+          description: error.message,
+        });
+      },
+    });
+
+  const exportBookingsMutation = trpc.plugins.tableBooking.exportBookings.useMutation({
+    onSuccess: (result) => {
+      downloadTextFile(result.filename, result.csv, "text/csv;charset=utf-8");
+      toast.success(`Exported ${result.total} bookings`);
+    },
+    onError: (error) => {
+      toast.error("Could not export bookings", {
+        description: error.message,
+      });
+    },
+  });
+
   const pluginInfo = pluginInfoQuery.data as
     | (RouterOutputs["plugins"]["info"] & {
         config: TableBookingPluginConfig | null;
@@ -1037,6 +1266,7 @@ export default function TableBookingProjectPage({
   const selectedDayBookings = selectedDateBookingsQuery.data?.result as
     | TableBookingBookingsPayload
     | undefined;
+  const dayCapacity = dayCapacityQuery.data as TableBookingDayCapacityPayload | undefined;
   const bookings = bookingsQuery.data?.result as
     | TableBookingBookingsPayload
     | undefined;
@@ -1085,7 +1315,15 @@ export default function TableBookingProjectPage({
 
   useEffect(() => {
     setBookingOffset(0);
-  }, [bookingStatus, bookingSearch, startDate, endDate]);
+  }, [bookingStatus, bookingSourceChannel, bookingSearch, startDate, endDate]);
+
+  useEffect(() => {
+    setReservationDate(selectedDate);
+    setEditingAdjustmentId(null);
+    if (!editingBookingId) {
+      setReservationTime("17:00");
+    }
+  }, [selectedDate, editingBookingId]);
 
   const pluginEnabled = !!pluginInfo?.enabled;
   const needsEnable =
@@ -1108,6 +1346,7 @@ export default function TableBookingProjectPage({
     pluginInfoQuery.isFetching ||
     summaryQuery.isFetching ||
     monthBookingsQuery.isFetching ||
+    dayCapacityQuery.isFetching ||
     selectedDateBookingsQuery.isFetching ||
     bookingsQuery.isFetching;
   const todayInTimezone = getTodayIsoDate(timezone);
@@ -1125,6 +1364,8 @@ export default function TableBookingProjectPage({
   const selectedOverride = getDateOverride(dateOverrides, selectedDate);
   const selectedDaySummary = monthBookingSummary.get(selectedDate);
   const selectedDayRows = selectedDayBookings?.rows ?? [];
+  const selectedDayCapacityWindows = dayCapacity?.windows ?? [];
+  const selectedDayAdjustments = dayCapacity?.adjustments ?? [];
   const selectedDayCountLabel = selectedDaySummary
     ? `${selectedDaySummary.count} bookings · ${selectedDaySummary.covers} covers`
     : "No bookings yet";
@@ -1187,6 +1428,69 @@ export default function TableBookingProjectPage({
     await navigator.clipboard.writeText(value);
     toast.success(`${label} copied`);
   };
+
+  const resetReservationEditor = (date = selectedDate) => {
+    setEditingBookingId(null);
+    setReservationDate(date);
+    setReservationTime("17:00");
+    setReservationPartySize("2");
+    setReservationName("");
+    setReservationEmail("");
+    setReservationPhone("");
+    setReservationNotes("");
+    setReservationSourceChannel("phone");
+    setSendGuestNotification(false);
+  };
+
+  const startEditingReservation = (booking: TableBookingRecord) => {
+    setEditingBookingId(booking.id);
+    setReservationDate(booking.serviceDate);
+    setReservationTime(formatTimeInputValue(booking.serviceStartAt, timezone));
+    setReservationPartySize(String(booking.partySize));
+    setReservationName(booking.guestName);
+    setReservationEmail(booking.guestEmail);
+    setReservationPhone(booking.guestPhone);
+    setReservationNotes(booking.notes ?? "");
+    setReservationSourceChannel(booking.sourceChannel);
+    setSendGuestNotification(false);
+    setSelectedDate(booking.serviceDate);
+    setVisibleMonth(booking.serviceDate.slice(0, 7));
+    setActiveTab("calendar");
+  };
+
+  const resetCapacityAdjustmentForm = (date = selectedDate) => {
+    const scheduleForDate = resolveScheduleForDate({
+      weeklySchedule,
+      dateOverrides,
+      date,
+    });
+    const firstPeriod = scheduleForDate.periods[0];
+    setEditingAdjustmentId(null);
+    setAdjustmentStartTime(firstPeriod?.startTime ?? "17:00");
+    setAdjustmentEndTime(firstPeriod?.endTime ?? "19:00");
+    setAdjustmentMode("cover_holdback");
+    setAdjustmentCapacityValue("4");
+    setAdjustmentReason("");
+  };
+
+  const startEditingCapacityAdjustment = (
+    adjustment: TableBookingCapacityAdjustmentRecord,
+  ) => {
+    setEditingAdjustmentId(adjustment.id);
+    setAdjustmentStartTime(adjustment.startTime);
+    setAdjustmentEndTime(adjustment.endTime);
+    setAdjustmentMode(adjustment.mode);
+    setAdjustmentCapacityValue(
+      adjustment.capacityValue ? String(adjustment.capacityValue) : "",
+    );
+    setAdjustmentReason(adjustment.reason ?? "");
+  };
+
+  useEffect(() => {
+    if (!editingAdjustmentId) {
+      resetCapacityAdjustmentForm(selectedDate);
+    }
+  }, [selectedDate, editingAdjustmentId, weeklySchedule, dateOverrides]);
 
   const updateWeeklyPeriod = (
     dayOfWeek: number,
@@ -1332,6 +1636,49 @@ export default function TableBookingProjectPage({
     });
   };
 
+  const saveReservation = () => {
+    saveReservationMutation.mutate({
+      slug: projectSlug,
+      bookingId: editingBookingId ?? undefined,
+      date: reservationDate,
+      time: reservationTime,
+      partySize: Number.parseInt(reservationPartySize || "0", 10),
+      name: reservationName.trim(),
+      email: reservationEmail.trim(),
+      phone: reservationPhone.trim(),
+      notes: reservationNotes.trim() || null,
+      sourceChannel: reservationSourceChannel,
+      sendGuestNotification,
+    });
+  };
+
+  const saveCapacityAdjustment = () => {
+    saveCapacityAdjustmentMutation.mutate({
+      slug: projectSlug,
+      adjustmentId: editingAdjustmentId ?? undefined,
+      serviceDate: selectedDate,
+      startTime: adjustmentStartTime,
+      endTime: adjustmentEndTime,
+      mode: adjustmentMode,
+      capacityValue:
+        adjustmentMode === "closed"
+          ? null
+          : Number.parseInt(adjustmentCapacityValue || "0", 10),
+      reason: adjustmentReason.trim() || null,
+    });
+  };
+
+  const exportBookings = () => {
+    exportBookingsMutation.mutate({
+      slug: projectSlug,
+      status: bookingStatus,
+      sourceChannel: bookingSourceChannel,
+      search: bookingSearch,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    });
+  };
+
   const runBookingAction = (actionId: string, bookingId: string) => {
     actionMutation.mutate({
       slug: projectSlug,
@@ -1351,6 +1698,7 @@ export default function TableBookingProjectPage({
   const readErrors = [
     summaryQuery.error ? `Summary: ${summaryQuery.error.message}` : null,
     monthBookingsQuery.error ? `Calendar: ${monthBookingsQuery.error.message}` : null,
+    dayCapacityQuery.error ? `Capacity: ${dayCapacityQuery.error.message}` : null,
     selectedDateBookingsQuery.error
       ? `Selected day: ${selectedDateBookingsQuery.error.message}`
       : null,
@@ -1376,6 +1724,7 @@ export default function TableBookingProjectPage({
                 pluginInfoQuery.refetch(),
                 summaryQuery.refetch(),
                 monthBookingsQuery.refetch(),
+                dayCapacityQuery.refetch(),
                 selectedDateBookingsQuery.refetch(),
                 bookingsQuery.refetch(),
               ]);
@@ -1846,8 +2195,43 @@ export default function TableBookingProjectPage({
                     </SectionCard>
 
                     <SectionCard
+                      title="Service-window capacity"
+                      description="Booked versus effective capacity for the selected date."
+                    >
+                      {dayCapacityQuery.isLoading && !dayCapacity ? (
+                        <p className="text-sm text-muted-foreground">
+                          Loading capacity for this date...
+                        </p>
+                      ) : dayCapacityQuery.error ? (
+                        <p className="text-sm text-destructive">
+                          Could not load capacity: {dayCapacityQuery.error.message}
+                        </p>
+                      ) : selectedDayCapacityWindows.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No service windows are configured for this date.
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {selectedDayCapacityWindows.map((window) => (
+                            <CapacityWindowCard key={window.key} window={window} />
+                          ))}
+                        </div>
+                      )}
+                    </SectionCard>
+
+                    <SectionCard
                       title="Selected-day bookings"
                       description="Live reservations and staff actions for the currently selected date."
+                      action={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resetReservationEditor(selectedDate)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add reservation
+                        </Button>
+                      }
                     >
                       {selectedDateBookingsQuery.isLoading && !selectedDayBookings ? (
                         <p className="text-sm text-muted-foreground">
@@ -1869,7 +2253,11 @@ export default function TableBookingProjectPage({
                               key={booking.id}
                               booking={booking}
                               timeZone={timezone}
-                              actionPending={actionMutation.isPending}
+                              actionPending={
+                                actionMutation.isPending ||
+                                saveReservationMutation.isPending
+                              }
+                              onEdit={() => startEditingReservation(booking)}
                               onCancel={() =>
                                 runBookingAction("cancel_booking", booking.id)
                               }
@@ -1884,6 +2272,307 @@ export default function TableBookingProjectPage({
                         </div>
                       )}
                     </SectionCard>
+
+                    <SectionCard
+                      title={
+                        editingBookingId
+                          ? "Reservation editor"
+                          : "Operator reservation"
+                      }
+                      description={
+                        editingBookingId
+                          ? "Update or move a booking without leaving the selected day."
+                          : "Capture phone, walk-in, or staff-managed reservations so capacity stays accurate."
+                      }
+                    >
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Date</Label>
+                          <Input
+                            type="date"
+                            value={reservationDate}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationDate(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Time</Label>
+                          <Input
+                            type="time"
+                            value={reservationTime}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationTime(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Party size</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={reservationPartySize}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationPartySize(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Source</Label>
+                          <Select
+                            value={reservationSourceChannel}
+                            onValueChange={(value) =>
+                              setReservationSourceChannel(
+                                value as TableBookingSourceChannel,
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="phone">Phone</SelectItem>
+                              <SelectItem value="walk_in">Walk-in</SelectItem>
+                              <SelectItem value="staff_manual">Staff</SelectItem>
+                              <SelectItem value="online">Online</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Guest name</Label>
+                          <Input
+                            value={reservationName}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationName(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            value={reservationEmail}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationEmail(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Phone</Label>
+                          <Input
+                            value={reservationPhone}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setReservationPhone(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Notes</Label>
+                          <Textarea
+                            rows={3}
+                            value={reservationNotes}
+                            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                              setReservationNotes(event.target.value)
+                            }
+                            placeholder="Dietary requests or service notes"
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={sendGuestNotification}
+                          onCheckedChange={(value) =>
+                            setSendGuestNotification(Boolean(value))
+                          }
+                        />
+                        Send guest confirmation email after save
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={saveReservation}
+                          disabled={saveReservationMutation.isPending}
+                        >
+                          {saveReservationMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : editingBookingId ? (
+                            "Update reservation"
+                          ) : (
+                            "Create reservation"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => resetReservationEditor(selectedDate)}
+                          disabled={saveReservationMutation.isPending}
+                        >
+                          {editingBookingId ? "Stop editing" : "Reset"}
+                        </Button>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard
+                      title="Capacity controls"
+                      description="Hold back covers or temporarily close part of a service window without rewriting the weekly schedule."
+                    >
+                      {selectedDayAdjustments.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedDayAdjustments.map((adjustment) => (
+                            <div
+                              key={adjustment.id}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-3"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline">
+                                    {CAPACITY_MODE_LABELS[adjustment.mode]}
+                                  </Badge>
+                                  <span className="text-sm font-medium">
+                                    {adjustment.startTime} - {adjustment.endTime}
+                                  </span>
+                                  {adjustment.capacityValue ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {adjustment.capacityValue} covers
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {adjustment.reason ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {adjustment.reason}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    startEditingCapacityAdjustment(adjustment)
+                                  }
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    deleteCapacityAdjustmentMutation.mutate({
+                                      slug: projectSlug,
+                                      adjustmentId: adjustment.id,
+                                    })
+                                  }
+                                  disabled={deleteCapacityAdjustmentMutation.isPending}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No capacity adjustments for this date yet.
+                        </p>
+                      )}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Start</Label>
+                          <Input
+                            type="time"
+                            value={adjustmentStartTime}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setAdjustmentStartTime(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>End</Label>
+                          <Input
+                            type="time"
+                            value={adjustmentEndTime}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setAdjustmentEndTime(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Mode</Label>
+                          <Select
+                            value={adjustmentMode}
+                            onValueChange={(value) =>
+                              setAdjustmentMode(value as TableBookingCapacityMode)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cover_holdback">
+                                Cover holdback
+                              </SelectItem>
+                              <SelectItem value="effective_capacity_override">
+                                Effective capacity
+                              </SelectItem>
+                              <SelectItem value="closed">Closed window</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>
+                            {adjustmentMode === "effective_capacity_override"
+                              ? "Effective capacity"
+                              : "Covers"}
+                          </Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={adjustmentCapacityValue}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setAdjustmentCapacityValue(event.target.value)
+                            }
+                            disabled={adjustmentMode === "closed"}
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Reason</Label>
+                          <Input
+                            value={adjustmentReason}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setAdjustmentReason(event.target.value)
+                            }
+                            placeholder="Staff shortage, private event, walk-in holdback"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={saveCapacityAdjustment}
+                          disabled={saveCapacityAdjustmentMutation.isPending}
+                        >
+                          {saveCapacityAdjustmentMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : editingAdjustmentId ? (
+                            "Update adjustment"
+                          ) : (
+                            "Add adjustment"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => resetCapacityAdjustmentForm(selectedDate)}
+                          disabled={saveCapacityAdjustmentMutation.isPending}
+                        >
+                          {editingAdjustmentId ? "Stop editing" : "Reset"}
+                        </Button>
+                      </div>
+                    </SectionCard>
                   </div>
                 </div>
               </TabsContent>
@@ -1893,7 +2582,7 @@ export default function TableBookingProjectPage({
                   title="Booking search"
                   description="Search across bookings when you need more than the calendar day view."
                 >
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <div className="space-y-1.5">
                       <Label>Status</Label>
                       <Select
@@ -1918,10 +2607,34 @@ export default function TableBookingProjectPage({
                       </Select>
                     </div>
                     <div className="space-y-1.5">
+                      <Label>Source</Label>
+                      <Select
+                        value={bookingSourceChannel}
+                        onValueChange={(value) =>
+                          setBookingSourceChannel(
+                            value as typeof bookingSourceChannel,
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="walk_in">Walk-in</SelectItem>
+                          <SelectItem value="staff_manual">Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
                       <Label>Search</Label>
                       <Input
                         value={bookingSearch}
-                        onChange={(event) => setBookingSearch(event.target.value)}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          setBookingSearch(event.target.value)
+                        }
                         placeholder="Name, email, phone"
                       />
                     </div>
@@ -1930,7 +2643,9 @@ export default function TableBookingProjectPage({
                       <Input
                         type="date"
                         value={startDate}
-                        onChange={(event) => setStartDate(event.target.value)}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          setStartDate(event.target.value)
+                        }
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1938,18 +2653,35 @@ export default function TableBookingProjectPage({
                       <Input
                         type="date"
                         value={endDate}
-                        onChange={(event) => setEndDate(event.target.value)}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          setEndDate(event.target.value)
+                        }
                       />
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-muted-foreground">
                       {bookings?.total
                         ? `Showing ${bookingRangeStart}-${bookingRangeEnd} of ${bookings.total} bookings`
                         : "No bookings found"}
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={exportBookingsMutation.isPending}
+                        onClick={exportBookings}
+                      >
+                        {exportBookingsMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Exporting...
+                          </>
+                        ) : (
+                          "Export CSV"
+                        )}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -1992,7 +2724,11 @@ export default function TableBookingProjectPage({
                           key={booking.id}
                           booking={booking}
                           timeZone={timezone}
-                          actionPending={actionMutation.isPending}
+                          actionPending={
+                            actionMutation.isPending ||
+                            saveReservationMutation.isPending
+                          }
+                          onEdit={() => startEditingReservation(booking)}
                           onCancel={() =>
                             runBookingAction("cancel_booking", booking.id)
                           }
@@ -2084,7 +2820,9 @@ export default function TableBookingProjectPage({
                           <Label>Timezone</Label>
                           <Input
                             value={timezone}
-                            onChange={(event) => setTimezone(event.target.value)}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setTimezone(event.target.value)
+                            }
                             placeholder="Europe/Berlin"
                           />
                         </div>
@@ -2096,7 +2834,9 @@ export default function TableBookingProjectPage({
                               min={1}
                               max={20}
                               value={partyMin}
-                              onChange={(event) => setPartyMin(event.target.value)}
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                                setPartyMin(event.target.value)
+                              }
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -2106,7 +2846,9 @@ export default function TableBookingProjectPage({
                               min={1}
                               max={20}
                               value={partyMax}
-                              onChange={(event) => setPartyMax(event.target.value)}
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                                setPartyMax(event.target.value)
+                              }
                             />
                           </div>
                         </div>
@@ -2117,7 +2859,7 @@ export default function TableBookingProjectPage({
                               type="number"
                               min={0}
                               value={leadTimeMinutes}
-                              onChange={(event) =>
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
                                 setLeadTimeMinutes(event.target.value)
                               }
                             />
@@ -2128,7 +2870,7 @@ export default function TableBookingProjectPage({
                               type="number"
                               min={1}
                               value={bookingHorizonDays}
-                              onChange={(event) =>
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
                                 setBookingHorizonDays(event.target.value)
                               }
                             />
@@ -2141,7 +2883,7 @@ export default function TableBookingProjectPage({
                               type="number"
                               min={30}
                               value={defaultDurationMinutes}
-                              onChange={(event) =>
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
                                 setDefaultDurationMinutes(event.target.value)
                               }
                             />
@@ -2152,7 +2894,7 @@ export default function TableBookingProjectPage({
                               type="number"
                               min={0}
                               value={cancellationCutoffMinutes}
-                              onChange={(event) =>
+                              onChange={(event: ChangeEvent<HTMLInputElement>) =>
                                 setCancellationCutoffMinutes(event.target.value)
                               }
                             />
@@ -2177,7 +2919,7 @@ export default function TableBookingProjectPage({
                           <Label>Notification recipient emails</Label>
                           <Textarea
                             value={notificationRecipientsInput}
-                            onChange={(event) =>
+                            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                               setNotificationRecipientsInput(event.target.value)
                             }
                             rows={4}
@@ -2188,7 +2930,7 @@ export default function TableBookingProjectPage({
                           <Label>Source hosts</Label>
                           <Textarea
                             value={sourceHostsInput}
-                            onChange={(event) =>
+                            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                               setSourceHostsInput(event.target.value)
                             }
                             rows={4}
@@ -2199,7 +2941,7 @@ export default function TableBookingProjectPage({
                           <Label>Redirect allowlist</Label>
                           <Textarea
                             value={redirectHostsInput}
-                            onChange={(event) =>
+                            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                               setRedirectHostsInput(event.target.value)
                             }
                             rows={4}

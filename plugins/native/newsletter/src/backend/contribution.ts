@@ -8,6 +8,7 @@ import { createNewsletterPluginModule } from "./module";
 import {
   NewsletterCampaignNotFoundError,
   NewsletterCampaignStateError,
+  NewsletterCampaignDeliveryError,
   NewsletterConfirmationDeliveryError,
   NewsletterPluginNotEnabledError,
   NewsletterSignupRateLimitError,
@@ -76,6 +77,15 @@ export function createNewsletterPluginBackendContribution(
       deleteCampaignDraft(options) {
         return service.deleteCampaignDraft(options);
       },
+      testSendCampaign(options) {
+        return service.testSendCampaign(options);
+      },
+      sendCampaign(options) {
+        return service.sendCampaign(options);
+      },
+      cancelCampaign(options) {
+        return service.cancelCampaign(options);
+      },
       readSubscribers(options) {
         return service.listSubscribers(options);
       },
@@ -95,7 +105,10 @@ export function createNewsletterPluginBackendContribution(
             message: error.message,
           };
         }
-        if (error instanceof NewsletterConfirmationDeliveryError) {
+        if (
+          error instanceof NewsletterConfirmationDeliveryError ||
+          error instanceof NewsletterCampaignDeliveryError
+        ) {
           return {
             code: "INTERNAL_SERVER_ERROR" as const,
             message: error.message,
@@ -110,6 +123,10 @@ export function createNewsletterPluginBackendContribution(
         newsletterSubscriber: deps.tables.newsletterSubscriber,
         newsletterActionToken: deps.tables.newsletterActionToken,
         newsletterCampaign: deps.tables.newsletterCampaign,
+        newsletterCampaignDelivery: deps.tables.newsletterCampaignDelivery,
+      },
+      processQueuedCampaigns() {
+        return service.processQueuedCampaigns();
       },
     }),
     publicRoutes: [

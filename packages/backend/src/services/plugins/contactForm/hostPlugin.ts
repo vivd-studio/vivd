@@ -23,6 +23,7 @@ import {
   ensureProjectPluginInstance,
   getProjectPluginInstance,
 } from "../core/instanceStore";
+import { pluginEntitlementService } from "../PluginEntitlementService";
 import { getContactFormSubmitEndpoint } from "./publicApi";
 import { contactFormRecipientVerificationService } from "./recipientVerification";
 import { inferContactFormAutoSourceHosts } from "./sourceHosts";
@@ -111,6 +112,42 @@ export function createContactFormBackendHostPluginContribution(options: {
       return members
         .filter((member) => member.user.emailVerified)
         .map((member) => member.user.email);
+    },
+    async syncProjectTurnstileWidget(hostOptions) {
+      const entitlement = await pluginEntitlementService.getProjectEntitlementRow({
+        organizationId: hostOptions.organizationId,
+        projectSlug: hostOptions.projectSlug,
+        pluginId: "contact_form",
+      });
+      if (!entitlement) return;
+      if (entitlement.state !== "enabled" || entitlement.turnstileEnabled !== true) {
+        return;
+      }
+
+      const credentials = await contactFormTurnstileService.prepareProjectWidgetCredentials({
+        organizationId: hostOptions.organizationId,
+        projectSlug: hostOptions.projectSlug,
+        existingWidgetId: entitlement.turnstileWidgetId ?? null,
+        existingSiteKey: entitlement.turnstileSiteKey ?? null,
+        existingSecretKey: entitlement.turnstileSecretKey ?? null,
+      });
+
+      await pluginEntitlementService.upsertEntitlement({
+        organizationId: hostOptions.organizationId,
+        scope: "project",
+        projectSlug: hostOptions.projectSlug,
+        pluginId: "contact_form",
+        state: entitlement.state as "enabled" | "disabled" | "suspended",
+        managedBy: entitlement.managedBy as "manual_superadmin" | "plan" | "self_serve",
+        monthlyEventLimit: entitlement.monthlyEventLimit,
+        hardStop: entitlement.hardStop,
+        turnstileEnabled: entitlement.turnstileEnabled,
+        turnstileWidgetId: credentials.widgetId,
+        turnstileSiteKey: credentials.siteKey,
+        turnstileSecretKey: credentials.secretKey,
+        notes: entitlement.notes,
+        changedByUserId: entitlement.changedByUserId,
+      });
     },
   });
 

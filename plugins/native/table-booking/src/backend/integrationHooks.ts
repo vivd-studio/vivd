@@ -82,7 +82,28 @@ export function createTableBookingPluginBackendHooks(
         )
         .returning({ id: deps.tables.tableBookingActionToken.id });
 
-      return updatedReservations.length + updatedTokens.length;
+      const updatedCapacityAdjustments = await options.tx
+        .update(deps.tables.tableBookingCapacityAdjustment)
+        .set({ projectSlug: options.newSlug, updatedAt: new Date() })
+        .where(
+          and(
+            eq(
+              deps.tables.tableBookingCapacityAdjustment.organizationId,
+              options.organizationId,
+            ),
+            eq(
+              deps.tables.tableBookingCapacityAdjustment.projectSlug,
+              options.oldSlug,
+            ),
+          ),
+        )
+        .returning({ id: deps.tables.tableBookingCapacityAdjustment.id });
+
+      return (
+        updatedReservations.length +
+        updatedTokens.length +
+        updatedCapacityAdjustments.length
+      );
     },
   };
 }

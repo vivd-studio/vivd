@@ -8,6 +8,7 @@ import {
   runPluginActionProcedure,
   updatePluginConfigProcedure,
 } from "./generic";
+import { tableBookingRouter } from "./tableBooking";
 
 export const pluginsRouter = router({
   catalog: catalogPluginProcedure,
@@ -17,4 +18,5 @@ export const pluginsRouter = router({
   read: readPluginProcedure,
   updateConfig: updatePluginConfigProcedure,
   action: runPluginActionProcedure,
+  tableBooking: tableBookingRouter,
 });

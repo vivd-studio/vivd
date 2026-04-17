@@ -2,23 +2,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { createInstalledPluginSourceAliases } from "../../plugins/installed/registry.helpers.mjs";
-
-const sharedSrc = path.resolve(__dirname, "../shared/src");
-const pluginSdkSrc = path.resolve(__dirname, "../../plugins/sdk/src");
+import { createVivdWorkspaceSourceAliases } from "../../scripts/workspace/sourceAliases.mjs";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      ...createInstalledPluginSourceAliases({ configDir: __dirname }),
-      {
-        find: /^@vivd\/plugin-sdk$/,
-        replacement: path.resolve(pluginSdkSrc, "index.ts"),
-      },
-      { find: /^@vivd\/plugin-sdk\/(.*)$/, replacement: `${pluginSdkSrc}/$1` },
-      { find: /^@vivd\/shared$/, replacement: path.resolve(sharedSrc, "index.ts") },
-      { find: /^@vivd\/shared\/(.*)$/, replacement: `${sharedSrc}/$1` },
+      ...createVivdWorkspaceSourceAliases({
+        configDir: __dirname,
+        packageNames: [
+          "@vivd/installed-plugins",
+          "@vivd/plugin-sdk",
+          "@vivd/shared",
+          "@vivd/ui",
+        ],
+      }),
       { find: "@", replacement: path.resolve(__dirname, "./src") },
     ],
   },

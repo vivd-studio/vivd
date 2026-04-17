@@ -32,7 +32,9 @@
       "@vivd/plugin-sdk": ["../../../plugins/sdk/src/index.ts"],
       "@vivd/plugin-sdk/*": ["../../../plugins/sdk/src/*"],
       "@vivd/shared": ["../../shared/src/index.ts"],
-      "@vivd/shared/*": ["../../shared/src/*"]
+      "@vivd/shared/*": ["../../shared/src/*"],
+      "@vivd/ui": ["../../ui/src/index.ts"],
+      "@vivd/ui/*": ["../../ui/src/*"]
     }
   },
   "include": ["src", "../shared"]

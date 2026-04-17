@@ -64,6 +64,12 @@
       ],
       "@vivd/shared/*": [
         "../shared/src/*"
+      ],
+      "@vivd/ui": [
+        "../ui/src/index.ts"
+      ],
+      "@vivd/ui/*": [
+        "../ui/src/*"
       ]
     }
   },

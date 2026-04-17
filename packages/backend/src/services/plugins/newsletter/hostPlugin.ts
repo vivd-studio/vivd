@@ -8,11 +8,16 @@ import type { NewsletterPluginEntitlementServicePort } from "@vivd/plugin-newsle
 import { db } from "../../../db";
 import {
   newsletterActionToken,
+  newsletterCampaign,
+  newsletterCampaignDelivery,
   newsletterSubscriber,
   projectMeta,
   projectPluginInstance,
 } from "../../../db/schema";
-import { buildNewsletterConfirmationEmail } from "../../email/templates";
+import {
+  buildNewsletterCampaignEmail,
+  buildNewsletterConfirmationEmail,
+} from "../../email/templates";
 import { getEmailDeliveryService } from "../../integrations/EmailDeliveryService";
 import {
   ensureProjectPluginInstance,
@@ -26,12 +31,19 @@ import {
   normalizeHostCandidate,
 } from "../runtime/hostUtils";
 
+let runQueuedNewsletterCampaigns: (() => Promise<number>) | null = null;
+
 export const newsletterBackendPluginHooks =
   (createNewsletterPluginBackendHooks as (deps: any) => any)({
     db,
     tables: {
       newsletterSubscriber,
       newsletterActionToken,
+      newsletterCampaign,
+      newsletterCampaignDelivery,
+    },
+    processQueuedCampaigns() {
+      return runQueuedNewsletterCampaigns?.() ?? Promise.resolve(0);
     },
   });
 
@@ -45,6 +57,8 @@ export function createNewsletterBackendHostPluginContribution(options: {
     tables: {
       newsletterSubscriber,
       newsletterActionToken,
+      newsletterCampaign,
+      newsletterCampaignDelivery,
       projectMeta,
       projectPluginInstance,
     },
@@ -115,8 +129,21 @@ export function createNewsletterBackendHostPluginContribution(options: {
       }) {
         return buildNewsletterConfirmationEmail(hostOptions);
       },
+      buildCampaignEmail(hostOptions: {
+        projectTitle: string;
+        recipientName?: string | null;
+        subject: string;
+        body: string;
+        unsubscribeUrl?: string | null;
+        mode: "newsletter" | "waitlist";
+        isTest?: boolean;
+      }) {
+        return buildNewsletterCampaignEmail(hostOptions);
+      },
     },
   });
+
+  runQueuedNewsletterCampaigns = () => contribution.service.processQueuedCampaigns();
 
   return {
     ...contribution,

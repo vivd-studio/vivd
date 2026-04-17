@@ -42,6 +42,7 @@ export interface NewsletterPluginTables {
   newsletterSubscriber: any;
   newsletterActionToken: any;
   newsletterCampaign: any;
+  newsletterCampaignDelivery: any;
   projectMeta: any;
   projectPluginInstance: any;
 }
@@ -102,6 +103,7 @@ export interface NewsletterEmailDeliveryServicePort {
   }): Promise<{
     accepted: boolean;
     provider: string;
+    messageId?: string | null;
     error?: string | null;
   }>;
 }
@@ -114,6 +116,19 @@ export interface NewsletterEmailTemplatesPort {
     unsubscribeUrl: string;
     expiresInSeconds: number;
     mode: "newsletter" | "waitlist";
+  }): Promise<{
+    subject: string;
+    text: string;
+    html: string;
+  }>;
+  buildCampaignEmail(options: {
+    projectTitle: string;
+    recipientName?: string | null;
+    subject: string;
+    body: string;
+    unsubscribeUrl?: string | null;
+    mode: "newsletter" | "waitlist";
+    isTest?: boolean;
   }): Promise<{
     subject: string;
     text: string;
@@ -140,8 +155,12 @@ export interface NewsletterPluginIntegrationHooksDeps {
   db: NewsletterPluginDatabase;
   tables: Pick<
     NewsletterPluginTables,
-    "newsletterSubscriber" | "newsletterActionToken" | "newsletterCampaign"
+    | "newsletterSubscriber"
+    | "newsletterActionToken"
+    | "newsletterCampaign"
+    | "newsletterCampaignDelivery"
   >;
+  processQueuedCampaigns?: () => Promise<number>;
 }
 
 export interface NewsletterSubscribeInput {
@@ -268,6 +287,34 @@ export interface NewsletterPluginServicePort {
     campaignId: string;
     status: "deleted";
   }>;
+  testSendCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+    email: string;
+  }): Promise<{
+    campaignId: string;
+    status: "test_sent";
+    email: string;
+  }>;
+  sendCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "queued";
+    recipientCount: number;
+  }>;
+  cancelCampaign(options: {
+    organizationId: string;
+    projectSlug: string;
+    campaignId: string;
+  }): Promise<{
+    campaignId: string;
+    status: "canceled";
+  }>;
+  processQueuedCampaigns(): Promise<number>;
   listSubscribers(options: {
     organizationId: string;
     projectSlug: string;

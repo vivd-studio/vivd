@@ -26,6 +26,10 @@ export const contactFormPluginDefinition = {
   kind: "native",
   name: "Contact Form",
   description: "Collect visitor inquiries and store submissions in Vivd.",
+  agentHints: [
+    "Use `vivd plugins snippets contact_form [html|astro]` for the exact install snippet instead of rebuilding the form by hand.",
+    "Leave `sourceHosts` empty unless the user explicitly needs a manual allowlist. Setting it overrides Vivd's auto-detected published, tenant, and Studio preview hosts.",
+  ],
   category: "forms",
   version: 1,
   sortOrder: 10,
@@ -129,7 +133,10 @@ export interface ContactFormPluginInfoSource {
     submitEndpoint: string;
     expectedFields: string[];
     optionalFields: string[];
+    configuredSourceHosts: string[];
     inferredAutoSourceHosts: string[];
+    effectiveSourceHosts: string[];
+    turnstileExpectedDomains: string[];
     turnstileEnabled: boolean;
     turnstileConfigured: boolean;
   };

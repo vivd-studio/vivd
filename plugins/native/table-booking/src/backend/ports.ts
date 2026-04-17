@@ -7,6 +7,16 @@ import type {
   TableBookingSummaryPayload,
 } from "../shared/summary";
 
+export type TableBookingSourceChannel =
+  | "online"
+  | "phone"
+  | "walk_in"
+  | "staff_manual";
+export type TableBookingCapacityAdjustmentMode =
+  | "cover_holdback"
+  | "effective_capacity_override"
+  | "closed";
+
 export interface TableBookingPluginInstanceRow {
   id: string;
   organizationId: string;
@@ -40,6 +50,7 @@ export interface TableBookingPluginDatabase {
 export interface TableBookingPluginTables {
   tableBookingReservation: any;
   tableBookingActionToken: any;
+  tableBookingCapacityAdjustment: any;
   projectMeta: any;
   projectPluginInstance: any;
 }
@@ -174,8 +185,74 @@ export interface TableBookingPluginIntegrationHooksDeps {
   db: TableBookingPluginDatabase;
   tables: Pick<
     TableBookingPluginTables,
-    "tableBookingReservation" | "tableBookingActionToken"
+    | "tableBookingReservation"
+    | "tableBookingActionToken"
+    | "tableBookingCapacityAdjustment"
   >;
+}
+
+export interface TableBookingCapacityAdjustmentRecord {
+  id: string;
+  serviceDate: string;
+  startTime: string;
+  endTime: string;
+  mode: TableBookingCapacityAdjustmentMode;
+  capacityValue: number | null;
+  reason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TableBookingDayCapacityWindowRecord {
+  key: string;
+  startTime: string;
+  endTime: string;
+  slotIntervalMinutes: number;
+  durationMinutes: number;
+  baseCapacity: number;
+  effectiveCapacity: number;
+  bookedCovers: number;
+  remainingCovers: number;
+  isClosed: boolean;
+  adjustments: TableBookingCapacityAdjustmentRecord[];
+}
+
+export interface TableBookingDayCapacityPayload {
+  pluginId: "table_booking";
+  enabled: boolean;
+  serviceDate: string;
+  timeZone: string | null;
+  windows: TableBookingDayCapacityWindowRecord[];
+  adjustments: TableBookingCapacityAdjustmentRecord[];
+}
+
+export interface TableBookingStaffReservationInput {
+  bookingId?: string | null;
+  organizationId: string;
+  projectSlug: string;
+  date: string;
+  time: string;
+  partySize: number;
+  name: string;
+  email: string;
+  phone: string;
+  notes?: string | null;
+  sourceChannel: TableBookingSourceChannel;
+  sendGuestNotification?: boolean;
+  requestedByUserId?: string | null;
+}
+
+export interface TableBookingCapacityAdjustmentInput {
+  adjustmentId?: string | null;
+  organizationId: string;
+  projectSlug: string;
+  serviceDate: string;
+  startTime: string;
+  endTime: string;
+  mode: TableBookingCapacityAdjustmentMode;
+  capacityValue?: number | null;
+  reason?: string | null;
+  requestedByUserId?: string | null;
 }
 
 export interface TableBookingAvailabilityInput {
@@ -303,12 +380,43 @@ export interface TableBookingPluginServicePort {
     organizationId: string;
     projectSlug: string;
     status: "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed";
+    sourceChannel?: "all" | TableBookingSourceChannel;
     search?: string;
     startDate?: string;
     endDate?: string;
     limit?: number;
     offset?: number;
   }): Promise<TableBookingBookingsPayload>;
+  getDayCapacity(options: {
+    organizationId: string;
+    projectSlug: string;
+    serviceDate: string;
+  }): Promise<TableBookingDayCapacityPayload>;
+  upsertStaffReservation(options: TableBookingStaffReservationInput): Promise<{
+    bookingId: string;
+    status: "confirmed";
+  }>;
+  upsertCapacityAdjustment(
+    options: TableBookingCapacityAdjustmentInput,
+  ): Promise<TableBookingCapacityAdjustmentRecord>;
+  deleteCapacityAdjustment(options: {
+    organizationId: string;
+    projectSlug: string;
+    adjustmentId: string;
+  }): Promise<{ adjustmentId: string }>;
+  exportBookings(options: {
+    organizationId: string;
+    projectSlug: string;
+    status: "all" | "confirmed" | "cancelled_by_guest" | "cancelled_by_staff" | "no_show" | "completed";
+    sourceChannel?: "all" | TableBookingSourceChannel;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    filename: string;
+    csv: string;
+    total: number;
+  }>;
   getAgenda(options: {
     organizationId: string;
     projectSlug: string;

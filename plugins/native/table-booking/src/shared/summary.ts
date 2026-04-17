@@ -26,8 +26,17 @@ export const tableBookingBookingStatusSchema = z.enum([
   "completed",
 ]);
 
+export const tableBookingSourceChannelSchema = z.enum([
+  "all",
+  "online",
+  "phone",
+  "walk_in",
+  "staff_manual",
+]);
+
 export const tableBookingBookingsReadInputSchema = z.object({
   status: tableBookingBookingStatusSchema.default("all"),
+  sourceChannel: tableBookingSourceChannelSchema.default("all"),
   search: z.string().trim().max(160).default(""),
   startDate: tableBookingIsoDateSchema.optional(),
   endDate: tableBookingIsoDateSchema.optional(),
@@ -44,6 +53,9 @@ export type TableBookingSummaryRange = z.infer<
 >;
 export type TableBookingBookingFilterStatus = z.infer<
   typeof tableBookingBookingStatusSchema
+>;
+export type TableBookingSourceChannelFilter = z.infer<
+  typeof tableBookingSourceChannelSchema
 >;
 export type TableBookingSummaryReadInput = z.infer<
   typeof tableBookingSummaryReadInputSchema
@@ -90,6 +102,20 @@ export const tableBookingBookingsReadDefinition = {
         "cancelled_by_staff",
         "no_show",
         "completed",
+      ],
+      defaultValue: "all",
+    },
+    {
+      name: "sourceChannel",
+      type: "string",
+      required: false,
+      description: "Filter by booking source channel.",
+      allowedValues: [
+        "all",
+        "online",
+        "phone",
+        "walk_in",
+        "staff_manual",
       ],
       defaultValue: "all",
     },
@@ -169,6 +195,7 @@ export interface TableBookingSummaryPayload {
 export interface TableBookingRecord {
   id: string;
   status: Exclude<TableBookingBookingFilterStatus, "all">;
+  sourceChannel: Exclude<TableBookingSourceChannelFilter, "all">;
   serviceDate: string;
   serviceStartAt: string;
   serviceEndAt: string;
@@ -190,6 +217,7 @@ export interface TableBookingBookingsPayload {
   pluginId: "table_booking";
   enabled: boolean;
   status: TableBookingBookingFilterStatus;
+  sourceChannel: TableBookingSourceChannelFilter;
   search: string;
   startDate: string | null;
   endDate: string | null;

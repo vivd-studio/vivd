@@ -57,12 +57,70 @@ function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
   return fallback;
 }
 
-function isSupportRequestEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean((env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim());
+async function resolveSupportEmailFromConnectedBackend(): Promise<string | null> {
+  const config = getConnectedBackendAuthConfig();
+  if (!config) {
+    return null;
+  }
+
+  try {
+    const queryInput = encodeURIComponent(
+      JSON.stringify({
+        studioId: config.studioId,
+      }),
+    );
+    const response = await fetch(
+      `${config.backendUrl}/api/trpc/studioApi.getSupportContact?input=${queryInput}`,
+      {
+        method: "GET",
+        headers: buildConnectedBackendHeaders(config, {
+          includeContentType: false,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`status=${response.status}`);
+    }
+
+    const body = (await response.json().catch(() => null)) as any;
+    const payload = unwrapTrpcBody(body) as { supportEmail?: string | null } | null;
+    const supportEmail = payload?.supportEmail?.trim();
+    return supportEmail || null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[AgentInstructions] Failed to load support contact from backend: ${message}`,
+    );
+    return null;
+  }
 }
 
-function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: boolean): string {
+async function isSupportRequestEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  connectedCliAvailable = false,
+): Promise<boolean> {
+  const configured = (env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+  if (configured) {
+    return true;
+  }
+
+  if (!connectedCliAvailable) {
+    return false;
+  }
+
+  return Boolean(await resolveSupportEmailFromConnectedBackend());
+}
+
+async function buildFallbackInstructions(
+  projectSlug: string,
+  connectedCliAvailable: boolean,
+): Promise<string> {
   const enabledPlugins = readEnabledPluginsFromEnv();
+  const supportRequestEnabled = await isSupportRequestEnabled(
+    process.env,
+    connectedCliAvailable,
+  );
   return renderDefaultVivdAgentInstructions({
     projectName: projectSlug,
     enabledPlugins,
@@ -72,7 +130,7 @@ function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: b
       process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
       false,
     ),
-    supportRequestEnabled: isSupportRequestEnabled(process.env),
+    supportRequestEnabled,
   });
 }
 
@@ -93,12 +151,12 @@ class AgentInstructionsService {
       parseProjectVersion(options?.projectVersion) ?? readProjectVersionFromEnv();
 
     if (!isConnectedMode()) {
-      return buildFallbackInstructions(projectSlug, false);
+      return await buildFallbackInstructions(projectSlug, false);
     }
 
     const config = getConnectedBackendAuthConfig();
     if (!config) {
-      return buildFallbackInstructions(projectSlug, false);
+      return await buildFallbackInstructions(projectSlug, false);
     }
 
     const cacheKey = this.buildCacheKey(projectSlug, projectVersion);
@@ -159,7 +217,7 @@ class AgentInstructionsService {
       if (cached?.instructions) {
         return cached.instructions;
       }
-      return buildFallbackInstructions(projectSlug, true);
+      return await buildFallbackInstructions(projectSlug, true);
     }
   }
 }

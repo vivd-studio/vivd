@@ -48,6 +48,12 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("- newsletter");
     expect(result.instructions).toContain("Plugin-specific notes");
     expect(result.instructions).toContain(
+      "Contact Form: Use `vivd plugins snippets contact_form [html|astro]` for the exact install snippet instead of rebuilding the form by hand.",
+    );
+    expect(result.instructions).toContain(
+      "Contact Form: Leave `sourceHosts` empty unless the user explicitly needs a manual allowlist. Setting it overrides Vivd's auto-detected published, tenant, and Studio preview hosts.",
+    );
+    expect(result.instructions).toContain(
       "Newsletter / Waitlist: Set `mode=waitlist` before generating snippets when the user asked for a waitlist.",
     );
     expect(result.instructions).toContain("Enabled plugins for this project");

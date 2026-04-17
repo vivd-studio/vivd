@@ -93,6 +93,7 @@ export function createTableBookingPluginBackendContribution(
       tables: {
         tableBookingReservation: deps.tables.tableBookingReservation,
         tableBookingActionToken: deps.tables.tableBookingActionToken,
+        tableBookingCapacityAdjustment: deps.tables.tableBookingCapacityAdjustment,
       },
     }),
     publicRoutes: [

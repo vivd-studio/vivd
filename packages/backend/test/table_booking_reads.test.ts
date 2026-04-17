@@ -17,6 +17,7 @@ const tableBookingReservationTable = pgTable("table_booking_reservation_test", {
   guestEmailNormalized: text("guest_email_normalized"),
   guestPhone: text("guest_phone"),
   notes: text("notes"),
+  sourceChannel: text("source_channel"),
   sourceHost: text("source_host"),
   sourcePath: text("source_path"),
   referrerHost: text("referrer_host"),
@@ -24,6 +25,8 @@ const tableBookingReservationTable = pgTable("table_booking_reservation_test", {
   utmMedium: text("utm_medium"),
   utmCampaign: text("utm_campaign"),
   lastIpHash: text("last_ip_hash"),
+  createdByUserId: text("created_by_user_id"),
+  updatedByUserId: text("updated_by_user_id"),
   confirmedAt: timestamp("confirmed_at"),
   cancelledAt: timestamp("cancelled_at"),
   cancelledBy: text("cancelled_by"),
@@ -37,6 +40,26 @@ const tableBookingActionTokenTable = pgTable("table_booking_action_token_test", 
   id: text("id"),
   reservationId: text("reservation_id"),
 });
+
+const tableBookingCapacityAdjustmentTable = pgTable(
+  "table_booking_capacity_adjustment_test",
+  {
+    id: text("id"),
+    organizationId: text("organization_id"),
+    projectSlug: text("project_slug"),
+    pluginInstanceId: text("plugin_instance_id"),
+    serviceDate: text("service_date"),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    mode: text("mode"),
+    capacityValue: integer("capacity_value"),
+    reason: text("reason"),
+    createdByUserId: text("created_by_user_id"),
+    updatedByUserId: text("updated_by_user_id"),
+    createdAt: timestamp("created_at"),
+    updatedAt: timestamp("updated_at"),
+  },
+);
 
 const projectMetaTable = pgTable("project_meta_test", {
   organizationId: text("organization_id"),
@@ -66,6 +89,7 @@ type StoredReservationRow = {
   guestEmailNormalized: string;
   guestPhone: string;
   notes: string | null;
+  sourceChannel: "online" | "phone" | "walk_in" | "staff_manual";
   sourceHost: string | null;
   sourcePath: string | null;
   referrerHost: string | null;
@@ -73,6 +97,8 @@ type StoredReservationRow = {
   utmMedium: string | null;
   utmCampaign: string | null;
   lastIpHash: string | null;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
   confirmedAt: Date | string | null;
   cancelledAt: Date | string | null;
   cancelledBy: string | null;
@@ -117,7 +143,25 @@ function matchesWhere<T extends Record<string, unknown>>(row: T, where: unknown)
   return Object.entries(filters).every(([key, value]) => row[key] === value);
 }
 
-function createHarness(rows: StoredReservationRow[]) {
+function pickSelectedFields<T extends Record<string, unknown>>(
+  row: T,
+  selection: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!selection || Object.keys(selection).length === 0) {
+    return { ...row };
+  }
+
+  return Object.fromEntries(
+    Object.keys(selection).map((key) => [key, row[key]]),
+  );
+}
+
+function createHarness(
+  rows: StoredReservationRow[],
+  options?: {
+    throwOperatorCapacityStorageErrorOnFindMany?: boolean;
+  },
+) {
   const now = new Date("2026-04-16T12:00:00.000Z");
   const pluginInstance = {
     id: "plugin-1",
@@ -143,22 +187,60 @@ function createHarness(rows: StoredReservationRow[]) {
     updatedAt: now,
   };
 
+  const buildSelectQuery = (selection?: Record<string, unknown>) => {
+    let workingRows = [...rows];
+
+    const query = {
+      from: vi.fn(() => query),
+      where: vi.fn((where?: unknown) => {
+        workingRows = rows.filter((row) => matchesWhere(row, where));
+        return query;
+      }),
+      orderBy: vi.fn(() => query),
+      limit: vi.fn((limit: number) => {
+        workingRows = workingRows.slice(0, limit);
+        return query;
+      }),
+      offset: vi.fn((offset: number) => {
+        workingRows = workingRows.slice(offset);
+        return query;
+      }),
+      then: (resolve: (value: unknown) => unknown, reject?: (error: unknown) => unknown) =>
+        Promise.resolve(
+          selection && Object.prototype.hasOwnProperty.call(selection, "count")
+            ? [{ count: workingRows.length }]
+            : workingRows.map((row) => pickSelectedFields(row, selection)),
+        ).then(resolve, reject),
+    };
+
+    return query;
+  };
+
   const db = {
     query: {
       tableBookingReservation: {
-        findMany: vi.fn(
-          async ({ where }: { where?: unknown }) =>
-            rows.filter((row) => matchesWhere(row, where)),
+        findMany: vi.fn(async ({ where }: { where?: unknown }) => {
+          if (options?.throwOperatorCapacityStorageErrorOnFindMany) {
+            const error = new Error(
+              'column "source_channel" does not exist',
+            ) as Error & { code?: string };
+            error.code = "42703";
+            throw error;
+          }
+
+          return rows.filter((row) => matchesWhere(row, where));
+        }),
+        findFirst: vi.fn(async ({ where }: { where?: unknown }) =>
+          rows.find((row) => matchesWhere(row, where)) ?? null,
         ),
       },
+      tableBookingCapacityAdjustment: {
+        findFirst: vi.fn(async () => null),
+      },
     },
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(async (where?: unknown) => [
-          { count: rows.filter((row) => matchesWhere(row, where)).length },
-        ]),
-      })),
-    })),
+    select: vi.fn((selection?: Record<string, unknown>) =>
+      buildSelectQuery(selection),
+    ),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -170,6 +252,7 @@ function createHarness(rows: StoredReservationRow[]) {
     tables: {
       tableBookingReservation: tableBookingReservationTable,
       tableBookingActionToken: tableBookingActionTokenTable,
+      tableBookingCapacityAdjustment: tableBookingCapacityAdjustmentTable,
       projectMeta: projectMetaTable,
       projectPluginInstance: projectPluginInstanceTable,
     } as any,
@@ -218,6 +301,7 @@ describe("table booking reads", () => {
         guestEmailNormalized: "felix@example.com",
         guestPhone: "+4912345",
         notes: "Window seat",
+        sourceChannel: "online",
         sourceHost: "test2.localhost",
         sourcePath: "/",
         referrerHost: null,
@@ -225,6 +309,8 @@ describe("table booking reads", () => {
         utmMedium: null,
         utmCampaign: null,
         lastIpHash: null,
+        createdByUserId: null,
+        updatedByUserId: null,
         confirmedAt: "2026-04-16T19:18:23.613Z",
         cancelledAt: null,
         cancelledBy: null,
@@ -258,5 +344,148 @@ describe("table booking reads", () => {
     });
     expect(agenda.groups).toHaveLength(1);
     expect(agenda.groups[0]?.bookings[0]?.id).toBe("booking-1");
+  });
+
+  it("filters booking reads by source channel", async () => {
+    const service = createHarness([
+      {
+        id: "booking-online",
+        organizationId: "default",
+        projectSlug: "nudels-without-pesto",
+        pluginInstanceId: "plugin-1",
+        status: "confirmed",
+        serviceDate: "2026-04-17",
+        serviceStartAt: "2026-04-17T17:30:00.000Z",
+        serviceEndAt: "2026-04-17T19:00:00.000Z",
+        partySize: 2,
+        guestName: "Online Guest",
+        guestEmail: "online@example.com",
+        guestEmailNormalized: "online@example.com",
+        guestPhone: "+491111",
+        notes: null,
+        sourceChannel: "online",
+        sourceHost: "test2.localhost",
+        sourcePath: "/",
+        referrerHost: null,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
+        lastIpHash: null,
+        createdByUserId: null,
+        updatedByUserId: null,
+        confirmedAt: "2026-04-16T19:18:23.613Z",
+        cancelledAt: null,
+        cancelledBy: null,
+        completedAt: null,
+        noShowAt: null,
+        createdAt: "2026-04-16T19:18:23.613Z",
+        updatedAt: "2026-04-16T19:18:23.613Z",
+      },
+      {
+        id: "booking-phone",
+        organizationId: "default",
+        projectSlug: "nudels-without-pesto",
+        pluginInstanceId: "plugin-1",
+        status: "confirmed",
+        serviceDate: "2026-04-17",
+        serviceStartAt: "2026-04-17T19:00:00.000Z",
+        serviceEndAt: "2026-04-17T20:30:00.000Z",
+        partySize: 4,
+        guestName: "Phone Guest",
+        guestEmail: "phone@example.com",
+        guestEmailNormalized: "phone@example.com",
+        guestPhone: "+492222",
+        notes: "Phone booking",
+        sourceChannel: "phone",
+        sourceHost: null,
+        sourcePath: null,
+        referrerHost: null,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
+        lastIpHash: null,
+        createdByUserId: "user-1",
+        updatedByUserId: "user-1",
+        confirmedAt: "2026-04-16T19:20:00.000Z",
+        cancelledAt: null,
+        cancelledBy: null,
+        completedAt: null,
+        noShowAt: null,
+        createdAt: "2026-04-16T19:20:00.000Z",
+        updatedAt: "2026-04-16T19:20:00.000Z",
+      },
+    ]);
+
+    const bookings = await service.listBookings({
+      organizationId: "default",
+      projectSlug: "nudels-without-pesto",
+      status: "all",
+      sourceChannel: "phone",
+      limit: 100,
+      offset: 0,
+    });
+
+    expect(bookings.total).toBe(1);
+    expect(bookings.rows).toHaveLength(1);
+    expect(bookings.rows[0]).toMatchObject({
+      id: "booking-phone",
+      sourceChannel: "phone",
+      guestName: "Phone Guest",
+    });
+  });
+
+  it("falls back to legacy reservation reads when operator-capacity columns are missing", async () => {
+    const service = createHarness(
+      [
+        {
+          id: "booking-legacy",
+          organizationId: "default",
+          projectSlug: "nudels-without-pesto",
+          pluginInstanceId: "plugin-1",
+          status: "confirmed",
+          serviceDate: "2026-04-17",
+          serviceStartAt: "2026-04-17T17:30:00.000Z",
+          serviceEndAt: "2026-04-17T19:00:00.000Z",
+          partySize: 2,
+          guestName: "Legacy Guest",
+          guestEmail: "legacy@example.com",
+          guestEmailNormalized: "legacy@example.com",
+          guestPhone: "+499999",
+          notes: null,
+          sourceChannel: "online",
+          sourceHost: "test2.localhost",
+          sourcePath: "/",
+          referrerHost: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          lastIpHash: null,
+          createdByUserId: null,
+          updatedByUserId: null,
+          confirmedAt: "2026-04-16T19:18:23.613Z",
+          cancelledAt: null,
+          cancelledBy: null,
+          completedAt: null,
+          noShowAt: null,
+          createdAt: "2026-04-16T19:18:23.613Z",
+          updatedAt: "2026-04-16T19:18:23.613Z",
+        },
+      ],
+      {
+        throwOperatorCapacityStorageErrorOnFindMany: true,
+      },
+    );
+
+    const summary = await service.getTableBookingSummary({
+      organizationId: "default",
+      projectSlug: "nudels-without-pesto",
+      rangeDays: 7,
+    });
+
+    expect(summary.enabled).toBe(true);
+    expect(summary.counts).toMatchObject({
+      upcomingBookings: 1,
+      upcomingCovers: 2,
+    });
   });
 });

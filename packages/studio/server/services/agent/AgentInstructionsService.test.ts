@@ -117,6 +117,55 @@ describe("studio AgentInstructionsService fallback", () => {
     }
   });
 
+  it("keeps support-command guidance when fallback mode resolves support contact from the backend", async () => {
+    isConnectedModeMock.mockReturnValue(true);
+    getConnectedBackendAuthConfigMock.mockReturnValue({
+      backendUrl: "https://backend.example.test",
+      studioId: "studio_1",
+      studioAccessToken: "token_1",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: {
+            data: {
+              json: {
+                supportEmail: "support@vivd.studio",
+              },
+            },
+          },
+        }),
+      } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    try {
+      const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
+        projectSlug: "demo-project",
+        projectVersion: 1,
+      });
+
+      expect(prompt).toContain("vivd support request <summary...>");
+      expect(prompt).toContain(
+        "You must ask for explicit user permission before using the support command or contacting Vivd support on the user's behalf.",
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "https://backend.example.test/api/trpc/studioApi.getSupportContact?input=%7B%22studioId%22%3A%22studio_1%22%7D",
+        expect.objectContaining({
+          method: "GET",
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("omits support-command guidance when support email is not configured", async () => {
     const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
       projectSlug: "demo-project",

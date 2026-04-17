@@ -2,60 +2,30 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { createInstalledPluginSourceAliases } from "../../plugins/installed/registry.helpers.mjs";
+import { createVivdWorkspaceSourceAliases } from "../../scripts/workspace/sourceAliases.mjs";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
       {
-        find: "@",
-        replacement: path.resolve(__dirname, "./client/src"),
+        find: /^@studio\/shared\/(.*)$/,
+        replacement: `${path.resolve(__dirname, "./shared")}/$1`,
       },
       {
-        find: "@studio/shared",
-        replacement: path.resolve(__dirname, "./shared"),
+        find: /^@\/(.*)$/,
+        replacement: `${path.resolve(__dirname, "./client/src")}/$1`,
       },
-      {
-        find: /^@vivd\/shared\/studio$/,
-        replacement: path.resolve(__dirname, "../shared/src/studio/index.ts"),
-      },
-      {
-        find: /^@vivd\/shared\/cms$/,
-        replacement: path.resolve(__dirname, "../shared/src/cms/index.ts"),
-      },
-      {
-        find: /^@vivd\/shared\/types$/,
-        replacement: path.resolve(__dirname, "../shared/src/types/index.ts"),
-      },
-      {
-        find: /^@vivd\/shared\/config$/,
-        replacement: path.resolve(__dirname, "../shared/src/config/index.ts"),
-      },
-      {
-        find: /^@vivd\/shared$/,
-        replacement: path.resolve(__dirname, "../shared/src/index.ts"),
-      },
-      {
-        find: /^@vivd\/installed-plugins$/,
-        replacement: path.resolve(__dirname, "../../plugins/installed/src/index.ts"),
-      },
-      {
-        find: /^@vivd\/installed-plugins\/(.*)$/,
-        replacement: path.resolve(__dirname, "../../plugins/installed/src/$1"),
-      },
-      ...createInstalledPluginSourceAliases({
+      ...createVivdWorkspaceSourceAliases({
         configDir: __dirname,
-        includeBareImports: false,
+        packageNames: [
+          "@vivd/installed-plugins",
+          "@vivd/plugin-sdk",
+          "@vivd/shared",
+          "@vivd/ui",
+        ],
+        includeBareInstalledPluginImports: false,
       }),
-      {
-        find: /^@vivd\/plugin-sdk$/,
-        replacement: path.resolve(__dirname, "../../plugins/sdk/src/index.ts"),
-      },
-      {
-        find: /^@vivd\/plugin-sdk\/(.*)$/,
-        replacement: path.resolve(__dirname, "../../plugins/sdk/src/$1"),
-      },
     ],
   },
   test: {
