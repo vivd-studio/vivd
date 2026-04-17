@@ -205,13 +205,14 @@ class PluginAccessRequestService {
   }): Promise<ProjectPluginAccessRequestState> {
     let existing: ProjectPluginAccessRequestRow | null = null;
     try {
-      existing = await db.query.projectPluginAccessRequest.findFirst({
-        where: and(
-          eq(projectPluginAccessRequest.organizationId, options.organizationId),
-          eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
-          eq(projectPluginAccessRequest.pluginId, options.pluginId),
-        ),
-      });
+      existing =
+        (await db.query.projectPluginAccessRequest.findFirst({
+          where: and(
+            eq(projectPluginAccessRequest.organizationId, options.organizationId),
+            eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
+            eq(projectPluginAccessRequest.pluginId, options.pluginId),
+          ),
+        })) ?? null;
     } catch (error) {
       if (
         !isMissingAccessRequestStorageError(error) &&
