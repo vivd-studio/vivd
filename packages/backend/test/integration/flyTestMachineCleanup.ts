@@ -21,6 +21,13 @@ function parseOptionalPositiveIntEnv(name: string): number | null {
   return parsed;
 }
 
+function parseCsvEnv(name: string): string[] {
+  return (process.env[name] || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function isOlderThan(createdAt: string | null, maxAgeMs: number): boolean {
   if (!createdAt) return false;
   const createdAtMs = Date.parse(createdAt);
@@ -58,6 +65,7 @@ export function isFlyCapacityExhaustionError(error: unknown): boolean {
 export async function cleanupStaleFlyTestMachines(options: {
   provider: FlyStudioMachineProvider;
   projectSlugPrefixes?: readonly string[];
+  excludeProjectSlugs?: readonly string[];
   maxAgeMs?: number;
   limit?: number;
   logPrefix?: string;
@@ -72,6 +80,10 @@ export async function cleanupStaleFlyTestMachines(options: {
     options.limit ??
     parseOptionalPositiveIntEnv("VIVD_FLY_TEST_STALE_MACHINE_DELETE_LIMIT") ??
     DEFAULT_STALE_TEST_MACHINE_DELETE_LIMIT;
+  const excludeProjectSlugs = new Set(
+    options.excludeProjectSlugs ??
+      parseCsvEnv("VIVD_FLY_TEST_STALE_MACHINE_EXCLUDE_PROJECT_SLUGS"),
+  );
   const logPrefix = options.logPrefix ?? "[Fly test GC]";
 
   let summaries: FlyStudioMachineSummary[];
@@ -86,6 +98,7 @@ export async function cleanupStaleFlyTestMachines(options: {
   const candidates = summaries
     .filter((summary) => {
       if (!matchesTestPrefix(summary, prefixes)) return false;
+      if (excludeProjectSlugs.has(summary.projectSlug)) return false;
       const state = (summary.state || "").toLowerCase();
       if (state === "destroyed" || state === "destroying") return false;
       return isOlderThan(summary.createdAt, maxAgeMs);

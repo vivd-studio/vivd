@@ -26,6 +26,8 @@
  *   VIVD_FLY_TEST_DRIFT_IMAGE=ghcr.io/vivd-studio/vivd-studio:v1.1.51-repro.2
  *   VIVD_FLY_PROD_SHAPE_WAKE_EXPECT_MAX_MS=6000
  *   VIVD_FLY_PROD_SHAPE_STOP_DRAIN_MS=3000
+ *   VIVD_FLY_PROD_SHAPE_PROJECT_SLUG=prod-shape-release-signal
+ *   VIVD_FLY_PROD_SHAPE_REUSE_MACHINE=1
  *   VIVD_FLY_KEEP_MACHINE=1
  */
 import crypto from "node:crypto";
@@ -59,6 +61,10 @@ const FLY_STUDIO_APP = (process.env.FLY_STUDIO_APP || "").trim();
 const TEST_IMAGE = (process.env.VIVD_FLY_TEST_IMAGE || "").trim();
 const TEST_IMAGE_TAG = (process.env.VIVD_FLY_TEST_IMAGE_TAG || "").trim();
 const TEST_DRIFT_IMAGE = (process.env.VIVD_FLY_TEST_DRIFT_IMAGE || "").trim();
+const TEST_ORGANIZATION_ID =
+  (process.env.VIVD_FLY_PROD_SHAPE_ORGANIZATION_ID || "").trim() || "integration";
+const TEST_PROJECT_SLUG = (process.env.VIVD_FLY_PROD_SHAPE_PROJECT_SLUG || "").trim();
+const REUSE_MACHINE = process.env.VIVD_FLY_PROD_SHAPE_REUSE_MACHINE === "1";
 const KEEP_MACHINE = process.env.VIVD_FLY_KEEP_MACHINE === "1";
 const SHOULD_RUN =
   RUN_TESTS && FLY_API_TOKEN.length > 0 && FLY_STUDIO_APP.length > 0;
@@ -676,18 +682,27 @@ describe("Fly production-shaped reconcile + wake + auth", () => {
     "warm reconciles a stopped drifted machine, re-parks it suspended, and wakes with working auth",
     { timeout: 600_000 },
     async () => {
+      if (REUSE_MACHINE && !TEST_PROJECT_SLUG) {
+        throw new Error(
+          "VIVD_FLY_PROD_SHAPE_PROJECT_SLUG is required when VIVD_FLY_PROD_SHAPE_REUSE_MACHINE=1",
+        );
+      }
+
       const provider = new FlyStudioMachineProvider();
       await cleanupStaleFlyTestMachines({
         provider,
+        excludeProjectSlugs: TEST_PROJECT_SLUG ? [TEST_PROJECT_SLUG] : [],
         logPrefix: "[Fly prod-shape smoke][stale GC]",
       });
       const originalConfiguredImage = process.env.FLY_STUDIO_IMAGE;
       const requestedImage = await resolveRequestedImage(provider);
 
-      const organizationId = "integration";
-      const projectSlug = `prod-shape-${Date.now().toString(36)}-${crypto
-        .randomBytes(2)
-        .toString("hex")}`;
+      const organizationId = TEST_ORGANIZATION_ID;
+      const projectSlug =
+        TEST_PROJECT_SLUG ||
+        `prod-shape-${Date.now().toString(36)}-${crypto
+          .randomBytes(2)
+          .toString("hex")}`;
       const version = 1;
       const startEnv = await resolveStableStudioMachineEnv({
         providerKind: "fly",
@@ -940,7 +955,7 @@ describe("Fly production-shaped reconcile + wake + auth", () => {
           delete process.env.FLY_STUDIO_IMAGE;
         }
 
-        if (machineId && KEEP_MACHINE) {
+        if (machineId && (KEEP_MACHINE || REUSE_MACHINE)) {
           console.warn(`[Fly prod-shape smoke] keeping machine for debugging: ${machineId}`);
         } else if (machineId) {
           try {

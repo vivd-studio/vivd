@@ -374,6 +374,9 @@ jobs:
     if: needs.build-studio.result == 'success' && needs.deploy.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    concurrency:
+      group: studio-fly-prod-shape-smoke
+      cancel-in-progress: false
     env:
       FLY_STUDIO_PORT_START: 3100
       FLY_STUDIO_CPU_KIND: performance
@@ -430,6 +433,9 @@ jobs:
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
           VIVD_FLY_TEST_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
           VIVD_FLY_TEST_DRIFT_IMAGE: ${{ format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, vars.FLY_STUDIO_RECONCILE_BASELINE_TAG || 'v1.1.51-repro.2') }}
+          VIVD_FLY_PROD_SHAPE_PROJECT_SLUG: "prod-shape-release-signal"
+          VIVD_FLY_PROD_SHAPE_REUSE_MACHINE: "1"
+          VIVD_FLY_TEST_STALE_MACHINE_EXCLUDE_PROJECT_SLUGS: "prod-shape-release-signal"
           VIVD_FLY_PROD_SHAPE_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_prod_shape_reconcile_wake_auth.test.ts
 

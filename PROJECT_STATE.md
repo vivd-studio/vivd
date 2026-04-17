@@ -28,7 +28,9 @@
 ## Latest Progress
 
 Keep entries short: one sentence on the change, plus a brief validation note when it matters.
+- 2026-04-17: The Fly prod-shaped release smoke now reuses one dedicated validate-app machine (`prod-shape-release-signal`) and the publish workflow serializes that job, so the release signal comes from a long-lived machine with history instead of a brand-new machine each run; the latest `v1.2.12` red run is currently blocked earlier by an unrelated `@vivd/plugin-sdk` test-import failure, not by a Fly suspend result.
 
+- 2026-04-17: Hardened plugin access-request storage handling so the project plugin catalog/info flows degrade gracefully when a backend is running newer plugin-access-request code against a DB that has not applied `0026_fancy_arclight.sql` yet; request emails still send, but pending state becomes stateless until migrations catch up. Validation: `npm run test:run -w @vivd/backend -- test/plugin_access_request_service.test.ts` is the focused check for this fallback.
 - 2026-04-17: Fixed the compact CMS asset/document cards so their footer stays stacked and the action buttons wrap inside narrow locale/item cards instead of overflowing past the card edge. Validation: `npm run test:run -w @vivd/studio -- client/src/components/cms/CmsAssetField.test.tsx` passes.
 - 2026-04-17: Moved the CMS entry reorder controls back out of the overflow menu into the visible entry-header action row so frequent ordering changes are one click again. Validation: `npm run test:run -w @vivd/studio -- client/src/components/cms/CmsEntryEditor.test.tsx` passes.
 - 2026-04-17: Slightly slowed the shared shell sidebar motion while keeping the original easing/peek behavior, so the standard slide-in/out and immersive peek feel less abrupt without changing their character. Validation: `npm run test:run -w @vivd/frontend -- src/components/ui/sidebar.test.tsx` passes.

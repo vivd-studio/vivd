@@ -12,6 +12,13 @@ import { getEmailDeliveryService } from "../integrations/EmailDeliveryService";
 import { getPluginManifest, type PluginId } from "./catalog";
 
 type ProjectPluginAccessRequestRow = typeof projectPluginAccessRequest.$inferSelect;
+type ErrorWithCause = {
+  message?: unknown;
+  code?: unknown;
+  cause?: unknown;
+};
+
+let hasWarnedAboutMissingAccessRequestStorage = false;
 
 function escapeHtml(value: string): string {
   return value
@@ -42,21 +49,118 @@ function toAccessRequestState(
   };
 }
 
+function collectErrorChain(error: unknown): ErrorWithCause[] {
+  const chain: ErrorWithCause[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    chain.push(current as ErrorWithCause);
+    current = (current as ErrorWithCause).cause;
+  }
+
+  return chain;
+}
+
+function getErrorMessage(error: ErrorWithCause | null | undefined): string {
+  return typeof error?.message === "string" ? error.message : "";
+}
+
+function getErrorCode(error: ErrorWithCause | null | undefined): string {
+  return typeof error?.code === "string" ? error.code : "";
+}
+
+function isMissingAccessRequestStorageError(error: unknown): boolean {
+  const chain = collectErrorChain(error);
+
+  return chain.some((entry) => {
+    const message = getErrorMessage(entry).toLowerCase();
+    const code = getErrorCode(entry);
+
+    if (
+      (code === "42P01" || code === "42703") &&
+      message.includes("project_plugin_access_request")
+    ) {
+      return true;
+    }
+
+    if (
+      message.includes("project_plugin_access_request") &&
+      (message.includes("does not exist") ||
+        message.includes("undefined table") ||
+        message.includes("undefined column"))
+    ) {
+      return true;
+    }
+
+    if (
+      message.includes("requested_by_user_id") &&
+      (message.includes("does not exist") || message.includes("undefined column"))
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+function isPluginAccessRequestWrapperError(
+  error: unknown,
+  operation: "select" | "update",
+): boolean {
+  const chain = collectErrorChain(error);
+
+  return chain.some((entry) => {
+    const message = getErrorMessage(entry).toLowerCase();
+    return (
+      message.includes(`failed query: ${operation}`) &&
+      message.includes('"project_plugin_access_request"')
+    );
+  });
+}
+
+function warnMissingAccessRequestStorage(error: unknown): void {
+  if (hasWarnedAboutMissingAccessRequestStorage) return;
+  hasWarnedAboutMissingAccessRequestStorage = true;
+
+  const detail =
+    collectErrorChain(error)
+      .map((entry) => getErrorMessage(entry).trim())
+      .find((message) => message.length > 0) ?? "unknown error";
+
+  console.warn(
+    `[Plugins] project_plugin_access_request storage is unavailable or out of date; falling back to stateless plugin access requests. Run backend db:migrate to apply migration 0026_fancy_arclight.sql. Error: ${detail}`,
+  );
+}
+
 class PluginAccessRequestService {
   async getRequestState(options: {
     organizationId: string;
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<ProjectPluginAccessRequestState> {
-    const row = await db.query.projectPluginAccessRequest.findFirst({
-      where: and(
-        eq(projectPluginAccessRequest.organizationId, options.organizationId),
-        eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
-        eq(projectPluginAccessRequest.pluginId, options.pluginId),
-      ),
-    });
+    try {
+      const row = await db.query.projectPluginAccessRequest.findFirst({
+        where: and(
+          eq(projectPluginAccessRequest.organizationId, options.organizationId),
+          eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
+          eq(projectPluginAccessRequest.pluginId, options.pluginId),
+        ),
+      });
 
-    return toAccessRequestState(row);
+      return toAccessRequestState(row);
+    } catch (error) {
+      if (
+        !isMissingAccessRequestStorageError(error) &&
+        !isPluginAccessRequestWrapperError(error, "select")
+      ) {
+        throw error;
+      }
+
+      warnMissingAccessRequestStorage(error);
+      return toAccessRequestState(null);
+    }
   }
 
   async listRequestStates(options: {
@@ -66,17 +170,29 @@ class PluginAccessRequestService {
   }): Promise<Map<PluginId, ProjectPluginAccessRequestState>> {
     if (options.pluginIds.length === 0) return new Map();
 
-    const rows = await db.query.projectPluginAccessRequest.findMany({
-      where: and(
-        eq(projectPluginAccessRequest.organizationId, options.organizationId),
-        eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
-        inArray(projectPluginAccessRequest.pluginId, options.pluginIds),
-      ),
-    });
+    try {
+      const rows = await db.query.projectPluginAccessRequest.findMany({
+        where: and(
+          eq(projectPluginAccessRequest.organizationId, options.organizationId),
+          eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
+          inArray(projectPluginAccessRequest.pluginId, options.pluginIds),
+        ),
+      });
 
-    return new Map(
-      rows.map((row) => [row.pluginId as PluginId, toAccessRequestState(row)]),
-    );
+      return new Map(
+        rows.map((row) => [row.pluginId as PluginId, toAccessRequestState(row)]),
+      );
+    } catch (error) {
+      if (
+        !isMissingAccessRequestStorageError(error) &&
+        !isPluginAccessRequestWrapperError(error, "select")
+      ) {
+        throw error;
+      }
+
+      warnMissingAccessRequestStorage(error);
+      return new Map();
+    }
   }
 
   async requestAccess(options: {
@@ -87,13 +203,25 @@ class PluginAccessRequestService {
     requesterEmail: string;
     requesterName?: string | null;
   }): Promise<ProjectPluginAccessRequestState> {
-    const existing = await db.query.projectPluginAccessRequest.findFirst({
-      where: and(
-        eq(projectPluginAccessRequest.organizationId, options.organizationId),
-        eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
-        eq(projectPluginAccessRequest.pluginId, options.pluginId),
-      ),
-    });
+    let existing: ProjectPluginAccessRequestRow | null = null;
+    try {
+      existing = await db.query.projectPluginAccessRequest.findFirst({
+        where: and(
+          eq(projectPluginAccessRequest.organizationId, options.organizationId),
+          eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
+          eq(projectPluginAccessRequest.pluginId, options.pluginId),
+        ),
+      });
+    } catch (error) {
+      if (
+        !isMissingAccessRequestStorageError(error) &&
+        !isPluginAccessRequestWrapperError(error, "select")
+      ) {
+        throw error;
+      }
+
+      warnMissingAccessRequestStorage(error);
+    }
 
     if (existing?.status === "pending") {
       return toAccessRequestState(existing);
@@ -169,28 +297,14 @@ class PluginAccessRequestService {
     }
 
     const now = new Date();
-    const [saved] = await db
-      .insert(projectPluginAccessRequest)
-      .values({
-        id: existing?.id ?? randomUUID(),
-        organizationId: options.organizationId,
-        projectSlug: options.projectSlug,
-        pluginId: options.pluginId,
-        status: "pending",
-        requestedByUserId: options.requestedByUserId,
-        requesterEmail: options.requesterEmail.trim(),
-        emailProvider: result.provider,
-        emailMessageId: result.messageId ?? null,
-        requestedAt: now,
-        resolvedAt: null,
-      })
-      .onConflictDoUpdate({
-        target: [
-          projectPluginAccessRequest.organizationId,
-          projectPluginAccessRequest.projectSlug,
-          projectPluginAccessRequest.pluginId,
-        ],
-        set: {
+    try {
+      const [saved] = await db
+        .insert(projectPluginAccessRequest)
+        .values({
+          id: existing?.id ?? randomUUID(),
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          pluginId: options.pluginId,
           status: "pending",
           requestedByUserId: options.requestedByUserId,
           requesterEmail: options.requesterEmail.trim(),
@@ -198,12 +312,43 @@ class PluginAccessRequestService {
           emailMessageId: result.messageId ?? null,
           requestedAt: now,
           resolvedAt: null,
-          updatedAt: now,
-        },
-      })
-      .returning();
+        })
+        .onConflictDoUpdate({
+          target: [
+            projectPluginAccessRequest.organizationId,
+            projectPluginAccessRequest.projectSlug,
+            projectPluginAccessRequest.pluginId,
+          ],
+          set: {
+            status: "pending",
+            requestedByUserId: options.requestedByUserId,
+            requesterEmail: options.requesterEmail.trim(),
+            emailProvider: result.provider,
+            emailMessageId: result.messageId ?? null,
+            requestedAt: now,
+            resolvedAt: null,
+            updatedAt: now,
+          },
+        })
+        .returning();
 
-    return toAccessRequestState(saved);
+      return toAccessRequestState(saved);
+    } catch (error) {
+      if (
+        !isMissingAccessRequestStorageError(error) &&
+        !isPluginAccessRequestWrapperError(error, "update")
+      ) {
+        throw error;
+      }
+
+      warnMissingAccessRequestStorage(error);
+      return {
+        status: "pending",
+        requestedAt: now.toISOString(),
+        requestedByUserId: options.requestedByUserId,
+        requesterEmail: options.requesterEmail.trim() || null,
+      };
+    }
   }
 
   async resolveRequest(options: {
@@ -211,19 +356,27 @@ class PluginAccessRequestService {
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<void> {
-    await db
-      .update(projectPluginAccessRequest)
-      .set({
-        status: "resolved",
-        resolvedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(projectPluginAccessRequest.organizationId, options.organizationId),
-          eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
-          eq(projectPluginAccessRequest.pluginId, options.pluginId),
-        ),
-      );
+    try {
+      await db
+        .update(projectPluginAccessRequest)
+        .set({
+          status: "resolved",
+          resolvedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(projectPluginAccessRequest.organizationId, options.organizationId),
+            eq(projectPluginAccessRequest.projectSlug, options.projectSlug),
+            eq(projectPluginAccessRequest.pluginId, options.pluginId),
+          ),
+        );
+    } catch (error) {
+      if (!isMissingAccessRequestStorageError(error)) {
+        throw error;
+      }
+
+      warnMissingAccessRequestStorage(error);
+    }
   }
 }
 
