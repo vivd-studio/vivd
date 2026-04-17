@@ -1,5 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import {
+  cleanupPluginProjectEntitlementFields,
+  preparePluginProjectEntitlementFields,
+} from "../../services/plugins/integrationHooks";
 import { projectMemberProcedure } from "../../trpc";
 import { pluginAccessRequestService } from "../../services/plugins/PluginAccessRequestService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
@@ -66,9 +70,53 @@ export const ensurePluginProcedure = projectMemberProcedure
     });
 
     if (entitlement.state !== "enabled") {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: `${input.pluginId} is not entitled for this project`,
+      const existingProjectEntitlement =
+        await pluginEntitlementService.getProjectEntitlementRow({
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          pluginId: input.pluginId,
+        });
+      const existingProjectEntitlementSnapshot = existingProjectEntitlement
+        ? {
+            turnstileWidgetId: existingProjectEntitlement.turnstileWidgetId ?? null,
+            turnstileSiteKey: existingProjectEntitlement.turnstileSiteKey ?? null,
+            turnstileSecretKey: existingProjectEntitlement.turnstileSecretKey ?? null,
+          }
+        : null;
+      const preparedEntitlementFields =
+        await preparePluginProjectEntitlementFields({
+          pluginId: input.pluginId,
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          state: "enabled",
+          turnstileEnabled: existingProjectEntitlement?.turnstileEnabled ?? false,
+          existingProjectEntitlement: existingProjectEntitlementSnapshot,
+        });
+
+      await pluginEntitlementService.upsertEntitlement({
+        organizationId: ctx.organizationId!,
+        scope: "project",
+        projectSlug: input.slug,
+        pluginId: input.pluginId,
+        state: "enabled",
+        managedBy: "manual_superadmin",
+        monthlyEventLimit: existingProjectEntitlement?.monthlyEventLimit ?? null,
+        hardStop: existingProjectEntitlement?.hardStop ?? true,
+        turnstileEnabled: preparedEntitlementFields.turnstileEnabled,
+        turnstileWidgetId: preparedEntitlementFields.turnstileWidgetId,
+        turnstileSiteKey: preparedEntitlementFields.turnstileSiteKey,
+        turnstileSecretKey: preparedEntitlementFields.turnstileSecretKey,
+        notes:
+          (existingProjectEntitlement?.notes || "").trim() ||
+          "Enabled from project plugin controls",
+        changedByUserId: ctx.session.user.id,
+      });
+
+      await cleanupPluginProjectEntitlementFields({
+        pluginId: input.pluginId,
+        state: "enabled",
+        turnstileEnabled: preparedEntitlementFields.turnstileEnabled,
+        existingProjectEntitlement: existingProjectEntitlementSnapshot,
       });
     }
 

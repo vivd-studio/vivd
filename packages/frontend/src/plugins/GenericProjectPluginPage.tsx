@@ -74,6 +74,7 @@ export default function GenericProjectPluginPage({
       await Promise.all([
         utils.plugins.catalog.invalidate({ slug: projectSlug }),
         utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
+        utils.project.list.invalidate(),
       ]);
     },
     onError: (error) => {
@@ -138,9 +139,13 @@ export default function GenericProjectPluginPage({
         : `${pluginInfo.catalog.name} is available for this instance, but a super-admin still needs to enable it for this project.`;
     }
     if (pluginInfo.entitlementState === "suspended") {
-      return `${pluginInfo.catalog.name} is suspended for this project.`;
+      return canManageProjectPlugins
+        ? `${pluginInfo.catalog.name} is suspended for this project. You can enable it again directly here.`
+        : `${pluginInfo.catalog.name} is suspended for this project.`;
     }
-    return `${pluginInfo.catalog.name} access is managed in the admin plugin settings. Ask a super-admin to enable it for this project.`;
+    return canManageProjectPlugins
+      ? `${pluginInfo.catalog.name} is not active for this project yet. You can enable it directly here.`
+      : `${pluginInfo.catalog.name} access is managed in the admin plugin settings. Ask a super-admin to enable it for this project.`;
   }, [canManageProjectPlugins, isSessionPending, pluginInfo]);
   const handleSaveConfig = () => {
     let parsedConfig: Record<string, unknown>;
@@ -210,9 +215,7 @@ export default function GenericProjectPluginPage({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {!pluginInfo?.enabled &&
-                pluginInfo?.entitlementState === "enabled" &&
-                canManageProjectPlugins ? (
+                {!pluginInfo?.enabled && canManageProjectPlugins ? (
                   <Button
                     size="sm"
                     variant="outline"

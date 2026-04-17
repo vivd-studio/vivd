@@ -46,6 +46,7 @@ function getPluginInstallBadgeLabel(
 function getPluginStatusCopy(
   plugin: ProjectPluginCatalogItem,
   isExperimentalSolo: boolean,
+  canManageProjectPlugins: boolean,
 ): string {
   if (plugin.installState === "enabled") {
     return "Configured for this project and ready to open.";
@@ -54,7 +55,14 @@ function getPluginStatusCopy(
     return "Available in this instance and ready to enable for this project.";
   }
   if (plugin.installState === "suspended") {
-    return "Suspended for this project.";
+    return canManageProjectPlugins
+      ? "Suspended for this project. You can enable it again here."
+      : "Suspended for this project.";
+  }
+  if (canManageProjectPlugins) {
+    return isExperimentalSolo
+      ? "Not active in this experimental self-host compatibility install. You can enable it here for this project."
+      : "Not active for this project. You can enable it here.";
   }
   return isExperimentalSolo
     ? "Not active in this experimental self-host compatibility install."
@@ -107,7 +115,10 @@ export default function ProjectPlugins() {
   const genericEnsureMutation = trpc.plugins.ensure.useMutation({
     onSuccess: async () => {
       toast.success("Plugin enabled for this project");
-      await utils.plugins.catalog.invalidate({ slug });
+      await Promise.all([
+        utils.plugins.catalog.invalidate({ slug }),
+        utils.project.list.invalidate(),
+      ]);
     },
     onError: (error) => {
       toast.error("Failed to enable plugin", {
@@ -384,7 +395,11 @@ export default function ProjectPlugins() {
                             </p>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {getPluginStatusCopy(plugin, isExperimentalSolo)}
+                            {getPluginStatusCopy(
+                              plugin,
+                              isExperimentalSolo,
+                              canManageProjectPlugins,
+                            )}
                           </p>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             {plugin.instanceId ? (
@@ -400,7 +415,7 @@ export default function ProjectPlugins() {
                         </div>
 
                         <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end sm:justify-start">
-                          {plugin.installState === "available" && canManageProjectPlugins ? (
+                          {plugin.installState !== "enabled" && canManageProjectPlugins ? (
                             <Button
                               size="sm"
                               variant="outline"

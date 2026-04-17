@@ -6,13 +6,51 @@ const { pluginsOverviewUseQueryMock } = vi.hoisted(() => ({
   pluginsOverviewUseQueryMock: vi.fn(),
 }));
 
+const {
+  useUtilsMock,
+  ensureUseMutationMock,
+  ensureMutateMock,
+} = vi.hoisted(() => ({
+  useUtilsMock: vi.fn(),
+  ensureUseMutationMock: vi.fn(),
+  ensureMutateMock: vi.fn(),
+}));
+
+const { useSessionMock } = vi.hoisted(() => ({
+  useSessionMock: vi.fn(),
+}));
+
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    useUtils: useUtilsMock,
     organization: {
       pluginsOverview: {
         useQuery: pluginsOverviewUseQueryMock,
       },
     },
+    plugins: {
+      ensure: {
+        useMutation: ensureUseMutationMock,
+      },
+    },
+    project: {
+      list: {
+        useQuery: vi.fn(),
+      },
+    },
+  },
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  authClient: {
+    useSession: useSessionMock,
+  },
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -21,6 +59,36 @@ import { OrganizationPluginsTab } from "./OrganizationPluginsTab";
 describe("OrganizationPluginsTab", () => {
   beforeEach(() => {
     pluginsOverviewUseQueryMock.mockReset();
+    useUtilsMock.mockReset();
+    ensureUseMutationMock.mockReset();
+    ensureMutateMock.mockReset();
+    useSessionMock.mockReset();
+
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          role: "super_admin",
+        },
+      },
+      isPending: false,
+    });
+    useUtilsMock.mockReturnValue({
+      organization: {
+        pluginsOverview: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+      project: {
+        list: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    ensureUseMutationMock.mockReturnValue({
+      mutate: ensureMutateMock,
+      isPending: false,
+      variables: undefined,
+    });
     pluginsOverviewUseQueryMock.mockReturnValue({
       data: {
         rows: [
@@ -101,6 +169,7 @@ describe("OrganizationPluginsTab", () => {
       "href",
       "/vivd-studio/projects/acme-site/plugins",
     );
+    expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
   });
 
   it("filters rows by project, plugin, and issue search terms", () => {
@@ -119,5 +188,20 @@ describe("OrganizationPluginsTab", () => {
       target: { value: "turnstile syncing" },
     });
     expect(screen.getByText("Acme Site")).toBeInTheDocument();
+  });
+
+  it("offers a quick enable action for super-admin users", () => {
+    render(
+      <MemoryRouter>
+        <OrganizationPluginsTab />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable" }));
+
+    expect(ensureMutateMock).toHaveBeenCalledWith({
+      slug: "acme-site",
+      pluginId: "analytics",
+    });
   });
 });

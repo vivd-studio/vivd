@@ -137,9 +137,18 @@ describe("ProjectPlugins", () => {
           invalidate: vi.fn().mockResolvedValue(undefined),
         },
       },
+      project: {
+        list: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
     });
     catalogUseQueryMock.mockReturnValue({
       data: {
+        project: {
+          organizationId: "org-1",
+          slug: "site-1",
+        },
         plugins: [
           {
             pluginId: "contact_form",
@@ -161,7 +170,7 @@ describe("ProjectPlugins", () => {
           },
           {
             pluginId: "analytics",
-            installState: "available",
+            installState: "disabled",
             instanceId: null,
             instanceStatus: null,
             updatedAt: null,
@@ -219,7 +228,7 @@ describe("ProjectPlugins", () => {
     });
   });
 
-  it("shows project enable actions for available plugins", () => {
+  it("shows quick enable actions for inactive plugins", () => {
     render(
       <MemoryRouter>
         <ProjectPlugins />
@@ -229,9 +238,8 @@ describe("ProjectPlugins", () => {
     expect(
       screen.getAllByRole("button", { name: "Enable for this project" }),
     ).toHaveLength(2);
-    expect(
-      screen.getAllByText("Available in this instance and ready to enable for this project."),
-    ).toHaveLength(2);
+    expect(screen.getByText("Available in this instance and ready to enable for this project.")).toBeInTheDocument();
+    expect(screen.getByText("Not active for this project. You can enable it here.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Contact Form details" })).toHaveAttribute(
       "href",
       "/vivd-studio/projects/site-1/plugins/contact_form",

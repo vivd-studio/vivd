@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Plug, RefreshCcw, Search } from "lucide-react";
+import { AlertTriangle, Loader2, Plug, RefreshCcw, Search } from "lucide-react";
+import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
+import { authClient } from "@/lib/auth-client";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +72,24 @@ function includesAllSearchTerms(
 
 export function OrganizationPluginsTab() {
   const [search, setSearch] = useState("");
+  const utils = trpc.useUtils();
   const overviewQuery = trpc.organization.pluginsOverview.useQuery();
+  const { data: session } = authClient.useSession();
+  const canManageProjectPlugins = session?.user?.role === "super_admin";
+  const ensureMutation = trpc.plugins.ensure.useMutation({
+    onSuccess: async () => {
+      toast.success("Plugin enabled for this project");
+      await Promise.all([
+        utils.organization.pluginsOverview.invalidate(),
+        utils.project.list.invalidate(),
+      ]);
+    },
+    onError: (error) => {
+      toast.error("Failed to enable plugin", {
+        description: error.message,
+      });
+    },
+  });
   const rows = overviewQuery.data?.rows ?? [];
 
   const normalizedSearchTerms = useMemo(
@@ -99,7 +118,8 @@ export function OrganizationPluginsTab() {
         </CardTitle>
         <CardDescription>
           Org-wide plugin overview with key statuses and issue signals. Use row actions
-          to jump into project-level plugin configuration.
+          to jump into project-level plugin configuration. Super admins can enable
+          inactive plugins inline.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -158,10 +178,7 @@ export function OrganizationPluginsTab() {
                   <td className="px-3 py-2">
                     <div className="min-w-[320px] space-y-2">
                       {row.plugins.map((plugin) => (
-                        <div
-                          key={plugin.pluginId}
-                          className="rounded-md border bg-muted/15 p-2"
-                        >
+                        <div key={plugin.pluginId} className="rounded-md border bg-muted/15 p-2">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <div className="font-medium">{plugin.catalog.name}</div>
@@ -169,9 +186,40 @@ export function OrganizationPluginsTab() {
                                 {plugin.catalog.description}
                               </div>
                             </div>
-                            <Badge variant={getPluginStatusBadgeVariant(plugin)}>
-                              {getPluginStatusLabel(plugin)}
-                            </Badge>
+                            <div className="flex flex-col items-end gap-2">
+                              <Badge variant={getPluginStatusBadgeVariant(plugin)}>
+                                {getPluginStatusLabel(plugin)}
+                              </Badge>
+                              {canManageProjectPlugins &&
+                              plugin.installState !== "enabled" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    ensureMutation.mutate({
+                                      slug: row.projectSlug,
+                                      pluginId: plugin.pluginId,
+                                    })
+                                  }
+                                  disabled={
+                                    ensureMutation.isPending &&
+                                    ensureMutation.variables?.slug === row.projectSlug &&
+                                    ensureMutation.variables?.pluginId === plugin.pluginId
+                                  }
+                                >
+                                  {ensureMutation.isPending &&
+                                  ensureMutation.variables?.slug === row.projectSlug &&
+                                  ensureMutation.variables?.pluginId === plugin.pluginId ? (
+                                    <>
+                                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                      Enabling...
+                                    </>
+                                  ) : (
+                                    "Enable"
+                                  )}
+                                </Button>
+                              ) : null}
+                            </div>
                           </div>
                           {plugin.summaryLines.length > 0 ? (
                             <div className="mt-1 space-y-1 text-xs text-muted-foreground">

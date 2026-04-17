@@ -27,12 +27,26 @@ const {
   };
 });
 
-const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
+const {
+  resolveEffectiveEntitlementMock,
+  getProjectEntitlementRowMock,
+  upsertEntitlementMock,
+} = vi.hoisted(() => ({
   resolveEffectiveEntitlementMock: vi.fn(),
+  getProjectEntitlementRowMock: vi.fn(),
+  upsertEntitlementMock: vi.fn(),
 }));
 
 const { getPluginInstanceMock } = vi.hoisted(() => ({
   getPluginInstanceMock: vi.fn(),
+}));
+
+const {
+  preparePluginProjectEntitlementFieldsMock,
+  cleanupPluginProjectEntitlementFieldsMock,
+} = vi.hoisted(() => ({
+  preparePluginProjectEntitlementFieldsMock: vi.fn(),
+  cleanupPluginProjectEntitlementFieldsMock: vi.fn(),
 }));
 
 const {
@@ -89,7 +103,14 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
 vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     resolveEffectiveEntitlement: resolveEffectiveEntitlementMock,
+    getProjectEntitlementRow: getProjectEntitlementRowMock,
+    upsertEntitlement: upsertEntitlementMock,
   },
+}));
+
+vi.mock("../src/services/plugins/integrationHooks", () => ({
+  preparePluginProjectEntitlementFields: preparePluginProjectEntitlementFieldsMock,
+  cleanupPluginProjectEntitlementFields: cleanupPluginProjectEntitlementFieldsMock,
 }));
 
 vi.mock("../src/services/plugins/PluginAccessRequestService", () => ({
@@ -182,7 +203,11 @@ describe("plugins.generic router", () => {
     updatePluginConfigByIdMock.mockReset();
     runPluginActionMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
+    getProjectEntitlementRowMock.mockReset();
+    upsertEntitlementMock.mockReset();
     getPluginInstanceMock.mockReset();
+    preparePluginProjectEntitlementFieldsMock.mockReset();
+    cleanupPluginProjectEntitlementFieldsMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
     selectFromMock.mockClear();
@@ -191,6 +216,15 @@ describe("plugins.generic router", () => {
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
     selectWhereMock.mockResolvedValue([]);
     getPluginInstanceMock.mockResolvedValue(null);
+    getProjectEntitlementRowMock.mockResolvedValue(null);
+    upsertEntitlementMock.mockResolvedValue({});
+    preparePluginProjectEntitlementFieldsMock.mockResolvedValue({
+      turnstileEnabled: false,
+      turnstileWidgetId: null,
+      turnstileSiteKey: null,
+      turnstileSecretKey: null,
+    });
+    cleanupPluginProjectEntitlementFieldsMock.mockResolvedValue(undefined);
     resolveEffectiveEntitlementMock.mockResolvedValue({
       organizationId: "org-1",
       projectSlug: "site-1",
@@ -283,6 +317,89 @@ describe("plugins.generic router", () => {
       message: "Only super-admin users can enable plugins",
     });
     expect(ensurePluginInstanceMock).not.toHaveBeenCalled();
+  });
+
+  it("auto-enables disabled plugins for super-admin users", async () => {
+    resolveEffectiveEntitlementMock.mockResolvedValueOnce({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "contact_form",
+      scope: "project",
+      state: "disabled",
+      managedBy: "manual_superadmin",
+      monthlyEventLimit: null,
+      hardStop: true,
+      turnstileEnabled: false,
+      turnstileWidgetId: null,
+      turnstileSiteKey: null,
+      turnstileSecretKey: null,
+      notes: "",
+      changedByUserId: null,
+      updatedAt: new Date(),
+    });
+    ensurePluginInstanceMock.mockResolvedValueOnce({
+      instanceId: "ppi-1",
+      created: true,
+      status: "enabled",
+    });
+
+    const caller = pluginsRouter.createCaller(
+      makeContext({
+        session: {
+          session: {
+            id: "sess-1",
+            userId: "user-1",
+            expiresAt: new Date(Date.now() + 60_000),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ipAddress: null,
+            userAgent: null,
+          },
+          user: {
+            id: "user-1",
+            email: "super@example.com",
+            name: "Super User",
+            role: "super_admin",
+            emailVerified: true,
+            image: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      }),
+    );
+
+    await expect(
+      caller.ensure({ slug: "site-1", pluginId: "contact_form" }),
+    ).resolves.toMatchObject({
+      instanceId: "ppi-1",
+      status: "enabled",
+    });
+
+    expect(preparePluginProjectEntitlementFieldsMock).toHaveBeenCalledWith({
+      pluginId: "contact_form",
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      state: "enabled",
+      turnstileEnabled: false,
+      existingProjectEntitlement: null,
+    });
+    expect(upsertEntitlementMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        scope: "project",
+        projectSlug: "site-1",
+        pluginId: "contact_form",
+        state: "enabled",
+        managedBy: "manual_superadmin",
+        changedByUserId: "user-1",
+      }),
+    );
+    expect(ensurePluginInstanceMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "contact_form",
+    });
   });
 
   it("sends plugin access requests for non-super-admin project members", async () => {
