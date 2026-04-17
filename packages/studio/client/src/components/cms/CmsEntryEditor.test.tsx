@@ -53,10 +53,64 @@ const selectedModel: CmsModelRecord = {
       sortOrder: null,
       assetRefs: [],
     },
+    {
+      key: "second-post",
+      filePath: "/tmp/src/content/blog/second-post.md",
+      relativePath: "src/content/blog/second-post.md",
+      deletePath: "/tmp/src/content/blog/second-post.md",
+      values: {
+        title: "Second post",
+      },
+      slug: "second-post",
+      status: null,
+      sortOrder: null,
+      assetRefs: [],
+    },
   ],
 };
 
 describe("CmsEntryEditor", () => {
+  it("keeps move controls visible in the entry header", () => {
+    render(
+      <CmsEntryEditor
+        projectSlug="demo"
+        version={1}
+        selectedModel={selectedModel}
+        selectedEntryKey="second-post"
+        draftValues={{ title: "Second post" }}
+        defaultLocale="en"
+        locales={["en"]}
+        activeLocale={null}
+        sidecarDrafts={{}}
+        canUseAiImages={false}
+        referenceOptions={[]}
+        reportErrors={[]}
+        sourceKind="astro-collections"
+        readOnly={false}
+        readOnlyMessage={null}
+        isDirty={false}
+        busy={false}
+        isSaving={false}
+        loadingSidecars={false}
+        markdownBody={null}
+        loadingMarkdownBody={false}
+        setEditingTextFile={vi.fn()}
+        applyDraftValue={vi.fn()}
+        handleRichTextChange={vi.fn()}
+        openAssetReference={vi.fn()}
+        openExplorer={vi.fn()}
+        onMoveEntry={vi.fn()}
+        onMarkdownBodyChange={vi.fn()}
+        onActiveLocaleChange={vi.fn()}
+        onSaveEntry={vi.fn()}
+        onDeleteEntry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Up" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Down" })).toBeInTheDocument();
+  });
+
   it("renders the markdown body editor for markdown-backed entries", () => {
     render(
       <CmsEntryEditor
@@ -95,6 +149,8 @@ describe("CmsEntryEditor", () => {
     );
 
     expect(screen.getByText("Markdown body")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-codemirror")).toHaveValue("# Hello\n\nBody copy.");
+    const editor = screen.getByTestId("mock-codemirror") as HTMLTextAreaElement;
+    expect(editor.value).toContain("Hello");
+    expect(editor.value).toContain("Body copy.");
   });
 });

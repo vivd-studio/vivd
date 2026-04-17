@@ -177,6 +177,28 @@ export function CmsEntryEditor({
             </div>
           ) : null}
           {!readOnly ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onMoveEntry(-1)}
+                disabled={busy || selectedEntryIndex <= 0}
+              >
+                <ArrowUp className="mr-2 h-4 w-4" />
+                Up
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onMoveEntry(1)}
+                disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
+              >
+                <ArrowDown className="mr-2 h-4 w-4" />
+                Down
+              </Button>
+            </>
+          ) : null}
+          {!readOnly ? (
             <Button size="sm" disabled={!isDirty || busy} onClick={onSaveEntry}>
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -193,25 +215,6 @@ export function CmsEntryEditor({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {!readOnly ? (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => onMoveEntry(-1)}
-                    disabled={busy || selectedEntryIndex <= 0}
-                  >
-                    <ArrowUp className="mr-2 h-4 w-4" />
-                    Move up
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => onMoveEntry(1)}
-                    disabled={busy || selectedEntryIndex >= selectedModel.entries.length - 1}
-                  >
-                    <ArrowDown className="mr-2 h-4 w-4" />
-                    Move down
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              ) : null}
               <DropdownMenuItem
                 onClick={() => setEditingTextFile(selectedModel.relativeSchemaPath)}
               >

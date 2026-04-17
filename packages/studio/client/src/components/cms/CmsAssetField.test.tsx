@@ -445,4 +445,34 @@ describe("CmsAssetField", () => {
 
     expect(onChange).toHaveBeenCalledWith("/pdfs/products/apollo/replacement.pdf");
   });
+
+  it("keeps compact asset footers stacked so action buttons stay inside narrow cards", () => {
+    render(
+      <CmsAssetField
+        projectSlug="demo"
+        version={1}
+        fieldId="download-file"
+        label="Download"
+        field={{ type: "asset", accepts: [".pdf", "application/pdf"] }}
+        value="/pdfs/products/apollo/safety-sheet.pdf"
+        entryRelativePath="src/content/products/apollo.yaml"
+        storageKind="public"
+        assetRootPath="public/pdfs"
+        defaultFolderPath="public/pdfs/products/apollo"
+        canUseAiImages={false}
+        compact
+        onChange={vi.fn()}
+        onOpenAsset={vi.fn()}
+      />,
+    );
+
+    const footer = screen.getByTestId("download-file-asset-footer");
+    const actions = screen.getByTestId("download-file-asset-actions");
+
+    expect(footer.className).not.toContain("sm:flex-row");
+    expect(actions.className).toContain("w-full");
+    expect(screen.getByRole("button", { name: "Choose other" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Overwrite file" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Clear link" })).toBeVisible();
+  });
 });

@@ -40,6 +40,7 @@ import {
 import type { AssetItem } from "@/components/asset-explorer/types";
 import { uploadFilesToStudioPath } from "@/components/asset-explorer/upload";
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
+import { cn } from "@/lib/utils";
 import { CmsAssetPickerSheet } from "./CmsAssetPickerSheet";
 import {
   buildStoredAssetReferencePath,
@@ -345,8 +346,18 @@ export function CmsAssetField({
     replaceFileInputRef.current?.click();
   }, []);
 
+  const assetFooterClassName = cn(
+    "flex flex-col gap-3 border-t border-border/50 bg-background/90 px-3 py-3",
+    compact ? null : "sm:flex-row sm:items-end sm:justify-between",
+  );
+
   const actionButtons = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2",
+        compact ? "w-full" : null,
+      )}
+    >
       {!readOnly ? (
         <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
           {hasAsset ? "Choose other" : imageMode ? "Choose image" : "Choose file"}
@@ -475,9 +486,17 @@ export function CmsAssetField({
                 </div>
               </div>
             </ContextMenuTrigger>
-            <div className="flex flex-col gap-3 border-t border-border/50 bg-background/90 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+            <div
+              data-testid={`${fieldId}-asset-footer`}
+              className={assetFooterClassName}
+            >
               {pathInput}
-              <div className="shrink-0">{actionButtons}</div>
+              <div
+                data-testid={`${fieldId}-asset-actions`}
+                className={compact ? "min-w-0 w-full" : "shrink-0"}
+              >
+                {actionButtons}
+              </div>
             </div>
           </div>
           <ContextMenuContent className="w-52">
@@ -545,9 +564,17 @@ export function CmsAssetField({
             </div>
             {openPreviewButton}
           </div>
-          <div className="flex flex-col gap-3 border-t border-border/50 bg-background/90 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+          <div
+            data-testid={`${fieldId}-asset-footer`}
+            className={assetFooterClassName}
+          >
             {pathInput}
-            <div className="shrink-0">{actionButtons}</div>
+            <div
+              data-testid={`${fieldId}-asset-actions`}
+              className={compact ? "min-w-0 w-full" : "shrink-0"}
+            >
+              {actionButtons}
+            </div>
           </div>
         </div>
       )}
@@ -563,9 +590,17 @@ export function CmsAssetField({
             ? "Choose a file from the public files or upload a new one."
             : "Choose a file from the media library or upload a new one."}
       </p>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div
+        data-testid={`${fieldId}-asset-footer`}
+        className={cn("mt-4 flex flex-col gap-3", compact ? null : "sm:flex-row sm:items-end sm:justify-between")}
+      >
         {pathInput}
-        <div className="shrink-0">{actionButtons}</div>
+        <div
+          data-testid={`${fieldId}-asset-actions`}
+          className={compact ? "min-w-0 w-full" : "shrink-0"}
+        >
+          {actionButtons}
+        </div>
       </div>
     </div>
   );

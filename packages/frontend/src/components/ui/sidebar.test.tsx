@@ -12,7 +12,7 @@ import {
 } from "./sidebar";
 
 const SIDEBAR_STORAGE_KEY = "sidebar_state";
-const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 340;
+const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 260;
 
 function TestSidebar({
   defaultOpen = true,
