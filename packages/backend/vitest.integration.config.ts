@@ -34,6 +34,14 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../shared/src/index.ts"),
       },
       {
+        find: /^@vivd\/plugin-sdk$/,
+        replacement: path.resolve(__dirname, "../../plugins/sdk/src/index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-sdk\/(.*)$/,
+        replacement: path.resolve(__dirname, "../../plugins/sdk/src/$1"),
+      },
+      {
         find: /^@vivd\/backend$/,
         replacement: path.resolve(__dirname, "./src/index.ts"),
       },
