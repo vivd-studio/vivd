@@ -1043,6 +1043,42 @@ function readStudioTokenFromUrl(urlString) {
   }
 }
 
+async function readStudioTrpcMutation(
+  requestContext,
+  trpcUrl,
+  procedureName,
+  input,
+  studioToken,
+) {
+  const mutationUrl = `${trpcUrl.replace(/\/+$/u, "")}/${procedureName}`;
+  const headers = {
+    "content-type": "application/json",
+  };
+  if (typeof studioToken === "string" && studioToken.trim()) {
+    headers[STUDIO_AUTH_HEADER] = studioToken.trim();
+  }
+
+  const response = await requestContext.post(mutationUrl, {
+    headers,
+    data: input,
+    failOnStatusCode: false,
+  });
+  const body = await response.text();
+
+  if (!response.ok()) {
+    const detail = body.trim();
+    throw new Error(
+      detail
+        ? `${procedureName} failed (${response.status()}) [${mutationUrl}]: ${detail}`
+        : `${procedureName} failed (${response.status()}) [${mutationUrl}]`,
+    );
+  }
+
+  const payload = JSON.parse(body);
+  const result = Array.isArray(payload) ? payload[0] : payload;
+  return result?.result?.data?.json ?? result?.result?.data ?? result;
+}
+
 function rewriteLocalhostUrlToIpv4(urlString) {
   const url = new URL(urlString);
   const originalHost = url.host;
@@ -1137,6 +1173,55 @@ function countPendingQuestionsForSession(questions, sessionId) {
   }).length;
 }
 
+function listPendingQuestionsForSession(questions, sessionId) {
+  if (!sessionId) return [];
+
+  return (Array.isArray(questions) ? questions : []).filter((question) => {
+    const questionSessionId = question?.sessionID ?? question?.sessionId;
+    return questionSessionId === sessionId;
+  });
+}
+
+function buildAutoAnswersForQuestionRequest(request) {
+  const questions = Array.isArray(request?.questions) ? request.questions : [];
+
+  return questions.map((question, index) => {
+    const options = Array.isArray(question?.options) ? question.options : [];
+    const firstLabel =
+      typeof options[0]?.label === "string" ? options[0].label.trim() : "";
+    if (firstLabel) {
+      return [firstLabel];
+    }
+
+    if (question?.custom !== false) {
+      return [`Smoke answer ${index + 1}`];
+    }
+
+    throw new Error(
+      `Question request ${request?.id ?? "unknown"} does not expose an auto-answerable option for question ${index + 1}`,
+    );
+  });
+}
+
+async function autoReplyToPendingQuestion(options) {
+  const answers = buildAutoAnswersForQuestionRequest(options.request);
+
+  await readStudioTrpcMutation(
+    options.requestContext,
+    options.trpcUrl,
+    "agentChat.replyQuestion",
+    {
+      projectSlug: options.projectSlug,
+      version: options.version,
+      requestId: options.request.id,
+      answers,
+    },
+    options.studioToken,
+  );
+
+  return answers;
+}
+
 async function readInitialGenerationProgress(options) {
   const bootstrapResult = await Promise.allSettled([
     readStudioTrpcQuery(
@@ -1174,10 +1259,8 @@ async function readInitialGenerationProgress(options) {
 
   return {
     actionCount: countRecordedInitialGenerationActions(messages),
-    pendingQuestionCount: countPendingQuestionsForSession(
-      questions,
-      options.sessionId,
-    ),
+    pendingQuestionCount: countPendingQuestionsForSession(questions, options.sessionId),
+    pendingQuestions: listPendingQuestionsForSession(questions, options.sessionId),
     sessionStatus: statuses?.[options.sessionId] ?? null,
     messagesError: bootstrapError,
     statusesError: bootstrapError,
@@ -1264,9 +1347,12 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   let lastProgressError = null;
   let lastSessionHistoryEvidence = null;
   let lastSessionHistoryProbeAt = 0;
+  let lastPendingQuestions = [];
   let trpcUrl = null;
   let studioToken = null;
   let busyGraceApplied = false;
+  let answeredQuestionCount = 0;
+  const answeredQuestionRequestIds = new Set();
 
   while (true) {
     const elapsedMs = Date.now() - startedAt;
@@ -1353,6 +1439,9 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
         });
         lastRecordedActionCount = progress.actionCount;
         lastPendingQuestionCount = progress.pendingQuestionCount;
+        lastPendingQuestions = Array.isArray(progress.pendingQuestions)
+          ? progress.pendingQuestions
+          : [];
         lastSessionStatus = progress.sessionStatus?.type ?? null;
         lastProgressError = [progress.messagesError, progress.statusesError]
           .filter(Boolean)
@@ -1402,13 +1491,39 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
     );
 
     if (lastPendingQuestionCount > 0) {
+      const requestToAnswer = lastPendingQuestions.find(
+        (request) => request?.id && !answeredQuestionRequestIds.has(request.id),
+      );
+
       log(
         `Observed initial-generation agent question for session ${sessionIdFromUrl ?? "unknown"} (pendingQuestions=${lastPendingQuestionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"})`,
       );
-      return `observed-agent-question-${lastPendingQuestionCount}`;
+
+      if (requestToAnswer && trpcUrl && sessionIdFromUrl) {
+        const autoAnswers = await autoReplyToPendingQuestion({
+          requestContext: page.context().request,
+          trpcUrl,
+          studioToken,
+          projectSlug: options.projectSlug,
+          version: options.version,
+          request: requestToAnswer,
+        });
+        answeredQuestionRequestIds.add(requestToAnswer.id);
+        answeredQuestionCount += 1;
+        log(
+          `Auto-replied to initial-generation question ${requestToAnswer.id} with ${autoAnswers.length} answer group(s)`,
+        );
+        await sleep(INITIAL_GENERATION_ACTION_POLL_MS);
+        continue;
+      }
     }
 
     if (lastRecordedActionCount >= minRecordedActions) {
+      const decorateOutcome = (outcome) =>
+        answeredQuestionCount > 0
+          ? `answered-${answeredQuestionCount}-agent-question${answeredQuestionCount === 1 ? "" : "s"}-then-${outcome}`
+          : outcome;
+
       log(
         `Observed initial-generation progress for session ${sessionIdFromUrl ?? "unknown"} (recordedActions=${lastRecordedActionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"}); checking for a stop opportunity`,
       );
@@ -1422,11 +1537,13 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
             settleTimeoutMs,
             "send button after stop",
           );
-          return `stopped-after-${lastRecordedActionCount}-recorded-actions`;
+          return decorateOutcome(
+            `stopped-after-${lastRecordedActionCount}-recorded-actions`,
+          );
         }
       }
 
-      return `observed-${lastRecordedActionCount}-recorded-actions`;
+      return decorateOutcome(`observed-${lastRecordedActionCount}-recorded-actions`);
     }
 
     await sleep(INITIAL_GENERATION_ACTION_POLL_MS);
