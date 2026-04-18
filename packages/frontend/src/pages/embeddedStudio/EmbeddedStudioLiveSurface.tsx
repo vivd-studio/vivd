@@ -1,10 +1,10 @@
 import type { ReactNode, RefObject } from "react";
-import { Button } from "@vivd/ui";
 
+import { StudioLoadFailurePanel } from "@/components/common/StudioLoadFailurePanel";
 import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
-import { Loader2 } from "lucide-react";
+import type { StudioIframeFailure } from "@/lib/studioIframeFailure";
 
 type EmbeddedStudioLiveSurfaceProps = {
   projectSlug: string;
@@ -19,8 +19,9 @@ type EmbeddedStudioLiveSurfaceProps = {
   studioReady: boolean;
   studioLoadTimedOut: boolean;
   studioLoadErrored: boolean;
+  studioLoadError: StudioIframeFailure | null;
   onStudioIframeLoad: () => void;
-  onStudioIframeError: () => void;
+  onStudioIframeError: (failure?: StudioIframeFailure) => void;
   onReloadStudioIframe: () => void | Promise<void>;
   onHardRestart: () => void | Promise<void>;
   isHardRestartPending: boolean;
@@ -42,6 +43,7 @@ export function EmbeddedStudioLiveSurface({
   studioReady,
   studioLoadTimedOut,
   studioLoadErrored,
+  studioLoadError,
   onStudioIframeLoad,
   onStudioIframeError,
   onReloadStudioIframe,
@@ -75,37 +77,12 @@ export function EmbeddedStudioLiveSurface({
           <div className="absolute inset-0 z-10 bg-background">
             {studioLoadTimedOut || studioLoadErrored ? (
               <div className="flex h-full w-full items-center justify-center px-6">
-                <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
-                  <div className="text-base font-semibold">
-                    Studio is taking longer than usual
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    The studio machine may still be booting or it might be
-                    unresponsive (common after restarts). Try reloading the
-                    iframe or doing a hard restart.
-                  </div>
-                  <div className="flex items-center justify-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => void onReloadStudioIframe()}
-                    >
-                      Reload
-                    </Button>
-                    <Button
-                      onClick={() => void onHardRestart()}
-                      disabled={isHardRestartPending}
-                    >
-                      {isHardRestartPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Restarting…
-                        </>
-                      ) : (
-                        "Hard restart"
-                      )}
-                    </Button>
-                  </div>
-                </div>
+                <StudioLoadFailurePanel
+                  failure={studioLoadError}
+                  onReload={onReloadStudioIframe}
+                  onHardRestart={onHardRestart}
+                  isHardRestartPending={isHardRestartPending}
+                />
               </div>
             ) : (
               <StudioStartupLoading

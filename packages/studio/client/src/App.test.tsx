@@ -9,9 +9,13 @@ vi.mock("@/components/preview", () => ({
   PreviewContent: () => <div>Preview</div>,
 }));
 
-vi.mock("@/components/ui/sonner", () => ({
-  Toaster: () => null,
-}));
+vi.mock("@vivd/ui", async () => {
+  const actual = await vi.importActual<typeof import("@vivd/ui")>("@vivd/ui");
+  return {
+    ...actual,
+    Toaster: () => null,
+  };
+});
 
 describe("App", () => {
   const originalParent = window.parent;

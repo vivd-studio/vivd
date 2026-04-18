@@ -17,6 +17,7 @@ import {
 } from "@/lib/studioBridge";
 import { fetchStudioHealthReady } from "@/lib/studioRuntimeHealth";
 import { STUDIO_LOAD_TIMEOUT_MS } from "@/lib/studioStartupTimings";
+import type { StudioIframeFailure } from "@/lib/studioIframeFailure";
 import { useStudioIframeReadyRetry } from "./useStudioIframeReadyRetry";
 import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery";
 
@@ -88,6 +89,8 @@ export function useStudioIframeLifecycle({
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
+  const [studioLoadError, setStudioLoadError] =
+    useState<StudioIframeFailure | null>(null);
   const studioVisibleRef = useRef(false);
   const studioReadyRef = useRef(false);
   const attemptedEarlyRecoveryRef = useRef(false);
@@ -149,6 +152,7 @@ export function useStudioIframeLifecycle({
     setStudioReady(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
+    setStudioLoadError(null);
   }, []);
 
   const markStudioVisible = useCallback(() => {
@@ -204,6 +208,7 @@ export function useStudioIframeLifecycle({
   ]);
 
   const handleStudioIframeLoad = useCallback(() => {
+    setStudioLoadError(null);
     void tryMarkStudioVisibleFromIframe();
     requestStudioBridgeSync();
     void tryMarkStudioReadyFromIframe();
@@ -213,8 +218,14 @@ export function useStudioIframeLifecycle({
     tryMarkStudioVisibleFromIframe,
   ]);
 
-  const handleStudioIframeError = useCallback(() => {
+  const handleStudioIframeError = useCallback((failure?: StudioIframeFailure) => {
     setStudioLoadErrored(true);
+    setStudioLoadError(
+      failure ?? {
+        message: "Studio failed to load",
+        source: "network",
+      },
+    );
   }, []);
 
   const recheckStudioReadiness = useCallback(() => {
@@ -390,6 +401,7 @@ export function useStudioIframeLifecycle({
       setStudioReady(false);
       setStudioLoadTimedOut(false);
       setStudioLoadErrored(false);
+      setStudioLoadError(null);
       return;
     }
 
@@ -399,6 +411,7 @@ export function useStudioIframeLifecycle({
     setStudioReady(false);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
+    setStudioLoadError(null);
 
     const timeout = window.setTimeout(() => {
       setStudioLoadTimedOut(true);
@@ -515,6 +528,7 @@ export function useStudioIframeLifecycle({
     studioReady,
     studioLoadTimedOut,
     studioLoadErrored,
+    studioLoadError,
     handleStudioIframeLoad,
     handleStudioIframeError,
   };

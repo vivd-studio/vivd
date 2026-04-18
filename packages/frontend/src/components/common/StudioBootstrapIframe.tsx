@@ -1,4 +1,15 @@
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type RefObject,
+  type SyntheticEvent,
+} from "react";
+
+import {
+  detectStudioIframeFailure,
+  type StudioIframeFailure,
+} from "@/lib/studioIframeFailure";
 
 const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
 const BOOTSTRAP_RETRY_DELAYS_MS = [1_500, 4_000];
@@ -17,7 +28,7 @@ type StudioBootstrapIframeProps = {
   allow?: string;
   allowFullScreen?: boolean;
   onLoad?: () => void;
-  onError?: () => void;
+  onError?: (failure?: StudioIframeFailure) => void;
 };
 
 export function StudioBootstrapIframe({
@@ -109,6 +120,31 @@ export function StudioBootstrapIframe({
     };
   }, [bootstrapFingerprint, iframeRef, shouldBootstrap]);
 
+  const handleIframeLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
+    const iframe = event.currentTarget;
+    let failure: StudioIframeFailure | null = null;
+
+    try {
+      failure = detectStudioIframeFailure({
+        pathname: iframe.contentWindow?.location?.pathname,
+        bodyText: iframe.contentDocument?.body?.textContent,
+      });
+    } catch {
+      failure = null;
+    }
+
+    if (failure) {
+      onError?.(failure);
+      return;
+    }
+
+    onLoad?.();
+  };
+
+  const handleIframeError = () => {
+    onError?.();
+  };
+
   return (
     <>
       <iframe
@@ -120,8 +156,8 @@ export function StudioBootstrapIframe({
         className={className}
         allow={allow}
         allowFullScreen={allowFullScreen}
-        onLoad={onLoad}
-        onError={onError}
+        onLoad={handleIframeLoad}
+        onError={handleIframeError}
       />
       {shouldBootstrap ? (
         <form

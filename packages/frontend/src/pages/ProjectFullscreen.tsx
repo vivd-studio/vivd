@@ -15,6 +15,7 @@ import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading, VivdIcon } from "@/components/common";
+import { StudioLoadFailurePanel } from "@/components/common/StudioLoadFailurePanel";
 import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import {
@@ -329,9 +330,11 @@ export default function ProjectFullscreen() {
   };
 
   const {
+    studioVisible,
     studioReady,
     studioLoadTimedOut,
     studioLoadErrored,
+    studioLoadError,
     handleStudioIframeLoad,
     handleStudioIframeError,
   } = useStudioIframeLifecycle({
@@ -925,41 +928,16 @@ export default function ProjectFullscreen() {
             onError={handleStudioIframeError}
           />
 
-          {!studioReady ? (
+          {!studioVisible ? (
             <div className="absolute inset-0 z-10 bg-background">
               {studioLoadTimedOut || studioLoadErrored ? (
                 <div className="flex h-full w-full items-center justify-center px-6">
-                  <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
-                    <div className="text-base font-semibold">
-                      Studio is taking longer than usual
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      The studio machine may still be booting or it might be
-                      unresponsive. Try reloading the iframe or doing a hard
-                      restart.
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => void reloadStudioIframe()}
-                      >
-                        Reload
-                      </Button>
-                      <Button
-                        onClick={() => void handleHardRestart()}
-                        disabled={hardRestartStudio.isPending}
-                      >
-                        {hardRestartStudio.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Restarting…
-                          </>
-                        ) : (
-                          "Hard restart"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                  <StudioLoadFailurePanel
+                    failure={studioLoadError}
+                    onReload={reloadStudioIframe}
+                    onHardRestart={handleHardRestart}
+                    isHardRestartPending={hardRestartStudio.isPending}
+                  />
                 </div>
               ) : (
                 <StudioStartupLoading

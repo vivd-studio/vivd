@@ -119,6 +119,7 @@ export {
   panelVariants,
 } from "./panel";
 export { PasswordInput } from "./password-input";
+export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "./popover";
 export { Progress } from "./progress";
 export { ScrollArea, ScrollBar } from "./scroll-area";
 export {
@@ -155,6 +156,8 @@ export {
   StatTileValue,
 } from "./stat-tile";
 export { StatusPill, statusPillVariants } from "./status-pill";
+export { Toaster } from "./sonner";
+export type { ToasterProps } from "./sonner";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { Textarea } from "./textarea";
 export { Toggle, toggleVariants } from "./toggle";

@@ -22,7 +22,7 @@ Use this order:
 1. `packages/studio/client/src/lib/cmsPreviewBindings.ts`
 2. `packages/studio/client/src/lib/vivdPreviewTextPatching.ts`
 3. `packages/studio/client/src/components/preview/usePreviewInlineEditing.ts`
-4. `packages/studio/server/trpcRouters/cms.router.ts` or `packages/studio/server/trpcRouters/project.ts`
+4. `packages/studio/server/trpcRouters/cms.ts` or `packages/studio/server/trpcRouters/project.ts`
 
 Decision tree:
 
@@ -71,4 +71,3 @@ When touching Astro generation:
 - use `astro:assets` for local images
 - use `CmsText` / `CmsImage` only for explicitly collection-owned content
 - avoid generated patterns that hide ownership behind complex helpers too early
-

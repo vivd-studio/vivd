@@ -1,17 +1,14 @@
-import { useTheme } from "@/components/theme";
 import { Toaster as Sonner } from "sonner";
 
-type ToasterProps = React.ComponentProps<typeof Sonner>;
+export type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const semanticToastContentClass =
   "[&_[data-description]]:!text-white/90 [&_[data-button]]:!border [&_[data-button]]:!border-white/20 [&_[data-button]]:!bg-white/15 [&_[data-button]]:!text-white [&_[data-close-button]]:!bg-white/15 [&_[data-close-button]]:!border-white/20 [&_[data-close-button]]:!text-white";
 
-const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
-
+function Toaster({ theme = "system", ...props }: ToasterProps) {
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       toastOptions={{
         classNames: {
@@ -34,6 +31,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       {...props}
     />
   );
-};
+}
 
 export { Toaster };

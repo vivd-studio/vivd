@@ -26,6 +26,8 @@ Read this file when touching Fly Studio startup, wake/reconcile behavior, connec
   - Sort enabled plugin ids before writing them into env.
 - Warm reconcile using a different env surface than normal Studio start.
   - Warm reconcile must preserve the same stable machine/project env that normal start expects.
+- Be suspicious of Studio boot-path changes that eagerly initialize extra runtime subsystems during normal startup.
+- If a source diff looks empty but suspend behavior changed, compare the built runtime image artifacts directly; transient build caches or logs baked into the image can change suspend behavior.
 
 ## Connected-Mode Auth Rules
 
@@ -54,15 +56,25 @@ Read this file when touching Fly Studio startup, wake/reconcile behavior, connec
 ## Fly Debugging Tips
 
 - Use the local user's `fly` or `flyctl` CLI directly when available.
-- If backend-host SSH access would help and the user has not provided host/access details yet, ask for them explicitly instead of guessing.
+- If this repo's `.env` exposes `PROD_FLY_API_TOKEN`, it may be used for read-only inspection of prod Fly machine state and logs when the user explicitly wants production debugging.
+- If backend-host SSH access would help and the user has not provided host/access details yet, ask for the host IP or SSH details explicitly instead of guessing.
 - Useful things to inspect:
   - `fly logs -a vivd-studio-prod -i <machine-id>`
   - machine events, state, image, and env
   - whether the machine still carries legacy env that should have been scrubbed
+- Do not print secrets from `.env`, and do not mutate prod machines unless the user explicitly asks for that.
 - Compare:
   - machine metadata identity
   - machine env stable subset
   - desired env subset at start/reconcile time
+
+## Suspend Contract Details
+
+- Treat `/vivd-studio/api/cleanup/preview-leave` as part of the suspend contract, not as best-effort telemetry.
+- Apply that same cleanup rule to backend-driven re-park and warm-reconcile paths, not only to browser-driven smokes.
+- If the first suspend step fails immediately after boot or readiness probing, suspect harness timing or provider-generated traffic before blaming the reconciler.
+- If CI or release validation is meant to say something about production suspend behavior, set the guest shape explicitly instead of relying on provider defaults.
+- Favor the prod-shaped reconcile and wake smoke over the older fresh-machine suspend smoke when deciding whether a release is really safe.
 
 ## Other Findings From Past Incidents
 

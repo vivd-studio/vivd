@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StudioBootstrapIframe } from "./StudioBootstrapIframe";
@@ -9,11 +9,17 @@ describe("StudioBootstrapIframe", () => {
     HTMLIFrameElement.prototype,
     "contentWindow",
   );
+  const originalContentDocument = Object.getOwnPropertyDescriptor(
+    HTMLIFrameElement.prototype,
+    "contentDocument",
+  );
 
   let frameHref = "about:blank";
+  let frameBodyText = "";
 
   beforeEach(() => {
     frameHref = "about:blank";
+    frameBodyText = "";
     Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
       configurable: true,
       get() {
@@ -24,6 +30,14 @@ describe("StudioBootstrapIframe", () => {
             },
           },
         };
+      },
+    });
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
+      configurable: true,
+      get() {
+        const doc = document.implementation.createHTMLDocument("iframe");
+        doc.body.textContent = frameBodyText;
+        return doc;
       },
     });
   });
@@ -38,6 +52,20 @@ describe("StudioBootstrapIframe", () => {
       );
     } else {
       Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+        configurable: true,
+        get() {
+          return null;
+        },
+      });
+    }
+    if (originalContentDocument) {
+      Object.defineProperty(
+        HTMLIFrameElement.prototype,
+        "contentDocument",
+        originalContentDocument,
+      );
+    } else {
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
         configurable: true,
         get() {
           return null;
@@ -119,6 +147,26 @@ describe("StudioBootstrapIframe", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("treats bootstrap API error documents as load failures instead of successful loads", () => {
+    frameHref = "http://app.localhost:4100/vivd-studio/api/bootstrap";
+    frameBodyText = '{"error":"Invalid bootstrap token"}';
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+    const onLoad = vi.fn();
+    const onError = vi.fn();
+
+    renderBootstrapIframe({ onLoad, onError });
+
+    fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
+
+    expect(onLoad).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Invalid bootstrap token",
+        source: "bootstrap",
+      }),
+    );
   });
 
   it("resubmits when the clean target changes while the iframe is still blank", () => {

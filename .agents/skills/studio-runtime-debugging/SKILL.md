@@ -18,8 +18,10 @@ Use this skill when a Studio bug sits somewhere between the host page, the Studi
    - `npm run typecheck -w @vivd/studio`
    - `npm run typecheck -w @vivd/frontend`
    - relevant targeted `vitest` files for the touched layer
-3. If the bug is Docker/self-host/image-shaped, rebuild the real runtime:
+3. If the bug is Docker/self-host/image-shaped, rebuild the real runtime and inspect the live local runtime before guessing:
    - `npm run build:studio:local`
+   - find the relevant local Docker containers or local Docker Studio machine containers
+   - inspect `docker logs` and `docker exec` output for the running runtime
 4. Run the real smoke only after the targeted checks:
    - `STUDIO_IMAGE=vivd-studio:local npm run studio:host-smoke`
    - `STUDIO_IMAGE=vivd-studio:local npm run studio:image:revert-smoke`
@@ -62,6 +64,7 @@ Before a long debugging pass, confirm:
   - `compose.log`
   - `failure.png`
   - container name or session id
+- whether there is a live local Docker container or local Docker Studio machine you can inspect right now
 
 For Studio git/snapshot oddities, also confirm:
 - current `HEAD`

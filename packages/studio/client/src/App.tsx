@@ -1,15 +1,17 @@
 import { PreviewProvider, PreviewContent } from "@/components/preview";
-import { Toaster } from "@/components/ui/sonner";
+import { useTheme } from "@/components/theme";
 import {
   parseVivdHostMessage,
   postVivdHostMessage,
 } from "@/lib/hostBridge";
 import { useCallback, useEffect } from "react";
+import { Toaster } from "@vivd/ui";
 
 const READY_BROADCAST_INTERVAL_MS = 500;
 const READY_BROADCAST_TIMEOUT_MS = 30_000;
 
 export function App() {
+  const { theme } = useTheme();
   const params = new URLSearchParams(window.location.search);
   const embedded =
     params.get("embedded") === "1" ||
@@ -107,7 +109,7 @@ export function App() {
       >
         <PreviewContent />
       </PreviewProvider>
-      <Toaster />
+      <Toaster theme={theme} />
     </>
   );
 }

@@ -260,7 +260,10 @@ describe("InitialGenerationService", () => {
     });
 
     expect(task).toContain("Create a complete, finished version 1");
-    expect(task).toContain("you may ask the user clarifying questions");
+    expect(task).toContain(
+      "Before meaningful implementation, ask focused clarifying questions with the question tool",
+    );
+    expect(task).toContain("Prefer asking over guessing");
     expect(task).toContain("scratch_brief.txt");
     expect(task).toContain("src/content/media/shared/logo.png");
     expect(task).toContain("canonical home for Astro-managed site assets");
@@ -861,5 +864,63 @@ describe("InitialGenerationService", () => {
     expect(manifest.errorMessage).toBe(
       "The agent stopped before finishing the initial generation. Open Studio to continue the session.",
     );
+  });
+
+  it("returns the session for handoff when the first progress is a pending question", async () => {
+    writeManifest(tmpDir, {
+      state: "generating_initial_site",
+      sessionId: "sess-question",
+      startedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    listSessionsMock.mockResolvedValue([{ id: "sess-question" }]);
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-question": { type: "idle" },
+    });
+    listQuestionsMock.mockResolvedValue([
+      {
+        id: "que-1",
+        sessionID: "sess-question",
+        questions: [{ header: "Style", question: "Which direction?", options: [] }],
+      },
+    ]);
+    getSessionContentMock.mockResolvedValue([
+      {
+        info: {
+          id: "msg-user",
+          role: "user",
+          time: {
+            created: Date.now() - 30_000,
+            updated: Date.now() - 30_000,
+            completed: Date.now() - 30_000,
+          },
+        },
+        parts: [{ type: "text", text: "Create the initial site" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: Date.now() - 25_000,
+          },
+        },
+        parts: [],
+      },
+    ]);
+
+    const sessionId =
+      await initialGenerationService.resolveInitialGenerationSessionForHandoff({
+        projectSlug: "site-1",
+        version: 1,
+        workspaceDir: tmpDir,
+      });
+
+    expect(sessionId).toBe("sess-question");
+    expect(deleteSessionMock).not.toHaveBeenCalled();
+    expect(runTaskMock).not.toHaveBeenCalled();
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("generating_initial_site");
+    expect(manifest.sessionId).toBe("sess-question");
   });
 });

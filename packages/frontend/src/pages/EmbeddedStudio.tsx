@@ -457,6 +457,7 @@ export default function EmbeddedStudio() {
     studioReady,
     studioLoadTimedOut,
     studioLoadErrored,
+    studioLoadError,
     handleStudioIframeLoad,
     handleStudioIframeError,
   } = useStudioIframeLifecycle({
@@ -810,6 +811,7 @@ export default function EmbeddedStudio() {
           studioReady={studioReady}
           studioLoadTimedOut={studioLoadTimedOut}
           studioLoadErrored={studioLoadErrored}
+          studioLoadError={studioLoadError}
           onStudioIframeLoad={handleStudioIframeLoad}
           onStudioIframeError={handleStudioIframeError}
           onReloadStudioIframe={reloadStudioIframe}

@@ -6,6 +6,7 @@ const ENV_KEYS = [
   "VIVD_CONTROL_PLANE_RATE_LIMIT_LOG_THROTTLE_MS",
   "VIVD_CONTROL_PLANE_RATE_LIMIT_AUTH_SIGN_IN_MODE",
   "VIVD_CONTROL_PLANE_RATE_LIMIT_AUTH_SIGN_UP_MODE",
+  "VIVD_CONTROL_PLANE_RATE_LIMIT_AUTH_PASSWORD_RESET_MODE",
   "VIVD_CONTROL_PLANE_RATE_LIMIT_ZIP_IMPORT_MODE",
   "VIVD_AUTH_SIGN_IN_RATE_LIMIT_IP_PER_MINUTE",
   "VIVD_AUTH_SIGN_UP_RATE_LIMIT_IP_PER_10_MINUTES",
@@ -136,32 +137,38 @@ describe("ControlPlaneRateLimitService", () => {
     expect(blocked.triggeredBudget?.scope).toBe("ip");
   });
 
-  it("keeps password-reset retries non-blocking by default shadow policy", async () => {
+  it("allows normal password-reset retries before the enforced threshold", async () => {
     process.env.VIVD_CONTROL_PLANE_RATE_LIMIT_MODE = "shadow";
-    process.env.VIVD_AUTH_PASSWORD_RESET_RATE_LIMIT_IP_PER_10_MINUTES = "1";
+    process.env.VIVD_CONTROL_PLANE_RATE_LIMIT_AUTH_PASSWORD_RESET_MODE =
+      "enforce";
+    process.env.VIVD_AUTH_PASSWORD_RESET_RATE_LIMIT_IP_PER_10_MINUTES = "3";
     const service = new ControlPlaneRateLimitService();
 
-    const first = await service.checkAction({
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const decision = await service.checkAction({
+        action: "auth_password_reset",
+        organizationId: null,
+        requestIp: "203.0.113.14",
+        requestPath: "/vivd-studio/api/auth/request-password-reset",
+        userId: null,
+        now: attempt * 1_000,
+      });
+      expect(decision.allowed).toBe(true);
+      expect(decision.limited).toBe(false);
+    }
+
+    const blocked = await service.checkAction({
       action: "auth_password_reset",
       organizationId: null,
       requestIp: "203.0.113.14",
       requestPath: "/vivd-studio/api/auth/request-password-reset",
       userId: null,
-      now: 0,
-    });
-    const second = await service.checkAction({
-      action: "auth_password_reset",
-      organizationId: null,
-      requestIp: "203.0.113.14",
-      requestPath: "/vivd-studio/api/auth/request-password-reset",
-      userId: null,
-      now: 1_000,
+      now: 4_000,
     });
 
-    expect(first.allowed).toBe(true);
-    expect(second.allowed).toBe(true);
-    expect(second.limited).toBe(true);
-    expect(second.mode).toBe("shadow");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.limited).toBe(true);
+    expect(blocked.mode).toBe("enforce");
   });
 
   it("resets a fixed window after the configured period", async () => {

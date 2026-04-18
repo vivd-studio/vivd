@@ -98,19 +98,25 @@ describe("initial generation helpers", () => {
           path.join(tmpDir, "AGENTS.md"),
           "utf-8",
         ),
-      ).toContain("does not create CMS ownership");
+      ).toContain("Shared Vivd agent behavior already comes from injected agent instructions");
       expect(
         fs.readFileSync(
           path.join(tmpDir, "AGENTS.md"),
           "utf-8",
         ),
-      ).toContain("Derived CMS-backed render points need binding too");
+      ).toContain("Structured content schema: `src/content.config.ts`");
       expect(
         fs.readFileSync(
           path.join(tmpDir, "AGENTS.md"),
           "utf-8",
         ),
-      ).toContain("`CmsImage` still needs the actual image field value");
+      ).toContain("CMS media and other managed assets: `src/content/media/`");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "AGENTS.md"),
+          "utf-8",
+        ),
+      ).toContain("Update this file whenever the project adds a new content area");
 
       expect(
         fs.readFileSync(

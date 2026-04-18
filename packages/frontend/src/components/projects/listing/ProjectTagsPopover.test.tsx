@@ -3,11 +3,15 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectTagsPopover } from "./ProjectTagsPopover";
 
-vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  PopoverAnchor: ({ children }: { children: ReactNode }) => <>{children}</>,
-  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
+vi.mock("@vivd/ui", async () => {
+  const actual = await vi.importActual<typeof import("@vivd/ui")>("@vivd/ui");
+  return {
+    ...actual,
+    Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    PopoverAnchor: ({ children }: { children: ReactNode }) => <>{children}</>,
+    PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  };
+});
 
 function renderPopover(options?: {
   projectTags?: string[];

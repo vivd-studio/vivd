@@ -1,12 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, type RefObject } from "react";
 import { ArrowLeft, Check, Loader2, Plus, Search, X } from "lucide-react";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
 import type { Measurable } from "@radix-ui/rect";
-import { Input, Button } from "@vivd/ui";
+import { Button, Input, Popover, PopoverAnchor, PopoverContent } from "@vivd/ui";
 
 import { cn } from "@/lib/utils";
 import { TAG_COLORS, type TagColor, getTagColor } from "@/lib/tagColors";

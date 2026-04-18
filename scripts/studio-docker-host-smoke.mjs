@@ -1128,6 +1128,15 @@ function countRecordedInitialGenerationActions(messages) {
   return total;
 }
 
+function countPendingQuestionsForSession(questions, sessionId) {
+  if (!sessionId) return 0;
+
+  return (Array.isArray(questions) ? questions : []).filter((question) => {
+    const questionSessionId = question?.sessionID ?? question?.sessionId;
+    return questionSessionId === sessionId;
+  }).length;
+}
+
 async function readInitialGenerationProgress(options) {
   const bootstrapResult = await Promise.allSettled([
     readStudioTrpcQuery(
@@ -1152,6 +1161,10 @@ async function readInitialGenerationProgress(options) {
     bootstrap && typeof bootstrap === "object" && bootstrap.statuses
       ? bootstrap.statuses
       : null;
+  const questions =
+    bootstrap && typeof bootstrap === "object" && Array.isArray(bootstrap.questions)
+      ? bootstrap.questions
+      : [];
   const bootstrapError =
     bootstrapResult[0]?.status === "rejected"
       ? bootstrapResult[0].reason instanceof Error
@@ -1161,6 +1174,10 @@ async function readInitialGenerationProgress(options) {
 
   return {
     actionCount: countRecordedInitialGenerationActions(messages),
+    pendingQuestionCount: countPendingQuestionsForSession(
+      questions,
+      options.sessionId,
+    ),
     sessionStatus: statuses?.[options.sessionId] ?? null,
     messagesError: bootstrapError,
     statusesError: bootstrapError,
@@ -1241,6 +1258,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   let sessionIdFromUrl = null;
   let lastVisibleState = null;
   let lastRecordedActionCount = 0;
+  let lastPendingQuestionCount = 0;
   let lastProgressEvidenceCount = 0;
   let lastSessionStatus = null;
   let lastProgressError = null;
@@ -1334,6 +1352,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
           version: options.version,
         });
         lastRecordedActionCount = progress.actionCount;
+        lastPendingQuestionCount = progress.pendingQuestionCount;
         lastSessionStatus = progress.sessionStatus?.type ?? null;
         lastProgressError = [progress.messagesError, progress.statusesError]
           .filter(Boolean)
@@ -1377,9 +1396,17 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
 
     lastProgressEvidenceCount = Math.max(
       lastRecordedActionCount,
+      lastPendingQuestionCount > 0 ? 1 : 0,
       uiProgressEvidence,
       sessionHistoryEvidence,
     );
+
+    if (lastPendingQuestionCount > 0) {
+      log(
+        `Observed initial-generation agent question for session ${sessionIdFromUrl ?? "unknown"} (pendingQuestions=${lastPendingQuestionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"})`,
+      );
+      return `observed-agent-question-${lastPendingQuestionCount}`;
+    }
 
     if (lastRecordedActionCount >= minRecordedActions) {
       log(
@@ -1409,7 +1436,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
 
   throw new Error(
-    `Initial generation did not reach ${minRecordedActions} recorded action(s) within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} busyGraceApplied=${busyGraceApplied} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
+    `Initial generation did not reach ${minRecordedActions} recorded action(s) or a pending agent question within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} pendingQuestions=${lastPendingQuestionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} busyGraceApplied=${busyGraceApplied} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
   );
 }
 

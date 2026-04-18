@@ -38,6 +38,12 @@ describe("studio AgentInstructionsService fallback", () => {
     });
 
     expect(prompt).toContain("Non-technical users");
+    expect(prompt).toContain(
+      "Before starting meaningful work, resolve material uncertainty with focused clarifying questions.",
+    );
+    expect(prompt).toContain(
+      "Prefer using the question tool over guessing, and when in doubt, ask rather than assume.",
+    );
     expect(prompt).toContain("Proper error handling");
     expect(prompt).toContain("Multi-language support");
     expect(prompt).toContain(".vivd/uploads/");

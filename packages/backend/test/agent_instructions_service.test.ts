@@ -46,6 +46,12 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("- contact_form");
     expect(result.instructions).toContain("- analytics");
     expect(result.instructions).toContain("- newsletter");
+    expect(result.instructions).toContain(
+      "Before starting meaningful work, resolve material uncertainty with focused clarifying questions.",
+    );
+    expect(result.instructions).toContain(
+      "Prefer using the question tool over guessing, and when in doubt, ask rather than assume.",
+    );
     expect(result.instructions).toContain("Plugin-specific notes");
     expect(result.instructions).toContain(
       "Contact Form: Use `vivd plugins snippets contact_form [html|astro]` for the exact install snippet instead of rebuilding the form by hand.",

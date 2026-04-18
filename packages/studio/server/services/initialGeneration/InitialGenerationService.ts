@@ -45,9 +45,9 @@ const INITIAL_GENERATION_SESSION_START_SYSTEM_PROMPT_SUFFIX = `## Scratch Initia
 
 - This session is for autonomous initial website generation, not collaborative planning.
 - Treat the initial generation request as already approved. Do not stop after outlining a plan or ask for approval in normal assistant text.
-- Do not ask questions like "Does this plan sound good?" or "Should I continue?".
-- Start implementing immediately and keep working until the first complete version of the site is materially built.
-- Use the question tool only for a real blocking ambiguity that prevents a production-ready first version. If a reasonable assumption is available, make it and continue.
+- Before meaningful implementation, use the question tool to resolve material uncertainty. Prefer asking over guessing when important details are still unclear.
+- Avoid routine "Should I continue?" checkpoints or approval theater. If clarification is needed, ask a focused question and then continue once it is answered.
+- Start implementing as soon as the key uncertainty is resolved and keep working until the first complete version of the site is materially built.
 `;
 
 export type StartInitialGenerationOptions = {
@@ -585,7 +585,7 @@ ${
 }${options.manifest.siteTheme ? ` Build a ${options.manifest.siteTheme} themed website.` : ""}
 Create a complete, finished version 1 of the website in this run, not just a rough first draft.
 Keep it production-ready: responsive, accessible, polished, and free of placeholder content.
-If something important is missing, you may ask the user clarifying questions using the question tool, but otherwise make reasonable assumptions and finish the site.
+Before meaningful implementation, ask focused clarifying questions with the question tool whenever material details are still uncertain. Prefer asking over guessing; once the key uncertainty is resolved, continue autonomously and finish the site.
 Keep the project as Astro with the existing Tailwind setup. Do not replace the framework.
 Use uploaded source assets from \`${preferredAssetRoot}/\` when relevant.
 Treat \`src/content/media/\` as the canonical home for Astro-managed site assets. If the workspace still has legacy scratch assets under \`images/\`, you may reuse them, but prefer keeping final managed assets under \`src/content/media/\`.

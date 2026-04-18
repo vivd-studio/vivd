@@ -161,6 +161,7 @@ export class ControlPlaneRateLimitService {
     switch (action) {
       case "auth_sign_in":
       case "auth_sign_up":
+      case "auth_password_reset":
       case "zip_import":
         return "enforce";
       default:

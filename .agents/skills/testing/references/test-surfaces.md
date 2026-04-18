@@ -168,6 +168,8 @@ Guardrails:
 - only do this when the user has explicitly provided or confirmed access details
 - keep repo docs generic; do not record raw IPs, usernames, or private hostnames here
 - prefer describing the workflow, not the secret coordinates
+- for Fly-backed prod debugging, prefer read-only `flyctl` inspection first when the local environment already exposes the needed token
+- if host-level logs are needed, ask the user for the host IP or SSH access details explicitly
 
 Typical SSH-assisted checks:
 
@@ -177,11 +179,13 @@ Typical SSH-assisted checks:
 - compare reported app version with the version the UI thinks is pending/current
 - verify env or compose drift when a local fix did not actually land on the server
 
+For local Docker or self-host failures, prefer finding the still-running Studio or related containers and reading `docker logs` / `docker exec` output before guessing from the UI alone.
+
 ## Where The Truth Usually Lives
 
 - `scripts/ci-local.sh` for supported local validation combinations
 - `scripts/publish.sh` for release preflight expectations
 - `.github/workflows/reusable-validate.yml` for the shared CI regression set
 - `.github/workflows/publish.yml` for release smoke expectations
-- `docs/PROJECT_STATE.md` for current testing pain points and recently proven regressions
-- `docs/PROJECT_STATE_ARCHIVE.md` for older but still useful failure patterns
+- `PROJECT_STATE.md` for current testing pain points and recently proven regressions
+- `PROJECT_STATE_ARCHIVE.md` for older but still useful failure patterns

@@ -3,7 +3,8 @@ import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { getRouteDocumentTitle } from "@/lib/brand";
-import { Toaster } from "@/components/ui/sonner";
+import { useTheme } from "@/components/theme";
+import { Toaster } from "@vivd/ui";
 import { CenteredLoading } from "@/components/common";
 import { AppRoutes } from "@/app/router";
 import { RouteTransitionLoading } from "@/app/router/RouteTransitionLoading";
@@ -19,6 +20,7 @@ function DocumentTitleManager() {
 
 export default function App() {
   const { isPending: isSessionPending } = authClient.useSession();
+  const { theme } = useTheme();
   const {
     data: hasUsersData,
     isLoading: isHasUsersLoading,
@@ -46,7 +48,7 @@ export default function App() {
       <DocumentTitleManager />
       <RouteTransitionLoading />
       <AppRoutes hasUsers={hasUsers} />
-      <Toaster />
+      <Toaster theme={theme} />
     </BrowserRouter>
   );
 }

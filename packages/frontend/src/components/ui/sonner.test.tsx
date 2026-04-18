@@ -1,12 +1,9 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { Toaster } from "@vivd/ui";
 
 const { sonnerPropsSpy } = vi.hoisted(() => ({
   sonnerPropsSpy: vi.fn(),
-}));
-
-vi.mock("next-themes", () => ({
-  useTheme: () => ({ theme: "dark" }),
 }));
 
 vi.mock("sonner", () => ({
@@ -16,11 +13,9 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { Toaster } from "./sonner";
-
 describe("Toaster", () => {
   it("uses readable semantic toast styling for light and dark surfaces", () => {
-    render(<Toaster />);
+    render(<Toaster theme="dark" />);
 
     const props = sonnerPropsSpy.mock.calls.at(-1)?.[0] as {
       toastOptions?: {
