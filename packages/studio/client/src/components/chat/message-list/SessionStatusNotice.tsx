@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { AlertCircle, AlertTriangle, Loader2, X } from "lucide-react";
 import type { SessionErrorNoticeContent } from "../sessionErrorNotice";
 

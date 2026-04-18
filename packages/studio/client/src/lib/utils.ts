@@ -1,1 +1,1 @@
-export { cn } from "@vivd/ui/utils";
+export { cn } from "@vivd/ui";

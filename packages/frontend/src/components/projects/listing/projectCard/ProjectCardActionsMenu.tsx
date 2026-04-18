@@ -19,14 +19,8 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@vivd/ui";
+
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import type { Project } from "../ProjectCard.types";
 

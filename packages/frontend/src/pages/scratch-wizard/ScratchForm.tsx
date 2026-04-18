@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import { InteractiveSurface } from "@/components/ui/interactive-surface";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Input, Progress, InteractiveSurface, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 import { ArrowUp, Link2, Loader2, X } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
 import {

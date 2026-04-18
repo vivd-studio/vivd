@@ -1,11 +1,7 @@
 import type { CSSProperties } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Edit3 } from "lucide-react";
 
 interface EditControlsProps {

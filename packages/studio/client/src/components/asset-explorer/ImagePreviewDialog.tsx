@@ -1,10 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Button } from "@vivd/ui";
+
 import { Download, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
 import { FallbackImage } from "./FallbackImage";

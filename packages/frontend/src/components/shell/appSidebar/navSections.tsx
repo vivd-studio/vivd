@@ -19,11 +19,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { ROUTES } from "@/app/router";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@vivd/ui";
+
 import {
   SidebarGroup,
   SidebarGroupContent,

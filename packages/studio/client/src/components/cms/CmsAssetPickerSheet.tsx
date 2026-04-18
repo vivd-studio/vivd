@@ -10,25 +10,8 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Button, ScrollArea, Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@vivd/ui";
+
 import type { AssetItem } from "@/components/asset-explorer/types";
 import { CreateImageDialog } from "@/components/asset-explorer/CreateImageDialog";
 import { ImageThumbnail } from "@/components/asset-explorer/ImageThumbnail";

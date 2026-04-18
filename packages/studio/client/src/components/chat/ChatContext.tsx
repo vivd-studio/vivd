@@ -27,16 +27,8 @@ import {
 } from "./followupUtils";
 import { useChatAttachments } from "./useChatAttachments";
 import { useConfirmDialog } from "./useConfirmDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+
 import { useOpencodeChatController } from "@/features/opencodeChat";
 
 const ChatContext = createContext<ChatContextValue | null>(null);

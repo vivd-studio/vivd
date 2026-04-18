@@ -2,17 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { DragEvent, ChangeEvent } from "react";
 import { FileImage, FolderArchive, ImagePlus, Paperclip, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 
 // ---------------------------------------------------------------------------
 // Drag-and-drop hook (unchanged)

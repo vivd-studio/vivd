@@ -2,16 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { LogOut, Settings } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Avatar, AvatarFallback, AvatarImage, Button } from "@vivd/ui";
+
 
 export function HeaderProfileMenu() {
   const { data: session } = authClient.useSession();

@@ -1,6 +1,6 @@
 import { Loader2, Settings2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { CardContent } from "@/components/ui/card";
+import { Button, CardContent } from "@vivd/ui";
+
 import type { VersionInfo } from "../ProjectCard.types";
 
 interface ProjectCardContentProps {

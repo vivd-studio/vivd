@@ -1,12 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Button, Textarea, ScrollArea } from "@vivd/ui";
+
 import { Loader2, ImagePlus } from "lucide-react";
 import type { AssetItem } from "./types";
 import { getStudioImageUrlCandidates } from "./utils";

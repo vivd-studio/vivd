@@ -1,6 +1,6 @@
 import { Plus, FolderOpen } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Button, Label } from "@vivd/ui";
+
 import type { CmsFieldDefinition } from "@vivd/shared/cms";
 import { CmsAssetField } from "./CmsAssetField";
 import {

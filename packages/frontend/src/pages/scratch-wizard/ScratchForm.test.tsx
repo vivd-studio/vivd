@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@vivd/ui";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useScratchWizardMock } = vi.hoisted(() => ({

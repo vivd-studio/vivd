@@ -1,9 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge, Button, Input, Label, ScrollArea } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { Plus, Search, X } from "lucide-react";
 import type { CmsEntryRecord, CmsModelRecord } from "@vivd/shared/cms";

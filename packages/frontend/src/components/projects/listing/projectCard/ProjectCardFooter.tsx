@@ -1,12 +1,6 @@
 import { Plug } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { CardFooter } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, CardFooter, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
+
 import { getProjectPluginPresentation } from "@/plugins/presentation";
 
 type ProjectPluginPresentation = ReturnType<

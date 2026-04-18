@@ -9,17 +9,8 @@ import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
 import { importProjectZip } from "@/lib/import-utils";
 import { ROUTES } from "@/app/router";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Form } from "@/components/ui/form";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button, Input, Form, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
+
 import { VersionDialog } from "../versioning/VersionDialog";
 import { UrlFormFields } from "./UrlFormFields";
 

@@ -1,15 +1,7 @@
 import { Moon, Sun, Palette } from "lucide-react";
 import type { ColorTheme } from "@vivd/shared/types";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@vivd/ui";
 
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
 import { useTheme } from "./theme-provider";
 
 type ColorThemeOption = {

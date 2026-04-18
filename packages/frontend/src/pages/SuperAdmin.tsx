@@ -13,26 +13,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Panel,
-  PanelContent,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-} from "@/components/ui/panel";
-import { StatusPill } from "@/components/ui/status-pill";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Badge, Button, Field, FieldLabel, Input, Panel, PanelContent, PanelDescription, PanelHeader, PanelTitle, StatusPill, Tabs, TabsList, TabsTrigger, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
+
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 

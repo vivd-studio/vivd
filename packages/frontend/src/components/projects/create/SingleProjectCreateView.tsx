@@ -6,10 +6,8 @@ import { trpc } from "@/lib/trpc";
 import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
 import { importProjectZip } from "@/lib/import-utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Form } from "@/components/ui/form";
-import { InteractiveSurfaceButton } from "@/components/ui/interactive-surface";
+import { Button, Input, Form, InteractiveSurfaceButton } from "@vivd/ui";
+
 import { UrlFormFields } from "./UrlFormFields";
 import { Globe, Sparkles, ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";

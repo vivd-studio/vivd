@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { InteractiveSurface } from "@/components/ui/interactive-surface";
+import { Button, InteractiveSurface, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@vivd/ui";
+
 import { Download, MessageSquarePlus, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
 import {
@@ -9,13 +9,6 @@ import {
   getStudioImageUrlCandidates,
 } from "./utils";
 import { ImageThumbnail } from "./ImageThumbnail";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 
 interface AssetItemCardProps {
   item: AssetItem;

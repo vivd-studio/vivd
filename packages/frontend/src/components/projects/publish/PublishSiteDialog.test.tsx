@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@vivd/ui";
+
 import { PublishSiteDialog } from "./PublishSiteDialog";
 
 const {

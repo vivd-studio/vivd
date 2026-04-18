@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Shield, UserPlus, AlertCircle } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, Button } from "@vivd/ui";
+
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { AddUserForm } from "./AddUserForm";

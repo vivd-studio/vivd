@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { FolderOpen } from "lucide-react";
 
 interface AssetsButtonProps {

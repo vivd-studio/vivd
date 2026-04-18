@@ -13,6 +13,7 @@ export {
 } from "./alert-dialog";
 export { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 export { Badge, badgeVariants } from "./badge";
+export type { BadgeProps } from "./badge";
 export {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -23,15 +24,27 @@ export {
   BreadcrumbSeparator,
 } from "./breadcrumb";
 export { Button, buttonVariants } from "./button";
+export type { ButtonProps } from "./button";
 export {
   Callout,
   CalloutDescription,
   CalloutTitle,
   calloutVariants,
 } from "./callout";
-export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./card";
+export {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "./card";
 export { Checkbox } from "./checkbox";
-export { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsible";
+export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./collapsible";
 export {
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -146,5 +159,10 @@ export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { Textarea } from "./textarea";
 export { Toggle, toggleVariants } from "./toggle";
 export { ToggleGroup, ToggleGroupItem } from "./toggle-group";
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip";
+export {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./tooltip";
 export { cn } from "./utils";

@@ -1,4 +1,5 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@vivd/ui";
+
 import { useOpencodeSessionActivity } from "@/features/opencodeChat";
 import { Clock3, X } from "lucide-react";
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, Input } from "@vivd/ui";
+
 import { RefreshCw, Monitor, TabletSmartphone, Smartphone } from "lucide-react";
 import type { ViewportMode } from "../../types";
 

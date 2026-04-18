@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, Input } from "@vivd/ui";
+
 import { trpc } from "@/lib/trpc";
 import { FormContent } from "@/components/settings/SettingsPageShell";
 

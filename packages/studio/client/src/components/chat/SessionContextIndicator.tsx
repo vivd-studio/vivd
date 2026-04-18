@@ -1,24 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, CircleHelp } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { useOpencodeChat } from "@/features/opencodeChat";
 import { formatDollarsAsCredits } from "@vivd/shared";

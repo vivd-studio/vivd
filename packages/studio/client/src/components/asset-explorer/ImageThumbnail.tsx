@@ -1,8 +1,5 @@
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 import { Check, Image as ImageIcon } from "lucide-react";
 import type { AssetItem } from "./types";
 import { FallbackImage } from "./FallbackImage";

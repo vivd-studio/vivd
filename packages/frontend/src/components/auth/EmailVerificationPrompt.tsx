@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router/paths";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
+
 import { toast } from "sonner";
 
 const VERIFICATION_PROMPT_STORAGE_KEY_PREFIX = "vivd:email-verification-prompt-seen";

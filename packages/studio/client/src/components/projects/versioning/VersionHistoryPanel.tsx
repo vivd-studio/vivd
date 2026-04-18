@@ -1,24 +1,6 @@
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, Button, Badge, ScrollArea, Input, Label, InteractiveSurface, InteractiveSurfaceButton, Collapsible, CollapsibleContent, CollapsibleTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  InteractiveSurface,
-  InteractiveSurfaceButton,
-} from "@/components/ui/interactive-surface";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   History,
   RotateCcw,
@@ -35,16 +17,6 @@ import {
   Copy,
   ChevronDown,
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { isLikelyTrpcTimeoutError } from "@/lib/trpcTimeouts";
 import { POLLING_BACKGROUND } from "@/app/config/polling";

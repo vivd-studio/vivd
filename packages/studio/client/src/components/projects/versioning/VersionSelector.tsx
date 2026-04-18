@@ -1,12 +1,5 @@
-import { Badge, type BadgeProps } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge, type BadgeProps, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@vivd/ui";
+
 import { Check, ChevronDown, Layers, Settings2 } from "lucide-react";
 import type { MouseEventHandler, ReactNode } from "react";
 

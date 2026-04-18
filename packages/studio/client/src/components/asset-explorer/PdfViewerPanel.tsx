@@ -1,10 +1,6 @@
 import { useCallback, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 import {
   Download,
   ExternalLink,

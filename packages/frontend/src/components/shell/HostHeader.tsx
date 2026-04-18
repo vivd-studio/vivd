@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Link, type LinkProps } from "react-router-dom";
 import { ModeToggle } from "@/components/theme";
-import { BreadcrumbLink } from "@/components/ui/breadcrumb";
+import { BreadcrumbLink } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { HeaderProfileMenu } from "./HeaderProfileMenu";
 import {

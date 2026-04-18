@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { type CanonicalTimelineItem } from "@/features/opencodeChat/render/timeline";
 import { ChevronDown, Undo2 } from "lucide-react";

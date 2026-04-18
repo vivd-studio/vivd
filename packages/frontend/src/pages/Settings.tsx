@@ -1,26 +1,9 @@
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Button, Input, PasswordInput, Card, CardContent, CardHeader, CardTitle, CardDescription, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";

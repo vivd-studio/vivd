@@ -1,5 +1,6 @@
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import {
   ChevronLeft,
   FolderPlus,

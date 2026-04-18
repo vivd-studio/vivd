@@ -1,30 +1,8 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Callout, CalloutDescription, CalloutTitle } from "@/components/ui/callout";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Panel,
-  PanelContent,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-} from "@/components/ui/panel";
-import { StatTile } from "@/components/ui/stat-tile";
-import { StatusPill } from "@/components/ui/status-pill";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Badge, Button, Callout, CalloutDescription, CalloutTitle, Field, FieldDescription, FieldLabel, Input, Panel, PanelContent, PanelDescription, PanelHeader, PanelTitle, StatTile, StatusPill, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+
 import type { Organization } from "../types";
 
 type Props = {

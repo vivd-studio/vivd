@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";

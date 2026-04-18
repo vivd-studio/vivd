@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { badgeVariants, buttonVariants } from "@vivd/ui";
 
-import { badgeVariants } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 
 describe("shared semantic variants", () => {
   it("keeps primary buttons subtle in dark mode", () => {

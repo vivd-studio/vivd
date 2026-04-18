@@ -11,26 +11,8 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
-import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Input, Label } from "@vivd/ui";
+
 import { FallbackImage } from "@/components/asset-explorer/FallbackImage";
 import { AIEditDialog } from "@/components/asset-explorer/AIEditDialog";
 import {

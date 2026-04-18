@@ -1,23 +1,7 @@
 import type { ProjectVersionManualStatus } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+
 import type { ManualProjectStatusOption } from "./ProjectCard.helpers";
 
 interface ProjectCardStatusDialogProps {

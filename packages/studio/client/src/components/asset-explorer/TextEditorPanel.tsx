@@ -1,11 +1,7 @@
 import { useEffect, useCallback, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+
 import { LoadingSpinner } from "@/components/common";
 import { Loader2, Save, X, FileCode, WrapText, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";

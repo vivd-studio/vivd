@@ -2,8 +2,8 @@ import { lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Users, Activity, Plug, Wrench, SlidersHorizontal } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+
 import { trpc } from "@/lib/trpc";
 import { usePermissions } from "@/hooks/usePermissions";
 

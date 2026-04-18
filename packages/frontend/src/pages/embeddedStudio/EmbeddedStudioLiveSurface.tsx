@@ -1,5 +1,6 @@
 import type { ReactNode, RefObject } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";

@@ -1,4 +1,5 @@
-import { Card } from "@/components/ui/card";
+import { Card } from "@vivd/ui";
+
 import { Palette } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
 import { useTheme } from "@/components/theme";

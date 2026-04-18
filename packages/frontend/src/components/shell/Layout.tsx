@@ -4,13 +4,8 @@ import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@vivd/ui";
+
 import { ProjectWizard } from "@/components/projects";
 import { CenteredLoading } from "@/components/common";
 import { NavigationSearchProvider } from "./NavigationSearch";

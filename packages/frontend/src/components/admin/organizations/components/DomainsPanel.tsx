@@ -1,26 +1,8 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StatusPill } from "@/components/ui/status-pill";
+import { Badge, Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill } from "@vivd/ui";
+
 import type { Organization, OrganizationDomain } from "../types";
 
 type DomainUsage = "tenant_host" | "publish_target";

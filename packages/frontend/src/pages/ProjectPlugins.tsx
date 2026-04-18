@@ -4,15 +4,8 @@ import { ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@vivd/ui";
+
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";

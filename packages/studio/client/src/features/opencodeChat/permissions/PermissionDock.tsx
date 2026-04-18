@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { resolvePermissionRequestDisplay } from "../actionLabels";
 import type { OpenCodePermissionRequest } from "../types";
 

@@ -5,7 +5,8 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@vivd/ui";
+
 import { trpc } from "@/lib/trpc";
 import { formatCredits, formatDollarsAsCredits } from "@vivd/shared";
 import { SessionUsageTable } from "./SessionUsageTable";

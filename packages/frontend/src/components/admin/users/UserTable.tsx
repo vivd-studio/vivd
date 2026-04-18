@@ -1,11 +1,6 @@
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@vivd/ui";
+
 import type { User } from "../types";
 
 interface UserTableProps {

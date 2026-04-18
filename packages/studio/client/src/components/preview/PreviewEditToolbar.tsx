@@ -1,5 +1,6 @@
 import { Loader2, Save, X, AlertCircle, Edit3 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { usePreview } from "./PreviewContext";
 
 export function PreviewEditToolbar() {

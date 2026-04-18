@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui/card";
+import { Card } from "@vivd/ui";
+
 import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";

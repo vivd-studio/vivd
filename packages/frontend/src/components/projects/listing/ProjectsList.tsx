@@ -5,15 +5,8 @@ import { ProjectCard } from "./ProjectCard";
 import { VersionDialog } from "../versioning/VersionDialog";
 import { DeleteProjectDialog } from "../dialogs/DeleteProjectDialog";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+
 import { Search, X } from "lucide-react";
 import { getTagColor } from "@/lib/tagColors";
 

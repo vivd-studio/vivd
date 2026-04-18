@@ -10,7 +10,8 @@ import {
 } from "@/lib/studioAuth";
 import { createStudioTrpcFetch } from "@/lib/trpcFetch";
 import { ThemeProvider } from "@/components/theme";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@vivd/ui";
+
 import { App } from "@/App";
 import "./index.css";
 

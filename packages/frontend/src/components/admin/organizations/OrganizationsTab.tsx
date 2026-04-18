@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 import { FolderKanban, Globe2, Users } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Panel, PanelContent } from "@/components/ui/panel";
-import { StatTile } from "@/components/ui/stat-tile";
-import { StatusPill } from "@/components/ui/status-pill";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge, Panel, PanelContent, StatTile, StatusPill, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+
 import { DomainsPanel } from "./components/DomainsPanel";
 import { MembersPanel } from "./components/MembersPanel";
 import { SettingsPanel } from "./components/SettingsPanel";

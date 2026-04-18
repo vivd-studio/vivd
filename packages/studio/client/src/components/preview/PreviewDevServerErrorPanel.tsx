@@ -1,12 +1,8 @@
 import { useCallback, useState } from "react";
 import { AlertCircle, Bot, ChevronDown, Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger } from "@vivd/ui";
+
 import { copyTextWithFallback } from "@/lib/browserActions";
 import { cn } from "@/lib/utils";
 import { useOptionalChatContext } from "../chat/ChatContext";

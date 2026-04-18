@@ -1,14 +1,7 @@
 import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
+import { Input, Textarea, Checkbox, FormControl, FormField, FormItem, FormMessage } from "@vivd/ui";
+
 import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { UrlFormValues } from "@/lib/form-schemas";
 

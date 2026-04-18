@@ -1,26 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, InteractiveSurface } from "@vivd/ui";
+
 import { ChevronsRight, Plus, Send, MousePointerClick, X, Square } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SelectedElementPill, AttachedFilePill } from "./SelectedElementPill";
 import { ImagePreviewPill } from "./ImagePreviewPill";
 import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "./ChatContext";
-import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import { STUDIO_CHAT_ATTACHMENT_MAX_FILES } from "@studio/shared/chatAttachmentPolicy";
 
 import { cn } from "@/lib/utils";

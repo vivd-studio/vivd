@@ -6,8 +6,8 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import type { Measurable } from "@radix-ui/rect";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input, Button } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { TAG_COLORS, type TagColor, getTagColor } from "@/lib/tagColors";
 

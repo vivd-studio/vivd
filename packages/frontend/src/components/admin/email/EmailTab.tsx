@@ -3,18 +3,8 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Input, Label } from "@vivd/ui";
+
 
 type BrandingState = {
   displayName: string;

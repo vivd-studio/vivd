@@ -1,12 +1,6 @@
 import { Sparkles, Wand2, Lock, Sun, Moon, Palette } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { InteractiveSurfaceButton } from "@/components/ui/interactive-surface";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, InteractiveSurfaceButton } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { useScratchWizard } from "./ScratchWizardContext";
 import { STYLE_PRESETS } from "./types";

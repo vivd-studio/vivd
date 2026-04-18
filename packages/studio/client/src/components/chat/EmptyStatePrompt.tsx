@@ -1,5 +1,6 @@
 import { Loader2, Palette, Sparkles, Type } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { ChatInputRegion } from "./ChatInputRegion";
 
 interface EmptyStatePromptProps {

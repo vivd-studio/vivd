@@ -1,24 +1,8 @@
 import type { ChangeEvent } from "react";
 import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import type { RouterOutputs } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+
 
 type InstanceSoftware = RouterOutputs["superadmin"]["getInstanceSoftware"];
 type InstanceNetwork = RouterOutputs["superadmin"]["getInstanceSettings"]["network"];

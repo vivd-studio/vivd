@@ -6,14 +6,8 @@ import { CenteredLoading, VivdIcon } from "@/components/common";
 import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
-import { Button } from "@/components/ui/button";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Button, Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@vivd/ui";
+
 import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import {

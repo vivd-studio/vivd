@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { ArrowLeft, X } from "lucide-react";
 import { ModeToggle } from "@/components/theme";
 import { VivdIcon } from "@/components/common";

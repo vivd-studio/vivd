@@ -10,8 +10,8 @@ import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "@vivd/ui";
+
 import {
   NavigationSearchContext,
   type NavigationSearchContextValue,

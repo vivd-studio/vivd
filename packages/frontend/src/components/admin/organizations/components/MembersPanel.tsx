@@ -2,24 +2,8 @@ import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { ChevronRight, RotateCcw, XCircle } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StatusPill } from "@/components/ui/status-pill";
+import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, FieldDescription, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill } from "@vivd/ui";
+
 import type {
   EditableOrganizationRole,
   MemberEdits,

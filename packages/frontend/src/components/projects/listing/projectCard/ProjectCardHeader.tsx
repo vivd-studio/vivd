@@ -1,9 +1,8 @@
 import type { RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Globe } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Badge, CardHeader, CardTitle, Input } from "@vivd/ui";
+
 import type { TagColor } from "@/lib/tagColors";
 import { VersionSelector } from "../../versioning/VersionSelector";
 import { ProjectTagsPopover, TagChip } from "../ProjectTagsPopover";

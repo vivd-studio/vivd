@@ -5,37 +5,8 @@ import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { isExperimentalSoloInstall } from "@/lib/featureFlags";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+
 
 type AccessStateFilter = "all" | "enabled" | "disabled" | "suspended";
 type ProjectAccessRow =

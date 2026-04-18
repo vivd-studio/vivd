@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 

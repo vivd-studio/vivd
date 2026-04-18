@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Sun, Moon, Laptop } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 
 type Theme = "light" | "dark" | "system";
 

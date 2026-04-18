@@ -1,18 +1,9 @@
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { PasswordInput } from "@/components/ui/password-input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, PasswordInput, Card, CardContent, CardHeader, CardTitle, Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@vivd/ui";
+
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ROUTES } from "@/app/router/paths";
 

@@ -1,11 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Button, Textarea } from "@vivd/ui";
+
 import { Loader2, Wand2, Eraser } from "lucide-react";
 import type { AssetItem } from "./types";
 import { getStudioImageUrlCandidates } from "./utils";

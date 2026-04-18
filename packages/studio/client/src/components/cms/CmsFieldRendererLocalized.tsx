@@ -1,6 +1,5 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Input, Label, Textarea } from "@vivd/ui";
+
 import { CmsAssetField } from "./CmsAssetField";
 import {
   buildRichTextReference,

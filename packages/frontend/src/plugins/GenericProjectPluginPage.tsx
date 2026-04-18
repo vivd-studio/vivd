@@ -2,11 +2,8 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Label, Textarea } from "@vivd/ui";
+
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
   ProjectPluginAccessActions,

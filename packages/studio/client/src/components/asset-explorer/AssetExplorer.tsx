@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button, ScrollArea } from "@vivd/ui";
+
 import { X, Plus, ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 

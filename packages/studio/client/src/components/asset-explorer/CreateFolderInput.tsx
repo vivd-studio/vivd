@@ -1,5 +1,5 @@
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input, Button } from "@vivd/ui";
+
 
 interface CreateFolderInputProps {
   value: string;

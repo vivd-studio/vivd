@@ -9,7 +9,8 @@ import {
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { useSidebar } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { useTheme } from "@/components/theme";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading } from "@/components/common";

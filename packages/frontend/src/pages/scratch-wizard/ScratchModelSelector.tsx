@@ -1,10 +1,6 @@
 import { Check, Rocket, Sparkles, Zap } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import type { ModelTier } from "@vivd/shared";
 

@@ -19,16 +19,8 @@ import { TABLET_PRESET } from "./types";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2 } from "lucide-react";
 import { isTextFile } from "../asset-explorer/utils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PreviewDevServerErrorPanel } from "./PreviewDevServerErrorPanel";

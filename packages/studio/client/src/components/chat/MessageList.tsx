@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { LoadingSpinner } from "@/components/common";
 import {
   Undo2,

@@ -1,11 +1,6 @@
 import { MousePointerClick, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
+
 
 interface ElementSelectorProps {
   isActive: boolean;

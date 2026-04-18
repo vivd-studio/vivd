@@ -10,18 +10,8 @@ import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router/paths";
 import { hardRedirect } from "@/lib/hardRedirect";
 import { buildHostOrigin } from "@/lib/localHostRouting";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, Input, PasswordInput } from "@vivd/ui";
+
 
 const inviteSignupSchema = z
   .object({

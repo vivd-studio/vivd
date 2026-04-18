@@ -2,33 +2,8 @@ import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { AlertTriangle, Pencil } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Callout, CalloutTitle } from "@/components/ui/callout";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Panel,
-  PanelContent,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
-} from "@/components/ui/panel";
-import { Progress } from "@/components/ui/progress";
-import {
-  StatTile,
-  StatTileHelper,
-  StatTileLabel,
-  StatTileValue,
-} from "@/components/ui/stat-tile";
-import { StatusPill } from "@/components/ui/status-pill";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Button, Callout, CalloutTitle, Field, FieldLabel, Input, Panel, PanelContent, PanelDescription, PanelHeader, PanelTitle, Progress, StatTile, StatTileHelper, StatTileLabel, StatTileValue, StatusPill, Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@vivd/ui";
+
 import type { LimitsForm, Organization, OrganizationUsage } from "../types";
 import {
   formatLimit,

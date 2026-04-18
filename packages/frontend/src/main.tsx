@@ -6,7 +6,8 @@ import { ThemeProvider } from "@/components/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, httpSubscriptionLink, splitLink } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@vivd/ui";
+
 import { AppConfigProvider } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
 

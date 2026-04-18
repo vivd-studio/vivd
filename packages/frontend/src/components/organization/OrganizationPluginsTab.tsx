@@ -5,16 +5,8 @@ import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
 import { authClient } from "@/lib/auth-client";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from "@vivd/ui";
+
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 
 type OrganizationPluginsOverviewRow =

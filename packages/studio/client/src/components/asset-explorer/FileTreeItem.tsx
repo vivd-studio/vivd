@@ -9,7 +9,8 @@ import {
   Trash2,
   Wand2,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Input, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@vivd/ui";
+
 import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "./types";
 import {
@@ -20,16 +21,6 @@ import {
   isFileTreeGrayedFolder,
   shouldIgnoreFileTreeMoveTarget,
 } from "./utils";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import type { FileTreeMoveTarget } from "./FileTreeView";
 
 interface FileTreeItemProps {

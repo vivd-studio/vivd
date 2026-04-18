@@ -4,7 +4,8 @@ import { EditorView } from "@codemirror/view";
 import { Loader2, FileText } from "lucide-react";
 import { useMemo } from "react";
 import { useTheme } from "@/components/theme";
-import { Label } from "@/components/ui/label";
+import { Label } from "@vivd/ui";
+
 
 interface CmsMarkdownBodyEditorProps {
   value: string;

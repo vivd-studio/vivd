@@ -9,9 +9,8 @@ import { trpc } from "@/lib/trpc";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge, Button, Tabs, TabsList, TabsTrigger } from "@vivd/ui";
+
 import { buildAssetFileUrl } from "@/components/asset-explorer/utils";
 import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { cn } from "@/lib/utils";

@@ -12,7 +12,8 @@ import {
 } from "@/lib/localHostRouting";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { EmailVerificationPrompt } from "@/components/auth/EmailVerificationPrompt";
 
 function normalizeHostForComparison(host: string | null | undefined): string {

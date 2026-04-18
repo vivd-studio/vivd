@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@vivd/ui";
+
 import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { formatDollarsAsCredits } from "@vivd/shared";
 import { SessionList } from "./SessionList";
