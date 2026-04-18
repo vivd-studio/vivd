@@ -24,9 +24,16 @@ import {
 } from "@/plugins/projectPageScaffold";
 import { tableBookingPluginConfigSchema } from "../backend/config";
 import {
+  TABLE_BOOKING_DAY_CAPACITY_READ_ID,
   TABLE_BOOKING_BOOKINGS_READ_ID,
   TABLE_BOOKING_SUMMARY_READ_ID,
 } from "../shared/summary";
+import {
+  TABLE_BOOKING_DELETE_CAPACITY_ADJUSTMENT_ACTION_ID,
+  TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID,
+  TABLE_BOOKING_SAVE_CAPACITY_ADJUSTMENT_ACTION_ID,
+  TABLE_BOOKING_SAVE_RESERVATION_ACTION_ID,
+} from "../shared/operatorActions";
 import { PLUGIN_READ_REFETCH_INTERVAL_MS } from "./tableBookingProjectPage/constants";
 import { TableBookingBookingsTab } from "./tableBookingProjectPage/BookingsTab";
 import { TableBookingCalendarTab } from "./tableBookingProjectPage/CalendarTab";
@@ -40,6 +47,7 @@ import { TableBookingSetupTab } from "./tableBookingProjectPage/SetupTab";
 import type {
   SettingsTab,
   TableBookingBookingsPayload,
+  TableBookingDayCapacityPayload,
   TableBookingPluginInfo,
   TableBookingProjectPageProps,
   TableBookingSourceChannel,
@@ -179,10 +187,14 @@ export default function TableBookingProjectPage({
         : false,
     },
   );
-  const dayCapacityQuery = trpc.plugins.tableBooking.dayCapacity.useQuery(
+  const dayCapacityQuery = trpc.plugins.read.useQuery(
     {
       slug: projectSlug,
-      serviceDate: selectedDate,
+      pluginId: typedPluginId,
+      readId: TABLE_BOOKING_DAY_CAPACITY_READ_ID,
+      input: {
+        serviceDate: selectedDate,
+      },
     },
     {
       enabled: pluginReadQueriesEnabled && Boolean(selectedDate),
@@ -240,20 +252,19 @@ export default function TableBookingProjectPage({
     },
   });
 
-  const saveReservationMutation = trpc.plugins.tableBooking.saveReservation.useMutation({
+  const saveReservationMutation = trpc.plugins.action.useMutation({
     onSuccess: async (_, variables) => {
+      const reservationInput = variables.input;
+      if (!reservationInput) {
+        return;
+      }
       toast.success(
-        variables.bookingId ? "Reservation updated" : "Reservation created",
+        reservationInput.bookingId ? "Reservation updated" : "Reservation created",
       );
       setReservationSheetOpen(false);
-      reservationEditor.resetReservationEditor(variables.date);
+      reservationEditor.resetReservationEditor(String(reservationInput.date));
       await invalidatePluginPage([
         () => utils.plugins.read.invalidate(),
-        () =>
-          utils.plugins.tableBooking.dayCapacity.invalidate({
-            slug: projectSlug,
-            serviceDate: variables.date,
-          }),
       ]);
     },
     onError: (error) => {
@@ -264,20 +275,22 @@ export default function TableBookingProjectPage({
   });
 
   const saveCapacityAdjustmentMutation =
-    trpc.plugins.tableBooking.saveCapacityAdjustment.useMutation({
+    trpc.plugins.action.useMutation({
       onSuccess: async (_, variables) => {
+        const adjustmentInput = variables.input;
+        if (!adjustmentInput) {
+          return;
+        }
         toast.success(
-          variables.adjustmentId
+          adjustmentInput.adjustmentId
             ? "Capacity adjustment updated"
             : "Capacity adjustment saved",
         );
-        capacityEditor.resetCapacityAdjustmentForm(variables.serviceDate);
+        capacityEditor.resetCapacityAdjustmentForm(
+          String(adjustmentInput.serviceDate),
+        );
         await Promise.all([
           utils.plugins.read.invalidate(),
-          utils.plugins.tableBooking.dayCapacity.invalidate({
-            slug: projectSlug,
-            serviceDate: variables.serviceDate,
-          }),
         ]);
       },
       onError: (error) => {
@@ -285,19 +298,15 @@ export default function TableBookingProjectPage({
           description: error.message,
         });
       },
-    });
+  });
 
   const deleteCapacityAdjustmentMutation =
-    trpc.plugins.tableBooking.deleteCapacityAdjustment.useMutation({
+    trpc.plugins.action.useMutation({
       onSuccess: async () => {
         toast.success("Capacity adjustment removed");
         capacityEditor.resetCapacityAdjustmentForm(selectedDate);
         await Promise.all([
           utils.plugins.read.invalidate(),
-          utils.plugins.tableBooking.dayCapacity.invalidate({
-            slug: projectSlug,
-            serviceDate: selectedDate,
-          }),
         ]);
       },
       onError: (error) => {
@@ -305,12 +314,21 @@ export default function TableBookingProjectPage({
           description: error.message,
         });
       },
-    });
+  });
 
-  const exportBookingsMutation = trpc.plugins.tableBooking.exportBookings.useMutation({
+  const exportBookingsMutation = trpc.plugins.action.useMutation({
     onSuccess: (result) => {
-      downloadTextFile(result.filename, result.csv, "text/csv;charset=utf-8");
-      toast.success(`Exported ${result.total} bookings`);
+      const exportResult = result.result as {
+        filename: string;
+        csv: string;
+        total: number;
+      };
+      downloadTextFile(
+        exportResult.filename,
+        exportResult.csv,
+        "text/csv;charset=utf-8",
+      );
+      toast.success(`Exported ${exportResult.total} bookings`);
     },
     onError: (error) => {
       toast.error("Could not export bookings", {
@@ -336,6 +354,9 @@ export default function TableBookingProjectPage({
   const summary = summaryQuery.data?.result as TableBookingSummaryPayload | undefined;
   const monthBookings = monthBookingsQuery.data?.result as
     | TableBookingBookingsPayload
+    | undefined;
+  const dayCapacity = dayCapacityQuery.data?.result as
+    | TableBookingDayCapacityPayload
     | undefined;
   const selectedDayBookings = selectedDateBookingsQuery.data?.result as
     | TableBookingBookingsPayload
@@ -411,43 +432,58 @@ export default function TableBookingProjectPage({
     reservationEditor.clearReservationErrors();
     saveReservationMutation.mutate({
       slug: projectSlug,
-      bookingId: reservationEditor.editingBookingId ?? undefined,
-      date: reservationEditor.reservationDate,
-      time: reservationEditor.reservationTime,
-      partySize: validation.partySize,
-      name: reservationEditor.reservationName.trim(),
-      email: reservationEditor.reservationEmail.trim(),
-      phone: reservationEditor.reservationPhone.trim(),
-      notes: reservationEditor.reservationNotes.trim() || null,
-      sourceChannel: reservationEditor.reservationSourceChannel,
-      sendGuestNotification: reservationEditor.sendGuestNotification,
+      pluginId: typedPluginId,
+      actionId: TABLE_BOOKING_SAVE_RESERVATION_ACTION_ID,
+      input: {
+        bookingId: reservationEditor.editingBookingId ?? undefined,
+        date: reservationEditor.reservationDate,
+        time: reservationEditor.reservationTime,
+        partySize: validation.partySize,
+        name: reservationEditor.reservationName.trim(),
+        email: reservationEditor.reservationEmail.trim(),
+        phone: reservationEditor.reservationPhone.trim(),
+        notes: reservationEditor.reservationNotes.trim() || null,
+        sourceChannel: reservationEditor.reservationSourceChannel,
+        sendGuestNotification: reservationEditor.sendGuestNotification,
+      },
     });
   };
 
   const saveCapacityAdjustment = () => {
     saveCapacityAdjustmentMutation.mutate({
       slug: projectSlug,
-      adjustmentId: capacityEditor.editingAdjustmentId ?? undefined,
-      serviceDate: selectedDate,
-      startTime: capacityEditor.adjustmentStartTime,
-      endTime: capacityEditor.adjustmentEndTime,
-      mode: capacityEditor.adjustmentMode,
-      capacityValue:
-        capacityEditor.adjustmentMode === "closed"
-          ? null
-          : Number.parseInt(capacityEditor.adjustmentCapacityValue || "0", 10),
-      reason: capacityEditor.adjustmentReason.trim() || null,
+      pluginId: typedPluginId,
+      actionId: TABLE_BOOKING_SAVE_CAPACITY_ADJUSTMENT_ACTION_ID,
+      input: {
+        adjustmentId: capacityEditor.editingAdjustmentId ?? undefined,
+        serviceDate: selectedDate,
+        startTime: capacityEditor.adjustmentStartTime,
+        endTime: capacityEditor.adjustmentEndTime,
+        mode: capacityEditor.adjustmentMode,
+        capacityValue:
+          capacityEditor.adjustmentMode === "closed"
+            ? null
+            : Number.parseInt(
+                capacityEditor.adjustmentCapacityValue || "0",
+                10,
+              ),
+        reason: capacityEditor.adjustmentReason.trim() || null,
+      },
     });
   };
 
   const exportBookings = () => {
     exportBookingsMutation.mutate({
       slug: projectSlug,
-      status: bookingStatus,
-      sourceChannel: bookingSourceChannel,
-      search: bookingSearch,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
+      pluginId: typedPluginId,
+      actionId: TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID,
+      input: {
+        status: bookingStatus,
+        sourceChannel: bookingSourceChannel,
+        search: bookingSearch,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      },
     });
   };
 
@@ -676,7 +712,7 @@ export default function TableBookingProjectPage({
                     isLoading: selectedDateBookingsQuery.isLoading,
                     error: selectedDateBookingsQuery.error,
                   }}
-                  dayCapacity={dayCapacityQuery.data}
+                  dayCapacity={dayCapacity}
                   dayCapacityQuery={{
                     isLoading: dayCapacityQuery.isLoading,
                     error: dayCapacityQuery.error,
@@ -691,7 +727,11 @@ export default function TableBookingProjectPage({
                   deleteCapacityAdjustment={(adjustmentId) =>
                     deleteCapacityAdjustmentMutation.mutate({
                       slug: projectSlug,
-                      adjustmentId,
+                      pluginId: typedPluginId,
+                      actionId: TABLE_BOOKING_DELETE_CAPACITY_ADJUSTMENT_ACTION_ID,
+                      input: {
+                        adjustmentId,
+                      },
                     })
                   }
                   deleteCapacityAdjustmentPending={

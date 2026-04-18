@@ -23,9 +23,11 @@ import {
   PLUGIN_READ_REFETCH_INTERVAL_MS,
 } from "./tableBookingProjectPage/constants";
 import {
+  TABLE_BOOKING_DAY_CAPACITY_READ_ID,
   TABLE_BOOKING_BOOKINGS_READ_ID,
   TABLE_BOOKING_SUMMARY_READ_ID,
 } from "../shared/summary";
+import { TABLE_BOOKING_SAVE_RESERVATION_ACTION_ID } from "../shared/operatorActions";
 import {
   formatLongDate,
   formatTime,
@@ -118,10 +120,14 @@ export default function TableBookingOperatorPage({
       refetchInterval: pluginEnabled ? PLUGIN_READ_REFETCH_INTERVAL_MS : false,
     },
   );
-  const dayCapacityQuery = trpc.plugins.tableBooking.dayCapacity.useQuery(
+  const dayCapacityQuery = trpc.plugins.read.useQuery(
     {
       slug: projectSlug,
-      serviceDate: today,
+      pluginId: "table_booking",
+      readId: TABLE_BOOKING_DAY_CAPACITY_READ_ID,
+      input: {
+        serviceDate: today,
+      },
     },
     {
       enabled: pluginEnabled && Boolean(today),
@@ -131,20 +137,18 @@ export default function TableBookingOperatorPage({
   );
 
   const saveReservationMutation =
-    trpc.plugins.tableBooking.saveReservation.useMutation({
+    trpc.plugins.action.useMutation({
       onSuccess: async (_, variables) => {
+        const reservationInput = variables.input;
+        if (!reservationInput) {
+          return;
+        }
         toast.success(
-          variables.bookingId ? "Reservation updated" : "Reservation created",
+          reservationInput.bookingId ? "Reservation updated" : "Reservation created",
         );
         setReservationSheetOpen(false);
-        reservationEditor.resetReservationEditor(variables.date);
-        await Promise.all([
-          utils.plugins.read.invalidate(),
-          utils.plugins.tableBooking.dayCapacity.invalidate({
-            slug: projectSlug,
-            serviceDate: variables.date,
-          }),
-        ]);
+        reservationEditor.resetReservationEditor(String(reservationInput.date));
+        await Promise.all([utils.plugins.read.invalidate()]);
       },
       onError: (error) => {
         toast.error("Could not save reservation", {
@@ -174,7 +178,7 @@ export default function TableBookingOperatorPage({
   const todayBookings = todayBookingsQuery.data?.result as
     | TableBookingBookingsPayload
     | undefined;
-  const dayCapacity = dayCapacityQuery.data as
+  const dayCapacity = dayCapacityQuery.data?.result as
     | TableBookingDayCapacityPayload
     | undefined;
 
@@ -303,16 +307,20 @@ export default function TableBookingOperatorPage({
     reservationEditor.clearReservationErrors();
     saveReservationMutation.mutate({
       slug: projectSlug,
-      bookingId: reservationEditor.editingBookingId ?? undefined,
-      date: reservationEditor.reservationDate,
-      time: reservationEditor.reservationTime,
-      partySize: validation.partySize,
-      name: reservationEditor.reservationName.trim(),
-      email: reservationEditor.reservationEmail.trim(),
-      phone: reservationEditor.reservationPhone.trim(),
-      notes: reservationEditor.reservationNotes.trim() || null,
-      sourceChannel: reservationEditor.reservationSourceChannel,
-      sendGuestNotification: reservationEditor.sendGuestNotification,
+      pluginId: "table_booking",
+      actionId: TABLE_BOOKING_SAVE_RESERVATION_ACTION_ID,
+      input: {
+        bookingId: reservationEditor.editingBookingId ?? undefined,
+        date: reservationEditor.reservationDate,
+        time: reservationEditor.reservationTime,
+        partySize: validation.partySize,
+        name: reservationEditor.reservationName.trim(),
+        email: reservationEditor.reservationEmail.trim(),
+        phone: reservationEditor.reservationPhone.trim(),
+        notes: reservationEditor.reservationNotes.trim() || null,
+        sourceChannel: reservationEditor.reservationSourceChannel,
+        sendGuestNotification: reservationEditor.sendGuestNotification,
+      },
     });
   };
 

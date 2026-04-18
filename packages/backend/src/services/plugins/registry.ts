@@ -1,7 +1,7 @@
 import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
-} from "./contactForm/module";
+} from "@vivd/plugin-contact-form/backend/module";
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,

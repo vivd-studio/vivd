@@ -55,6 +55,7 @@ vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
     startRun: vi.fn(),
     finishRun: vi.fn(),
     finishSession: vi.fn(),
+    hasActiveSession: vi.fn(() => false),
   },
 }));
 

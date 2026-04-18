@@ -170,6 +170,7 @@ export interface PluginUpdateConfigContext extends PluginOperationContext {
 export interface PluginActionContext extends PluginOperationContext {
   actionId: string;
   args: string[];
+  input?: Record<string, unknown>;
   requestedByUserId?: string | null;
   requestHost?: string | null;
 }

@@ -3,10 +3,30 @@ import {
   agentEventEmitter,
   createAgentEvent,
   type SessionCompletedData,
+  type SessionErrorData,
   type SessionStatus,
 } from "./eventEmitter.js";
 import { serverManager } from "./serverManager.js";
+import { inspectLatestAssistantTerminalState } from "./sessionHelpers.js";
+import { getStudioOpencodeOrphanedBusyGraceMs } from "../config.js";
 import { agentLeaseReporter } from "../services/reporting/AgentLeaseReporter.js";
+
+const FRESH_BUSY_STATUS_MAX_AGE_MS = 2_000;
+const CURRENT_PROCESS_STARTED_AT_MS = Math.max(
+  0,
+  Date.now() - Math.floor(process.uptime() * 1000),
+);
+
+type SessionIdentity = { id: string };
+
+type OrphanedBusySessionReconcileResult =
+  | { reconciled: false }
+  | { reconciled: true; message: string };
+
+const orphanedBusySessionReconciles = new Map<
+  string,
+  Promise<OrphanedBusySessionReconcileResult>
+>();
 
 export async function listSessions(directory: string) {
   const { client, directory: opencodeDir } =
@@ -39,6 +59,11 @@ export async function listProjects(directory: string) {
 export async function getSessionContent(sessionId: string, directory: string) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
+  await maybeReconcileOrphanedBusySessionIfNeeded({
+    client,
+    directory: opencodeDir,
+    sessionId,
+  });
   const result = await client.session.messages({
     sessionID: sessionId,
     directory: opencodeDir,
@@ -207,13 +232,28 @@ export async function getSessionsStatus(directory: string) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
   const sessions = await listSessions(directory);
-  const result = await client.session.status({ directory: opencodeDir });
-  if (result.error) throw new Error(JSON.stringify(result.error));
+  const normalizedStatuses = await loadNormalizedSessionStatuses(
+    client,
+    opencodeDir,
+    sessions,
+  );
+  for (const session of sessions) {
+    if (normalizedStatuses[session.id]?.type !== "busy") {
+      continue;
+    }
 
-  const normalizedStatuses = normalizeSessionStatuses(result.data, sessions);
+    const reconcileResult = await maybeReconcileOrphanedBusySession({
+      client,
+      directory: opencodeDir,
+      sessionId: session.id,
+    });
+    if (reconcileResult.reconciled) {
+      normalizedStatuses[session.id] = { type: "idle" };
+    }
+  }
+
   const emitterStatuses = agentEventEmitter.getSessionStatuses();
   const emitterStatusSnapshots = agentEventEmitter.getSessionStatusSnapshots();
-  const FRESH_BUSY_STATUS_MAX_AGE_MS = 2_000;
   const now = Date.now();
 
   const statusMap: Record<string, SessionStatus> = {};
@@ -245,6 +285,122 @@ export async function getSessionsStatus(directory: string) {
   }
 
   return statusMap;
+}
+
+async function loadNormalizedSessionStatuses(
+  client: OpencodeClient,
+  directory: string,
+  sessions: SessionIdentity[],
+): Promise<Record<string, SessionStatus>> {
+  const result = await client.session.status({ directory });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return normalizeSessionStatuses(result.data, sessions);
+}
+
+async function maybeReconcileOrphanedBusySessionIfNeeded(options: {
+  client: OpencodeClient;
+  directory: string;
+  sessionId: string;
+}): Promise<boolean> {
+  const statuses = await loadNormalizedSessionStatuses(
+    options.client,
+    options.directory,
+    [{ id: options.sessionId }],
+  );
+  if (statuses[options.sessionId]?.type !== "busy") {
+    return false;
+  }
+
+  const result = await maybeReconcileOrphanedBusySession(options);
+  return result.reconciled;
+}
+
+async function maybeReconcileOrphanedBusySession(options: {
+  client: OpencodeClient;
+  directory: string;
+  sessionId: string;
+}): Promise<OrphanedBusySessionReconcileResult> {
+  const key = `${options.directory}::${options.sessionId}`;
+  const inFlight = orphanedBusySessionReconciles.get(key);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const run = maybeReconcileOrphanedBusySessionImpl(options).finally(() => {
+    if (orphanedBusySessionReconciles.get(key) === run) {
+      orphanedBusySessionReconciles.delete(key);
+    }
+  });
+  orphanedBusySessionReconciles.set(key, run);
+  return run;
+}
+
+async function maybeReconcileOrphanedBusySessionImpl(options: {
+  client: OpencodeClient;
+  directory: string;
+  sessionId: string;
+}): Promise<OrphanedBusySessionReconcileResult> {
+  if (agentLeaseReporter.hasActiveSession(options.sessionId)) {
+    return { reconciled: false };
+  }
+
+  const latestAssistantState = await inspectLatestAssistantTerminalState({
+    client: options.client,
+    directory: options.directory,
+    sessionId: options.sessionId,
+  });
+  if (!latestAssistantState.hasAssistant || latestAssistantState.isTerminal) {
+    return { reconciled: false };
+  }
+
+  const activityAtMs = latestAssistantState.activityAtMs;
+  if (typeof activityAtMs !== "number" || !Number.isFinite(activityAtMs)) {
+    return { reconciled: false };
+  }
+
+  const now = Date.now();
+  const activityAgeMs = Math.max(0, now - activityAtMs);
+  const orphanedBusyGraceMs = getStudioOpencodeOrphanedBusyGraceMs();
+  const predatesCurrentProcess = activityAtMs < CURRENT_PROCESS_STARTED_AT_MS;
+  const exceededGraceWindow = activityAgeMs >= orphanedBusyGraceMs;
+
+  if (!predatesCurrentProcess && !exceededGraceWindow) {
+    return { reconciled: false };
+  }
+
+  const message = predatesCurrentProcess
+    ? "Studio interrupted this session after the runtime restarted because OpenCode still reported it as busy without an attached local run."
+    : `Studio interrupted this session because OpenCode kept reporting it as busy for more than ${Math.round(orphanedBusyGraceMs / 60_000)} minutes without an attached local run.`;
+
+  console.warn(
+    `[OpenCode] Aborting orphaned busy session=${options.sessionId} processStartedAtMs=${CURRENT_PROCESS_STARTED_AT_MS} activityAtMs=${activityAtMs} activityAgeMs=${activityAgeMs} graceMs=${orphanedBusyGraceMs}`,
+  );
+
+  const abortResult = await options.client.session.abort({
+    sessionID: options.sessionId,
+    directory: options.directory,
+  });
+  if (abortResult.error) {
+    console.warn(
+      `[OpenCode] Failed to abort orphaned busy session=${options.sessionId}: ${JSON.stringify(abortResult.error)}`,
+    );
+    return { reconciled: false };
+  }
+
+  agentLeaseReporter.finishSession(options.sessionId);
+  agentEventEmitter.emitSessionEvent(
+    options.sessionId,
+    createAgentEvent(options.sessionId, "session.error", {
+      kind: "session.error",
+      errorType: "error",
+      message,
+    } as SessionErrorData),
+  );
+
+  return {
+    reconciled: true,
+    message,
+  };
 }
 
 function isSessionStatusLike(value: unknown): value is SessionStatus {

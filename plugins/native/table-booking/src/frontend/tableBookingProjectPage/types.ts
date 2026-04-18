@@ -6,6 +6,9 @@ import type {
   TableBookingWeeklyScheduleEntry,
 } from "../../backend/config";
 import type {
+  TableBookingDayCapacityPayload as TableBookingDayCapacityPayloadFromBackend,
+} from "../../backend/ports";
+import type {
   TableBookingBookingsPayload,
   TableBookingRecord,
   TableBookingSummaryPayload,
@@ -21,7 +24,7 @@ export type TableBookingStatus =
 export type TableBookingSourceChannel =
   TableBookingBookingsPayload["rows"][number]["sourceChannel"];
 export type TableBookingDayCapacityPayload =
-  RouterOutputs["plugins"]["tableBooking"]["dayCapacity"];
+  TableBookingDayCapacityPayloadFromBackend;
 export type TableBookingCapacityAdjustmentRecord =
   TableBookingDayCapacityPayload["adjustments"][number];
 export type TableBookingCapacityMode =
@@ -65,10 +68,10 @@ export type TableBookingPluginInfo = RouterOutputs["plugins"]["info"] & {
 export type {
   TableBookingBookingsPayload,
   TableBookingDateOverride,
-  TableBookingDayCapacityPayload as TableBookingCapacityPayload,
   TableBookingPluginConfig,
   TableBookingRecord,
   TableBookingSchedulePeriod,
   TableBookingSummaryPayload,
   TableBookingWeeklyScheduleEntry,
 };
+export type { TableBookingDayCapacityPayload as TableBookingCapacityPayload };

@@ -122,6 +122,7 @@ export async function runProjectPluginAction(options: {
   pluginId: PluginId;
   actionId: string;
   args: string[];
+  input?: Record<string, unknown>;
   requestedByUserId?: string | null;
   requestHost?: string | null;
 }) {

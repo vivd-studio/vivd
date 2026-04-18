@@ -24,6 +24,7 @@
     "./frontend/plugin": "./src/frontend/plugin.ts",
     "./frontend/module": "./src/frontend/module.ts",
     "./frontend/TableBookingProjectPage": "./src/frontend/TableBookingProjectPage.tsx",
+    "./shared/operatorActions": "./src/shared/operatorActions.ts",
     "./shared/projectUi": "./src/shared/projectUi.ts",
     "./shared/summary": "./src/shared/summary.ts"
   },

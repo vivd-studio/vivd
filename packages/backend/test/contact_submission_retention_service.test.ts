@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  getContactSubmissionRetentionCleanupIntervalMs,
+  getContactSubmissionRetentionDays,
+  purgeExpiredContactSubmissions,
+} from "@vivd/plugin-contact-form/backend/retention";
 
-const { deleteMock, whereMock, returningMock } = vi.hoisted(() => {
+const { deleteMock, whereMock, returningMock, retentionDeps } = vi.hoisted(() => {
   const returningMock = vi.fn();
   const whereMock = vi.fn(() => ({ returning: returningMock }));
   const deleteMock = vi.fn(() => ({ where: whereMock }));
@@ -9,20 +14,19 @@ const { deleteMock, whereMock, returningMock } = vi.hoisted(() => {
     deleteMock,
     whereMock,
     returningMock,
+    retentionDeps: {
+      db: {
+        delete: deleteMock,
+      },
+      tables: {
+        contactFormSubmission: {
+          createdAt: "createdAt",
+          id: "id",
+        },
+      },
+    },
   };
 });
-
-vi.mock("../src/db", () => ({
-  db: {
-    delete: deleteMock,
-  },
-}));
-
-import {
-  getContactSubmissionRetentionCleanupIntervalMs,
-  getContactSubmissionRetentionDays,
-  purgeExpiredContactSubmissions,
-} from "../src/services/plugins/contactForm/retention";
 
 describe("ContactSubmissionRetentionService", () => {
   afterEach(() => {
@@ -44,6 +48,7 @@ describe("ContactSubmissionRetentionService", () => {
     process.env.VIVD_CONTACT_FORM_RETENTION_DAYS = "0";
 
     const deletedCount = await purgeExpiredContactSubmissions(
+      retentionDeps,
       new Date("2026-02-22T00:00:00.000Z"),
     );
 
@@ -56,6 +61,7 @@ describe("ContactSubmissionRetentionService", () => {
     returningMock.mockResolvedValueOnce([{ id: "a" }, { id: "b" }]);
 
     const deletedCount = await purgeExpiredContactSubmissions(
+      retentionDeps,
       new Date("2026-02-22T00:00:00.000Z"),
     );
 

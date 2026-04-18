@@ -21,6 +21,7 @@ const PENDING_TITLE_TTL_MS = 5_000;
 type LatestAssistantTerminalState = {
   hasAssistant: boolean;
   isTerminal: boolean;
+  activityAtMs: number | null;
   reason:
     | "no_assistant"
     | "assistant_error"
@@ -164,6 +165,11 @@ function getLatestAssistantTerminalState(
       return {
         hasAssistant: true,
         isTerminal: true,
+        activityAtMs: readSessionNumber(
+          (info.time as Record<string, unknown> | undefined)?.updated,
+          (info.time as Record<string, unknown> | undefined)?.completed,
+          (info.time as Record<string, unknown> | undefined)?.created,
+        ) ?? null,
         reason: "assistant_error",
       };
     }
@@ -175,6 +181,12 @@ function getLatestAssistantTerminalState(
       return {
         hasAssistant: true,
         isTerminal: true,
+        activityAtMs:
+          readSessionNumber(
+            (info.time as Record<string, unknown> | undefined)?.updated,
+            completedAt,
+            (info.time as Record<string, unknown> | undefined)?.created,
+          ) ?? null,
         reason: "assistant_completed",
       };
     }
@@ -184,6 +196,11 @@ function getLatestAssistantTerminalState(
       return {
         hasAssistant: true,
         isTerminal: true,
+        activityAtMs: readSessionNumber(
+          (info.time as Record<string, unknown> | undefined)?.updated,
+          (info.time as Record<string, unknown> | undefined)?.completed,
+          (info.time as Record<string, unknown> | undefined)?.created,
+        ) ?? null,
         reason: "assistant_finish",
       };
     }
@@ -191,6 +208,11 @@ function getLatestAssistantTerminalState(
     return {
       hasAssistant: true,
       isTerminal: false,
+      activityAtMs:
+        readSessionNumber(
+          (info.time as Record<string, unknown> | undefined)?.updated,
+          (info.time as Record<string, unknown> | undefined)?.created,
+        ) ?? null,
       reason: "assistant_unfinished",
     };
   }
@@ -198,6 +220,7 @@ function getLatestAssistantTerminalState(
   return {
     hasAssistant: false,
     isTerminal: false,
+    activityAtMs: null,
     reason: "no_assistant",
   };
 }
@@ -219,6 +242,7 @@ export async function inspectLatestAssistantTerminalState(options: {
       return {
         hasAssistant: false,
         isTerminal: false,
+        activityAtMs: null,
         reason: "no_assistant",
       };
     }
@@ -234,6 +258,7 @@ export async function inspectLatestAssistantTerminalState(options: {
     return {
       hasAssistant: false,
       isTerminal: false,
+      activityAtMs: null,
       reason: "no_assistant",
     };
   }

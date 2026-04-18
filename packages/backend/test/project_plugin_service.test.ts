@@ -1,4 +1,12 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createContactFormPluginService } from "@vivd/plugin-contact-form/backend/service";
+import { db } from "../src/db";
+import { projectPluginInstance } from "../src/db/schema";
+import {
+  ensureProjectPluginInstance,
+  getProjectPluginInstance,
+} from "../src/services/plugins/core/instanceStore";
 
 const {
   findFirstMock,
@@ -38,6 +46,17 @@ const {
     updateReturningMock,
   };
 });
+
+const {
+  listVerifiedExternalRecipientEmailSetMock,
+  markRecipientVerifiedMock,
+  syncProjectTurnstileWidgetMock,
+} = vi.hoisted(() => ({
+  listVerifiedExternalRecipientEmailSetMock: vi.fn(),
+  markRecipientVerifiedMock: vi.fn(),
+  syncProjectTurnstileWidgetMock: vi.fn(),
+}));
+
 vi.mock("../src/db", () => ({
   db: {
     query: {
@@ -57,8 +76,6 @@ vi.mock("../src/db", () => ({
   },
 }));
 
-import { contactFormPluginService } from "../src/services/plugins/contactForm/service";
-
 function makeRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "ppi-1",
@@ -75,10 +92,69 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe("contactFormPluginService", () => {
+  const buildService = () =>
+    createContactFormPluginService({
+      projectPluginInstanceService: {
+        ensurePluginInstance: ensureProjectPluginInstance,
+        getPluginInstance: getProjectPluginInstance,
+        async updatePluginInstance(hostOptions) {
+          const updates: {
+            configJson?: unknown;
+            status?: string;
+            updatedAt: Date;
+          } = {
+            updatedAt: hostOptions.updatedAt ?? new Date(),
+          };
+          if (Object.prototype.hasOwnProperty.call(hostOptions, "configJson")) {
+            updates.configJson = hostOptions.configJson;
+          }
+          if (typeof hostOptions.status === "string") {
+            updates.status = hostOptions.status;
+          }
+
+          const [updated] = await db
+            .update(projectPluginInstance)
+            .set(updates)
+            .where(eq(projectPluginInstance.id, hostOptions.instanceId))
+            .returning();
+
+          return updated ?? null;
+        },
+      },
+      pluginEntitlementService: {
+        resolveEffectiveEntitlement: vi.fn(),
+      },
+      recipientVerificationService: {
+        listRecipientDirectory: vi.fn().mockResolvedValue({
+          options: [],
+          pending: [],
+        }),
+        listVerifiedExternalRecipientEmailSet:
+          listVerifiedExternalRecipientEmailSetMock,
+        requestRecipientVerification: vi.fn(),
+        markRecipientVerified: markRecipientVerifiedMock,
+        verifyRecipientByToken: vi.fn(),
+      },
+      getContactFormSubmitEndpoint: vi
+        .fn()
+        .mockResolvedValue("https://api.vivd.studio/plugins/contact/v1/submit"),
+      inferSourceHosts: vi.fn().mockResolvedValue([]),
+      async listVerifiedOrganizationMemberEmails() {
+        const members = await organizationMemberFindManyMock();
+        return members
+          .filter((member: any) => member.user.emailVerified)
+          .map((member: any) => member.user.email);
+      },
+      syncProjectTurnstileWidget: syncProjectTurnstileWidgetMock,
+    });
+
   beforeEach(() => {
     findFirstMock.mockReset();
     organizationMemberFindManyMock.mockReset();
     contactFormRecipientVerificationFindManyMock.mockReset();
+    listVerifiedExternalRecipientEmailSetMock.mockReset();
+    markRecipientVerifiedMock.mockReset();
+    syncProjectTurnstileWidgetMock.mockReset();
     insertMock.mockClear();
     insertValuesMock.mockClear();
     insertReturningMock.mockReset();
@@ -94,10 +170,16 @@ describe("contactFormPluginService", () => {
         },
       },
     ]);
-    contactFormRecipientVerificationFindManyMock.mockResolvedValue([]);
+    listVerifiedExternalRecipientEmailSetMock.mockResolvedValue(new Set());
+    markRecipientVerifiedMock.mockResolvedValue({
+      email: "person@example.com",
+      status: "marked_verified",
+      cooldownRemainingSeconds: 0,
+    });
   });
 
   it("returns existing enabled instances idempotently", async () => {
+    const contactFormPluginService = buildService();
     const existing = makeRow({ status: "enabled" });
     findFirstMock.mockResolvedValueOnce(existing);
 
@@ -114,6 +196,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("re-enables existing disabled instances instead of creating duplicates", async () => {
+    const contactFormPluginService = buildService();
     const existingDisabled = makeRow({ status: "disabled" });
     const updatedEnabled = makeRow({
       status: "enabled",
@@ -135,6 +218,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("recovers from unique conflicts by loading the concurrently-created row", async () => {
+    const contactFormPluginService = buildService();
     const concurrentRow = makeRow({
       id: "ppi-concurrent",
       publicToken: "ppi-concurrent.token",
@@ -155,6 +239,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("persists config when recipient emails are verified", async () => {
+    const contactFormPluginService = buildService();
     const existing = makeRow({ status: "enabled" });
     const updated = makeRow({
       configJson: {
@@ -189,6 +274,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("rejects recipient emails that are not verified in the organization", async () => {
+    const contactFormPluginService = buildService();
     await expect(
       contactFormPluginService.updateContactFormConfig({
         organizationId: "org-1",
@@ -220,6 +306,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("rejects saves when recipient email list is empty", async () => {
+    const contactFormPluginService = buildService();
     await expect(
       contactFormPluginService.updateContactFormConfig({
         organizationId: "org-1",
@@ -251,6 +338,7 @@ describe("contactFormPluginService", () => {
   });
 
   it("rejects manually marking a recipient verified when the plugin is not enabled", async () => {
+    const contactFormPluginService = buildService();
     findFirstMock.mockResolvedValueOnce(makeRow({ status: "disabled" }));
 
     await expect(

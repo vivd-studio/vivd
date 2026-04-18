@@ -39,6 +39,7 @@ export const runPluginActionInput = z.object({
   pluginId: z.enum(PLUGIN_IDS),
   actionId: z.string().trim().min(1),
   args: z.array(z.string()).default([]),
+  input: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const readPluginInput = z.object({
@@ -212,6 +213,7 @@ export const runPluginActionProcedure = projectMemberProcedure
       pluginId: input.pluginId,
       actionId: input.actionId,
       args: input.args,
+      input: input.input,
       requestedByUserId: ctx.session.user.id,
       requestHost:
         ctx.requestHost ??

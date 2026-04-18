@@ -132,6 +132,8 @@ Good examples:
 - generic catalog, info, config, and action transport in the host
 - plugin-specific dashboard page in the plugin package
 - shared shortcut metadata in `packages/shared/src/types/plugins.ts`
+- richer control-plane mutations still going through the generic `plugins.action` surface by sending structured `input` payloads instead of reviving plugin-specific backend routers
+- plugin-owned public route aliases declared as extra `publicRoutes` entries in the plugin contribution when the same router must mount at more than one host path
 
 Bad examples:
 - adding another hardcoded plugin list to a frontend page
@@ -242,10 +244,12 @@ Examples:
 - plugin-specific backend router files under `packages/backend/src/trpcRouters/plugins/*`
 - backend plugin integration registries such as `packages/backend/src/services/plugins/integrationHooks.ts`
 - compatibility page re-exports such as `packages/frontend/src/pages/ProjectAnalytics.tsx`
+- old backend plugin re-export folders under `packages/backend/src/services/plugins/<plugin>/` and `packages/backend/src/httpRoutes/plugins/<plugin>/`
 
 If you touch a compatibility layer:
 - move logic into the plugin or generic host layer first
 - leave the old path as a thin adapter or re-export only if still needed
+- if nothing in-repo still imports it after the move, delete it instead of preserving a dead wrapper
 
 ## Project-State Note
 

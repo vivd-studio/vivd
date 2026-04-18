@@ -7,6 +7,7 @@ import {
 export const TABLE_BOOKING_SUMMARY_READ_ID = "summary";
 export const TABLE_BOOKING_BOOKINGS_READ_ID = "bookings";
 export const TABLE_BOOKING_AGENDA_READ_ID = "agenda";
+export const TABLE_BOOKING_DAY_CAPACITY_READ_ID = "day_capacity";
 
 export const tableBookingSummaryRangeSchema = z.union([
   z.literal(7),
@@ -48,6 +49,10 @@ export const tableBookingAgendaReadInputSchema = z.object({
   rangeDays: z.number().int().min(1).max(31).default(7),
 });
 
+export const tableBookingDayCapacityReadInputSchema = z.object({
+  serviceDate: tableBookingIsoDateSchema,
+});
+
 export type TableBookingSummaryRange = z.infer<
   typeof tableBookingSummaryRangeSchema
 >;
@@ -65,6 +70,9 @@ export type TableBookingBookingsReadInput = z.infer<
 >;
 export type TableBookingAgendaReadInput = z.infer<
   typeof tableBookingAgendaReadInputSchema
+>;
+export type TableBookingDayCapacityReadInput = z.infer<
+  typeof tableBookingDayCapacityReadInputSchema
 >;
 
 export const tableBookingSummaryReadDefinition = {
@@ -167,6 +175,21 @@ export const tableBookingAgendaReadDefinition = {
       required: false,
       description: "Number of upcoming days to include.",
       defaultValue: 7,
+    },
+  ],
+} satisfies PluginReadDefinition;
+
+export const tableBookingDayCapacityReadDefinition = {
+  readId: TABLE_BOOKING_DAY_CAPACITY_READ_ID,
+  title: "Day capacity",
+  description:
+    "Load the effective capacity windows and overrides for one service date.",
+  arguments: [
+    {
+      name: "serviceDate",
+      type: "string",
+      required: true,
+      description: "Service date in YYYY-MM-DD format.",
     },
   ],
 } satisfies PluginReadDefinition;

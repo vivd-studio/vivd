@@ -1,40 +1,33 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createContext, useContext, type ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TableBookingProjectPage from "@vivd/plugin-table-booking/frontend/TableBookingProjectPage";
 import {
+  TABLE_BOOKING_DAY_CAPACITY_READ_ID,
   TABLE_BOOKING_BOOKINGS_READ_ID,
   TABLE_BOOKING_SUMMARY_READ_ID,
   type TableBookingBookingsPayload,
   type TableBookingSummaryPayload,
 } from "@vivd/plugin-table-booking/shared/summary";
+import { TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID } from "@vivd/plugin-table-booking/shared/operatorActions";
 
 const {
   ensureUseMutationMock,
   infoUseQueryMock,
   actionUseMutationMock,
-  dayCapacityUseQueryMock,
-  deleteCapacityAdjustmentUseMutationMock,
-  exportBookingsUseMutationMock,
   projectListUseQueryMock,
   readUseQueryMock,
   requestAccessUseMutationMock,
-  saveCapacityAdjustmentUseMutationMock,
-  saveReservationUseMutationMock,
   updateConfigUseMutationMock,
   useUtilsMock,
 } = vi.hoisted(() => ({
   ensureUseMutationMock: vi.fn(),
   infoUseQueryMock: vi.fn(),
   actionUseMutationMock: vi.fn(),
-  dayCapacityUseQueryMock: vi.fn(),
-  deleteCapacityAdjustmentUseMutationMock: vi.fn(),
-  exportBookingsUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   readUseQueryMock: vi.fn(),
   requestAccessUseMutationMock: vi.fn(),
-  saveCapacityAdjustmentUseMutationMock: vi.fn(),
-  saveReservationUseMutationMock: vi.fn(),
   updateConfigUseMutationMock: vi.fn(),
   useUtilsMock: vi.fn(),
 }));
@@ -188,23 +181,6 @@ vi.mock("@/lib/trpc", () => ({
       updateConfig: {
         useMutation: updateConfigUseMutationMock,
       },
-      tableBooking: {
-        dayCapacity: {
-          useQuery: dayCapacityUseQueryMock,
-        },
-        saveReservation: {
-          useMutation: saveReservationUseMutationMock,
-        },
-        saveCapacityAdjustment: {
-          useMutation: saveCapacityAdjustmentUseMutationMock,
-        },
-        deleteCapacityAdjustment: {
-          useMutation: deleteCapacityAdjustmentUseMutationMock,
-        },
-        exportBookings: {
-          useMutation: exportBookingsUseMutationMock,
-        },
-      },
     },
     project: {
       list: {
@@ -334,6 +310,67 @@ function createMutationResult() {
   };
 }
 
+function createReadQueryResult<T>(
+  result: T,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    data: { result },
+    error: null,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function defaultReadUseQueryMock({
+  readId,
+  input,
+}: {
+  readId: string;
+  input?: {
+    startDate?: string;
+    endDate?: string;
+  };
+}) {
+  if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
+    return createReadQueryResult(summaryPayload);
+  }
+
+  if (readId === TABLE_BOOKING_DAY_CAPACITY_READ_ID) {
+    return createReadQueryResult(dayCapacityPayload);
+  }
+
+  if (readId === TABLE_BOOKING_BOOKINGS_READ_ID) {
+    return createReadQueryResult({
+      ...bookingsPayload,
+      startDate: input?.startDate ?? null,
+      endDate: input?.endDate ?? null,
+    });
+  }
+
+  return createReadQueryResult(undefined);
+}
+
+function mockActionMutation(
+  mutationResult: ReturnType<typeof createMutationResult> = createMutationResult(),
+) {
+  actionUseMutationMock.mockReturnValue(mutationResult);
+  return mutationResult;
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <TableBookingProjectPage
+        projectSlug="nudels-without-pesto"
+        isEmbedded={true}
+      />
+    </MemoryRouter>,
+  );
+}
+
 describe("TableBookingProjectPage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -343,13 +380,8 @@ describe("TableBookingProjectPage", () => {
     infoUseQueryMock.mockReset();
     readUseQueryMock.mockReset();
     actionUseMutationMock.mockReset();
-    dayCapacityUseQueryMock.mockReset();
-    deleteCapacityAdjustmentUseMutationMock.mockReset();
     ensureUseMutationMock.mockReset();
-    exportBookingsUseMutationMock.mockReset();
     requestAccessUseMutationMock.mockReset();
-    saveCapacityAdjustmentUseMutationMock.mockReset();
-    saveReservationUseMutationMock.mockReset();
     updateConfigUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
     useUtilsMock.mockReset();
@@ -372,11 +404,6 @@ describe("TableBookingProjectPage", () => {
         },
         read: {
           invalidate: vi.fn().mockResolvedValue(undefined),
-        },
-        tableBooking: {
-          dayCapacity: {
-            invalidate: vi.fn().mockResolvedValue(undefined),
-          },
         },
       },
     });
@@ -436,20 +463,10 @@ describe("TableBookingProjectPage", () => {
       refetch: vi.fn().mockResolvedValue(undefined),
     });
 
-    actionUseMutationMock.mockReturnValue(createMutationResult());
-    dayCapacityUseQueryMock.mockReturnValue({
-      data: dayCapacityPayload,
-      error: null,
-      isLoading: false,
-      isFetching: false,
-      refetch: vi.fn().mockResolvedValue(undefined),
-    });
-    deleteCapacityAdjustmentUseMutationMock.mockReturnValue(createMutationResult());
+    readUseQueryMock.mockImplementation(defaultReadUseQueryMock);
+    mockActionMutation();
     ensureUseMutationMock.mockReturnValue(createMutationResult());
-    exportBookingsUseMutationMock.mockReturnValue(createMutationResult());
     requestAccessUseMutationMock.mockReturnValue(createMutationResult());
-    saveCapacityAdjustmentUseMutationMock.mockReturnValue(createMutationResult());
-    saveReservationUseMutationMock.mockReturnValue(createMutationResult());
     updateConfigUseMutationMock.mockReturnValue(createMutationResult());
   });
 
@@ -470,51 +487,33 @@ describe("TableBookingProjectPage", () => {
         };
       }) => {
         if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
-          return {
-            data: { result: summaryPayload },
-            error: null,
-            isLoading: false,
-            refetch: vi.fn().mockResolvedValue(undefined),
-          };
+          return createReadQueryResult(summaryPayload);
+        }
+        if (readId === TABLE_BOOKING_DAY_CAPACITY_READ_ID) {
+          return createReadQueryResult(dayCapacityPayload);
         }
         if (
           input?.startDate === "2026-04-01" &&
           input?.endDate === "2026-04-30"
         ) {
-          return {
-            data: { result: bookingsPayload },
-            error: null,
-            isLoading: false,
-            refetch: vi.fn().mockResolvedValue(undefined),
-          };
+          return createReadQueryResult(bookingsPayload);
         }
-        return {
-          data: {
-            result: {
-              ...bookingsPayload,
-              total: 0,
-              startDate: input?.startDate ?? null,
-              endDate: input?.endDate ?? null,
-              rows: [],
-            },
-          },
-          error: null,
-          isLoading: false,
-          refetch: vi.fn().mockResolvedValue(undefined),
-        };
+        return createReadQueryResult({
+          ...bookingsPayload,
+          total: 0,
+          startDate: input?.startDate ?? null,
+          endDate: input?.endDate ?? null,
+          rows: [],
+        });
       },
     );
 
-    render(
-      <TableBookingProjectPage
-        projectSlug="nudels-without-pesto"
-        isEmbedded={true}
-      />,
-    );
+    renderPage();
 
     expect(screen.getByText("Schedule calendar")).toBeInTheDocument();
     expect(screen.getByText("Overall capacity")).toBeInTheDocument();
-    expect(screen.getByText("4 covers in the pipeline")).toBeInTheDocument();
+    expect(screen.getByText("Upcoming")).toBeInTheDocument();
+    expect(screen.getAllByText("4 covers")).not.toHaveLength(0);
 
     const monthCall = readUseQueryMock.mock.calls.find(
       (call) =>
@@ -541,61 +540,44 @@ describe("TableBookingProjectPage", () => {
           endDate?: string;
         };
       }) => {
+        if (readId === TABLE_BOOKING_DAY_CAPACITY_READ_ID) {
+          return createReadQueryResult(dayCapacityPayload);
+        }
+        if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
+          return createReadQueryResult(summaryPayload);
+        }
         if (readId === TABLE_BOOKING_BOOKINGS_READ_ID) {
           if (
             input?.startDate === "2026-04-01" &&
             input?.endDate === "2026-04-30"
           ) {
-            return {
-              data: { result: bookingsPayload },
-              error: null,
-              isLoading: false,
-              refetch: vi.fn().mockResolvedValue(undefined),
-            };
+            return createReadQueryResult(bookingsPayload);
           }
           if (
             input?.startDate === "2026-04-16" &&
             input?.endDate === "2026-04-16"
           ) {
-            return {
-              data: {
-                result: {
-                  ...bookingsPayload,
-                  total: 0,
-                  startDate: "2026-04-16",
-                  endDate: "2026-04-16",
-                  rows: [],
-                },
-              },
-              error: null,
-              isLoading: false,
-              refetch: vi.fn().mockResolvedValue(undefined),
-            };
+            return createReadQueryResult({
+              ...bookingsPayload,
+              total: 0,
+              startDate: "2026-04-16",
+              endDate: "2026-04-16",
+              rows: [],
+            });
           }
           return {
             data: undefined,
             error: { message: "bookings exploded" },
             isLoading: false,
+            isFetching: false,
             refetch: vi.fn().mockResolvedValue(undefined),
           };
         }
-        if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
-          return {
-            data: { result: summaryPayload },
-            error: null,
-            isLoading: false,
-            refetch: vi.fn().mockResolvedValue(undefined),
-          };
-        }
+        return createReadQueryResult(undefined);
       },
     );
 
-    render(
-      <TableBookingProjectPage
-        projectSlug="nudels-without-pesto"
-        isEmbedded={true}
-      />,
-    );
+    renderPage();
 
     expect(
       screen.getByText(
@@ -607,7 +589,8 @@ describe("TableBookingProjectPage", () => {
 
   it("exposes booking export and source-channel badges in booking search", () => {
     const exportMutate = vi.fn();
-    exportBookingsUseMutationMock.mockReturnValue({
+    actionUseMutationMock.mockReset();
+    mockActionMutation({
       mutate: exportMutate,
       isPending: false,
       variables: undefined,
@@ -626,54 +609,41 @@ describe("TableBookingProjectPage", () => {
         };
       }) => {
         if (readId === TABLE_BOOKING_SUMMARY_READ_ID) {
-          return {
-            data: { result: summaryPayload },
-            error: null,
-            isLoading: false,
-            refetch: vi.fn().mockResolvedValue(undefined),
-          };
+          return createReadQueryResult(summaryPayload);
+        }
+        if (readId === TABLE_BOOKING_DAY_CAPACITY_READ_ID) {
+          return createReadQueryResult(dayCapacityPayload);
         }
         if (
           input?.startDate === "2026-04-01" &&
           input?.endDate === "2026-04-30"
         ) {
-          return {
-            data: { result: bookingsPayload },
-            error: null,
-            isLoading: false,
-            refetch: vi.fn().mockResolvedValue(undefined),
-          };
+          return createReadQueryResult(bookingsPayload);
         }
-        return {
-          data: { result: bookingsPayload },
-          error: null,
-          isLoading: false,
-          refetch: vi.fn().mockResolvedValue(undefined),
-        };
+        return createReadQueryResult(bookingsPayload);
       },
     );
 
-    render(
-      <TableBookingProjectPage
-        projectSlug="nudels-without-pesto"
-        isEmbedded={true}
-      />,
-    );
+    renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: "Booking search" }));
 
     expect(screen.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
-    expect(screen.getAllByText("Staff")).toHaveLength(2);
+    expect(screen.getByText("Staff")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
 
     expect(exportMutate).toHaveBeenCalledWith({
       slug: "nudels-without-pesto",
-      status: "all",
-      sourceChannel: "all",
-      search: "",
-      startDate: undefined,
-      endDate: undefined,
+      pluginId: "table_booking",
+      actionId: TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID,
+      input: {
+        status: "all",
+        sourceChannel: "all",
+        search: "",
+        startDate: undefined,
+        endDate: undefined,
+      },
     });
   });
 });

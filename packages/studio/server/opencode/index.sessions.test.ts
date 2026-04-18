@@ -20,6 +20,7 @@ const {
   createAgentEventMock,
   getSystemPromptForSessionStartMock,
   finishSessionRunsMock,
+  hasActiveSessionMock,
   requestBucketSyncAfterAgentTaskMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
@@ -41,6 +42,7 @@ const {
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
   getSystemPromptForSessionStartMock: vi.fn(),
   finishSessionRunsMock: vi.fn(),
+  hasActiveSessionMock: vi.fn(),
   requestBucketSyncAfterAgentTaskMock: vi.fn(),
 }));
 
@@ -97,12 +99,14 @@ vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
     startRun: vi.fn(),
     finishRun: vi.fn(),
     finishSession: finishSessionRunsMock,
+    hasActiveSession: hasActiveSessionMock,
   },
 }));
 
 import {
   abortSession,
   createSession,
+  getSessionContent,
   getMessageDiff,
   getSessionsStatus,
   listSessions,
@@ -130,6 +134,7 @@ describe("opencode index session behavior", () => {
     createAgentEventMock.mockClear();
     getSystemPromptForSessionStartMock.mockReset();
     finishSessionRunsMock.mockReset();
+    hasActiveSessionMock.mockReset();
     requestBucketSyncAfterAgentTaskMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
@@ -143,6 +148,7 @@ describe("opencode index session behavior", () => {
     getSessionStatusesMock.mockReturnValue({});
     getSessionStatusSnapshotsMock.mockReturnValue({});
     getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
+    hasActiveSessionMock.mockReturnValue(false);
     requestBucketSyncAfterAgentTaskMock.mockReturnValue(true);
 
     getClientAndDirectoryMock.mockResolvedValue({
@@ -436,6 +442,143 @@ describe("opencode index session behavior", () => {
     expect(result).toEqual({
       "sess-1": { type: "busy" },
     });
+  });
+
+  it("aborts orphaned busy sessions from before the current runtime and surfaces the reconciled error", async () => {
+    sessionListMock.mockResolvedValueOnce({
+      data: [{ id: "sess-1", directory: "/workspace/project/" }],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: {
+        "sess-1": { type: "busy" },
+      },
+      error: undefined,
+    });
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "msg-assistant",
+            role: "assistant",
+            time: {
+              created: 0,
+            },
+          },
+        },
+      ],
+      error: undefined,
+    });
+    getSessionStatusesMock.mockReturnValueOnce({
+      "sess-1": {
+        type: "error",
+        message: "Interrupted orphaned session",
+      },
+    });
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(sessionAbortMock).toHaveBeenCalledWith({
+      sessionID: "sess-1",
+      directory: "/workspace/project/",
+    });
+    expect(emitSessionEventMock).toHaveBeenCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        kind: "session.error",
+        message: expect.stringContaining("runtime restarted"),
+      }),
+    );
+    expect(result).toEqual({
+      "sess-1": {
+        type: "error",
+        message: "Interrupted orphaned session",
+      },
+    });
+  });
+
+  it("does not abort a busy session while a local run is still attached", async () => {
+    sessionListMock.mockResolvedValueOnce({
+      data: [{ id: "sess-1", directory: "/workspace/project/" }],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: {
+        "sess-1": { type: "busy" },
+      },
+      error: undefined,
+    });
+    hasActiveSessionMock.mockReturnValueOnce(true);
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(sessionMessagesMock).not.toHaveBeenCalled();
+    expect(sessionAbortMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      "sess-1": { type: "busy" },
+    });
+  });
+
+  it("reconciles orphaned busy sessions before returning session messages", async () => {
+    sessionStatusMock.mockResolvedValueOnce({
+      data: {
+        "sess-1": { type: "busy" },
+      },
+      error: undefined,
+    });
+    sessionMessagesMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            info: {
+              id: "msg-assistant",
+              role: "assistant",
+              time: {
+                created: 0,
+              },
+            },
+          },
+        ],
+        error: undefined,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            info: {
+              id: "msg-assistant",
+              role: "assistant",
+              time: {
+                created: 0,
+              },
+            },
+          },
+        ],
+        error: undefined,
+      });
+
+    const result = await getSessionContent("sess-1", "/workspace/project");
+
+    expect(sessionAbortMock).toHaveBeenCalledWith({
+      sessionID: "sess-1",
+      directory: "/workspace/project/",
+    });
+    expect(emitSessionEventMock).toHaveBeenCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        kind: "session.error",
+      }),
+    );
+    expect(result).toEqual([
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: 0,
+          },
+        },
+      },
+    ]);
   });
 
   it("marks session idle and emits completion when abort succeeds", async () => {

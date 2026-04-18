@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createEmailFeedbackRouter } from "@vivd/plugin-contact-form/backend/http/feedback";
 
 const { recordFeedbackMock, verifyWebhookMock } = vi.hoisted(() => ({
   recordFeedbackMock: vi.fn(),
@@ -13,20 +14,14 @@ vi.mock("resend", () => ({
   })),
 }));
 
-vi.mock("../src/services/email/deliverability", () => ({
-  emailDeliverabilityService: {
-    recordFeedback: recordFeedbackMock,
-  },
-  isSesFeedbackAutoConfirmEnabled: vi.fn(() => false),
-}));
-
 async function postResendWebhook(body: string, headers?: Record<string, string>) {
-  const { createEmailFeedbackRouter } = await import(
-    "../src/httpRoutes/plugins/contactForm/feedback"
-  );
-
   // Avoid opening sockets in restricted environments by invoking the route handler directly.
-  const router = createEmailFeedbackRouter() as unknown as {
+  const router = createEmailFeedbackRouter({
+    emailDeliverabilityService: {
+      recordFeedback: recordFeedbackMock,
+    },
+    isSesFeedbackAutoConfirmEnabled: () => false,
+  }) as unknown as {
     stack?: Array<{
       route?: {
         path?: string;

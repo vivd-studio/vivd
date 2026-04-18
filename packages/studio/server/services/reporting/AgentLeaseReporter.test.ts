@@ -62,6 +62,7 @@ describe("AgentLeaseReporter", () => {
       projectSlug: "site-1",
       version: 1,
     });
+    expect(reporter.hasActiveSession("session-1")).toBe(true);
     await flushMicrotasks();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -80,6 +81,7 @@ describe("AgentLeaseReporter", () => {
 
     fetchMock.mockClear();
     reporter.finishRun("run-1");
+    expect(reporter.hasActiveSession("session-1")).toBe(false);
     await flushMicrotasks();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

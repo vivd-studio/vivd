@@ -126,7 +126,13 @@ vi.mock("../src/services/plugins/core/instanceService", () => ({
 }));
 
 vi.mock("../src/services/plugins/registry", () => ({
-  PLUGIN_IDS: ["contact_form", "analytics", "newsletter", "google_maps"],
+  PLUGIN_IDS: [
+    "contact_form",
+    "analytics",
+    "newsletter",
+    "google_maps",
+    "table_booking",
+  ],
   getOptionalPluginModule: vi.fn(() => ({
     mapPublicError: () => null,
   })),
@@ -544,6 +550,49 @@ describe("plugins.generic router", () => {
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Plugin action requires an email argument.",
+    });
+  });
+
+  it("forwards structured generic action input to the project plugin service", async () => {
+    runPluginActionMock.mockResolvedValueOnce({
+      pluginId: "table_booking",
+      actionId: "save_reservation",
+      result: { bookingId: "booking-1" },
+    });
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.action({
+        slug: "site-1",
+        pluginId: "table_booking",
+        actionId: "save_reservation",
+        args: [],
+        input: {
+          date: "2026-04-18",
+          time: "18:30",
+          partySize: 4,
+        },
+      }),
+    ).resolves.toMatchObject({
+      pluginId: "table_booking",
+      actionId: "save_reservation",
+      result: { bookingId: "booking-1" },
+    });
+
+    expect(runPluginActionMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "table_booking",
+      actionId: "save_reservation",
+      args: [],
+      input: {
+        date: "2026-04-18",
+        time: "18:30",
+        partySize: 4,
+      },
+      requestedByUserId: "user-1",
+      requestHost: "app.vivd.local",
     });
   });
 });

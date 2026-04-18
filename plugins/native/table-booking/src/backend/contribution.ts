@@ -71,6 +71,21 @@ export function createTableBookingPluginBackendContribution(
       readAgenda(options) {
         return service.getAgenda(options);
       },
+      readDayCapacity(options) {
+        return service.getDayCapacity(options);
+      },
+      saveReservation(options) {
+        return service.upsertStaffReservation(options);
+      },
+      saveCapacityAdjustment(options) {
+        return service.upsertCapacityAdjustment(options);
+      },
+      deleteCapacityAdjustment(options) {
+        return service.deleteCapacityAdjustment(options);
+      },
+      exportBookings(options) {
+        return service.exportBookings(options);
+      },
       mapPublicError(context) {
         const { error } = context;
         if (

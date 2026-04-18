@@ -8,6 +8,7 @@ import { DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS } from "../shared/ope
 export const WEBP_QUALITY = 85;
 export const STUDIO_WORKING_IMAGE_UPLOAD_WEBP_QUALITY = 90;
 export const STUDIO_WORKING_IMAGE_UPLOAD_MAX_DIMENSION = 3840;
+export const DEFAULT_STUDIO_OPENCODE_ORPHANED_BUSY_GRACE_MS = 20 * 60 * 1000;
 
 export function getStudioOpencodeSoftContextLimitTokens(
   env: NodeJS.ProcessEnv = process.env,
@@ -20,6 +21,22 @@ export function getStudioOpencodeSoftContextLimitTokens(
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS;
+  }
+
+  return parsed;
+}
+
+export function getStudioOpencodeOrphanedBusyGraceMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = (env.STUDIO_OPENCODE_ORPHANED_BUSY_GRACE_MS || "").trim();
+  if (!raw) {
+    return DEFAULT_STUDIO_OPENCODE_ORPHANED_BUSY_GRACE_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 60_000) {
+    return DEFAULT_STUDIO_OPENCODE_ORPHANED_BUSY_GRACE_MS;
   }
 
   return parsed;

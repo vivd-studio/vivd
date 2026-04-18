@@ -2,7 +2,7 @@ import {
   ContactFormPluginNotEnabledError,
   ContactFormRecipientRequiredError,
   ContactFormRecipientVerificationError,
-} from "./contactForm/service";
+} from "@vivd/plugin-contact-form/backend/service";
 import {
   projectPluginInstanceService,
   type ProjectPluginInstanceSummary,
@@ -196,6 +196,7 @@ class ProjectPluginService {
     pluginId: PluginId;
     actionId: string;
     args: string[];
+    input?: Record<string, unknown>;
     requestedByUserId?: string | null;
     requestHost?: string | null;
   }): Promise<ProjectPluginActionPayload> {

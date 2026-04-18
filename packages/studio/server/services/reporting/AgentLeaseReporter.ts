@@ -21,7 +21,8 @@ const DEFAULT_HEARTBEAT_MS = 20_000;
 const MIN_HEARTBEAT_MS = 5_000;
 
 export class AgentLeaseReporter {
-  private activeRuns = new Map<string, ActiveRun>();
+  private runs = new Map<string, ActiveRun>();
+  private leaseTrackedRunIds = new Set<string>();
   private runIdsBySession = new Map<string, Set<string>>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatInFlight: Promise<void> | null = null;
@@ -37,7 +38,8 @@ export class AgentLeaseReporter {
       startedAtMs: Date.now(),
     };
 
-    this.activeRuns.set(input.runId, run);
+    this.runs.set(input.runId, run);
+    this.leaseTrackedRunIds.add(input.runId);
 
     const sessionRuns = this.runIdsBySession.get(input.sessionId) || new Set<string>();
     sessionRuns.add(input.runId);
@@ -50,10 +52,11 @@ export class AgentLeaseReporter {
   }
 
   finishRun(runId: string): void {
-    const run = this.activeRuns.get(runId);
+    const run = this.runs.get(runId);
     if (!run) return;
 
-    this.activeRuns.delete(runId);
+    this.runs.delete(runId);
+    this.leaseTrackedRunIds.delete(runId);
     const sessionRuns = this.runIdsBySession.get(run.sessionId);
     if (sessionRuns) {
       sessionRuns.delete(runId);
@@ -64,6 +67,10 @@ export class AgentLeaseReporter {
 
     this.stopHeartbeatTimerIfIdle();
     void this.reportIdle(run);
+  }
+
+  hasActiveSession(sessionId: string): boolean {
+    return (this.runIdsBySession.get(sessionId)?.size ?? 0) > 0;
   }
 
   async pauseForSuspend(): Promise<void> {
@@ -79,7 +86,7 @@ export class AgentLeaseReporter {
     if (!this.pausedForSuspend) return;
 
     this.pausedForSuspend = false;
-    if (this.activeRuns.size === 0) return;
+    if (this.leaseTrackedRunIds.size === 0) return;
 
     this.ensureHeartbeatTimer();
     void this.flushHeartbeats();
@@ -108,27 +115,35 @@ export class AgentLeaseReporter {
   }
 
   private stopHeartbeatTimerIfIdle(): void {
-    if (this.activeRuns.size > 0) return;
+    if (this.leaseTrackedRunIds.size > 0) return;
     this.stopHeartbeatTimer();
+  }
+
+  private stopLeaseTracking(runId: string): void {
+    if (!this.runs.has(runId)) return;
+    this.leaseTrackedRunIds.delete(runId);
+    this.stopHeartbeatTimerIfIdle();
   }
 
   private async flushHeartbeats(): Promise<void> {
     if (this.pausedForSuspend) return;
-    if (this.activeRuns.size === 0) {
+    if (this.leaseTrackedRunIds.size === 0) {
       this.stopHeartbeatTimerIfIdle();
       return;
     }
     if (this.heartbeatInFlight) return;
 
     const run = (async () => {
-      const runs = Array.from(this.activeRuns.values());
+      const runs = Array.from(this.runs.values()).filter((activeRun) =>
+        this.leaseTrackedRunIds.has(activeRun.runId),
+      );
       for (const activeRun of runs) {
         const leaseState = await this.reportActive(activeRun);
         if (leaseState === "max_exceeded") {
           console.warn(
-            `[AgentLeaseReporter] Lease max exceeded for run ${activeRun.runId} (session ${activeRun.sessionId}); stopping keepalive heartbeats for this run.`,
+            `[AgentLeaseReporter] Lease max exceeded for run ${activeRun.runId} (session ${activeRun.sessionId}); stopping keepalive heartbeats while leaving the local run attached.`,
           );
-          this.finishRun(activeRun.runId);
+          this.stopLeaseTracking(activeRun.runId);
         }
       }
     })().finally(() => {

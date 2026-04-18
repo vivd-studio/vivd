@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getContactFormSnippets } from "../src/services/plugins/contactForm/snippets";
+import { getContactFormSnippets } from "@vivd/plugin-contact-form/backend/snippets";
 
 describe("contact form snippets", () => {
   it("renders both html and astro snippets with the token", () => {

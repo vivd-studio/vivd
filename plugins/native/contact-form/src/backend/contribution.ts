@@ -123,6 +123,14 @@ export function createContactFormPluginBackendContribution(
           }),
       },
       {
+        routeId: "contact_form.recipient_verification_control_plane",
+        mountPath: "/vivd-studio/api/plugins",
+        createRouter: () =>
+          createContactRecipientVerificationRouter({
+            recipientVerificationService: deps.recipientVerificationService,
+          }),
+      },
+      {
         routeId: "contact_form.submit",
         mountPath: "/plugins",
         createRouter: (routeDeps) =>

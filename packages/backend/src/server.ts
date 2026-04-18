@@ -16,7 +16,6 @@ import { and, eq } from "drizzle-orm";
 import { domainService } from "./services/publish/DomainService";
 import { startStudioMachineReconciler } from "./services/studioMachines";
 import { createPublicPluginsRouter } from "./httpRoutes/plugins";
-import { createContactRecipientVerificationRouter } from "./httpRoutes/plugins/contactForm/recipientVerification";
 import { startInstalledPluginBackgroundJobs } from "./services/plugins/integrationHooks";
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
 import { publishService } from "./services/publish/PublishService";
@@ -151,10 +150,6 @@ const zipImportUpload = multer({
 // Public plugin runtime endpoints – mounted before global CORS so they get
 // permissive Access-Control-Allow-Origin (customer sites call these cross-origin).
 app.use(createPublicPluginsRouter({ upload }));
-app.use(
-  "/vivd-studio/api/plugins",
-  createContactRecipientVerificationRouter(),
-);
 
 app.use(
   cors({
