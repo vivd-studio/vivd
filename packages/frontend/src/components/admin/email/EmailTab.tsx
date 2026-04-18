@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
@@ -184,6 +184,14 @@ export function EmailTab() {
     });
   };
 
+  const handleBrandingChange =
+    (field: keyof BrandingState) => (event: ChangeEvent<HTMLInputElement>) => {
+      setBranding((current) => ({
+        ...current,
+        [field]: event.target.value,
+      }));
+    };
+
   const usesMinimalFooter = Object.values(branding).every(
     (value) => value.trim().length === 0,
   );
@@ -212,12 +220,7 @@ export function EmailTab() {
                 id="email-brand-display-name"
                 value={branding.displayName}
                 placeholder="Example Studio"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    displayName: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("displayName")}
               />
             </div>
 
@@ -227,12 +230,7 @@ export function EmailTab() {
                 id="email-brand-logo-url"
                 value={branding.logoUrl}
                 placeholder="https://example.com/logo.png"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    logoUrl: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("logoUrl")}
               />
             </div>
 
@@ -242,12 +240,7 @@ export function EmailTab() {
                 id="email-brand-support-email"
                 value={branding.supportEmail}
                 placeholder="support@example.com"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    supportEmail: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("supportEmail")}
               />
             </div>
 
@@ -257,12 +250,7 @@ export function EmailTab() {
                 id="email-brand-website-url"
                 value={branding.websiteUrl}
                 placeholder="https://example.com"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    websiteUrl: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("websiteUrl")}
               />
             </div>
 
@@ -272,12 +260,7 @@ export function EmailTab() {
                 id="email-brand-legal-name"
                 value={branding.legalName}
                 placeholder="Example GmbH"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    legalName: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("legalName")}
               />
             </div>
 
@@ -287,12 +270,7 @@ export function EmailTab() {
                 id="email-brand-legal-address"
                 value={branding.legalAddress}
                 placeholder="Street 1, 12345 City"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    legalAddress: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("legalAddress")}
               />
             </div>
 
@@ -302,12 +280,7 @@ export function EmailTab() {
                 id="email-brand-imprint-url"
                 value={branding.imprintUrl}
                 placeholder="https://example.com/imprint"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    imprintUrl: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("imprintUrl")}
               />
             </div>
 
@@ -317,12 +290,7 @@ export function EmailTab() {
                 id="email-brand-privacy-url"
                 value={branding.privacyUrl}
                 placeholder="https://example.com/privacy"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    privacyUrl: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("privacyUrl")}
               />
             </div>
 
@@ -332,12 +300,7 @@ export function EmailTab() {
                 id="email-brand-terms-url"
                 value={branding.termsUrl}
                 placeholder="https://example.com/terms"
-                onChange={(event) =>
-                  setBranding((current) => ({
-                    ...current,
-                    termsUrl: event.target.value,
-                  }))
-                }
+                onChange={handleBrandingChange("termsUrl")}
               />
             </div>
           </div>
@@ -460,7 +423,9 @@ export function EmailTab() {
                   <Checkbox
                     id="deliverability-auto-suppress-bounces"
                     checked={autoSuppressBounces}
-                    onCheckedChange={(value) => setAutoSuppressBounces(value === true)}
+                    onCheckedChange={(value: boolean | "indeterminate") =>
+                      setAutoSuppressBounces(value === true)
+                    }
                   />
                   <Label
                     htmlFor="deliverability-auto-suppress-bounces"
@@ -474,7 +439,9 @@ export function EmailTab() {
                   <Checkbox
                     id="deliverability-auto-suppress-complaints"
                     checked={autoSuppressComplaints}
-                    onCheckedChange={(value) => setAutoSuppressComplaints(value === true)}
+                    onCheckedChange={(value: boolean | "indeterminate") =>
+                      setAutoSuppressComplaints(value === true)
+                    }
                   />
                   <Label
                     htmlFor="deliverability-auto-suppress-complaints"
@@ -493,7 +460,7 @@ export function EmailTab() {
                   <Input
                     id="deliverability-complaint-threshold"
                     value={complaintRateThresholdPercent}
-                    onChange={(event) =>
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       setComplaintRateThresholdPercent(event.target.value)
                     }
                     inputMode="decimal"
@@ -506,7 +473,9 @@ export function EmailTab() {
                   <Input
                     id="deliverability-bounce-threshold"
                     value={bounceRateThresholdPercent}
-                    onChange={(event) => setBounceRateThresholdPercent(event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setBounceRateThresholdPercent(event.target.value)
+                    }
                     inputMode="decimal"
                   />
                 </div>

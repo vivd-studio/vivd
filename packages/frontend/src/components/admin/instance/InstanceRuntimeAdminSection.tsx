@@ -1,3 +1,4 @@
+import type { ChangeEvent } from "react";
 import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import type { RouterOutputs } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -207,7 +208,9 @@ export function InstanceRuntimeAdminSection({
                   id="instance-network-public-host"
                   value={publicHost}
                   placeholder="example.com or 203.0.113.10"
-                  onChange={(event) => onPublicHostChange(event.target.value)}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    onPublicHostChange(event.target.value)
+                  }
                   disabled={networkFieldsDisabled}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -221,7 +224,9 @@ export function InstanceRuntimeAdminSection({
                   id="instance-network-acme-email"
                   value={acmeEmail}
                   placeholder="admin@example.com"
-                  onChange={(event) => onAcmeEmailChange(event.target.value)}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    onAcmeEmailChange(event.target.value)
+                  }
                   disabled={networkFieldsDisabled || tlsMode !== "managed"}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -234,7 +239,7 @@ export function InstanceRuntimeAdminSection({
               <Label>HTTPS handled by</Label>
               <Select
                 value={tlsMode}
-                onValueChange={(value) => onTlsModeChange(value as NetworkTlsMode)}
+                onValueChange={(value: string) => onTlsModeChange(value as NetworkTlsMode)}
                 disabled={networkFieldsDisabled}
               >
                 <SelectTrigger className="max-w-sm">

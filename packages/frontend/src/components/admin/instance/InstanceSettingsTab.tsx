@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -589,7 +589,7 @@ export function InstanceSettingsTab() {
               >
                 <Checkbox
                   checked={capabilities[entry.key]}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked: boolean | "indeterminate") =>
                     setCapabilities((current) => ({
                       ...current,
                       [entry.key]: checked === true,
@@ -631,7 +631,7 @@ export function InstanceSettingsTab() {
                 id={`instance-limit-${field.key}`}
                 value={limits[field.key]}
                 placeholder={field.placeholder}
-                onChange={(event) =>
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   setLimits((current) => ({
                     ...current,
                     [field.key]: event.target.value,

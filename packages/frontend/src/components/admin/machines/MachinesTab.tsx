@@ -473,7 +473,7 @@ export function MachinesTab() {
                   <span className="text-sm text-muted-foreground">Studio image:</span>
                   <Select
                     value={currentImageSelectorValue}
-                    onValueChange={(value) => {
+                    onValueChange={(value: string) => {
                       if (value === "__env__") return;
                       if (value === "__latest__") {
                         setImageOverrideMutation.mutate({ tag: null });
