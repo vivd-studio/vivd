@@ -17,6 +17,7 @@
       "@vivd/plugin-contact-form": ["./src/index.ts"],
       "@vivd/plugin-contact-form/*": ["./src/*"],
       "@vivd/plugin-sdk": ["../../sdk/src/index.ts"],
+      "@vivd/plugin-sdk/*": ["../../sdk/src/*"],
       "@vivd/shared": ["../../../packages/shared/src/index.ts"],
       "@vivd/shared/*": ["../../../packages/shared/src/*"],
       "@vivd/ui": ["../../../packages/ui/src/index.ts"],

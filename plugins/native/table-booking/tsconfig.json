@@ -21,6 +21,7 @@
       "@vivd/plugin-table-booking": ["./src/index.ts"],
       "@vivd/plugin-table-booking/*": ["./src/*"],
       "@vivd/plugin-sdk": ["../../sdk/src/index.ts"],
+      "@vivd/plugin-sdk/*": ["../../sdk/src/*"],
       "@vivd/shared": ["../../../packages/shared/src/index.ts"],
       "@vivd/shared/*": ["../../../packages/shared/src/*"],
       "@vivd/ui": ["../../../packages/ui/src/index.ts"],

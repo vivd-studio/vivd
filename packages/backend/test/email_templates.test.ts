@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildContactSubmissionEmail,
-  buildNewsletterConfirmationEmail,
   buildOrganizationInvitationEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
@@ -9,32 +7,6 @@ import {
 } from "../src/services/email/templates";
 
 describe("email templates", () => {
-  it("renders contact submission emails with escaped html and a minimal default footer", async () => {
-    const email = await buildContactSubmissionEmail(
-      {
-        projectSlug: "rocket-site",
-        submittedAtLabel: "February 22, 2026, 10:15 PM UTC",
-        replyToEmail: "sender@example.com",
-      submittedFields: [
-        { label: "Name", value: "Alice <script>alert(1)</script>" },
-        { label: "Message", value: "Hello\nWorld" },
-      ],
-      unknownFields: {
-        source: "Landing <unknown>",
-      },
-      },
-      {},
-    );
-
-    expect(email.text).toContain("Project: rocket-site");
-    expect(email.html).toContain("Alice &lt;script&gt;alert(1)&lt;/script&gt;");
-    expect(email.html).toContain("Landing &lt;unknown&gt;");
-    expect(email.text).not.toContain("Felix Pahlke");
-    expect(email.text).not.toContain("vivd.studio/impressum");
-    expect(email.html).not.toContain("vivd.studio/datenschutz");
-    expect(email.html).not.toContain("images/vivd_logo_transparent.png");
-  });
-
   it("renders verification email with configured branding details only", async () => {
     const email = await buildVerificationEmail(
       {
@@ -83,36 +55,6 @@ describe("email templates", () => {
     expect(email.html).toContain("Set a new password");
     expect(email.html).not.toContain("https://vivd.studio/agb");
     expect(email.html).not.toContain("images/vivd_logo_transparent.png");
-  });
-
-  it("renders newsletter confirmation email with branded copy", async () => {
-    const email = await buildNewsletterConfirmationEmail(
-      {
-        projectTitle: "Horse Tinder",
-        recipientName: "Pat",
-        confirmUrl: "https://api.example.com/plugins/newsletter/v1/confirm?token=abc",
-        unsubscribeUrl:
-          "https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def",
-        expiresInSeconds: 172_800,
-        mode: "waitlist",
-      },
-      {
-        displayName: "Example Studio",
-        websiteUrl: "https://example.com",
-        supportEmail: "support@example.com",
-      },
-    );
-
-    expect(email.subject).toBe("Confirm your waitlist signup for Horse Tinder");
-    expect(email.text).toContain("Hello Pat");
-    expect(email.text).toContain("Please confirm your waitlist signup for Horse Tinder.");
-    expect(email.text).toContain("https://api.example.com/plugins/newsletter/v1/confirm?token=abc");
-    expect(email.text).toContain("https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def");
-    expect(email.text).toContain("This link expires in 2 days.");
-    expect(email.html).toContain("Confirm your waitlist signup");
-    expect(email.html).toContain("Confirm waitlist signup");
-    expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/confirm?token=abc");
-    expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def");
   });
 
   it("renders organization invitation email for invite-first onboarding", async () => {

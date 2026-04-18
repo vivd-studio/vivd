@@ -9,8 +9,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Panel } from "@/components/ui/panel";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatusPill } from "@/components/ui/status-pill";
 import type {
   EditableOrganizationRole,
   MemberEdits,
@@ -157,11 +159,14 @@ export function MembersPanel({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mt-2 space-y-3 rounded-lg border bg-card p-4">
+          <Panel tone="sunken" className="mt-2 space-y-3 p-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Email</Label>
+              <Field>
+                <FieldLabel htmlFor="invite-email" required>
+                  Email
+                </FieldLabel>
                 <Input
+                  id="invite-email"
                   type="email"
                   placeholder="user@example.com"
                   value={userForm.email}
@@ -172,13 +177,13 @@ export function MembersPanel({
                     }))
                   }
                 />
-                <div className="text-xs text-muted-foreground">
+                <FieldDescription>
                   The invite email lets them create an account or sign in with an
                   existing one.
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Role</Label>
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel>Role</FieldLabel>
                 <Select
                   value={userForm.organizationRole}
                   onValueChange={(value) =>
@@ -198,10 +203,11 @@ export function MembersPanel({
                     <SelectItem value="client_editor">Client Editor</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Name</Label>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="invite-name">Name</FieldLabel>
                 <Input
+                  id="invite-name"
                   placeholder="Full name (optional)"
                   value={userForm.name}
                   onChange={(e) =>
@@ -211,10 +217,10 @@ export function MembersPanel({
                     }))
                   }
                 />
-              </div>
+              </Field>
               {userForm.organizationRole === "client_editor" ? (
-                <div className="space-y-1.5">
-                  <Label>Assigned project</Label>
+                <Field>
+                  <FieldLabel>Assigned project</FieldLabel>
                   <ProjectSelect
                     value={userForm.projectSlug}
                     onChange={(value) =>
@@ -225,9 +231,9 @@ export function MembersPanel({
                     }
                     projects={projects}
                   />
-                </div>
+                </Field>
               ) : (
-                <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                <div className="rounded-md border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                   Invitees will land in the organization workspace after they accept.
                 </div>
               )}
@@ -238,9 +244,9 @@ export function MembersPanel({
               </Button>
             </div>
             {Boolean(inviteError) ? (
-              <div className="text-sm text-red-500">{String(inviteError)}</div>
+              <div className="text-sm text-destructive">{String(inviteError)}</div>
             ) : null}
-          </div>
+          </Panel>
         </CollapsibleContent>
       </Collapsible>
 
@@ -249,11 +255,11 @@ export function MembersPanel({
         {invitationsLoading ? (
           <LoadingSpinner message="Loading invites..." className="justify-start" />
         ) : invitationsError ? (
-          <div className="text-red-500">
+          <div className="text-sm text-destructive">
             Failed to load invites: {String(invitationsError)}
           </div>
         ) : invitations.length > 0 ? (
-          <div className="rounded-lg border bg-card divide-y">
+          <Panel className="divide-y divide-border">
             {invitations.map((invitation) => (
               <div
                 key={invitation.id}
@@ -262,17 +268,19 @@ export function MembersPanel({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="truncate font-medium">{invitation.email}</div>
-                    <Badge
-                      variant={
+                    <StatusPill
+                      tone={
                         invitation.state === "pending"
-                          ? "default"
+                          ? "info"
                           : invitation.state === "expired"
-                            ? "secondary"
-                            : "outline"
+                            ? "warn"
+                            : invitation.state === "canceled"
+                              ? "danger"
+                              : "success"
                       }
                     >
                       {formatInviteState(invitation.state)}
-                    </Badge>
+                    </StatusPill>
                   </div>
                   <div className="truncate text-sm text-muted-foreground">
                     {invitation.role}
@@ -309,20 +317,22 @@ export function MembersPanel({
                 </div>
               </div>
             ))}
-          </div>
+          </Panel>
         ) : (
-          <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+          <Panel tone="dashed" className="px-4 py-6 text-sm text-muted-foreground">
             No pending invites.
-          </div>
+          </Panel>
         )}
       </div>
 
       {membersLoading ? (
         <LoadingSpinner message="Loading members..." className="justify-start" />
       ) : membersError ? (
-        <div className="text-red-500">Failed to load members: {String(membersError)}</div>
+        <div className="text-sm text-destructive">
+          Failed to load members: {String(membersError)}
+        </div>
       ) : (
-        <div className="rounded-lg border bg-card divide-y">
+        <Panel className="divide-y divide-border">
           {members.map((member) => {
             const edit =
               memberEdits[member.userId] ??
@@ -445,7 +455,7 @@ export function MembersPanel({
           {members.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground">No members</div>
           ) : null}
-        </div>
+        </Panel>
       )}
     </div>
   );

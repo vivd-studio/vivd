@@ -26,6 +26,8 @@ Vivd is in a mixed state:
 - the installed bundle order now lives in `plugins/installed/registry.config.mjs`; `plugins/installed/src/index.ts` and the generated surface files should be regenerated from that registry instead of edited by hand
 - config-time helpers for registry-driven plugin package matchers and source aliases now live in `plugins/installed/registry.helpers.mjs`, and root plugin-workspace fanout scripts should prefer that helper over repeating plugin package names by hand
 - backend host binding for native plugins now prefers `backend.createHostContribution(hostContext)` exposed by the plugin package; `packages/backend/src/services/plugins/descriptors.ts` builds those contributions directly from `plugins/installed`, so new per-plugin `hostPlugin.ts` or `hostRegistry.ts` files in backend are the wrong direction
+- backend host context should expose generic services only; plugin-owned email builders now live in plugin packages and receive generic delivery/branding helpers from host context instead of a host-owned `email.templates` bag
+- plugin-owned frontend code should import shared primitives from `@vivd/ui`; `packages/frontend/src/plugins/host.ts` is for host runtime helpers such as `trpc`, routes, and project-page scaffolding, not generic buttons/inputs/cards
 - `external_embed` plugins are still host-managed at runtime: they do not need native backend/frontend/CLI module exports, and backend should synthesize generic info/config/snippet behavior from the manifest instead of forcing a fake `PluginModule`
 
 Treat the architecture as:
@@ -167,6 +169,8 @@ Use this sequence:
    - Register the frontend module in `packages/frontend/src/plugins/registry.tsx`
    - Use a generic fallback page unless the plugin needs custom UI
    - Put custom pages in the plugin package if the plugin is extracted
+   - Import shared buttons/cards/inputs/selects/tabs and similar primitives from `@vivd/ui`, not from `packages/frontend/src/...`
+   - Keep `packages/frontend/src/plugins/host.ts` limited to host-only capabilities such as `trpc`, route helpers, and project-page scaffolding
    - Delete dead host-side re-export wrappers once callers import the plugin package directly; do not leave `packages/frontend/src/plugins/<plugin>/module.ts` around as inert compatibility clutter
    - Keep plugin-specific frontend tests beside the plugin package UI where practical; let the frontend workspace Vitest config include them rather than storing plugin-only test files under `packages/frontend/src/plugins`
 
@@ -176,6 +180,8 @@ Use this sequence:
 
 6. Check package boundaries.
    - If a host package imports `@vivd/plugin-...`, add it to that host’s `package.json`
+   - If a plugin package imports `@vivd/ui`, add that dependency to the plugin package and refresh the root `package-lock.json`
+   - If a plugin package imports a plugin-sdk subpath such as `@vivd/plugin-sdk/emailTemplates`, make sure its `tsconfig.json` includes the `@vivd/plugin-sdk/*` source alias
    - Update Dockerfiles and compose/dev sync rules so the workspace package exists inside containers
 
 ## Frontend Panels

@@ -60,6 +60,13 @@ export default {
           DEFAULT: "hsl(var(--chat-user))",
           foreground: "hsl(var(--chat-user-foreground))",
         },
+        surface: {
+          page: "hsl(var(--surface-page))",
+          panel: "hsl(var(--surface-panel))",
+          sunken: "hsl(var(--surface-sunken))",
+          raised: "hsl(var(--surface-raised))",
+          input: "hsl(var(--surface-input))",
+        },
       },
     },
   },

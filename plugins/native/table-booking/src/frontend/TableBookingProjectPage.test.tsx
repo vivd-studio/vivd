@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createContext, useContext, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -57,6 +58,104 @@ vi.mock("@/components/settings/SettingsPageShell", () => ({
   ),
 }));
 
+vi.mock("@vivd/ui", async () => {
+  const actual = await vi.importActual<any>("@vivd/ui");
+  const TabsContext = createContext<{
+    value: string;
+    onValueChange?: (value: string) => void;
+  } | null>(null);
+
+  return {
+    ...actual,
+    Select: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value: string;
+      onValueChange?: (value: string) => void;
+      children: ReactNode;
+    }) => (
+      <select
+        aria-label="mock-select"
+        value={value}
+        onChange={(event) => onValueChange?.(event.target.value)}
+      >
+        {children}
+      </select>
+    ),
+    SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+    SelectItem: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => <option value={value}>{children}</option>,
+    SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+    SelectValue: () => null,
+    Checkbox: ({
+      checked,
+      onCheckedChange,
+    }: {
+      checked?: boolean;
+      onCheckedChange?: (value: boolean) => void;
+    }) => (
+      <input
+        aria-label="mock-checkbox"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onCheckedChange?.(event.target.checked)}
+      />
+    ),
+    Tabs: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value: string;
+      onValueChange?: (value: string) => void;
+      children: ReactNode;
+    }) => (
+      <TabsContext.Provider value={{ value, onValueChange }}>
+        <div>{children}</div>
+      </TabsContext.Provider>
+    ),
+    TabsList: ({ children }: { children: ReactNode }) => (
+      <div role="tablist">{children}</div>
+    ),
+    TabsTrigger: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => {
+      const context = useContext(TabsContext);
+      return (
+        <button
+          role="tab"
+          aria-selected={context?.value === value}
+          onClick={() => context?.onValueChange?.(value)}
+        >
+          {children}
+        </button>
+      );
+    },
+    TabsContent: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => {
+      const context = useContext(TabsContext);
+      if (context?.value !== value) return null;
+      return <div role="tabpanel">{children}</div>;
+    },
+  };
+});
+
 vi.mock("@/components/ui/select", () => ({
   Select: ({
     value,
@@ -76,13 +175,9 @@ vi.mock("@/components/ui/select", () => ({
     </select>
   ),
   SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectItem: ({
-    value,
-    children,
-  }: {
-    value: string;
-    children: ReactNode;
-  }) => <option value={value}>{children}</option>,
+  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
   SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
   SelectValue: () => null,
 }));
@@ -354,7 +449,9 @@ function defaultReadUseQueryMock({
 }
 
 function mockActionMutation(
-  mutationResult: ReturnType<typeof createMutationResult> = createMutationResult(),
+  mutationResult: ReturnType<
+    typeof createMutationResult
+  > = createMutationResult(),
 ) {
   actionUseMutationMock.mockReturnValue(mutationResult);
   return mutationResult;
@@ -410,7 +507,9 @@ describe("TableBookingProjectPage", () => {
 
     projectListUseQueryMock.mockReturnValue({
       data: {
-        projects: [{ slug: "nudels-without-pesto", title: "Nudels without Pesto" }],
+        projects: [
+          { slug: "nudels-without-pesto", title: "Nudels without Pesto" },
+        ],
       },
       isLoading: false,
       refetch: vi.fn().mockResolvedValue(undefined),
@@ -438,10 +537,19 @@ describe("TableBookingProjectPage", () => {
           dateOverrides: [],
         },
         usage: {
-          availabilityEndpoint: "https://api.example.com/plugins/table-booking/v1/availability",
+          availabilityEndpoint:
+            "https://api.example.com/plugins/table-booking/v1/availability",
           bookEndpoint: "https://api.example.com/plugins/table-booking/v1/book",
-          cancelEndpoint: "https://api.example.com/plugins/table-booking/v1/cancel",
-          expectedFields: ["date", "partySize", "time", "name", "email", "phone"],
+          cancelEndpoint:
+            "https://api.example.com/plugins/table-booking/v1/cancel",
+          expectedFields: [
+            "date",
+            "partySize",
+            "time",
+            "name",
+            "email",
+            "phone",
+          ],
           optionalFields: ["notes"],
           inferredAutoSourceHosts: ["test2.localhost"],
         },
@@ -628,7 +736,9 @@ describe("TableBookingProjectPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Booking search" }));
 
-    expect(screen.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Export CSV" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Staff")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));

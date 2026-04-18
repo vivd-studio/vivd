@@ -8,6 +8,12 @@ import type {
   TableBookingPluginBackendContributionDeps,
 } from "./contribution";
 import { createTableBookingPluginBackendContribution } from "./contribution";
+import {
+  buildGuestBookingCancellationEmail,
+  buildGuestBookingConfirmationEmail,
+  buildStaffBookingCancellationEmail,
+  buildStaffNewBookingEmail,
+} from "./emails";
 import { tableBookingPluginDefinition } from "./module";
 
 function createTableBookingHostContribution(
@@ -18,7 +24,8 @@ function createTableBookingHostContribution(
     tables: {
       tableBookingReservation: hostContext.tables.tableBookingReservation,
       tableBookingActionToken: hostContext.tables.tableBookingActionToken,
-      tableBookingCapacityAdjustment: hostContext.tables.tableBookingCapacityAdjustment,
+      tableBookingCapacityAdjustment:
+        hostContext.tables.tableBookingCapacityAdjustment,
       projectMeta: hostContext.tables.projectMeta,
       projectPluginInstance: hostContext.tables.projectPluginInstance,
     },
@@ -31,10 +38,14 @@ function createTableBookingHostContribution(
         });
       },
       getPluginInstance(options) {
-        return hostContext.projectPluginInstanceService.getPluginInstance(options);
+        return hostContext.projectPluginInstanceService.getPluginInstance(
+          options,
+        );
       },
       updatePluginInstance(options) {
-        return hostContext.projectPluginInstanceService.updatePluginInstance(options);
+        return hostContext.projectPluginInstanceService.updatePluginInstance(
+          options,
+        );
       },
     },
     getPublicPluginApiBaseUrl: hostContext.runtime.getPublicPluginApiBaseUrl,
@@ -43,16 +54,28 @@ function createTableBookingHostContribution(
     emailDeliveryService: hostContext.email.deliveryService,
     emailTemplates: {
       buildGuestConfirmationEmail(options) {
-        return hostContext.email.templates.buildGuestBookingConfirmationEmail!(options);
+        return buildGuestBookingConfirmationEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
       buildGuestCancellationEmail(options) {
-        return hostContext.email.templates.buildGuestBookingCancellationEmail!(options);
+        return buildGuestBookingCancellationEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
       buildStaffNewBookingEmail(options) {
-        return hostContext.email.templates.buildStaffNewBookingEmail!(options);
+        return buildStaffNewBookingEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
       buildStaffCancellationEmail(options) {
-        return hostContext.email.templates.buildStaffBookingCancellationEmail!(options);
+        return buildStaffBookingCancellationEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
     },
   });

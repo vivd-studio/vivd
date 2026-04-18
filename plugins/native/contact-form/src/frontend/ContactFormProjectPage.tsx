@@ -1,44 +1,34 @@
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  ChevronDown,
-  Copy,
-  Loader2,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
+  Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
+  Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
-import { Textarea } from "@/components/ui/textarea";
-import { trpc, type RouterOutputs } from "@/lib/trpc";
+  Textarea,
+} from "@vivd/ui";
+import { FormContent, SettingsPageShell } from "@/plugins/host";
+import { trpc, type RouterOutputs } from "@/plugins/host";
 import {
   ProjectPluginAccessActions,
   ProjectPluginPageActions,
   useProjectPluginPageModel,
-} from "@/plugins/projectPageScaffold";
+} from "@/plugins/host";
 
 type ContactFormFieldType = "text" | "email" | "textarea";
 
@@ -177,7 +167,10 @@ function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <Collapsible defaultOpen={defaultOpen} className="rounded-lg border bg-card">
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className="rounded-lg border bg-card"
+    >
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 text-left group">
         <div>
           <h3 className="text-sm font-medium">{title}</h3>
@@ -221,14 +214,16 @@ function SnippetCard({
 
 function getContactFormInfo(
   value: RouterOutputs["plugins"]["info"] | undefined,
-): (RouterOutputs["plugins"]["info"] & {
-  config: ContactFormConfig | null;
-  usage: ContactFormUsage | null;
-  snippets: ContactFormSnippets | null;
-  details: {
-    recipients?: ContactRecipientDirectory;
-  } | null;
-}) | null {
+):
+  | (RouterOutputs["plugins"]["info"] & {
+      config: ContactFormConfig | null;
+      usage: ContactFormUsage | null;
+      snippets: ContactFormSnippets | null;
+      details: {
+        recipients?: ContactRecipientDirectory;
+      } | null;
+    })
+  | null {
   return (value ?? null) as any;
 }
 
@@ -313,9 +308,11 @@ export default function ContactFormProjectPage({
 
   const pluginInfo = getContactFormInfo(infoQuery.data);
   const snippets = pluginInfo?.snippets;
-  const inferredAutoSourceHosts = pluginInfo?.usage?.inferredAutoSourceHosts || [];
+  const inferredAutoSourceHosts =
+    pluginInfo?.usage?.inferredAutoSourceHosts || [];
   const effectiveSourceHosts = pluginInfo?.usage?.effectiveSourceHosts || [];
-  const turnstileExpectedDomains = pluginInfo?.usage?.turnstileExpectedDomains || [];
+  const turnstileExpectedDomains =
+    pluginInfo?.usage?.turnstileExpectedDomains || [];
   const recipientDirectory = pluginInfo?.details?.recipients;
   const recipientOptions = recipientDirectory?.options ?? [];
   const pendingRecipients = recipientDirectory?.pending ?? [];
@@ -324,17 +321,22 @@ export default function ContactFormProjectPage({
   const [customRecipientEmail, setCustomRecipientEmail] = useState("");
   const [sourceHostsInput, setSourceHostsInput] = useState("");
   const [redirectHostsInput, setRedirectHostsInput] = useState("");
-  const [formFieldsInput, setFormFieldsInput] = useState<EditableContactFormField[]>(
-    DEFAULT_CONTACT_FORM_FIELDS,
-  );
-  const manualSourceHostsConfigured = parseListInput(sourceHostsInput).length > 0;
+  const [formFieldsInput, setFormFieldsInput] = useState<
+    EditableContactFormField[]
+  >(DEFAULT_CONTACT_FORM_FIELDS);
+  const manualSourceHostsConfigured =
+    parseListInput(sourceHostsInput).length > 0;
   const invalidateContactFormPage = () => invalidatePluginPage();
 
   useEffect(() => {
     if (!pluginInfo?.config) return;
-    setRecipientEmails(pluginInfo.config.recipientEmails.map(normalizeEmailAddress));
+    setRecipientEmails(
+      pluginInfo.config.recipientEmails.map(normalizeEmailAddress),
+    );
     setSourceHostsInput(formatListInput(pluginInfo.config.sourceHosts));
-    setRedirectHostsInput(formatListInput(pluginInfo.config.redirectHostAllowlist));
+    setRedirectHostsInput(
+      formatListInput(pluginInfo.config.redirectHostAllowlist),
+    );
     setFormFieldsInput(
       (pluginInfo.config.formFields || DEFAULT_CONTACT_FORM_FIELDS).map(
         (field: EditableContactFormField) => ({
@@ -365,7 +367,10 @@ export default function ContactFormProjectPage({
     }
   };
 
-  const updateFormField = (index: number, patch: Partial<EditableContactFormField>) => {
+  const updateFormField = (
+    index: number,
+    patch: Partial<EditableContactFormField>,
+  ) => {
     setFormFieldsInput((previous) =>
       previous.map((field, currentIndex) =>
         currentIndex === index ? { ...field, ...patch } : field,
@@ -458,7 +463,10 @@ export default function ContactFormProjectPage({
     });
   };
 
-  const handleRequestRecipientVerification = (email: string, actionId = "verify_recipient") => {
+  const handleRequestRecipientVerification = (
+    email: string,
+    actionId = "verify_recipient",
+  ) => {
     if (!pluginEnabled) return;
     const normalizedEmail = normalizeEmailAddress(email);
     if (!normalizedEmail) {
@@ -495,7 +503,9 @@ export default function ContactFormProjectPage({
   const handleRemoveRecipient = (email: string) => {
     const normalizedEmail = normalizeEmailAddress(email);
     setRecipientEmails((previous) =>
-      previous.filter((entry) => normalizeEmailAddress(entry) !== normalizedEmail),
+      previous.filter(
+        (entry) => normalizeEmailAddress(entry) !== normalizedEmail,
+      ),
     );
   };
 
@@ -503,7 +513,9 @@ export default function ContactFormProjectPage({
     <SettingsPageShell
       title="Contact Form"
       description={`Configure the Contact Form plugin for ${projectSlug}.`}
-      className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
+      className={
+        isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined
+      }
       actions={
         <ProjectPluginPageActions
           projectSlug={projectSlug}
@@ -524,7 +536,9 @@ export default function ContactFormProjectPage({
                   <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
                     <PluginIcon className="h-4 w-4" />
                   </span>
-                  <span>{pluginInfo?.catalog.name || pluginPresentation.title}</span>
+                  <span>
+                    {pluginInfo?.catalog.name || pluginPresentation.title}
+                  </span>
                 </CardTitle>
                 <CardDescription>
                   {pluginInfo?.catalog.description ||
@@ -534,7 +548,9 @@ export default function ContactFormProjectPage({
               <div className="flex items-center gap-2">
                 {!pluginEnabled ? (
                   <ProjectPluginAccessActions
-                    canEnablePlugin={contactNeedsProjectEnable && canManageProjectPlugins}
+                    canEnablePlugin={
+                      contactNeedsProjectEnable && canManageProjectPlugins
+                    }
                     canRequestPluginAccess={
                       !(contactNeedsProjectEnable && canManageProjectPlugins) &&
                       canRequestPluginAccess
@@ -571,7 +587,8 @@ export default function ContactFormProjectPage({
           <CardContent className="space-y-5">
             {infoQuery.error ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Failed to load Contact Form plugin info: {infoQuery.error.message}
+                Failed to load Contact Form plugin info:{" "}
+                {infoQuery.error.message}
               </div>
             ) : null}
 
@@ -597,7 +614,10 @@ export default function ContactFormProjectPage({
                           >
                             <div className="flex items-center gap-2 text-sm">
                               <span>{email}</span>
-                              <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                              <Badge
+                                variant="default"
+                                className="text-[10px] px-1.5 py-0"
+                              >
                                 Verified
                               </Badge>
                             </div>
@@ -614,21 +634,27 @@ export default function ContactFormProjectPage({
                       </div>
                     ) : (
                       <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
-                        Add an email address to start receiving form submissions.
+                        Add an email address to start receiving form
+                        submissions.
                       </div>
                     )}
 
                     {pendingRecipients.length > 0 ? (
                       <div className="space-y-2">
                         {pendingRecipients.map(
-                          (entry: ContactRecipientDirectory["pending"][number]) => (
+                          (
+                            entry: ContactRecipientDirectory["pending"][number],
+                          ) => (
                             <div
                               key={entry.email}
                               className="flex items-center justify-between rounded-md border border-dashed px-3 py-2"
                             >
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <span>{entry.email}</span>
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0"
+                                >
                                   Pending
                                 </Badge>
                               </div>
@@ -667,11 +693,15 @@ export default function ContactFormProjectPage({
                             </SelectTrigger>
                             <SelectContent>
                               {recipientOptions.map(
-                                (option: ContactRecipientDirectory["options"][number]) => (
+                                (
+                                  option: ContactRecipientDirectory["options"][number],
+                                ) => (
                                   <SelectItem
                                     key={option.email}
                                     value={option.email}
-                                    disabled={option.isVerified || option.isPending}
+                                    disabled={
+                                      option.isVerified || option.isPending
+                                    }
                                   >
                                     {option.email}
                                     {option.isVerified
@@ -700,7 +730,9 @@ export default function ContactFormProjectPage({
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         <Input
                           value={customRecipientEmail}
-                          onChange={(event) => setCustomRecipientEmail(event.target.value)}
+                          onChange={(event) =>
+                            setCustomRecipientEmail(event.target.value)
+                          }
                           placeholder="team@example.com"
                         />
                         <Button
@@ -746,27 +778,37 @@ export default function ContactFormProjectPage({
 
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div className="space-y-1">
-                            <Label htmlFor={`contact-field-key-${index}`} className="text-xs">
+                            <Label
+                              htmlFor={`contact-field-key-${index}`}
+                              className="text-xs"
+                            >
                               Field key
                             </Label>
                             <Input
                               id={`contact-field-key-${index}`}
                               value={field.key}
                               onChange={(event) =>
-                                updateFormField(index, { key: event.target.value })
+                                updateFormField(index, {
+                                  key: event.target.value,
+                                })
                               }
                               placeholder="name"
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label htmlFor={`contact-field-label-${index}`} className="text-xs">
+                            <Label
+                              htmlFor={`contact-field-label-${index}`}
+                              className="text-xs"
+                            >
                               Label
                             </Label>
                             <Input
                               id={`contact-field-label-${index}`}
                               value={field.label}
                               onChange={(event) =>
-                                updateFormField(index, { label: event.target.value })
+                                updateFormField(index, {
+                                  label: event.target.value,
+                                })
                               }
                               placeholder="Name"
                             />
@@ -781,7 +823,10 @@ export default function ContactFormProjectPage({
                               onValueChange={(value) =>
                                 updateFormField(index, {
                                   type: value as ContactFormFieldType,
-                                  rows: value === "textarea" ? field.rows ?? 5 : undefined,
+                                  rows:
+                                    value === "textarea"
+                                      ? (field.rows ?? 5)
+                                      : undefined,
                                 })
                               }
                             >
@@ -791,26 +836,36 @@ export default function ContactFormProjectPage({
                               <SelectContent>
                                 <SelectItem value="text">Text</SelectItem>
                                 <SelectItem value="email">Email</SelectItem>
-                                <SelectItem value="textarea">Textarea</SelectItem>
+                                <SelectItem value="textarea">
+                                  Textarea
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
                           <div className="space-y-1">
-                            <Label htmlFor={`contact-field-placeholder-${index}`} className="text-xs">
+                            <Label
+                              htmlFor={`contact-field-placeholder-${index}`}
+                              className="text-xs"
+                            >
                               Placeholder
                             </Label>
                             <Input
                               id={`contact-field-placeholder-${index}`}
                               value={field.placeholder}
                               onChange={(event) =>
-                                updateFormField(index, { placeholder: event.target.value })
+                                updateFormField(index, {
+                                  placeholder: event.target.value,
+                                })
                               }
                               placeholder="Optional"
                             />
                           </div>
                           {field.type === "textarea" ? (
                             <div className="space-y-1">
-                              <Label htmlFor={`contact-field-rows-${index}`} className="text-xs">
+                              <Label
+                                htmlFor={`contact-field-rows-${index}`}
+                                className="text-xs"
+                              >
                                 Rows
                               </Label>
                               <Input
@@ -834,7 +889,9 @@ export default function ContactFormProjectPage({
                             id={`contact-field-required-${index}`}
                             checked={field.required}
                             onCheckedChange={(checked) =>
-                              updateFormField(index, { required: checked === true })
+                              updateFormField(index, {
+                                required: checked === true,
+                              })
                             }
                           />
                           <Label
@@ -859,18 +916,23 @@ export default function ContactFormProjectPage({
                 >
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="contact-source-hosts" className="text-xs font-medium">
+                      <Label
+                        htmlFor="contact-source-hosts"
+                        className="text-xs font-medium"
+                      >
                         Allowed source hosts
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        Leave empty to automatically use published, tenant, and Studio
-                        preview hosts. Entering values here overrides that auto-detected
-                        list.
+                        Leave empty to automatically use published, tenant, and
+                        Studio preview hosts. Entering values here overrides
+                        that auto-detected list.
                       </p>
                       <Textarea
                         id="contact-source-hosts"
                         value={sourceHostsInput}
-                        onChange={(event) => setSourceHostsInput(event.target.value)}
+                        onChange={(event) =>
+                          setSourceHostsInput(event.target.value)
+                        }
                         placeholder={"mydomain.com\nwww.mydomain.com"}
                         rows={3}
                       />
@@ -881,13 +943,15 @@ export default function ContactFormProjectPage({
                       ) : null}
                       {manualSourceHostsConfigured ? (
                         <p className="text-xs text-amber-700 dark:text-amber-300">
-                          Manual override active. Submission and Turnstile host checks now
-                          use only the hosts above until you clear this field.
+                          Manual override active. Submission and Turnstile host
+                          checks now use only the hosts above until you clear
+                          this field.
                         </p>
                       ) : null}
                       {effectiveSourceHosts.length > 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Effective submit hosts: {effectiveSourceHosts.join(", ")}
+                          Effective submit hosts:{" "}
+                          {effectiveSourceHosts.join(", ")}
                         </p>
                       ) : null}
                       {turnstileExpectedDomains.length > 0 ? (
@@ -899,16 +963,22 @@ export default function ContactFormProjectPage({
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="contact-redirect-hosts" className="text-xs font-medium">
+                      <Label
+                        htmlFor="contact-redirect-hosts"
+                        className="text-xs font-medium"
+                      >
                         Allowed redirect hosts
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        Validates the redirect URL after successful form submission.
+                        Validates the redirect URL after successful form
+                        submission.
                       </p>
                       <Textarea
                         id="contact-redirect-hosts"
                         value={redirectHostsInput}
-                        onChange={(event) => setRedirectHostsInput(event.target.value)}
+                        onChange={(event) =>
+                          setRedirectHostsInput(event.target.value)
+                        }
                         placeholder="mydomain.com"
                         rows={3}
                       />

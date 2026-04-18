@@ -1,15 +1,15 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
+  Button,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@vivd/ui";
 import {
   BOOKING_STATUS_OPTIONS,
   SOURCE_CHANNEL_FILTER_OPTIONS,
@@ -211,7 +211,9 @@ export function TableBookingBookingsTab({
           Could not load bookings: {bookingsQuery.error.message}
         </p>
       ) : null}
-      {!bookingsQuery.isLoading && !bookingsQuery.error && bookingsRows.length === 0 ? (
+      {!bookingsQuery.isLoading &&
+      !bookingsQuery.error &&
+      bookingsRows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No bookings match the current filters.
         </p>

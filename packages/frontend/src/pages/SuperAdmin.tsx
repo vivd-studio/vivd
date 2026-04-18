@@ -15,15 +15,16 @@ import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -274,16 +275,16 @@ export default function SuperAdmin() {
     if (section === "org") {
       return (
         <div className="grid gap-6 xl:min-h-0 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
-          <Card className="border-border/70 shadow-sm xl:sticky xl:top-4 xl:flex xl:max-h-[calc(100svh-8rem)] xl:min-h-0 xl:flex-col">
-            <CardHeader className="gap-4 border-b bg-muted/20">
+          <Panel className="xl:sticky xl:top-4 xl:flex xl:max-h-[calc(100svh-8rem)] xl:min-h-0 xl:flex-col">
+            <PanelHeader separated className="gap-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <CardTitle className="text-base">Organization Directory</CardTitle>
-                  <CardDescription>
+                  <PanelTitle>Organization Directory</PanelTitle>
+                  <PanelDescription>
                     {organizations.length === 0
                       ? "Create your first organization to get started."
                       : `${organizations.length} organizations across the platform.`}
-                  </CardDescription>
+                  </PanelDescription>
                 </div>
                 <Button
                   size="sm"
@@ -306,19 +307,19 @@ export default function SuperAdmin() {
                   />
                 </div>
                 {organizations.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span className="rounded-full border bg-background px-2.5 py-1">
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill tone="success" dot>
                       {activeOrganizationCount} active
-                    </span>
-                    <span className="rounded-full border bg-background px-2.5 py-1">
+                    </StatusPill>
+                    <StatusPill tone="neutral">
                       {organizations.length - activeOrganizationCount} non-active
-                    </span>
+                    </StatusPill>
                   </div>
                 ) : null}
               </div>
-            </CardHeader>
+            </PanelHeader>
 
-            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <PanelContent className="flex min-h-0 flex-1 flex-col p-0">
               {orgsLoading ? (
                 <div className="px-6 py-10">
                   <LoadingSpinner
@@ -350,16 +351,17 @@ export default function SuperAdmin() {
                         type="button"
                         onClick={() => selectOrg(org.id)}
                         className={cn(
-                          "w-full rounded-xl border p-3 text-left transition-colors",
+                          "w-full rounded-md border p-3 text-left transition-colors",
                           effectiveOrgId === org.id
-                            ? "border-foreground/15 bg-accent/50 shadow-sm"
-                            : "border-transparent hover:border-border hover:bg-muted/30",
+                            ? "border-border bg-surface-sunken shadow-sm"
+                            : "border-transparent hover:border-border hover:bg-surface-sunken/60",
                         )}
                       >
                         <div className="flex items-start gap-3">
                           <span
+                            aria-hidden="true"
                             className={cn(
-                              "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
+                              "mt-1.5 h-2 w-2 shrink-0 rounded-full",
                               org.status === "active"
                                 ? "bg-emerald-500"
                                 : "bg-amber-500",
@@ -383,17 +385,19 @@ export default function SuperAdmin() {
                               </span>
                             </div>
                           </div>
-                          <span className="rounded-full border bg-background px-2 py-1 text-[11px] capitalize text-muted-foreground">
+                          <StatusPill
+                            tone={org.status === "active" ? "success" : "warn"}
+                          >
                             {org.status}
-                          </span>
+                          </StatusPill>
                         </div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </PanelContent>
+          </Panel>
 
           <div className="min-w-0">
             <Suspense fallback={<ContentLoadingState />}>
@@ -405,8 +409,8 @@ export default function SuperAdmin() {
                   onOrgDeleted={handleOrgDeleted}
                 />
               ) : !orgsLoading ? (
-                <Card className="border-dashed shadow-none">
-                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <Panel tone="dashed">
+                  <PanelContent className="flex flex-col items-center justify-center py-16 pt-16 text-center">
                     <Building2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
                     <h3 className="text-lg font-medium">No organizations</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -419,8 +423,8 @@ export default function SuperAdmin() {
                       <Plus className="h-4 w-4" />
                       Create organization
                     </Button>
-                  </CardContent>
-                </Card>
+                  </PanelContent>
+                </Panel>
               ) : null}
             </Suspense>
           </div>
@@ -508,24 +512,28 @@ export default function SuperAdmin() {
             <DialogTitle>Create organization</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-org-slug">Slug</Label>
+            <Field>
+              <FieldLabel htmlFor="new-org-slug" required>
+                Slug
+              </FieldLabel>
               <Input
                 id="new-org-slug"
                 placeholder="e.g. acme"
                 value={newOrgSlug}
                 onChange={(e) => setNewOrgSlug(e.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-org-name">Display name</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-org-name" required>
+                Display name
+              </FieldLabel>
               <Input
                 id="new-org-name"
                 placeholder="e.g. Acme Inc."
                 value={newOrgName}
                 onChange={(e) => setNewOrgName(e.target.value)}
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>

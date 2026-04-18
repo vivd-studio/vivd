@@ -1,17 +1,20 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Callout, CalloutDescription, CalloutTitle } from "@/components/ui/callout";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
+import { StatTile } from "@/components/ui/stat-tile";
+import { StatusPill } from "@/components/ui/status-pill";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,11 +49,11 @@ type ReadonlyFieldProps = {
 
 function ReadonlyField({ label, value, helper }: ReadonlyFieldProps) {
   return (
-    <div className="rounded-lg border bg-background/80 px-4 py-3">
+    <StatTile className="gap-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-medium text-foreground">{value}</dd>
-      <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
-    </div>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
+      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+    </StatTile>
   );
 }
 
@@ -80,14 +83,14 @@ export function SettingsPanel({
 
   return (
     <div className="space-y-4">
-      <Card className="border-border/70">
-        <CardHeader className="pb-4">
-          <CardTitle>Identity</CardTitle>
-          <CardDescription>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Identity</PanelTitle>
+          <PanelDescription>
             Names and stable identifiers used throughout the control plane.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-5">
           <dl className="grid gap-3 md:grid-cols-3">
             <ReadonlyField
               label="Slug"
@@ -103,13 +106,12 @@ export function SettingsPanel({
               label="Status"
               value={
                 <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      selectedOrg.status === "active" ? "default" : "destructive"
-                    }
+                  <StatusPill
+                    tone={selectedOrg.status === "active" ? "success" : "danger"}
+                    dot
                   >
                     {selectedOrg.status}
-                  </Badge>
+                  </StatusPill>
                   {selectedOrg.id === "default" ? (
                     <Badge variant="outline">Default</Badge>
                   ) : null}
@@ -123,14 +125,14 @@ export function SettingsPanel({
             />
           </dl>
 
-          <div className="rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label htmlFor="org-name">Display name</Label>
-              <p className="text-sm text-muted-foreground">
+          <Panel tone="sunken" className="p-4">
+            <Field>
+              <FieldLabel htmlFor="org-name">Display name</FieldLabel>
+              <FieldDescription>
                 Shown in org switchers, project ownership surfaces, and admin
                 summaries.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
             <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
               <div className="max-w-xl flex-1">
                 <Input
@@ -151,19 +153,19 @@ export function SettingsPanel({
                 {renamePending ? "Saving..." : "Save name"}
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </Panel>
+        </PanelContent>
+      </Panel>
 
-      <Card className="border-border/70">
-        <CardHeader className="pb-4">
-          <CardTitle>Repository defaults</CardTitle>
-          <CardDescription>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Repository defaults</PanelTitle>
+          <PanelDescription>
             Controls how auto-created GitHub repositories are named for this
             organization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-5">
           <dl className="grid gap-3 md:grid-cols-2">
             <ReadonlyField
               label="Current prefix"
@@ -190,13 +192,15 @@ export function SettingsPanel({
             />
           </dl>
 
-          <div className="rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label htmlFor="github-prefix">GitHub repository prefix</Label>
-              <p className="text-sm text-muted-foreground">
+          <Panel tone="sunken" className="p-4">
+            <Field>
+              <FieldLabel htmlFor="github-prefix">
+                GitHub repository prefix
+              </FieldLabel>
+              <FieldDescription>
                 A trailing hyphen is added automatically if needed.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
             <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
               <div className="max-w-xl flex-1">
                 <Input
@@ -216,43 +220,69 @@ export function SettingsPanel({
                 {savePending ? "Saving..." : "Save prefix"}
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </Panel>
+        </PanelContent>
+      </Panel>
 
-      <Card className="border-destructive/40">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Delete organization</CardTitle>
-          <CardDescription>
-            Remove this organization, its members, projects, domains, and usage
-            records from the platform.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">This action is permanent.</p>
-            <p className="mt-1 text-muted-foreground">
-              Delete only when this tenant should no longer exist anywhere in the
-              control plane.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-muted-foreground">
-              {selectedOrg.id === "default"
-                ? "The default organization stays in place as the platform fallback tenant."
-                : "Deletion removes all associated members, domains, projects, and usage history."}
+      <Panel>
+        <PanelHeader>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <PanelTitle>Delete organization</PanelTitle>
+              <PanelDescription>
+                Remove this organization, its members, projects, domains, and
+                usage records from the platform.
+              </PanelDescription>
             </div>
-            <Button
-              variant="destructive"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={deletePending || selectedOrg.id === "default"}
+            <StatusPill
+              tone={selectedOrg.id === "default" ? "neutral" : "danger"}
             >
-              Delete organization
-            </Button>
+              {selectedOrg.id === "default" ? "Protected" : "Destructive"}
+            </StatusPill>
           </div>
-        </CardContent>
-      </Card>
+        </PanelHeader>
+        <PanelContent className="space-y-4">
+          {selectedOrg.id === "default" ? (
+            <Callout tone="info" icon={<AlertTriangle />}>
+              <CalloutTitle>Default organization is protected.</CalloutTitle>
+              <CalloutDescription>
+                The default organization stays in place as the platform fallback
+                tenant.
+              </CalloutDescription>
+            </Callout>
+          ) : (
+            <Callout tone="danger" icon={<AlertTriangle />}>
+              <CalloutTitle>This action is permanent.</CalloutTitle>
+              <CalloutDescription>
+                Delete only when this tenant should no longer exist anywhere in
+                the control plane.
+              </CalloutDescription>
+            </Callout>
+          )}
+
+          <Panel tone="sunken" className="p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  Deletion scope
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedOrg.id === "default"
+                    ? "Deletion stays unavailable because this tenant anchors the platform fallback path."
+                    : "Deletion removes all associated members, domains, projects, and usage history."}
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={deletePending || selectedOrg.id === "default"}
+              >
+                Delete organization
+              </Button>
+            </div>
+          </Panel>
+        </PanelContent>
+      </Panel>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

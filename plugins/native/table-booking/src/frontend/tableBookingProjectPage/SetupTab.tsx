@@ -1,11 +1,6 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Badge, Button, Checkbox, Input, Label, Textarea } from "@vivd/ui";
 import { WEEKDAY_LABELS, WEEKDAY_ORDER } from "./constants";
 import { PeriodEditor, SectionCard, SurfaceList } from "./shared";
 import type { SettingsTab, TableBookingPluginInfo } from "./types";
@@ -35,9 +30,15 @@ export function TableBookingSetupTab({
       >
         <div className="grid gap-4 md:grid-cols-2">
           {WEEKDAY_ORDER.map((dayOfWeek) => {
-            const entry = getWeeklyScheduleEntry(draft.weeklySchedule, dayOfWeek);
+            const entry = getWeeklyScheduleEntry(
+              draft.weeklySchedule,
+              dayOfWeek,
+            );
             return (
-              <div key={dayOfWeek} className="rounded-lg border bg-background p-4">
+              <div
+                key={dayOfWeek}
+                className="rounded-lg border bg-background p-4"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">
@@ -61,19 +62,23 @@ export function TableBookingSetupTab({
                 <div className="mt-3 space-y-3">
                   {entry.periods.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No service windows. Guests can only book this day if you add
-                      hours here or create a date override.
+                      No service windows. Guests can only book this day if you
+                      add hours here or create a date override.
                     </p>
                   ) : (
                     entry.periods.map((period, index) => (
                       <PeriodEditor
                         key={`${dayOfWeek}-${index}`}
                         period={period}
-                        defaultDurationMinutes={draft.defaultDurationMinutesNumber}
+                        defaultDurationMinutes={
+                          draft.defaultDurationMinutesNumber
+                        }
                         onChange={(next) =>
                           draft.updateWeeklyPeriod(dayOfWeek, index, next)
                         }
-                        onRemove={() => draft.removeWeeklyPeriod(dayOfWeek, index)}
+                        onRemove={() =>
+                          draft.removeWeeklyPeriod(dayOfWeek, index)
+                        }
                       />
                     ))
                   )}
@@ -177,7 +182,9 @@ export function TableBookingSetupTab({
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={draft.collectNotes}
-                onCheckedChange={(value) => draft.setCollectNotes(Boolean(value))}
+                onCheckedChange={(value) =>
+                  draft.setCollectNotes(Boolean(value))
+                }
               />
               Collect guest notes
             </label>
@@ -238,7 +245,9 @@ export function TableBookingSetupTab({
           description="Use the calendar for editing. This list gives you a quick audit trail of special openings and closures."
         >
           {draft.dateOverrides.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No date overrides yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No date overrides yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {draft.dateOverrides.map((override) => (

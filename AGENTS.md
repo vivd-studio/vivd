@@ -83,6 +83,11 @@ For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machine
 - Do not commit or push unless specifically requested. Git inspection commands are fine.
 - When suggesting commit messages, prefer conventional commits such as `fix(scope): ...`, `refactor(scope): ...`, or `chore(scope): ...`.
 
+## UI / Surfaces
+
+- Vivd has one surface / elevation language shared by `packages/frontend` and `packages/studio`. Any new container, tile, callout, status chip, or form field should go through the primitives in `@vivd/ui` (`Panel`, `StatTile`, `Callout`, `StatusPill`, `Field`) — not hand-rolled `rounded-* border bg-*` constructions.
+- Before reaching for `bg-muted/NN`, `bg-card`, `bg-background/NN`, or raw tailwind palette colors (`bg-orange-50`, etc.) for UI state, read `.agents/skills/frontend-surfaces/SKILL.md`. It defines the surface roles (`surface-page/panel/sunken/raised/input`), the primitive lookup, the corner-radius rules, and the ban list.
+
 ## Maintenance Note
 
 Keep this file focused on durable repo-wide rules and orientation. Put specialist runbooks, deep implementation notes, and transitional migration detail in focused docs or skills instead of expanding this file.

@@ -12,16 +12,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { trpc } from "@/lib/trpc";
-import { ROUTES } from "@/app/router";
+import { Badge, Button, cn } from "@vivd/ui";
+import { ROUTES, trpc } from "@/plugins/host";
 import { ReservationSheet } from "./tableBookingProjectPage/calendarSheets";
 import { CapacityWindowCard } from "./tableBookingProjectPage/shared";
-import {
-  PLUGIN_READ_REFETCH_INTERVAL_MS,
-} from "./tableBookingProjectPage/constants";
+import { PLUGIN_READ_REFETCH_INTERVAL_MS } from "./tableBookingProjectPage/constants";
 import {
   TABLE_BOOKING_DAY_CAPACITY_READ_ID,
   TABLE_BOOKING_BOOKINGS_READ_ID,
@@ -136,26 +131,27 @@ export default function TableBookingOperatorPage({
     },
   );
 
-  const saveReservationMutation =
-    trpc.plugins.action.useMutation({
-      onSuccess: async (_, variables) => {
-        const reservationInput = variables.input;
-        if (!reservationInput) {
-          return;
-        }
-        toast.success(
-          reservationInput.bookingId ? "Reservation updated" : "Reservation created",
-        );
-        setReservationSheetOpen(false);
-        reservationEditor.resetReservationEditor(String(reservationInput.date));
-        await Promise.all([utils.plugins.read.invalidate()]);
-      },
-      onError: (error) => {
-        toast.error("Could not save reservation", {
-          description: error.message,
-        });
-      },
-    });
+  const saveReservationMutation = trpc.plugins.action.useMutation({
+    onSuccess: async (_, variables) => {
+      const reservationInput = variables.input;
+      if (!reservationInput) {
+        return;
+      }
+      toast.success(
+        reservationInput.bookingId
+          ? "Reservation updated"
+          : "Reservation created",
+      );
+      setReservationSheetOpen(false);
+      reservationEditor.resetReservationEditor(String(reservationInput.date));
+      await Promise.all([utils.plugins.read.invalidate()]);
+    },
+    onError: (error) => {
+      toast.error("Could not save reservation", {
+        description: error.message,
+      });
+    },
+  });
 
   const actionMutation = trpc.plugins.action.useMutation({
     onSuccess: async () => {
@@ -174,7 +170,9 @@ export default function TableBookingOperatorPage({
     setActiveTab: () => {},
   });
 
-  const summary = summaryQuery.data?.result as TableBookingSummaryPayload | undefined;
+  const summary = summaryQuery.data?.result as
+    | TableBookingSummaryPayload
+    | undefined;
   const todayBookings = todayBookingsQuery.data?.result as
     | TableBookingBookingsPayload
     | undefined;
@@ -250,8 +248,7 @@ export default function TableBookingOperatorPage({
       if (nowMinutes < end) {
         const next = Math.min(
           end - interval,
-          start +
-            Math.ceil((nowMinutes - start) / interval) * interval,
+          start + Math.ceil((nowMinutes - start) / interval) * interval,
         );
         return formatTimeFromMinutes(Math.max(start, next));
       }
@@ -403,7 +400,8 @@ export default function TableBookingOperatorPage({
           <div className={cn("max-w-md rounded-xl p-6", surfaceClass)}>
             <p className="text-lg font-semibold">Service mode is unavailable</p>
             <p className={cn("mt-2 text-sm", mutedClass)}>
-              Enable Table Booking for this project before opening the service board.
+              Enable Table Booking for this project before opening the service
+              board.
             </p>
             <Button className="mt-4" onClick={handleClose}>
               Back to settings
@@ -416,12 +414,15 @@ export default function TableBookingOperatorPage({
             <div
               className={cn(
                 "mx-3 mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium md:mx-5",
-                isHc ? "op-pill op-pill-danger" : "border-destructive/50 bg-destructive/10 text-destructive",
+                isHc
+                  ? "op-pill op-pill-danger"
+                  : "border-destructive/50 bg-destructive/10 text-destructive",
               )}
             >
               <WifiOff className="h-4 w-4" />
               <span>
-                Live data may be stale. Last successful update {freshness.label}.
+                Live data may be stale. Last successful update {freshness.label}
+                .
               </span>
               <Button
                 size="sm"
@@ -438,12 +439,15 @@ export default function TableBookingOperatorPage({
             <div
               className={cn(
                 "mx-3 mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-xs md:mx-5",
-                isHc ? "op-pill op-pill-warn" : "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+                isHc
+                  ? "op-pill op-pill-warn"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
               )}
             >
               <ShieldAlert className="h-4 w-4" />
               <span>
-                Couldn't keep the screen awake — the tablet may sleep during service.
+                Couldn't keep the screen awake — the tablet may sleep during
+                service.
               </span>
               <button
                 type="button"
@@ -485,10 +489,7 @@ export default function TableBookingOperatorPage({
                 ) : nextWindow ? (
                   <Badge
                     variant="outline"
-                    className={cn(
-                      "px-3 py-1 text-sm",
-                      isHc ? "op-pill" : "",
-                    )}
+                    className={cn("px-3 py-1 text-sm", isHc ? "op-pill" : "")}
                   >
                     Next · {nextWindow.startTime}
                   </Badge>
@@ -554,7 +555,8 @@ export default function TableBookingOperatorPage({
               <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                 {upcomingArrivals.length === 0 ? (
                   <p className={cn("text-sm", mutedClass)}>
-                    No confirmed arrivals yet today. Use <span className="font-medium">Add reservation</span> to
+                    No confirmed arrivals yet today. Use{" "}
+                    <span className="font-medium">Add reservation</span> to
                     capture a phone or walk-in booking.
                   </p>
                 ) : (
@@ -572,10 +574,18 @@ export default function TableBookingOperatorPage({
                         runBookingAction("cancel_booking", booking, "Cancelled")
                       }
                       onNoShow={() =>
-                        runBookingAction("mark_no_show", booking, "Marked no-show")
+                        runBookingAction(
+                          "mark_no_show",
+                          booking,
+                          "Marked no-show",
+                        )
                       }
                       onCompleted={() =>
-                        runBookingAction("mark_completed", booking, "Marked completed")
+                        runBookingAction(
+                          "mark_completed",
+                          booking,
+                          "Marked completed",
+                        )
                       }
                       onEdit={() => {
                         reservationEditor.startEditingReservation(booking);
@@ -678,7 +688,10 @@ function OperatorHeader({
           )}
           title={`Last successful update ${freshness.label}`}
         >
-          <span className={cn("op-freshness-dot", toneClass)} aria-hidden="true" />
+          <span
+            className={cn("op-freshness-dot", toneClass)}
+            aria-hidden="true"
+          />
           <Clock className="h-3.5 w-3.5" />
           {freshness.label}
         </span>
@@ -692,9 +705,7 @@ function OperatorHeader({
           disabled={refreshing}
           className={cn(isHc && "op-btn")}
         >
-          <RefreshCw
-            className={cn("h-4 w-4", refreshing && "animate-spin")}
-          />
+          <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
           <span className="hidden md:inline">Refresh</span>
         </Button>
         <Button
@@ -743,7 +754,13 @@ function CoversHeadline({
   return (
     <div className="grid grid-cols-3 gap-3">
       <StatTile
-        label={currentWindow ? "Remaining now" : nextWindow ? "Remaining next" : "Covers today"}
+        label={
+          currentWindow
+            ? "Remaining now"
+            : nextWindow
+              ? "Remaining next"
+              : "Covers today"
+        }
         value={String(
           focused?.remainingCovers ?? summary?.counts.coversToday ?? 0,
         )}
@@ -883,7 +900,12 @@ function ArrivalRow({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={cn("truncate font-semibold", isHc ? "text-lg" : "text-base")}>
+            <p
+              className={cn(
+                "truncate font-semibold",
+                isHc ? "text-lg" : "text-base",
+              )}
+            >
               {booking.guestName || "Guest"}
             </p>
             <span
@@ -898,7 +920,9 @@ function ArrivalRow({
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                  isHc ? "op-pill op-pill-warn" : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+                  isHc
+                    ? "op-pill op-pill-warn"
+                    : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
                 )}
               >
                 {minutesUntil <= 0 ? "Now" : `${minutesUntil} min`}

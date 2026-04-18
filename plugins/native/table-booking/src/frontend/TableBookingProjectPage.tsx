@@ -10,18 +10,23 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ROUTES } from "@/app/router";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { trpc } from "@/lib/trpc";
+import { ROUTES } from "@/plugins/host";
+import { SettingsPageShell } from "@/plugins/host";
+import {
+  Badge,
+  Button,
+  Separator,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@vivd/ui";
+import { trpc } from "@/plugins/host";
 import {
   ProjectPluginAccessActions,
   ProjectPluginPageActions,
   useProjectPluginPageModel,
-} from "@/plugins/projectPageScaffold";
+} from "@/plugins/host";
 import { tableBookingPluginConfigSchema } from "../backend/config";
 import {
   TABLE_BOOKING_DAY_CAPACITY_READ_ID,
@@ -112,9 +117,9 @@ export default function TableBookingProjectPage({
   );
   const [reservationSheetOpen, setReservationSheetOpen] = useState(false);
   const [capacitySheetOpen, setCapacitySheetOpen] = useState(false);
-  const [bookingStatus, setBookingStatus] = useState<"all" | TableBookingStatus>(
-    "all",
-  );
+  const [bookingStatus, setBookingStatus] = useState<
+    "all" | TableBookingStatus
+  >("all");
   const [bookingSourceChannel, setBookingSourceChannel] = useState<
     "all" | TableBookingSourceChannel
   >("all");
@@ -124,8 +129,7 @@ export default function TableBookingProjectPage({
   const [bookingOffset, setBookingOffset] = useState(0);
   const limit = 100;
 
-  const pluginReadQueriesEnabled =
-    !!projectSlug && pluginEnabled;
+  const pluginReadQueriesEnabled = !!projectSlug && pluginEnabled;
   const monthRange = getMonthRange(visibleMonth);
 
   const summaryQuery = trpc.plugins.read.useQuery(
@@ -259,13 +263,13 @@ export default function TableBookingProjectPage({
         return;
       }
       toast.success(
-        reservationInput.bookingId ? "Reservation updated" : "Reservation created",
+        reservationInput.bookingId
+          ? "Reservation updated"
+          : "Reservation created",
       );
       setReservationSheetOpen(false);
       reservationEditor.resetReservationEditor(String(reservationInput.date));
-      await invalidatePluginPage([
-        () => utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginPage([() => utils.plugins.read.invalidate()]);
     },
     onError: (error) => {
       toast.error("Could not save reservation", {
@@ -274,46 +278,40 @@ export default function TableBookingProjectPage({
     },
   });
 
-  const saveCapacityAdjustmentMutation =
-    trpc.plugins.action.useMutation({
-      onSuccess: async (_, variables) => {
-        const adjustmentInput = variables.input;
-        if (!adjustmentInput) {
-          return;
-        }
-        toast.success(
-          adjustmentInput.adjustmentId
-            ? "Capacity adjustment updated"
-            : "Capacity adjustment saved",
-        );
-        capacityEditor.resetCapacityAdjustmentForm(
-          String(adjustmentInput.serviceDate),
-        );
-        await Promise.all([
-          utils.plugins.read.invalidate(),
-        ]);
-      },
-      onError: (error) => {
-        toast.error("Could not save capacity adjustment", {
-          description: error.message,
-        });
-      },
+  const saveCapacityAdjustmentMutation = trpc.plugins.action.useMutation({
+    onSuccess: async (_, variables) => {
+      const adjustmentInput = variables.input;
+      if (!adjustmentInput) {
+        return;
+      }
+      toast.success(
+        adjustmentInput.adjustmentId
+          ? "Capacity adjustment updated"
+          : "Capacity adjustment saved",
+      );
+      capacityEditor.resetCapacityAdjustmentForm(
+        String(adjustmentInput.serviceDate),
+      );
+      await Promise.all([utils.plugins.read.invalidate()]);
+    },
+    onError: (error) => {
+      toast.error("Could not save capacity adjustment", {
+        description: error.message,
+      });
+    },
   });
 
-  const deleteCapacityAdjustmentMutation =
-    trpc.plugins.action.useMutation({
-      onSuccess: async () => {
-        toast.success("Capacity adjustment removed");
-        capacityEditor.resetCapacityAdjustmentForm(selectedDate);
-        await Promise.all([
-          utils.plugins.read.invalidate(),
-        ]);
-      },
-      onError: (error) => {
-        toast.error("Could not remove capacity adjustment", {
-          description: error.message,
-        });
-      },
+  const deleteCapacityAdjustmentMutation = trpc.plugins.action.useMutation({
+    onSuccess: async () => {
+      toast.success("Capacity adjustment removed");
+      capacityEditor.resetCapacityAdjustmentForm(selectedDate);
+      await Promise.all([utils.plugins.read.invalidate()]);
+    },
+    onError: (error) => {
+      toast.error("Could not remove capacity adjustment", {
+        description: error.message,
+      });
+    },
   });
 
   const exportBookingsMutation = trpc.plugins.action.useMutation({
@@ -351,7 +349,9 @@ export default function TableBookingProjectPage({
     weeklySchedule: draft.weeklySchedule,
     dateOverrides: draft.dateOverrides,
   });
-  const summary = summaryQuery.data?.result as TableBookingSummaryPayload | undefined;
+  const summary = summaryQuery.data?.result as
+    | TableBookingSummaryPayload
+    | undefined;
   const monthBookings = monthBookingsQuery.data?.result as
     | TableBookingBookingsPayload
     | undefined;
@@ -497,7 +497,8 @@ export default function TableBookingProjectPage({
   };
 
   const bookingsRows = bookings?.rows ?? [];
-  const bookingRangeStart = bookings && bookings.total > 0 ? bookingOffset + 1 : 0;
+  const bookingRangeStart =
+    bookings && bookings.total > 0 ? bookingOffset + 1 : 0;
   const bookingRangeEnd = bookings
     ? Math.min(bookingOffset + bookingsRows.length, bookings.total)
     : 0;
@@ -505,19 +506,27 @@ export default function TableBookingProjectPage({
   const canLoadMoreBookings = bookingRangeEnd < (bookings?.total ?? 0);
   const readErrors = [
     summaryQuery.error ? `Summary: ${summaryQuery.error.message}` : null,
-    monthBookingsQuery.error ? `Calendar: ${monthBookingsQuery.error.message}` : null,
-    dayCapacityQuery.error ? `Capacity: ${dayCapacityQuery.error.message}` : null,
+    monthBookingsQuery.error
+      ? `Calendar: ${monthBookingsQuery.error.message}`
+      : null,
+    dayCapacityQuery.error
+      ? `Capacity: ${dayCapacityQuery.error.message}`
+      : null,
     selectedDateBookingsQuery.error
       ? `Selected day: ${selectedDateBookingsQuery.error.message}`
       : null,
-    bookingsQuery.error ? `Booking search: ${bookingsQuery.error.message}` : null,
+    bookingsQuery.error
+      ? `Booking search: ${bookingsQuery.error.message}`
+      : null,
   ].filter((value): value is string => Boolean(value));
 
   return (
     <SettingsPageShell
       title="Table Booking"
       description="Operate bookings from a calendar-first view, then adjust hours and widget settings without dropping into raw config."
-      className={isEmbedded ? "mx-auto w-full max-w-7xl px-4 py-4 sm:px-6" : undefined}
+      className={
+        isEmbedded ? "mx-auto w-full max-w-7xl px-4 py-4 sm:px-6" : undefined
+      }
       actions={
         <ProjectPluginPageActions
           projectSlug={projectSlug}
@@ -540,7 +549,10 @@ export default function TableBookingProjectPage({
               ) : null}
               <Button variant="outline" asChild>
                 <Link
-                  to={ROUTES.PROJECT_PLUGIN_OPERATOR(projectSlug, "table_booking")}
+                  to={ROUTES.PROJECT_PLUGIN_OPERATOR(
+                    projectSlug,
+                    "table_booking",
+                  )}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -578,7 +590,9 @@ export default function TableBookingProjectPage({
                 <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
                   <PluginIcon className="h-4 w-4" />
                 </span>
-                <h2 className="text-lg font-semibold">Project: {projectTitle}</h2>
+                <h2 className="text-lg font-semibold">
+                  Project: {projectTitle}
+                </h2>
                 <Badge variant={pluginEnabled ? "success" : "outline"}>
                   {pluginEnabled
                     ? "Enabled"
@@ -665,7 +679,8 @@ export default function TableBookingProjectPage({
                 icon={BellRing}
                 label="Issues"
                 value={String(
-                  (summary?.counts.cancelled ?? 0) + (summary?.counts.noShow ?? 0),
+                  (summary?.counts.cancelled ?? 0) +
+                    (summary?.counts.noShow ?? 0),
                 )}
                 note={`${summary?.counts.cancelled ?? 0} cancelled · ${summary?.counts.noShow ?? 0} no-show`}
                 tone={
@@ -678,7 +693,10 @@ export default function TableBookingProjectPage({
               />
             </section>
 
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)}>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => setActiveTab(value as SettingsTab)}
+            >
               <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-muted p-1 md:grid-cols-4">
                 <TabsTrigger value="calendar" className="px-3 py-2">
                   Calendar
@@ -728,7 +746,8 @@ export default function TableBookingProjectPage({
                     deleteCapacityAdjustmentMutation.mutate({
                       slug: projectSlug,
                       pluginId: typedPluginId,
-                      actionId: TABLE_BOOKING_DELETE_CAPACITY_ADJUSTMENT_ACTION_ID,
+                      actionId:
+                        TABLE_BOOKING_DELETE_CAPACITY_ADJUSTMENT_ACTION_ID,
                       input: {
                         adjustmentId,
                       },
@@ -773,7 +792,8 @@ export default function TableBookingProjectPage({
                   exportBookings={exportBookings}
                   exportPending={exportBookingsMutation.isPending}
                   actionPending={
-                    actionMutation.isPending || saveReservationMutation.isPending
+                    actionMutation.isPending ||
+                    saveReservationMutation.isPending
                   }
                   runBookingAction={runBookingAction}
                   onEditBooking={(booking) => {
@@ -794,7 +814,10 @@ export default function TableBookingProjectPage({
               </TabsContent>
 
               <TabsContent value="install" className="space-y-5">
-                <TableBookingInstallTab pluginInfo={pluginInfo} copyText={copyText} />
+                <TableBookingInstallTab
+                  pluginInfo={pluginInfo}
+                  copyText={copyText}
+                />
               </TabsContent>
             </Tabs>
           </>

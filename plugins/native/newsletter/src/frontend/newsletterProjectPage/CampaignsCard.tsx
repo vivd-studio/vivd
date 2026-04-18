@@ -1,17 +1,20 @@
 import { Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  Textarea,
+} from "@vivd/ui";
 import type {
   NewsletterCampaignAudience,
   NewsletterCampaignRecord,
@@ -97,8 +100,8 @@ export function NewsletterCampaignsCard(props: {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Drafts can now be test-sent and queued for background delivery. Start with
-          a test send before queueing a live broadcast.
+          Drafts can now be test-sent and queued for background delivery. Start
+          with a test send before queueing a live broadcast.
         </p>
         <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-3 rounded-lg border p-3">
@@ -128,8 +131,10 @@ export function NewsletterCampaignsCard(props: {
                       {` • ${row.recipientCount || row.estimatedRecipientCount} recipients`}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {row.deliveryCounts.sent} sent • {row.deliveryCounts.failed} failed •{" "}
-                      {row.deliveryCounts.skipped} skipped • {row.deliveryCounts.queued} queued
+                      {row.deliveryCounts.sent} sent •{" "}
+                      {row.deliveryCounts.failed} failed •{" "}
+                      {row.deliveryCounts.skipped} skipped •{" "}
+                      {row.deliveryCounts.queued} queued
                     </p>
                     <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                       {row.body}
@@ -144,14 +149,16 @@ export function NewsletterCampaignsCard(props: {
             )}
             <div className="flex items-center justify-between gap-2 border-t pt-3">
               <p className="text-xs text-muted-foreground">
-                {campaigns?.total ?? 0} campaigns total, page {currentCampaignPage} of{" "}
-                {campaignPageCount}
+                {campaigns?.total ?? 0} campaigns total, page{" "}
+                {currentCampaignPage} of {campaignPageCount}
               </p>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onGoToPage(Math.max(0, campaignOffset - campaignLimit))}
+                  onClick={() =>
+                    onGoToPage(Math.max(0, campaignOffset - campaignLimit))
+                  }
                   disabled={campaignOffset === 0}
                 >
                   Previous
@@ -160,7 +167,10 @@ export function NewsletterCampaignsCard(props: {
                   variant="outline"
                   size="sm"
                   onClick={() => onGoToPage(campaignOffset + campaignLimit)}
-                  disabled={!campaigns || campaignOffset + campaignLimit >= campaigns.total}
+                  disabled={
+                    !campaigns ||
+                    campaignOffset + campaignLimit >= campaigns.total
+                  }
                 >
                   Next
                 </Button>
@@ -173,26 +183,33 @@ export function NewsletterCampaignsCard(props: {
               <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                 <Badge variant="outline">{selectedCampaign.status}</Badge>
                 <span>
-                  {selectedCampaign.recipientCount || selectedCampaign.estimatedRecipientCount}{" "}
+                  {selectedCampaign.recipientCount ||
+                    selectedCampaign.estimatedRecipientCount}{" "}
                   recipients
                 </span>
                 <span>{selectedCampaign.deliveryCounts.sent} sent</span>
                 <span>{selectedCampaign.deliveryCounts.failed} failed</span>
                 <span>{selectedCampaign.deliveryCounts.skipped} skipped</span>
                 {selectedCampaign.testSentAt ? (
-                  <span>Last test {formatDateTime(selectedCampaign.testSentAt)}</span>
+                  <span>
+                    Last test {formatDateTime(selectedCampaign.testSentAt)}
+                  </span>
                 ) : null}
                 {selectedCampaign.completedAt ? (
-                  <span>Completed {formatDateTime(selectedCampaign.completedAt)}</span>
+                  <span>
+                    Completed {formatDateTime(selectedCampaign.completedAt)}
+                  </span>
                 ) : selectedCampaign.queuedAt ? (
-                  <span>Queued {formatDateTime(selectedCampaign.queuedAt)}</span>
+                  <span>
+                    Queued {formatDateTime(selectedCampaign.queuedAt)}
+                  </span>
                 ) : null}
               </div>
             ) : null}
             {selectedCampaign && !editingNewCampaign && !campaignIsEditable ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                This campaign is {selectedCampaign.status}. Create a new draft to make
-                content edits.
+                This campaign is {selectedCampaign.status}. Create a new draft
+                to make content edits.
               </div>
             ) : null}
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
@@ -244,8 +261,8 @@ export function NewsletterCampaignsCard(props: {
                       : `Viewing campaign updated ${formatDate(selectedCampaign.updatedAt)}`}
                 </span>
                 <span>
-                  {currentCampaignRecipientEstimate} confirmed recipients currently
-                  match this audience
+                  {currentCampaignRecipientEstimate} confirmed recipients
+                  currently match this audience
                 </span>
               </div>
             </div>
@@ -257,8 +274,8 @@ export function NewsletterCampaignsCard(props: {
             ) : null}
             {campaignHasUnsavedEdits ? (
               <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                Save this draft before sending a test or queueing delivery so the
-                saved campaign matches what will be sent.
+                Save this draft before sending a test or queueing delivery so
+                the saved campaign matches what will be sent.
               </div>
             ) : null}
 
@@ -266,7 +283,9 @@ export function NewsletterCampaignsCard(props: {
               {campaignIsEditable ? (
                 <Button
                   onClick={onSaveDraft}
-                  disabled={isPending || !campaignSubject.trim() || !campaignBody.trim()}
+                  disabled={
+                    isPending || !campaignSubject.trim() || !campaignBody.trim()
+                  }
                 >
                   {isPending ? (
                     <>
@@ -280,8 +299,14 @@ export function NewsletterCampaignsCard(props: {
                   )}
                 </Button>
               ) : null}
-              {selectedCampaignId && !editingNewCampaign && campaignIsEditable ? (
-                <Button variant="outline" disabled={isPending} onClick={onDeleteDraft}>
+              {selectedCampaignId &&
+              !editingNewCampaign &&
+              campaignIsEditable ? (
+                <Button
+                  variant="outline"
+                  disabled={isPending}
+                  onClick={onDeleteDraft}
+                >
                   Delete draft
                 </Button>
               ) : null}
@@ -293,7 +318,9 @@ export function NewsletterCampaignsCard(props: {
                 <Input
                   value={testSendEmail}
                   placeholder="you@example.com"
-                  onChange={(event) => onTestSendEmailChange(event.target.value)}
+                  onChange={(event) =>
+                    onTestSendEmailChange(event.target.value)
+                  }
                 />
               </div>
               <Button

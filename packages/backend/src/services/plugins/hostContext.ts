@@ -1,16 +1,7 @@
 import * as tables from "../../db/schema";
 import { db } from "../../db";
 import { emailDeliverabilityService, isSesFeedbackAutoConfirmEnabled } from "../email/deliverability";
-import {
-  buildContactRecipientVerificationEmail,
-  buildContactSubmissionEmail,
-  buildGuestBookingCancellationEmail,
-  buildGuestBookingConfirmationEmail,
-  buildNewsletterCampaignEmail,
-  buildNewsletterConfirmationEmail,
-  buildStaffBookingCancellationEmail,
-  buildStaffNewBookingEmail,
-} from "../email/templates";
+import { emailTemplateBrandingService } from "../email/templateBranding";
 import { getEmailDeliveryService } from "../integrations/EmailDeliveryService";
 import { installProfileService } from "../system/InstallProfileService";
 import { pluginEntitlementService } from "./PluginEntitlementService";
@@ -57,17 +48,8 @@ export const backendPluginHostContext = {
   email: {
     deliveryService: getEmailDeliveryService(),
     deliverabilityService: emailDeliverabilityService,
+    brandingResolver: emailTemplateBrandingService,
     isSesFeedbackAutoConfirmEnabled,
-    templates: {
-      buildContactSubmissionEmail,
-      buildContactRecipientVerificationEmail,
-      buildNewsletterConfirmationEmail,
-      buildNewsletterCampaignEmail,
-      buildGuestBookingConfirmationEmail,
-      buildGuestBookingCancellationEmail,
-      buildStaffNewBookingEmail,
-      buildStaffBookingCancellationEmail,
-    },
   },
   system: {
     installProfileService,

@@ -1,15 +1,18 @@
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+  Textarea,
+} from "@vivd/ui";
 
 export function NewsletterSettingsCard(props: {
   mode: "newsletter" | "waitlist";
@@ -47,7 +50,9 @@ export function NewsletterSettingsCard(props: {
             <Label>Mode</Label>
             <Select
               value={mode}
-              onValueChange={(value) => onModeChange(value as "newsletter" | "waitlist")}
+              onValueChange={(value) =>
+                onModeChange(value as "newsletter" | "waitlist")
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -84,7 +89,8 @@ export function NewsletterSettingsCard(props: {
               rows={4}
             />
             <p className="text-xs text-muted-foreground">
-              Comma- or newline-separated allowlist. Leave empty to use inferred project hosts.
+              Comma- or newline-separated allowlist. Leave empty to use inferred
+              project hosts.
             </p>
           </div>
           <div className="space-y-2">

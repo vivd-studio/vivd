@@ -12,17 +12,8 @@ import {
   Shield,
   UserPlus,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
-import {
-  CAPACITY_MODE_LABELS,
-  WEEKDAY_LABELS,
-} from "./constants";
+import { Badge, Button, cn, ToggleGroup, ToggleGroupItem } from "@vivd/ui";
+import { CAPACITY_MODE_LABELS, WEEKDAY_LABELS } from "./constants";
 import {
   CapacityAdjustmentSheet,
   HoursSheet,
@@ -362,7 +353,9 @@ export function TableBookingCalendarTab({
                   timeZone={timezone}
                   actionPending={actionPending || reservationPending}
                   onEdit={() => openEditReservation(booking)}
-                  onCancel={() => runBookingAction("cancel_booking", booking.id)}
+                  onCancel={() =>
+                    runBookingAction("cancel_booking", booking.id)
+                  }
                   onMarkNoShow={() =>
                     runBookingAction("mark_no_show", booking.id)
                   }
@@ -465,7 +458,10 @@ function DaySummaryCard({
             {isClosed ? "Closed" : "Open"}
           </Badge>
           {hasOverride ? (
-            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+            <Badge
+              variant="outline"
+              className="border-amber-400 text-amber-700 dark:text-amber-300"
+            >
               Date override
             </Badge>
           ) : null}
@@ -661,13 +657,7 @@ function EmptyDay({ onAddReservation }: { onAddReservation: () => void }) {
   );
 }
 
-function LegendDot({
-  className,
-  label,
-}: {
-  className: string;
-  label: string;
-}) {
+function LegendDot({ className, label }: { className: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
       <span className={cn("h-2 w-2 rounded-full", className)} />

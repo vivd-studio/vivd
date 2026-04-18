@@ -1,4 +1,5 @@
 import type { PluginCliModule } from "./pluginCli.js";
+import type { EmailTemplateBrandingResolver } from "./emailTemplates.js";
 import type {
   PluginDefinition,
   PluginKind,
@@ -38,10 +39,7 @@ export type ExternalEmbedPlacementTarget =
   | "layout_head"
   | "layout_body";
 
-export type PluginConsentCategory =
-  | "functional"
-  | "analytics"
-  | "marketing";
+export type PluginConsentCategory = "functional" | "analytics" | "marketing";
 
 export interface ExternalEmbedProviderDefinition {
   provider: string;
@@ -156,9 +154,7 @@ export interface BackendHostContext {
     getPublicPluginApiBaseUrl(options?: {
       requestHost?: string | null;
     }): Promise<string>;
-    getControlPlaneOrigin(options?: {
-      requestHost?: string | null;
-    }): string;
+    getControlPlaneOrigin(options?: { requestHost?: string | null }): string;
     inferProjectPluginSourceHosts(options: {
       organizationId: string;
       projectSlug: string;
@@ -173,17 +169,8 @@ export interface BackendHostContext {
   email: {
     deliveryService: any;
     deliverabilityService: any;
+    brandingResolver: EmailTemplateBrandingResolver;
     isSesFeedbackAutoConfirmEnabled?: () => boolean;
-    templates: {
-      buildContactSubmissionEmail?: (...args: any[]) => Promise<any>;
-      buildContactRecipientVerificationEmail?: (...args: any[]) => Promise<any>;
-      buildNewsletterConfirmationEmail?: (...args: any[]) => Promise<any>;
-      buildNewsletterCampaignEmail?: (...args: any[]) => Promise<any>;
-      buildGuestBookingConfirmationEmail?: (...args: any[]) => Promise<any>;
-      buildGuestBookingCancellationEmail?: (...args: any[]) => Promise<any>;
-      buildStaffNewBookingEmail?: (...args: any[]) => Promise<any>;
-      buildStaffBookingCancellationEmail?: (...args: any[]) => Promise<any>;
-    };
   };
   system: {
     installProfileService: {
@@ -217,13 +204,13 @@ interface BasePluginPackageManifest<
   TSharedProjectUi = SharedProjectPluginUiDefinition | undefined,
   TKind extends PluginKind = PluginKind,
 > extends PluginPackageDescriptor<
-    TPluginId,
-    TFrontend,
-    TBackend,
-    TCli,
-    TSharedProjectUi,
-    TKind
-  > {
+  TPluginId,
+  TFrontend,
+  TBackend,
+  TCli,
+  TSharedProjectUi,
+  TKind
+> {
   manifestVersion: 2;
   kind: TKind;
   controlPlane: PluginControlPlanePresentation;
@@ -236,18 +223,25 @@ export interface NativePluginPackageManifest<
   TPluginId extends string = string,
   TFrontend = unknown,
   TBackend = unknown,
-> extends BasePluginPackageManifest<TPluginId, TFrontend, TBackend, PluginCliModule | undefined, SharedProjectPluginUiDefinition | undefined, "native"> {}
+> extends BasePluginPackageManifest<
+  TPluginId,
+  TFrontend,
+  TBackend,
+  PluginCliModule | undefined,
+  SharedProjectPluginUiDefinition | undefined,
+  "native"
+> {}
 
 export interface ExternalEmbedPluginPackageManifest<
   TPluginId extends string = string,
 > extends BasePluginPackageManifest<
-    TPluginId,
-    never,
-    never,
-    never,
-    SharedProjectPluginUiDefinition | undefined,
-    "external_embed"
-  > {
+  TPluginId,
+  never,
+  never,
+  never,
+  SharedProjectPluginUiDefinition | undefined,
+  "external_embed"
+> {
   externalEmbed: ExternalEmbedContribution;
 }
 
@@ -256,13 +250,13 @@ export interface ConnectedPluginPackageManifest<
   TFrontend = unknown,
   TBackend = unknown,
 > extends BasePluginPackageManifest<
-    TPluginId,
-    TFrontend,
-    TBackend,
-    PluginCliModule | undefined,
-    SharedProjectPluginUiDefinition | undefined,
-    "connected"
-  > {
+  TPluginId,
+  TFrontend,
+  TBackend,
+  PluginCliModule | undefined,
+  SharedProjectPluginUiDefinition | undefined,
+  "connected"
+> {
   connected: ConnectedPluginContribution;
 }
 
@@ -278,18 +272,19 @@ export type PluginPackageManifest<
 export interface NativePluginBackendPackage<
   TPluginId extends string = string,
   TBackendDeps = unknown,
-  TBackendContribution extends PluginContribution<TPluginId> = PluginContribution<TPluginId>,
+  TBackendContribution extends PluginContribution<TPluginId> =
+    PluginContribution<TPluginId>,
   TFrontend = unknown,
   THostContext = BackendHostContext,
 > extends NativePluginPackageManifest<
-    TPluginId,
-    TFrontend,
-    PluginContributionFactory<TBackendDeps, TBackendContribution> & {
-      createHostContribution?: (
-        hostContext: THostContext,
-      ) => TBackendContribution;
-    }
-  > {
+  TPluginId,
+  TFrontend,
+  PluginContributionFactory<TBackendDeps, TBackendContribution> & {
+    createHostContribution?: (
+      hostContext: THostContext,
+    ) => TBackendContribution;
+  }
+> {
   backend: PluginContributionFactory<TBackendDeps, TBackendContribution> & {
     createHostContribution?: (
       hostContext: THostContext,
@@ -329,21 +324,27 @@ export function isConnectedPluginPackageManifest(
   return manifest.kind === "connected";
 }
 
-export type PluginIdsFromDescriptors<T extends readonly { pluginId: string }[]> =
-  {
-    [K in keyof T]: T[K] extends { pluginId: infer TPluginId extends string }
-      ? TPluginId
-      : never;
-  };
+export type PluginIdsFromDescriptors<
+  T extends readonly { pluginId: string }[],
+> = {
+  [K in keyof T]: T[K] extends { pluginId: infer TPluginId extends string }
+    ? TPluginId
+    : never;
+};
 
-export function extractPluginIds<const T extends readonly { pluginId: string }[]>(
-  descriptors: T,
-): PluginIdsFromDescriptors<T> {
-  return descriptors.map((descriptor) => descriptor.pluginId) as PluginIdsFromDescriptors<T>;
+export function extractPluginIds<
+  const T extends readonly { pluginId: string }[],
+>(descriptors: T): PluginIdsFromDescriptors<T> {
+  return descriptors.map(
+    (descriptor) => descriptor.pluginId,
+  ) as PluginIdsFromDescriptors<T>;
 }
 
 export function buildSharedProjectPluginUiRegistry(
-  descriptors: readonly Pick<PluginPackageDescriptor, "pluginId" | "sharedProjectUi">[],
+  descriptors: readonly Pick<
+    PluginPackageDescriptor,
+    "pluginId" | "sharedProjectUi"
+  >[],
 ): ProjectPluginUiRegistry {
   return Object.fromEntries(
     descriptors.flatMap((descriptor) =>

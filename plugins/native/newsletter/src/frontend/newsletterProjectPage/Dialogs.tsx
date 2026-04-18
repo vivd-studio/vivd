@@ -7,7 +7,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@vivd/ui";
 import type { NewsletterCampaignRecord } from "./types";
 
 export function NewsletterDialogs(props: {
@@ -55,8 +55,8 @@ export function NewsletterDialogs(props: {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete campaign draft?</AlertDialogTitle>
             <AlertDialogDescription>
-              This only removes the saved draft. No subscriber emails have been sent by
-              this draft yet.
+              This only removes the saved draft. No subscriber emails have been
+              sent by this draft yet.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -90,7 +90,9 @@ export function NewsletterDialogs(props: {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isActionPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isActionPending}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isActionPending || !unsubscribeEmail}
               onClick={(event) => {
@@ -142,8 +144,8 @@ export function NewsletterDialogs(props: {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel campaign send?</AlertDialogTitle>
             <AlertDialogDescription>
-              Queued deliveries that have not started yet will be canceled. Any email
-              already being processed may still complete.
+              Queued deliveries that have not started yet will be canceled. Any
+              email already being processed may still complete.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

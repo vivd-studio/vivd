@@ -1078,6 +1078,39 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ============================================
+   Semantic Surface Tokens (Elevation Language)
+   ============================================
+   These are the canonical surface roles used across the app.
+   Components should consume these — not raw --card / --muted / --background.
+
+   - surface-page     : App canvas. The thing everything sits on.
+   - surface-panel    : Primary elevated container. Section shells, side rails.
+   - surface-sunken   : Nested well inside a panel. Stat tiles, inline callouts.
+                        In dark modes this goes toward --background (darker than panel);
+                        in light modes toward --muted (darker than panel).
+   - surface-raised   : Floating surfaces above everything. Popovers, dropdowns, menus.
+   - surface-input    : Form field background. One step sunken from whatever contains it.
+
+   Rule of thumb: panel sits on page, sunken sits on panel, raised floats above.
+   Inputs are always surface-input. Never hand-roll bg-muted/NN or bg-background/NN.
+*/
+@layer base {
+  :root {
+    --surface-page: var(--background);
+    --surface-panel: var(--card);
+    --surface-sunken: var(--muted);
+    --surface-raised: var(--popover);
+    --surface-input: var(--muted);
+  }
+
+  .dark {
+    /* In dark themes, --muted is lighter than --card, so sunken flips to --background */
+    --surface-sunken: var(--background);
+    --surface-input: var(--muted);
+  }
+}
+
 @layer components {
   .vivd-surface-field {
     border: 1px solid hsl(var(--border) / 0.9);

@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@vivd/plugin-sdk": "1.0.0",
+    "@vivd/ui": "1.0.0",
     "maxmind": "^5.0.6"
   }
 }

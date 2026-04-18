@@ -36,6 +36,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@vivd/plugin-sdk": "1.0.0"
+    "@vivd/plugin-sdk": "1.0.0",
+    "@vivd/ui": "1.0.0"
   }
 }

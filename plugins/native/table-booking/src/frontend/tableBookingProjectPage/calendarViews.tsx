@@ -1,13 +1,7 @@
 import { Fragment } from "react";
-import { cn } from "@/lib/utils";
-import {
-  WEEKDAY_ORDER,
-  WEEKDAY_SHORT_LABELS,
-} from "./constants";
-import type {
-  DailyBookingSummary,
-  TableBookingRecord,
-} from "./types";
+import { cn } from "@vivd/ui";
+import { WEEKDAY_ORDER, WEEKDAY_SHORT_LABELS } from "./constants";
+import type { DailyBookingSummary, TableBookingRecord } from "./types";
 import type { TableBookingConfigDraftState } from "./useConfigDraft";
 import {
   buildWeekDates,
@@ -95,7 +89,8 @@ export function MonthView({
                 <span
                   className={cn(
                     "text-sm font-semibold",
-                    isToday && "rounded-full bg-primary px-1.5 text-primary-foreground",
+                    isToday &&
+                      "rounded-full bg-primary px-1.5 text-primary-foreground",
                   )}
                 >
                   {Number.parseInt(day.date.slice(-2), 10)}
@@ -284,7 +279,8 @@ function BookingTimelineCard({
         isCancelled &&
           "border-destructive/50 bg-destructive/10 text-destructive line-through",
         isNoShow && "border-muted-foreground/40 bg-muted text-muted-foreground",
-        isCompleted && "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        isCompleted &&
+          "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
         !isCancelled &&
           !isNoShow &&
           !isCompleted &&
@@ -343,7 +339,9 @@ export function WeekView({
 
   return (
     <div className="overflow-hidden rounded-lg border">
-      <div className={cn("relative overflow-y-auto", TIMELINE_MAX_HEIGHT_CLASS)}>
+      <div
+        className={cn("relative overflow-y-auto", TIMELINE_MAX_HEIGHT_CLASS)}
+      >
         <div className="sticky top-0 z-20 grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b bg-muted/50 backdrop-blur-sm">
           <div />
           {weekDates.map((date) => {
@@ -447,7 +445,10 @@ export function WeekView({
                 {schedule.isClosed ? (
                   <div
                     className="absolute inset-x-0 flex items-center justify-center text-[11px] text-muted-foreground"
-                    style={{ top: `${VIEW_TOP_PAD}px`, height: `${totalHeight}px` }}
+                    style={{
+                      top: `${VIEW_TOP_PAD}px`,
+                      height: `${totalHeight}px`,
+                    }}
                   >
                     Closed
                   </div>
@@ -512,7 +513,9 @@ export function DayView({
 
   return (
     <div className="overflow-hidden rounded-lg border">
-      <div className={cn("relative overflow-y-auto", TIMELINE_MAX_HEIGHT_CLASS)}>
+      <div
+        className={cn("relative overflow-y-auto", TIMELINE_MAX_HEIGHT_CLASS)}
+      >
         <div
           className="relative grid grid-cols-[5rem_minmax(0,1fr)]"
           style={{ height: `${bodyHeight}px` }}

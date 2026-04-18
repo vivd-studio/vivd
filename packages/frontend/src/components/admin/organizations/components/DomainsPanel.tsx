@@ -10,8 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Panel } from "@/components/ui/panel";
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatusPill } from "@/components/ui/status-pill";
 import type { Organization, OrganizationDomain } from "../types";
 
 type DomainUsage = "tenant_host" | "publish_target";
@@ -127,13 +129,15 @@ export function DomainsPanel({
         <LoadingSpinner message="Loading domains..." className="justify-start" />
       )}
       {Boolean(domainsError) && (
-        <div className="text-sm text-red-500">Failed to load domains: {String(domainsError)}</div>
+        <div className="text-sm text-destructive">
+          Failed to load domains: {String(domainsError)}
+        </div>
       )}
 
       {!domainsLoading && !domainsError && (
-        <div className="rounded-lg border bg-card overflow-auto">
+        <Panel className="overflow-auto p-0">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-muted-foreground">
+            <thead className="bg-surface-sunken text-muted-foreground">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Domain</th>
                 <th className="px-3 py-2 font-medium">Usage</th>
@@ -170,17 +174,18 @@ export function DomainsPanel({
                       </Badge>
                     </td>
                     <td className="px-3 py-2">
-                      <Badge
-                        variant={
+                      <StatusPill
+                        tone={
                           row.status === "active"
-                            ? "default"
+                            ? "success"
                             : row.status === "pending_verification"
-                              ? "secondary"
-                              : "outline"
+                              ? "warn"
+                              : "neutral"
                         }
+                        dot
                       >
                         {row.status}
-                      </Badge>
+                      </StatusPill>
                     </td>
                     <td className="px-3 py-2">
                       <div>{formatDate(row.verifiedAt)}</div>
@@ -268,7 +273,7 @@ export function DomainsPanel({
               )}
             </tbody>
           </table>
-        </div>
+        </Panel>
       )}
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
@@ -278,17 +283,19 @@ export function DomainsPanel({
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-domain">Domain</Label>
+            <Field>
+              <FieldLabel htmlFor="new-domain" required>
+                Domain
+              </FieldLabel>
               <Input
                 id="new-domain"
                 value={newDomain}
                 onChange={(e) => setNewDomain(e.target.value)}
                 placeholder="example.com"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Usage</Label>
+            </Field>
+            <Field>
+              <FieldLabel>Usage</FieldLabel>
               <Select
                 value={newUsage}
                 onValueChange={(value) => setNewUsage(value as DomainUsage)}
@@ -301,9 +308,9 @@ export function DomainsPanel({
                   <SelectItem value="tenant_host">tenant_host</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Type</Label>
+            </Field>
+            <Field>
+              <FieldLabel>Type</FieldLabel>
               <Select
                 value={newType}
                 onValueChange={(value) => setNewType(value as DomainType)}
@@ -316,9 +323,9 @@ export function DomainsPanel({
                   <SelectItem value="managed_subdomain">managed_subdomain</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Status</Label>
+            </Field>
+            <Field>
+              <FieldLabel>Status</FieldLabel>
               <Select
                 value={newStatus}
                 onValueChange={(value) => setNewStatus(value as DomainStatus)}
@@ -332,7 +339,7 @@ export function DomainsPanel({
                   <SelectItem value="disabled">disabled</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
           </div>
 
           <DialogFooter>

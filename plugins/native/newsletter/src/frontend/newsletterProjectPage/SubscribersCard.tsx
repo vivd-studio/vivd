@@ -1,16 +1,19 @@
 import { RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@vivd/ui";
 import type { NewsletterSubscribers } from "./types";
 import { formatDate } from "./utils";
 
@@ -145,7 +148,9 @@ export function NewsletterSubscribersCard(props: {
                     <td className="px-3 py-3 align-top">
                       <div className="font-medium">{row.email}</div>
                       {row.name ? (
-                        <div className="text-xs text-muted-foreground">{row.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.name}
+                        </div>
                       ) : null}
                       {row.utmSource || row.utmCampaign ? (
                         <div className="mt-1 text-xs text-muted-foreground">
@@ -208,7 +213,9 @@ export function NewsletterSubscribersCard(props: {
                     colSpan={5}
                     className="px-3 py-10 text-center text-sm text-muted-foreground"
                   >
-                    {isLoading ? "Loading subscribers..." : "No subscribers found."}
+                    {isLoading
+                      ? "Loading subscribers..."
+                      : "No subscribers found."}
                   </td>
                 </tr>
               )}
@@ -218,7 +225,8 @@ export function NewsletterSubscribersCard(props: {
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {subscribers?.total ?? 0} rows total, page {currentPage} of {pageCount}
+            {subscribers?.total ?? 0} rows total, page {currentPage} of{" "}
+            {pageCount}
           </p>
           <div className="flex gap-2">
             <Button

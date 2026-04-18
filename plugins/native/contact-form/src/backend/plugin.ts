@@ -4,9 +4,7 @@ import type {
   NativePluginBackendPackage,
 } from "@vivd/plugin-sdk";
 import { contactFormPluginManifest } from "../manifest";
-import type {
-  ContactFormPluginBackendContribution,
-} from "./contribution";
+import type { ContactFormPluginBackendContribution } from "./contribution";
 import { createContactFormPluginBackendContribution } from "./contribution";
 import { contactFormPluginDefinition } from "./module";
 import type { ContactFormPluginBackendContributionDeps } from "./ports";
@@ -15,6 +13,10 @@ import {
   buildContactFormSubmitEndpoint,
   buildContactRecipientVerificationEndpoint,
 } from "./publicApi";
+import {
+  buildContactRecipientVerificationEmail,
+  buildContactSubmissionEmail,
+} from "./emails";
 import { createContactFormRecipientVerificationService } from "./recipientVerification";
 import { inferContactFormAutoSourceHosts } from "./sourceHosts";
 import { createContactFormTurnstileService } from "./turnstile";
@@ -123,9 +125,10 @@ function createContactFormHostContribution(
       },
       getContactRecipientVerificationEndpoint: (options) =>
         getVivdContactRecipientVerificationEndpoint(hostContext, options),
-      buildRecipientVerificationEmail: (...args) =>
-        hostContext.email.templates.buildContactRecipientVerificationEmail!(
-          ...args
+      buildRecipientVerificationEmail: (options) =>
+        buildContactRecipientVerificationEmail(
+          options,
+          hostContext.email.brandingResolver,
         ),
       emailDeliveryService: hostContext.email.deliveryService,
     });
@@ -139,10 +142,14 @@ function createContactFormHostContribution(
         });
       },
       getPluginInstance(options) {
-        return hostContext.projectPluginInstanceService.getPluginInstance(options);
+        return hostContext.projectPluginInstanceService.getPluginInstance(
+          options,
+        );
       },
       updatePluginInstance(options) {
-        return hostContext.projectPluginInstanceService.updatePluginInstance(options);
+        return hostContext.projectPluginInstanceService.updatePluginInstance(
+          options,
+        );
       },
     },
     pluginEntitlementService: hostContext.pluginEntitlementService,
@@ -155,8 +162,8 @@ function createContactFormHostContribution(
     inferSourceHosts,
     emailDeliverabilityService: hostContext.email.deliverabilityService,
     emailDeliveryService: hostContext.email.deliveryService,
-    buildContactSubmissionEmail: (...args) =>
-      hostContext.email.templates.buildContactSubmissionEmail!(...args),
+    buildContactSubmissionEmail: (options) =>
+      buildContactSubmissionEmail(options, hostContext.email.brandingResolver),
     isSesFeedbackAutoConfirmEnabled:
       hostContext.email.isSesFeedbackAutoConfirmEnabled ?? (() => false),
     db: hostContext.db,
@@ -186,7 +193,10 @@ function createContactFormHostContribution(
       });
 
       return members
-        .filter((member: { user: { emailVerified: boolean } }) => member.user.emailVerified)
+        .filter(
+          (member: { user: { emailVerified: boolean } }) =>
+            member.user.emailVerified,
+        )
         .map((member: { user: { email: string } }) => member.user.email);
     },
     async syncProjectTurnstileWidget(options) {
@@ -197,17 +207,21 @@ function createContactFormHostContribution(
           pluginId: "contact_form",
         });
       if (!entitlement) return;
-      if (entitlement.state !== "enabled" || entitlement.turnstileEnabled !== true) {
+      if (
+        entitlement.state !== "enabled" ||
+        entitlement.turnstileEnabled !== true
+      ) {
         return;
       }
 
-      const credentials = await turnstileService.prepareProjectWidgetCredentials({
-        organizationId: options.organizationId,
-        projectSlug: options.projectSlug,
-        existingWidgetId: entitlement.turnstileWidgetId ?? null,
-        existingSiteKey: entitlement.turnstileSiteKey ?? null,
-        existingSecretKey: entitlement.turnstileSecretKey ?? null,
-      });
+      const credentials =
+        await turnstileService.prepareProjectWidgetCredentials({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          existingWidgetId: entitlement.turnstileWidgetId ?? null,
+          existingSiteKey: entitlement.turnstileSiteKey ?? null,
+          existingSecretKey: entitlement.turnstileSecretKey ?? null,
+        });
 
       await hostContext.pluginEntitlementService.upsertEntitlement({
         organizationId: options.organizationId,

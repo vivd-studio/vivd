@@ -1,22 +1,35 @@
 import { type ReactNode, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { BarChart3 } from "lucide-react";
-import { trpc } from "@/lib/trpc";
-import { LoadingSpinner } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
-import { ProjectPluginAccessActions, ProjectPluginPageActions, useProjectPluginPageModel } from "@/plugins/projectPageScaffold";
+import { trpc } from "@/plugins/host";
+import { LoadingSpinner } from "@/plugins/host";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Progress,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@vivd/ui";
+import { SettingsPageShell } from "@/plugins/host";
+import {
+  ProjectPluginAccessActions,
+  ProjectPluginPageActions,
+  useProjectPluginPageModel,
+} from "@/plugins/host";
 import {
   ANALYTICS_SUMMARY_READ_ID,
   type AnalyticsSummaryPayload,
 } from "../shared/summary";
 
 type AnalyticsRange = 7 | 30;
-type ComparisonMetric = AnalyticsSummaryPayload["comparison"]["totals"]["pageviews"];
+type ComparisonMetric =
+  AnalyticsSummaryPayload["comparison"]["totals"]["pageviews"];
 type DailyRow = {
   date: string;
   pageviews: number;
@@ -62,7 +75,10 @@ function formatDeltaSummary(metric: ComparisonMetric): string {
 function formatDateLabel(value: string): string {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function formatDeviceLabel(value: string): string {
@@ -96,13 +112,17 @@ function getCountryDisplayNames(): Intl.DisplayNames | null {
 }
 
 function formatCountryName(value: string): string {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(normalized)) return "Unknown";
   return getCountryDisplayNames()?.of(normalized) || normalized;
 }
 
 function formatCountryFlag(value: string): string {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(normalized)) return "??";
   return String.fromCodePoint(
     ...normalized.split("").map((char) => 127397 + char.charCodeAt(0)),
@@ -122,7 +142,9 @@ function MetricCard({
     <section className="rounded-lg border bg-card p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-      {caption ? <p className="mt-1 text-xs text-muted-foreground">{caption}</p> : null}
+      {caption ? (
+        <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
+      ) : null}
     </section>
   );
 }
@@ -140,7 +162,9 @@ function SectionCard({
     <section className="rounded-lg border bg-card p-4 space-y-3">
       <div>
         <h3 className="text-sm font-medium">{title}</h3>
-        {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
+        {description ? (
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        ) : null}
       </div>
       {children}
     </section>
@@ -212,7 +236,10 @@ export default function AnalyticsProjectPage() {
   const dailyRows = useMemo<DailyRow[]>(() => {
     if (!analyticsSummary) return [];
     const submissionsByDate = new Map(
-      analyticsSummary.contactForm.daily.map((row) => [row.date, row.submissions]),
+      analyticsSummary.contactForm.daily.map((row) => [
+        row.date,
+        row.submissions,
+      ]),
     );
 
     return analyticsSummary.daily
@@ -224,7 +251,8 @@ export default function AnalyticsProjectPage() {
           sessions: row.uniqueSessions,
           visitors: row.uniqueVisitors,
           submissions,
-          submitRatePct: row.pageviews > 0 ? (submissions / row.pageviews) * 100 : 0,
+          submitRatePct:
+            row.pageviews > 0 ? (submissions / row.pageviews) * 100 : 0,
         };
       })
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -255,7 +283,8 @@ export default function AnalyticsProjectPage() {
       activeTrafficDays: dailyRows.filter((row) => row.pageviews > 0).length,
       activeLeadDays: dailyRows.filter((row) => row.submissions > 0).length,
       avgDailyPageviews: analyticsSummary.totals.pageviews / dailyRows.length,
-      avgDailySubmissions: analyticsSummary.contactForm.submissions / dailyRows.length,
+      avgDailySubmissions:
+        analyticsSummary.contactForm.submissions / dailyRows.length,
       topTrafficDay,
       topLeadDay,
     };
@@ -268,21 +297,27 @@ export default function AnalyticsProjectPage() {
   };
 
   if (!projectSlug) {
-    return <div className="text-sm text-muted-foreground">Missing project slug.</div>;
+    return (
+      <div className="text-sm text-muted-foreground">Missing project slug.</div>
+    );
   }
 
   return (
     <SettingsPageShell
       title="Analytics"
       description={`Business analytics dashboard for ${projectSlug}.`}
-      className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
+      className={
+        isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined
+      }
       actions={
         <ProjectPluginPageActions
           projectSlug={projectSlug}
           isEmbedded={isEmbedded}
           backTarget="project"
           onRefresh={handleRefresh}
-          isRefreshing={analyticsInfoQuery.isFetching || analyticsSummaryQuery.isFetching}
+          isRefreshing={
+            analyticsInfoQuery.isFetching || analyticsSummaryQuery.isFetching
+          }
         />
       }
     >
@@ -304,7 +339,9 @@ export default function AnalyticsProjectPage() {
           {analyticsEnabled ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 p-3">
               <div>
-                <p className="text-xs text-muted-foreground">{analyticsRangeLabel}</p>
+                <p className="text-xs text-muted-foreground">
+                  {analyticsRangeLabel}
+                </p>
                 <p className="text-sm font-medium">
                   {analyticsSummary
                     ? `${analyticsSummary.rangeStart} to ${analyticsSummary.rangeEnd}`
@@ -335,22 +372,24 @@ export default function AnalyticsProjectPage() {
         <CardContent className="space-y-5">
           {analyticsInfoQuery.error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load analytics settings: {analyticsInfoQuery.error.message}
+              Failed to load analytics settings:{" "}
+              {analyticsInfoQuery.error.message}
             </div>
           ) : null}
 
           {!analyticsEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  {disabledCopy}
-                </span>
+                <span>{disabledCopy}</span>
                 {analyticsNeedsProjectEnable || canRequestAnalyticsAccess ? (
                   <ProjectPluginAccessActions
-                    canEnablePlugin={analyticsNeedsProjectEnable && canEnableProjectAnalytics}
+                    canEnablePlugin={
+                      analyticsNeedsProjectEnable && canEnableProjectAnalytics
+                    }
                     canRequestPluginAccess={
-                      !(analyticsNeedsProjectEnable && canEnableProjectAnalytics) &&
-                      canRequestAnalyticsAccess
+                      !(
+                        analyticsNeedsProjectEnable && canEnableProjectAnalytics
+                      ) && canRequestAnalyticsAccess
                     }
                     isEnablePending={analyticsEnsureMutation.isPending}
                     isRequestPending={isRequestPending}
@@ -378,7 +417,8 @@ export default function AnalyticsProjectPage() {
             <>
               {analyticsSummaryQuery.error ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  Failed to load analytics data: {analyticsSummaryQuery.error.message}
+                  Failed to load analytics data:{" "}
+                  {analyticsSummaryQuery.error.message}
                 </div>
               ) : null}
 
@@ -407,24 +447,34 @@ export default function AnalyticsProjectPage() {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           <MetricCard
                             label="Pageviews"
-                            value={formatInteger(analyticsSummary.totals.pageviews)}
+                            value={formatInteger(
+                              analyticsSummary.totals.pageviews,
+                            )}
                           />
                           <MetricCard
                             label="Unique visitors"
-                            value={formatInteger(analyticsSummary.totals.uniqueVisitors)}
+                            value={formatInteger(
+                              analyticsSummary.totals.uniqueVisitors,
+                            )}
                           />
                           <MetricCard
                             label="Sessions"
-                            value={formatInteger(analyticsSummary.totals.uniqueSessions)}
+                            value={formatInteger(
+                              analyticsSummary.totals.uniqueSessions,
+                            )}
                           />
                           <MetricCard
                             label="Pages / session"
-                            value={formatRatio(analyticsSummary.totals.avgPagesPerSession)}
+                            value={formatRatio(
+                              analyticsSummary.totals.avgPagesPerSession,
+                            )}
                             caption="Higher values often indicate deeper engagement."
                           />
                           <MetricCard
                             label="Contact submissions"
-                            value={formatInteger(analyticsSummary.contactForm.submissions)}
+                            value={formatInteger(
+                              analyticsSummary.contactForm.submissions,
+                            )}
                             caption={
                               analyticsSummary.contactForm.enabled
                                 ? "Contact Form plugin active."
@@ -433,7 +483,9 @@ export default function AnalyticsProjectPage() {
                           />
                           <MetricCard
                             label="Submit rate"
-                            value={formatPercent(analyticsSummary.contactForm.conversionRatePct)}
+                            value={formatPercent(
+                              analyticsSummary.contactForm.conversionRatePct,
+                            )}
                             caption="Submissions divided by pageviews."
                           />
                         </div>
@@ -451,11 +503,15 @@ export default function AnalyticsProjectPage() {
                             />
                             <InsightRow
                               label="Avg pageviews / day"
-                              value={formatRatio(summaryInsights.avgDailyPageviews)}
+                              value={formatRatio(
+                                summaryInsights.avgDailyPageviews,
+                              )}
                             />
                             <InsightRow
                               label="Avg submissions / day"
-                              value={formatRatio(summaryInsights.avgDailySubmissions)}
+                              value={formatRatio(
+                                summaryInsights.avgDailySubmissions,
+                              )}
                             />
                             <InsightRow
                               label="Best traffic day"
@@ -488,7 +544,9 @@ export default function AnalyticsProjectPage() {
                             <tr className="text-left">
                               <th className="px-3 py-2 font-medium">Metric</th>
                               <th className="px-3 py-2 font-medium">Current</th>
-                              <th className="px-3 py-2 font-medium">Previous</th>
+                              <th className="px-3 py-2 font-medium">
+                                Previous
+                              </th>
                               <th className="px-3 py-2 font-medium">Change</th>
                             </tr>
                           </thead>
@@ -496,30 +554,41 @@ export default function AnalyticsProjectPage() {
                             <tr className="border-t">
                               <td className="px-3 py-2">Pageviews</td>
                               <td className="px-3 py-2">
-                                {formatInteger(analyticsSummary.comparison.totals.pageviews.current)}
+                                {formatInteger(
+                                  analyticsSummary.comparison.totals.pageviews
+                                    .current,
+                                )}
                               </td>
                               <td className="px-3 py-2">
-                                {formatInteger(analyticsSummary.comparison.totals.pageviews.previous)}
+                                {formatInteger(
+                                  analyticsSummary.comparison.totals.pageviews
+                                    .previous,
+                                )}
                               </td>
                               <td className="px-3 py-2">
-                                {formatDeltaSummary(analyticsSummary.comparison.totals.pageviews)}
+                                {formatDeltaSummary(
+                                  analyticsSummary.comparison.totals.pageviews,
+                                )}
                               </td>
                             </tr>
                             <tr className="border-t">
                               <td className="px-3 py-2">Unique visitors</td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.uniqueVisitors.current,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueVisitors.current,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.uniqueVisitors.previous,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueVisitors.previous,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatDeltaSummary(
-                                  analyticsSummary.comparison.totals.uniqueVisitors,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueVisitors,
                                 )}
                               </td>
                             </tr>
@@ -527,17 +596,20 @@ export default function AnalyticsProjectPage() {
                               <td className="px-3 py-2">Sessions</td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.uniqueSessions.current,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueSessions.current,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.uniqueSessions.previous,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueSessions.previous,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatDeltaSummary(
-                                  analyticsSummary.comparison.totals.uniqueSessions,
+                                  analyticsSummary.comparison.totals
+                                    .uniqueSessions,
                                 )}
                               </td>
                             </tr>
@@ -545,17 +617,20 @@ export default function AnalyticsProjectPage() {
                               <td className="px-3 py-2">Contact submissions</td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.submissions.current,
+                                  analyticsSummary.comparison.totals.submissions
+                                    .current,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatInteger(
-                                  analyticsSummary.comparison.totals.submissions.previous,
+                                  analyticsSummary.comparison.totals.submissions
+                                    .previous,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatDeltaSummary(
-                                  analyticsSummary.comparison.totals.submissions,
+                                  analyticsSummary.comparison.totals
+                                    .submissions,
                                 )}
                               </td>
                             </tr>
@@ -563,17 +638,20 @@ export default function AnalyticsProjectPage() {
                               <td className="px-3 py-2">Submit rate</td>
                               <td className="px-3 py-2">
                                 {formatPercent(
-                                  analyticsSummary.comparison.totals.conversionRatePct.current,
+                                  analyticsSummary.comparison.totals
+                                    .conversionRatePct.current,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatPercent(
-                                  analyticsSummary.comparison.totals.conversionRatePct.previous,
+                                  analyticsSummary.comparison.totals
+                                    .conversionRatePct.previous,
                                 )}
                               </td>
                               <td className="px-3 py-2">
                                 {formatDeltaSummary(
-                                  analyticsSummary.comparison.totals.conversionRatePct,
+                                  analyticsSummary.comparison.totals
+                                    .conversionRatePct,
                                 )}
                               </td>
                             </tr>
@@ -592,18 +670,28 @@ export default function AnalyticsProjectPage() {
                             <tr className="text-left">
                               <th className="px-3 py-2 font-medium">Step</th>
                               <th className="px-3 py-2 font-medium">Count</th>
-                              <th className="px-3 py-2 font-medium">From previous</th>
-                              <th className="px-3 py-2 font-medium">From pageviews</th>
-                              <th className="px-3 py-2 font-medium">Progress</th>
+                              <th className="px-3 py-2 font-medium">
+                                From previous
+                              </th>
+                              <th className="px-3 py-2 font-medium">
+                                From pageviews
+                              </th>
+                              <th className="px-3 py-2 font-medium">
+                                Progress
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {analyticsSummary.funnel.steps.map((step) => (
                               <tr key={step.key} className="border-t">
                                 <td className="px-3 py-2">{step.label}</td>
-                                <td className="px-3 py-2">{formatInteger(step.count)}</td>
                                 <td className="px-3 py-2">
-                                  {formatPercent(step.conversionFromPreviousPct)}
+                                  {formatInteger(step.count)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {formatPercent(
+                                    step.conversionFromPreviousPct,
+                                  )}
                                 </td>
                                 <td className="px-3 py-2">
                                   {formatPercent(step.conversionFromFirstPct)}
@@ -613,7 +701,10 @@ export default function AnalyticsProjectPage() {
                                     <Progress
                                       value={Math.min(
                                         100,
-                                        Math.max(0, step.conversionFromFirstPct),
+                                        Math.max(
+                                          0,
+                                          step.conversionFromFirstPct,
+                                        ),
                                       )}
                                     />
                                   </div>
@@ -641,12 +732,24 @@ export default function AnalyticsProjectPage() {
                             <thead className="sticky top-0 bg-muted/40">
                               <tr className="text-left">
                                 <th className="px-3 py-2 font-medium">Date</th>
-                                <th className="px-3 py-2 font-medium">Pageviews</th>
-                                <th className="px-3 py-2 font-medium">Visitors</th>
-                                <th className="px-3 py-2 font-medium">Sessions</th>
-                                <th className="px-3 py-2 font-medium">Submissions</th>
-                                <th className="px-3 py-2 font-medium">Submit rate</th>
-                                <th className="px-3 py-2 font-medium">Traffic vs peak</th>
+                                <th className="px-3 py-2 font-medium">
+                                  Pageviews
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Visitors
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Sessions
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submissions
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submit rate
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Traffic vs peak
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
@@ -657,15 +760,22 @@ export default function AnalyticsProjectPage() {
                                   );
 
                                   return (
-                                    <tr key={row.date} className="border-t align-top">
+                                    <tr
+                                      key={row.date}
+                                      className="border-t align-top"
+                                    >
                                       <td className="px-3 py-2 text-xs text-muted-foreground">
                                         {formatDateLabel(row.date)}
                                       </td>
                                       <td className="px-3 py-2">
                                         {formatInteger(row.pageviews)}
                                       </td>
-                                      <td className="px-3 py-2">{formatInteger(row.visitors)}</td>
-                                      <td className="px-3 py-2">{formatInteger(row.sessions)}</td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.visitors)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.sessions)}
+                                      </td>
                                       <td className="px-3 py-2">
                                         {formatInteger(row.submissions)}
                                       </td>
@@ -676,7 +786,9 @@ export default function AnalyticsProjectPage() {
                                         <div className="min-w-[140px] space-y-1">
                                           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                                             <span>vs peak</span>
-                                            <span>{formatInteger(peakTrafficShare)}%</span>
+                                            <span>
+                                              {formatInteger(peakTrafficShare)}%
+                                            </span>
                                           </div>
                                           <Progress value={peakTrafficShare} />
                                         </div>
@@ -686,7 +798,10 @@ export default function AnalyticsProjectPage() {
                                 })
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={7}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={7}
+                                  >
                                     No daily traffic data in this range.
                                   </td>
                                 </tr>
@@ -706,10 +821,16 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">#</th>
+                                <th className="w-12 px-3 py-2 font-medium">
+                                  #
+                                </th>
                                 <th className="px-3 py-2 font-medium">Path</th>
-                                <th className="px-3 py-2 font-medium">Pageviews</th>
-                                <th className="px-3 py-2 font-medium">Visitors</th>
+                                <th className="px-3 py-2 font-medium">
+                                  Pageviews
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Visitors
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
@@ -719,8 +840,12 @@ export default function AnalyticsProjectPage() {
                                     <td className="px-3 py-2 text-muted-foreground">
                                       {index + 1}
                                     </td>
-                                    <td className="px-3 py-2 text-xs break-all">{row.path}</td>
-                                    <td className="px-3 py-2">{formatInteger(row.pageviews)}</td>
+                                    <td className="px-3 py-2 text-xs break-all">
+                                      {row.path}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {formatInteger(row.pageviews)}
+                                    </td>
                                     <td className="px-3 py-2">
                                       {formatInteger(row.uniqueVisitors)}
                                     </td>
@@ -728,7 +853,10 @@ export default function AnalyticsProjectPage() {
                                 ))
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={4}
+                                  >
                                     No pageview data in this range.
                                   </td>
                                 </tr>
@@ -746,27 +874,43 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">#</th>
-                                <th className="px-3 py-2 font-medium">Referrer host</th>
-                                <th className="px-3 py-2 font-medium">Events</th>
+                                <th className="w-12 px-3 py-2 font-medium">
+                                  #
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Referrer host
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Events
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
                               {analyticsSummary.topReferrers.length > 0 ? (
-                                analyticsSummary.topReferrers.map((row, index) => (
-                                  <tr key={row.referrerHost} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                      {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
-                                      {row.referrerHost}
-                                    </td>
-                                    <td className="px-3 py-2">{formatInteger(row.events)}</td>
-                                  </tr>
-                                ))
+                                analyticsSummary.topReferrers.map(
+                                  (row, index) => (
+                                    <tr
+                                      key={row.referrerHost}
+                                      className="border-t"
+                                    >
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        {index + 1}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs break-all">
+                                        {row.referrerHost}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.events)}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={3}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={3}
+                                  >
                                     No referrer data in this range.
                                   </td>
                                 </tr>
@@ -787,53 +931,82 @@ export default function AnalyticsProjectPage() {
                             <table className="w-full text-sm">
                               <thead className="bg-muted/30">
                                 <tr className="text-left">
-                                  <th className="w-12 px-3 py-2 font-medium">#</th>
-                                  <th className="px-3 py-2 font-medium">Country</th>
-                                  <th className="px-3 py-2 font-medium">Pageviews</th>
-                                  <th className="px-3 py-2 font-medium">Visitors</th>
-                                  <th className="px-3 py-2 font-medium">Sessions</th>
-                                  <th className="px-3 py-2 font-medium">Share</th>
+                                  <th className="w-12 px-3 py-2 font-medium">
+                                    #
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Country
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Pageviews
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Visitors
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Sessions
+                                  </th>
+                                  <th className="px-3 py-2 font-medium">
+                                    Share
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {analyticsSummary.countries.length > 0 ? (
-                                  analyticsSummary.countries.map((row, index) => (
-                                    <tr key={row.countryCode} className="border-t">
-                                      <td className="px-3 py-2 text-muted-foreground">
-                                        {index + 1}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                          <span aria-hidden="true" className="text-base">
-                                            {formatCountryFlag(row.countryCode)}
-                                          </span>
-                                          <div className="min-w-0">
-                                            <div>{formatCountryName(row.countryCode)}</div>
-                                            <div className="text-xs text-muted-foreground">
-                                              {row.countryCode === "unknown"
-                                                ? "Unknown source"
-                                                : row.countryCode}
+                                  analyticsSummary.countries.map(
+                                    (row, index) => (
+                                      <tr
+                                        key={row.countryCode}
+                                        className="border-t"
+                                      >
+                                        <td className="px-3 py-2 text-muted-foreground">
+                                          {index + 1}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          <div className="flex items-center gap-2">
+                                            <span
+                                              aria-hidden="true"
+                                              className="text-base"
+                                            >
+                                              {formatCountryFlag(
+                                                row.countryCode,
+                                              )}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <div>
+                                                {formatCountryName(
+                                                  row.countryCode,
+                                                )}
+                                              </div>
+                                              <div className="text-xs text-muted-foreground">
+                                                {row.countryCode === "unknown"
+                                                  ? "Unknown source"
+                                                  : row.countryCode}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {formatInteger(row.pageviews)}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {formatInteger(row.uniqueVisitors)}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {formatInteger(row.uniqueSessions)}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {formatPercent(row.share)}
-                                      </td>
-                                    </tr>
-                                  ))
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {formatInteger(row.pageviews)}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {formatInteger(row.uniqueVisitors)}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {formatInteger(row.uniqueSessions)}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {formatPercent(row.share)}
+                                        </td>
+                                      </tr>
+                                    ),
+                                  )
                                 ) : (
                                   <tr className="border-t">
-                                    <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                    <td
+                                      className="px-3 py-3 text-muted-foreground"
+                                      colSpan={6}
+                                    >
                                       No country data in this range.
                                     </td>
                                   </tr>
@@ -842,7 +1015,8 @@ export default function AnalyticsProjectPage() {
                             </table>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Free DB-IP Lite self-host installs require attribution:{" "}
+                            Free DB-IP Lite self-host installs require
+                            attribution:{" "}
                             <a
                               href="https://db-ip.com"
                               target="_blank"
@@ -873,7 +1047,9 @@ export default function AnalyticsProjectPage() {
                                     {formatPercent(row.share)})
                                   </span>
                                 </div>
-                                <Progress value={Math.min(100, Math.max(0, row.share))} />
+                                <Progress
+                                  value={Math.min(100, Math.max(0, row.share))}
+                                />
                               </div>
                             ))}
                           </div>
@@ -897,13 +1073,20 @@ export default function AnalyticsProjectPage() {
                             Sessions with pageviews
                           </p>
                           <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(analyticsSummary.pathAnalysis.sessionsWithPageviews)}
+                            {formatInteger(
+                              analyticsSummary.pathAnalysis
+                                .sessionsWithPageviews,
+                            )}
                           </p>
                         </div>
                         <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">Tracked transitions</p>
+                          <p className="text-xs text-muted-foreground">
+                            Tracked transitions
+                          </p>
                           <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(analyticsSummary.pathAnalysis.totalTransitions)}
+                            {formatInteger(
+                              analyticsSummary.pathAnalysis.totalTransitions,
+                            )}
                           </p>
                         </div>
                         <div className="rounded-md border bg-muted/20 p-3">
@@ -912,9 +1095,12 @@ export default function AnalyticsProjectPage() {
                           </p>
                           <p className="mt-1 text-lg font-semibold">
                             {formatRatio(
-                              analyticsSummary.pathAnalysis.sessionsWithPageviews > 0
-                                ? analyticsSummary.pathAnalysis.totalTransitions /
-                                    analyticsSummary.pathAnalysis.sessionsWithPageviews
+                              analyticsSummary.pathAnalysis
+                                .sessionsWithPageviews > 0
+                                ? analyticsSummary.pathAnalysis
+                                    .totalTransitions /
+                                    analyticsSummary.pathAnalysis
+                                      .sessionsWithPageviews
                                 : 0,
                             )}
                           </p>
@@ -926,29 +1112,45 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">#</th>
-                                <th className="px-3 py-2 font-medium">Top entry pages</th>
-                                <th className="px-3 py-2 font-medium">Sessions</th>
+                                <th className="w-12 px-3 py-2 font-medium">
+                                  #
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Top entry pages
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Sessions
+                                </th>
                                 <th className="px-3 py-2 font-medium">Share</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {analyticsSummary.pathAnalysis.topEntryPages.length > 0 ? (
-                                analyticsSummary.pathAnalysis.topEntryPages.map((row, index) => (
-                                  <tr key={row.path} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                      {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">{row.path}</td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.sessions)}
-                                    </td>
-                                    <td className="px-3 py-2">{formatPercent(row.share)}</td>
-                                  </tr>
-                                ))
+                              {analyticsSummary.pathAnalysis.topEntryPages
+                                .length > 0 ? (
+                                analyticsSummary.pathAnalysis.topEntryPages.map(
+                                  (row, index) => (
+                                    <tr key={row.path} className="border-t">
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        {index + 1}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs break-all">
+                                        {row.path}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.sessions)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatPercent(row.share)}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={4}
+                                  >
                                     No entry-page data in this range.
                                   </td>
                                 </tr>
@@ -961,29 +1163,45 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">#</th>
-                                <th className="px-3 py-2 font-medium">Top exit pages</th>
-                                <th className="px-3 py-2 font-medium">Sessions</th>
+                                <th className="w-12 px-3 py-2 font-medium">
+                                  #
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Top exit pages
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Sessions
+                                </th>
                                 <th className="px-3 py-2 font-medium">Share</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {analyticsSummary.pathAnalysis.topExitPages.length > 0 ? (
-                                analyticsSummary.pathAnalysis.topExitPages.map((row, index) => (
-                                  <tr key={row.path} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                      {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">{row.path}</td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.sessions)}
-                                    </td>
-                                    <td className="px-3 py-2">{formatPercent(row.share)}</td>
-                                  </tr>
-                                ))
+                              {analyticsSummary.pathAnalysis.topExitPages
+                                .length > 0 ? (
+                                analyticsSummary.pathAnalysis.topExitPages.map(
+                                  (row, index) => (
+                                    <tr key={row.path} className="border-t">
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        {index + 1}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs break-all">
+                                        {row.path}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.sessions)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatPercent(row.share)}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={4}
+                                  >
                                     No exit-page data in this range.
                                   </td>
                                 </tr>
@@ -1000,39 +1218,51 @@ export default function AnalyticsProjectPage() {
                               <th className="w-12 px-3 py-2 font-medium">#</th>
                               <th className="px-3 py-2 font-medium">From</th>
                               <th className="px-3 py-2 font-medium">To</th>
-                              <th className="px-3 py-2 font-medium">Transitions</th>
-                              <th className="px-3 py-2 font-medium">Sessions</th>
+                              <th className="px-3 py-2 font-medium">
+                                Transitions
+                              </th>
+                              <th className="px-3 py-2 font-medium">
+                                Sessions
+                              </th>
                               <th className="px-3 py-2 font-medium">Share</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {analyticsSummary.pathAnalysis.topTransitions.length > 0 ? (
-                              analyticsSummary.pathAnalysis.topTransitions.map((row, index) => (
-                                <tr
-                                  key={`${row.fromPath}-${row.toPath}`}
-                                  className="border-t"
-                                >
-                                  <td className="px-3 py-2 text-muted-foreground">
-                                    {index + 1}
-                                  </td>
-                                  <td className="px-3 py-2 text-xs break-all">
-                                    {row.fromPath}
-                                  </td>
-                                  <td className="px-3 py-2 text-xs break-all">
-                                    {row.toPath}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    {formatInteger(row.transitions)}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    {formatInteger(row.uniqueSessions)}
-                                  </td>
-                                  <td className="px-3 py-2">{formatPercent(row.share)}</td>
-                                </tr>
-                              ))
+                            {analyticsSummary.pathAnalysis.topTransitions
+                              .length > 0 ? (
+                              analyticsSummary.pathAnalysis.topTransitions.map(
+                                (row, index) => (
+                                  <tr
+                                    key={`${row.fromPath}-${row.toPath}`}
+                                    className="border-t"
+                                  >
+                                    <td className="px-3 py-2 text-muted-foreground">
+                                      {index + 1}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs break-all">
+                                      {row.fromPath}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs break-all">
+                                      {row.toPath}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {formatInteger(row.transitions)}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {formatInteger(row.uniqueSessions)}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {formatPercent(row.share)}
+                                    </td>
+                                  </tr>
+                                ),
+                              )
                             ) : (
                               <tr className="border-t">
-                                <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                <td
+                                  className="px-3 py-3 text-muted-foreground"
+                                  colSpan={6}
+                                >
                                   No path-transition data in this range.
                                 </td>
                               </tr>
@@ -1053,38 +1283,62 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="px-3 py-2 font-medium">Source</th>
-                                <th className="px-3 py-2 font-medium">Medium</th>
-                                <th className="px-3 py-2 font-medium">Campaign</th>
-                                <th className="px-3 py-2 font-medium">Pageviews</th>
-                                <th className="px-3 py-2 font-medium">Submissions</th>
-                                <th className="px-3 py-2 font-medium">Submit rate</th>
+                                <th className="px-3 py-2 font-medium">
+                                  Source
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Medium
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Campaign
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Pageviews
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submissions
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submit rate
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {analyticsSummary.attribution.campaigns.length > 0 ? (
-                                analyticsSummary.attribution.campaigns.map((row) => (
-                                  <tr
-                                    key={`${row.utmSource}-${row.utmMedium}-${row.utmCampaign}`}
-                                    className="border-t"
-                                  >
-                                    <td className="px-3 py-2 text-xs">{row.utmSource}</td>
-                                    <td className="px-3 py-2 text-xs">{row.utmMedium}</td>
-                                    <td className="px-3 py-2 text-xs">{row.utmCampaign}</td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.pageviews)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.submissions)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatPercent(row.submissionRatePct)}
-                                    </td>
-                                  </tr>
-                                ))
+                              {analyticsSummary.attribution.campaigns.length >
+                              0 ? (
+                                analyticsSummary.attribution.campaigns.map(
+                                  (row) => (
+                                    <tr
+                                      key={`${row.utmSource}-${row.utmMedium}-${row.utmCampaign}`}
+                                      className="border-t"
+                                    >
+                                      <td className="px-3 py-2 text-xs">
+                                        {row.utmSource}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs">
+                                        {row.utmMedium}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs">
+                                        {row.utmCampaign}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.pageviews)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.submissions)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatPercent(row.submissionRatePct)}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={6}
+                                  >
                                     No UTM campaign data in this range.
                                   </td>
                                 </tr>
@@ -1102,31 +1356,50 @@ export default function AnalyticsProjectPage() {
                           <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr className="text-left">
-                                <th className="px-3 py-2 font-medium">Source</th>
-                                <th className="px-3 py-2 font-medium">Pageviews</th>
-                                <th className="px-3 py-2 font-medium">Submissions</th>
-                                <th className="px-3 py-2 font-medium">Submit rate</th>
+                                <th className="px-3 py-2 font-medium">
+                                  Source
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Pageviews
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submissions
+                                </th>
+                                <th className="px-3 py-2 font-medium">
+                                  Submit rate
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {analyticsSummary.attribution.sources.length > 0 ? (
-                                analyticsSummary.attribution.sources.map((row) => (
-                                  <tr key={row.utmSource} className="border-t">
-                                    <td className="px-3 py-2 text-xs">{row.utmSource}</td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.pageviews)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.submissions)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatPercent(row.submissionRatePct)}
-                                    </td>
-                                  </tr>
-                                ))
+                              {analyticsSummary.attribution.sources.length >
+                              0 ? (
+                                analyticsSummary.attribution.sources.map(
+                                  (row) => (
+                                    <tr
+                                      key={row.utmSource}
+                                      className="border-t"
+                                    >
+                                      <td className="px-3 py-2 text-xs">
+                                        {row.utmSource}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.pageviews)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatInteger(row.submissions)}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {formatPercent(row.submissionRatePct)}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )
                               ) : (
                                 <tr className="border-t">
-                                  <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  <td
+                                    className="px-3 py-3 text-muted-foreground"
+                                    colSpan={4}
+                                  >
                                     No attributed source data in this range.
                                   </td>
                                 </tr>
@@ -1145,13 +1418,19 @@ export default function AnalyticsProjectPage() {
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">Total submissions</p>
+                          <p className="text-xs text-muted-foreground">
+                            Total submissions
+                          </p>
                           <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(analyticsSummary.contactForm.submissions)}
+                            {formatInteger(
+                              analyticsSummary.contactForm.submissions,
+                            )}
                           </p>
                         </div>
                         <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">Avg submissions / day</p>
+                          <p className="text-xs text-muted-foreground">
+                            Avg submissions / day
+                          </p>
                           <p className="mt-1 text-lg font-semibold">
                             {formatRatio(summaryInsights.avgDailySubmissions)}
                           </p>
@@ -1162,28 +1441,38 @@ export default function AnalyticsProjectPage() {
                           <thead className="bg-muted/30">
                             <tr className="text-left">
                               <th className="w-12 px-3 py-2 font-medium">#</th>
-                              <th className="px-3 py-2 font-medium">Source host</th>
-                              <th className="px-3 py-2 font-medium">Submissions</th>
+                              <th className="px-3 py-2 font-medium">
+                                Source host
+                              </th>
+                              <th className="px-3 py-2 font-medium">
+                                Submissions
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {analyticsSummary.contactForm.topSourceHosts.length > 0 ? (
-                              analyticsSummary.contactForm.topSourceHosts.map((row, index) => (
-                                <tr key={row.sourceHost} className="border-t">
-                                  <td className="px-3 py-2 text-muted-foreground">
-                                    {index + 1}
-                                  </td>
-                                  <td className="px-3 py-2 text-xs break-all">
-                                    {row.sourceHost}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    {formatInteger(row.submissions)}
-                                  </td>
-                                </tr>
-                              ))
+                            {analyticsSummary.contactForm.topSourceHosts
+                              .length > 0 ? (
+                              analyticsSummary.contactForm.topSourceHosts.map(
+                                (row, index) => (
+                                  <tr key={row.sourceHost} className="border-t">
+                                    <td className="px-3 py-2 text-muted-foreground">
+                                      {index + 1}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs break-all">
+                                      {row.sourceHost}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {formatInteger(row.submissions)}
+                                    </td>
+                                  </tr>
+                                ),
+                              )
                             ) : (
                               <tr className="border-t">
-                                <td className="px-3 py-3 text-muted-foreground" colSpan={3}>
+                                <td
+                                  className="px-3 py-3 text-muted-foreground"
+                                  colSpan={3}
+                                >
                                   No contact submissions in this range.
                                 </td>
                               </tr>

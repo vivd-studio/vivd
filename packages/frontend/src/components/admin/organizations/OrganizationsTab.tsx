@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { FolderKanban, Globe2, Users } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Panel, PanelContent } from "@/components/ui/panel";
+import { StatTile } from "@/components/ui/stat-tile";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DomainsPanel } from "./components/DomainsPanel";
 import { MembersPanel } from "./components/MembersPanel";
@@ -33,11 +35,11 @@ type OverviewStatRowProps = {
 
 function OverviewMetaItem({ label, value, helper }: OverviewMetaItemProps) {
   return (
-    <div className="rounded-lg border bg-background/80 px-4 py-3">
+    <StatTile className="gap-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-medium text-foreground">{value}</dd>
-      <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
-    </div>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
+      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+    </StatTile>
   );
 }
 
@@ -48,20 +50,20 @@ function OverviewStatRow({
   icon: Icon,
 }: OverviewStatRowProps) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border bg-background/80 px-4 py-3">
-      <div className="rounded-md bg-muted p-2 text-muted-foreground">
+    <StatTile className="flex-row items-start gap-3">
+      <div className="rounded-md border border-border bg-surface-panel p-2 text-muted-foreground">
         <Icon className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-sm text-muted-foreground">{label}</dt>
-          <dd className="text-lg font-semibold tracking-tight text-foreground">
+          <dd className="text-lg font-semibold tracking-tight text-foreground tabular-nums">
             {value}
           </dd>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
       </div>
-    </div>
+    </StatTile>
   );
 }
 
@@ -93,22 +95,21 @@ export function OrganizationsTab({
 
   return (
     <div className="space-y-6">
-      <Card className="border-border/70 shadow-sm">
-        <CardContent className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <Panel>
+        <PanelContent className="grid gap-6 p-5 pt-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant={
-                  admin.selectedOrg.status === "active" ? "default" : "destructive"
-                }
+              <StatusPill
+                tone={admin.selectedOrg.status === "active" ? "success" : "danger"}
+                dot
               >
                 {admin.selectedOrg.status}
-              </Badge>
+              </StatusPill>
               {admin.usage?.limits.blocked ? (
-                <Badge variant="destructive">Credits blocked</Badge>
+                <StatusPill tone="danger">Credits blocked</StatusPill>
               ) : null}
               {admin.usage?.limits.imageGenBlocked ? (
-                <Badge variant="secondary">Image generation blocked</Badge>
+                <StatusPill tone="warn">Image generation blocked</StatusPill>
               ) : null}
               {admin.selectedOrg.id === "default" ? (
                 <Badge variant="outline">Default organization</Badge>
@@ -174,7 +175,7 @@ export function OrganizationsTab({
             </dl>
           </div>
 
-          <div className="rounded-lg border bg-muted/10 p-4">
+          <div>
             <div className="space-y-1">
               <h3 className="text-sm font-medium">Workspace summary</h3>
               <p className="text-sm text-muted-foreground">
@@ -202,8 +203,8 @@ export function OrganizationsTab({
               />
             </dl>
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
         <TabsList className="w-full justify-start overflow-x-auto">

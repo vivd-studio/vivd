@@ -14,7 +14,10 @@ export default defineConfig({
     globals: true,
     environment: "node",
     // By default, only run unit tests (exclude integration folder)
-    include: ["test/**/*.test.ts"],
+    include: [
+      "test/**/*.test.ts",
+      "../../plugins/native/*/src/backend/**/*.test.ts",
+    ],
     exclude: ["test/integration/**"],
     setupFiles: ["./test/setup.ts"],
     coverage: {

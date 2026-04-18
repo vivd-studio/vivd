@@ -18,6 +18,10 @@
       "import": "./dist/pluginContracts.js",
       "types": "./dist/pluginContracts.d.ts"
     },
+    "./emailTemplates": {
+      "import": "./dist/emailTemplates.js",
+      "types": "./dist/emailTemplates.d.ts"
+    },
     "./pluginPackages": {
       "import": "./dist/pluginPackages.js",
       "types": "./dist/pluginPackages.d.ts"

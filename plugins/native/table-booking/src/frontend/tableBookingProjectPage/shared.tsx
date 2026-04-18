@@ -1,17 +1,17 @@
 import type { ChangeEvent, ComponentType, ReactNode } from "react";
 import { useState } from "react";
 import { ChevronDown, Copy, MoreHorizontal, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
+  Badge,
+  Button,
+  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+  Input,
+  Label,
+} from "@vivd/ui";
 import {
   formatCapacityModeLabel,
   formatDateTime,
@@ -78,7 +78,9 @@ export function MetricCard({
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      {note ? <p className="mt-2 text-xs text-muted-foreground">{note}</p> : null}
+      {note ? (
+        <p className="mt-2 text-xs text-muted-foreground">{note}</p>
+      ) : null}
     </div>
   );
 }
@@ -242,7 +244,10 @@ export function PeriodEditor({
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
-                slotIntervalMinutes: Number.parseInt(event.target.value || "0", 10),
+                slotIntervalMinutes: Number.parseInt(
+                  event.target.value || "0",
+                  10,
+                ),
               })
             }
           />
@@ -257,7 +262,10 @@ export function PeriodEditor({
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               onChange({
                 ...period,
-                maxConcurrentCovers: Number.parseInt(event.target.value || "0", 10),
+                maxConcurrentCovers: Number.parseInt(
+                  event.target.value || "0",
+                  10,
+                ),
               })
             }
           />
@@ -424,11 +432,7 @@ export function BookingRow({
             ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={actionPending}
-                >
+                <Button size="sm" variant="outline" disabled={actionPending}>
                   <MoreHorizontal className="h-3.5 w-3.5" />
                   Actions
                 </Button>
@@ -488,13 +492,11 @@ export function CapacityWindowCard({
             <p className="text-sm font-medium">
               {window.startTime} - {window.endTime}
             </p>
-            {window.isClosed ? (
-              <Badge variant="secondary">Closed</Badge>
-            ) : null}
+            {window.isClosed ? <Badge variant="secondary">Closed</Badge> : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            {window.bookedCovers} booked · {window.effectiveCapacity} effective ·{" "}
-            {window.remainingCovers} remaining
+            {window.bookedCovers} booked · {window.effectiveCapacity} effective
+            · {window.remainingCovers} remaining
           </p>
         </div>
         <div className="min-w-[7rem] text-right text-xs text-muted-foreground">

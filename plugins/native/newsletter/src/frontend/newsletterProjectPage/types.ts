@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { RouterOutputs } from "@/lib/trpc";
+import type { RouterOutputs } from "@/plugins/host";
 import type {
   NewsletterCampaignsPayload,
   NewsletterSubscribersPayload,
@@ -45,5 +45,7 @@ export type NewsletterCampaigns = NewsletterCampaignsPayload | undefined;
 export type NewsletterSubscribers = NewsletterSubscribersPayload | undefined;
 export type NewsletterSummary = NewsletterSummaryPayload | undefined;
 export type NewsletterPluginIcon = ComponentType<{ className?: string }>;
-export type NewsletterCampaignRecord = NewsletterCampaignsPayload["rows"][number];
-export type NewsletterSubscriberRecord = NewsletterSubscribersPayload["rows"][number];
+export type NewsletterCampaignRecord =
+  NewsletterCampaignsPayload["rows"][number];
+export type NewsletterSubscriberRecord =
+  NewsletterSubscribersPayload["rows"][number];

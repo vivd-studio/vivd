@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/emailTemplates.ts",
     "src/pluginCli.ts",
     "src/pluginContracts.ts",
     "src/pluginPackages.ts",

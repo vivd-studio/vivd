@@ -1,19 +1,26 @@
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Pencil } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Callout, CalloutTitle } from "@/components/ui/callout";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { Progress } from "@/components/ui/progress";
+import {
+  StatTile,
+  StatTileHelper,
+  StatTileLabel,
+  StatTileValue,
+} from "@/components/ui/stat-tile";
+import { StatusPill } from "@/components/ui/status-pill";
 import {
   Sheet,
   SheetContent,
@@ -46,27 +53,34 @@ function formatThresholdPercent(value: string): string {
   return `${Math.round(parsed * 100)}%`;
 }
 
+function usageToneClass(pct: number, unlimited: boolean): string {
+  if (unlimited) return "";
+  if (pct >= 100) return "text-destructive";
+  if (pct >= 80) return "text-amber-600 dark:text-amber-400";
+  return "";
+}
+
+function progressToneClass(pct: number): string {
+  if (pct >= 100) return "[&>div]:bg-destructive";
+  if (pct >= 80) return "[&>div]:bg-amber-500";
+  return "";
+}
+
 function UsageRow({ label, current, limit }: UsageRowProps) {
   const unlimited = isUnlimited(limit);
   const pct = safePercentage(current, limit);
-  const isHigh = pct >= 80;
-  const isExceeded = pct >= 100;
+  const tone = usageToneClass(pct, unlimited);
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">{label}</span>
-        <span
-          className={`font-medium tabular-nums ${isExceeded ? "text-destructive" : isHigh ? "text-orange-500" : ""}`}
-        >
+        <span className={`font-medium tabular-nums ${tone}`}>
           {formatUsage(current)} / {formatLimit(limit)}
         </span>
       </div>
       {!unlimited && (
-        <Progress
-          value={pct}
-          className={`h-1.5 ${isExceeded ? "[&>div]:bg-destructive" : isHigh ? "[&>div]:bg-orange-500" : ""}`}
-        />
+        <Progress value={pct} className={`h-1.5 ${progressToneClass(pct)}`} />
       )}
     </div>
   );
@@ -75,55 +89,33 @@ function UsageRow({ label, current, limit }: UsageRowProps) {
 function UsageStatCard({ label, current, limit, helper }: UsageStatCardProps) {
   const unlimited = isUnlimited(limit);
   const pct = safePercentage(current, limit);
-  const isHigh = pct >= 80;
-  const isExceeded = pct >= 100;
+  const tone = usageToneClass(pct, unlimited);
 
   return (
-    <div className="rounded-xl border bg-background/70 p-4">
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+    <StatTile>
+      <StatTileLabel className="text-xs font-medium uppercase tracking-[0.16em]">
         {label}
-      </p>
-      <div className="mt-3 flex items-end justify-between gap-3">
+      </StatTileLabel>
+      <div className="flex items-end justify-between gap-3">
         <div>
-          <p
-            className={`text-2xl font-semibold tracking-tight ${
-              isExceeded ? "text-destructive" : ""
-            }`}
-          >
-            {formatUsage(current)}
-          </p>
-          <p className="text-sm text-muted-foreground">
+          <StatTileValue className={tone}>{formatUsage(current)}</StatTileValue>
+          <p className="mt-1 text-sm text-muted-foreground">
             of {formatLimit(limit)}
           </p>
         </div>
         <p
-          className={`text-sm font-medium tabular-nums ${
-            isExceeded
-              ? "text-destructive"
-              : isHigh
-                ? "text-orange-500"
-                : "text-muted-foreground"
-          }`}
+          className={`text-sm font-medium tabular-nums ${tone || "text-muted-foreground"}`}
         >
           {unlimited ? "No cap" : `${pct}%`}
         </p>
       </div>
       {!unlimited ? (
-        <Progress
-          value={pct}
-          className={`mt-4 h-2 ${
-            isExceeded
-              ? "[&>div]:bg-destructive"
-              : isHigh
-                ? "[&>div]:bg-orange-500"
-                : ""
-          }`}
-        />
+        <Progress value={pct} className={`mt-2 h-2 ${progressToneClass(pct)}`} />
       ) : (
-        <div className="mt-4 h-2 rounded-full bg-muted" />
+        <div className="mt-2 h-2 rounded-full bg-muted" />
       )}
-      <p className="mt-3 text-xs text-muted-foreground">{helper}</p>
-    </div>
+      <StatTileHelper>{helper}</StatTileHelper>
+    </StatTile>
   );
 }
 
@@ -157,49 +149,48 @@ export function UsageLimitsPanel({
       {usageLoading ? (
         <LoadingSpinner message="Loading usage..." className="justify-start" />
       ) : usageError ? (
-        <div className="text-red-500">
+        <div className="text-sm text-destructive">
           Failed to load usage: {String(usageError)}
         </div>
       ) : usage ? (
         <>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <Card className="border-border/70">
-              <CardHeader className="pb-4">
+            <Panel>
+              <PanelHeader>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <CardTitle>Usage overview</CardTitle>
-                    <CardDescription>
+                  <div className="space-y-1.5">
+                    <PanelTitle>Usage overview</PanelTitle>
+                    <PanelDescription>
                       Live credit and resource usage for {selectedOrg.name}.
-                    </CardDescription>
+                    </PanelDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {usage.limits.blocked ? (
-                      <Badge variant="destructive">Blocked</Badge>
-                    ) : (
-                      <Badge variant="default">Active</Badge>
-                    )}
+                    <StatusPill
+                      tone={usage.limits.blocked ? "danger" : "success"}
+                      dot
+                    >
+                      {usage.limits.blocked ? "Blocked" : "Active"}
+                    </StatusPill>
                     {usage.limits.imageGenBlocked ? (
-                      <Badge variant="secondary">Image gen blocked</Badge>
+                      <StatusPill tone="warn">Image gen blocked</StatusPill>
                     ) : null}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              </PanelHeader>
+              <PanelContent className="space-y-4">
                 {usage.limits.warnings.length > 0 ? (
-                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/30">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                        {usage.limits.warnings.length === 1
-                          ? "1 active warning"
-                          : `${usage.limits.warnings.length} active warnings`}
-                      </p>
-                      <ul className="list-disc space-y-1 pl-4 text-sm text-orange-700 dark:text-orange-400">
-                        {usage.limits.warnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                  <Callout tone="warn" icon={<AlertTriangle />}>
+                    <CalloutTitle>
+                      {usage.limits.warnings.length === 1
+                        ? "1 active warning"
+                        : `${usage.limits.warnings.length} active warnings`}
+                    </CalloutTitle>
+                    <ul className="list-disc space-y-1 pl-4 text-sm leading-snug text-muted-foreground">
+                      {usage.limits.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  </Callout>
                 ) : null}
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -234,17 +225,17 @@ export function UsageLimitsPanel({
                     helper="Monthly image generation allowance."
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
 
-            <Card className="border-border/70">
-              <CardHeader className="pb-4">
-                <CardTitle>Policy</CardTitle>
-                <CardDescription>
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Policy</PanelTitle>
+                <PanelDescription>
                   Thresholds and caps currently applied to this organization.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                </PanelDescription>
+              </PanelHeader>
+              <PanelContent className="space-y-4">
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Credit access</span>
@@ -279,19 +270,19 @@ export function UsageLimitsPanel({
                   <Pencil className="h-3.5 w-3.5" />
                   Edit Limits
                 </Button>
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="border-border/70">
-              <CardHeader className="pb-4">
-                <CardTitle>Credits</CardTitle>
-                <CardDescription>
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Credits</PanelTitle>
+                <PanelDescription>
                   Budget windows and current credit draw.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                </PanelDescription>
+              </PanelHeader>
+              <PanelContent className="space-y-4">
                 <UsageRow
                   label="Daily"
                   current={usage.limits.usage.daily.current}
@@ -307,17 +298,17 @@ export function UsageLimitsPanel({
                   current={usage.limits.usage.monthly.current}
                   limit={usage.limits.usage.monthly.limit}
                 />
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
 
-            <Card className="border-border/70">
-              <CardHeader className="pb-4">
-                <CardTitle>Resources</CardTitle>
-                <CardDescription>
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Resources</PanelTitle>
+                <PanelDescription>
                   Project slots and plugin-related monthly allowances.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                </PanelDescription>
+              </PanelHeader>
+              <PanelContent className="space-y-4">
                 <UsageRow
                   label="Projects"
                   current={usage.projectCount}
@@ -328,8 +319,8 @@ export function UsageLimitsPanel({
                   current={usage.limits.usage.imageGen.current}
                   limit={usage.limits.usage.imageGen.limit}
                 />
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
           </div>
 
           {/* Edit Limits Sheet */}
@@ -342,9 +333,12 @@ export function UsageLimitsPanel({
                 </SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
-                <div className="space-y-1.5">
-                  <Label>Daily credit limit</Label>
+                <Field>
+                  <FieldLabel htmlFor="daily-credit-limit">
+                    Daily credit limit
+                  </FieldLabel>
                   <Input
+                    id="daily-credit-limit"
                     inputMode="numeric"
                     value={limitsForm.dailyCreditLimit}
                     onChange={(e) =>
@@ -354,10 +348,13 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Weekly credit limit</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="weekly-credit-limit">
+                    Weekly credit limit
+                  </FieldLabel>
                   <Input
+                    id="weekly-credit-limit"
                     inputMode="numeric"
                     value={limitsForm.weeklyCreditLimit}
                     onChange={(e) =>
@@ -367,10 +364,13 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Monthly credit limit</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="monthly-credit-limit">
+                    Monthly credit limit
+                  </FieldLabel>
                   <Input
+                    id="monthly-credit-limit"
                     inputMode="numeric"
                     value={limitsForm.monthlyCreditLimit}
                     onChange={(e) =>
@@ -380,10 +380,13 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Image generations / month</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="image-gen-per-month">
+                    Image generations / month
+                  </FieldLabel>
                   <Input
+                    id="image-gen-per-month"
                     inputMode="numeric"
                     value={limitsForm.imageGenPerMonth}
                     onChange={(e) =>
@@ -393,10 +396,13 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Warning threshold (0-1)</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="warning-threshold">
+                    Warning threshold (0-1)
+                  </FieldLabel>
                   <Input
+                    id="warning-threshold"
                     inputMode="decimal"
                     value={limitsForm.warningThreshold}
                     onChange={(e) =>
@@ -406,10 +412,13 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Max projects (0 = unlimited)</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="max-projects">
+                    Max projects (0 = unlimited)
+                  </FieldLabel>
                   <Input
+                    id="max-projects"
                     inputMode="numeric"
                     value={limitsForm.maxProjects}
                     onChange={(e) =>
@@ -419,11 +428,11 @@ export function UsageLimitsPanel({
                       }))
                     }
                   />
-                </div>
+                </Field>
               </div>
               <SheetFooter>
                 {Boolean(patchLimitsError) && (
-                  <div className="text-sm text-red-500 mr-auto">
+                  <div className="mr-auto text-sm text-destructive">
                     {String(patchLimitsError)}
                   </div>
                 )}

@@ -8,6 +8,10 @@ import type {
   NewsletterPluginBackendContributionDeps,
 } from "./contribution";
 import { createNewsletterPluginBackendContribution } from "./contribution";
+import {
+  buildNewsletterCampaignEmail,
+  buildNewsletterConfirmationEmail,
+} from "./emails";
 import { newsletterPluginDefinition } from "./module";
 
 function createNewsletterHostContribution(
@@ -32,10 +36,14 @@ function createNewsletterHostContribution(
         });
       },
       getPluginInstance(options) {
-        return hostContext.projectPluginInstanceService.getPluginInstance(options);
+        return hostContext.projectPluginInstanceService.getPluginInstance(
+          options,
+        );
       },
       updatePluginInstance(options) {
-        return hostContext.projectPluginInstanceService.updatePluginInstance(options);
+        return hostContext.projectPluginInstanceService.updatePluginInstance(
+          options,
+        );
       },
     },
     getPublicPluginApiBaseUrl: hostContext.runtime.getPublicPluginApiBaseUrl,
@@ -44,10 +52,16 @@ function createNewsletterHostContribution(
     emailDeliveryService: hostContext.email.deliveryService,
     emailTemplates: {
       buildConfirmationEmail(options) {
-        return hostContext.email.templates.buildNewsletterConfirmationEmail!(options);
+        return buildNewsletterConfirmationEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
       buildCampaignEmail(options) {
-        return hostContext.email.templates.buildNewsletterCampaignEmail!(options);
+        return buildNewsletterCampaignEmail(
+          options,
+          hostContext.email.brandingResolver,
+        );
       },
     },
   });

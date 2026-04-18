@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { trpc } from "@/lib/trpc";
+import { SettingsPageShell } from "@/plugins/host";
+import { Card, CardContent, CardHeader, CardTitle } from "@vivd/ui";
+import { trpc } from "@/plugins/host";
 import {
   ProjectPluginAccessActions,
   useProjectPluginPageModel,
-} from "@/plugins/projectPageScaffold";
+} from "@/plugins/host";
 import {
   NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUBSCRIBERS_READ_ID,
@@ -67,7 +67,9 @@ export default function NewsletterProjectPage({
     pluginId: "newsletter",
     isEmbedded,
     documentTitle: ({ projectTitle, pluginEnabled }) =>
-      pluginEnabled ? `${projectTitle} · Newsletter` : `${projectTitle} · Plugins`,
+      pluginEnabled
+        ? `${projectTitle} · Newsletter`
+        : `${projectTitle} · Plugins`,
     updateDocumentTitleWhenEmbedded: false,
     enableToast: {
       success: "Newsletter plugin enabled",
@@ -88,16 +90,20 @@ export default function NewsletterProjectPage({
   const [campaignBody, setCampaignBody] = useState("");
   const [campaignAudience, setCampaignAudience] =
     useState<NewsletterCampaignAudience>("all_confirmed");
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
-  const [campaignSelectionMode, setCampaignSelectionMode] = useState<"auto" | "manual">(
-    "auto",
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
+    null,
   );
+  const [campaignSelectionMode, setCampaignSelectionMode] = useState<
+    "auto" | "manual"
+  >("auto");
   const [editingNewCampaign, setEditingNewCampaign] = useState(false);
   const [campaignOffset, setCampaignOffset] = useState(0);
   const [deleteCampaignId, setDeleteCampaignId] = useState<string | null>(null);
   const [testSendEmail, setTestSendEmail] = useState("");
   const [sendCampaignId, setSendCampaignId] = useState<string | null>(null);
-  const [cancelSendCampaignId, setCancelSendCampaignId] = useState<string | null>(null);
+  const [cancelSendCampaignId, setCancelSendCampaignId] = useState<
+    string | null
+  >(null);
   const [subscriberStatus, setSubscriberStatus] =
     useState<NewsletterSubscriberStatus>("all");
   const [search, setSearch] = useState("");
@@ -172,7 +178,10 @@ export default function NewsletterProjectPage({
   const campaignActionMutation = trpc.plugins.action.useMutation({
     onSuccess: async (result) => {
       if (result.actionId === "save_campaign_draft") {
-        const payload = result.result as { campaignId?: string; estimatedRecipientCount?: number };
+        const payload = result.result as {
+          campaignId?: string;
+          estimatedRecipientCount?: number;
+        };
         if (payload.campaignId) {
           if (editingNewCampaign) {
             setCampaignOffset(0);
@@ -189,7 +198,10 @@ export default function NewsletterProjectPage({
         });
       } else if (result.actionId === "delete_campaign_draft") {
         setDeleteCampaignId(null);
-        if ((result.result as { campaignId?: string }).campaignId === selectedCampaignId) {
+        if (
+          (result.result as { campaignId?: string }).campaignId ===
+          selectedCampaignId
+        ) {
           setCampaignSelectionMode("auto");
           setSelectedCampaignId(null);
           setCampaignSubject("");
@@ -205,7 +217,10 @@ export default function NewsletterProjectPage({
             : undefined,
         });
       } else if (result.actionId === "send_campaign") {
-        const payload = result.result as { campaignId?: string; recipientCount?: number };
+        const payload = result.result as {
+          campaignId?: string;
+          recipientCount?: number;
+        };
         setSendCampaignId(null);
         if (payload.campaignId) {
           setEditingNewCampaign(false);
@@ -242,7 +257,9 @@ export default function NewsletterProjectPage({
     setMode(pluginInfo.config.mode);
     setCollectName(Boolean(pluginInfo.config.collectName));
     setSourceHostsInput(formatListInput(pluginInfo.config.sourceHosts ?? []));
-    setRedirectHostsInput(formatListInput(pluginInfo.config.redirectHostAllowlist ?? []));
+    setRedirectHostsInput(
+      formatListInput(pluginInfo.config.redirectHostAllowlist ?? []),
+    );
   }, [pluginInfo?.config]);
 
   useEffect(() => {
@@ -272,7 +289,9 @@ export default function NewsletterProjectPage({
     }
 
     if (selectedCampaignId) {
-      const selected = campaigns.rows.find((row) => row.id === selectedCampaignId);
+      const selected = campaigns.rows.find(
+        (row) => row.id === selectedCampaignId,
+      );
       if (!selected) {
         if (campaignSelectionMode === "manual") {
           return;
@@ -293,7 +312,12 @@ export default function NewsletterProjectPage({
     setCampaignSubject(firstCampaign.subject);
     setCampaignBody(firstCampaign.body);
     setCampaignAudience(firstCampaign.audience);
-  }, [campaignSelectionMode, campaigns?.rows, editingNewCampaign, selectedCampaignId]);
+  }, [
+    campaignSelectionMode,
+    campaigns?.rows,
+    editingNewCampaign,
+    selectedCampaignId,
+  ]);
 
   useEffect(() => {
     if (
@@ -333,13 +357,15 @@ export default function NewsletterProjectPage({
     [campaigns?.rows, selectedCampaignId],
   );
   const campaignIsEditable =
-    editingNewCampaign || !selectedCampaign || selectedCampaign.status === "draft";
+    editingNewCampaign ||
+    !selectedCampaign ||
+    selectedCampaign.status === "draft";
   const campaignHasUnsavedEdits = Boolean(
     selectedCampaign &&
-      !editingNewCampaign &&
-      (selectedCampaign.subject !== campaignSubject ||
-        selectedCampaign.body !== campaignBody ||
-        selectedCampaign.audience !== campaignAudience),
+    !editingNewCampaign &&
+    (selectedCampaign.subject !== campaignSubject ||
+      selectedCampaign.body !== campaignBody ||
+      selectedCampaign.audience !== campaignAudience),
   );
   const currentCampaignRecipientEstimate =
     campaignAudience === "mode_confirmed"
@@ -532,7 +558,10 @@ export default function NewsletterProjectPage({
             isRequestPendingAction={requestAccessMutation.isPending}
             requestAccessLabel={requestAccessLabel}
             onEnable={() =>
-              ensureMutation.mutate({ slug: projectSlug, pluginId: typedPluginId })
+              ensureMutation.mutate({
+                slug: projectSlug,
+                pluginId: typedPluginId,
+              })
             }
             onRequestAccess={() =>
               requestAccessMutation.mutate({
@@ -590,7 +619,9 @@ export default function NewsletterProjectPage({
           onTestSendEmailChange={setTestSendEmail}
           onSendTest={sendCampaignTest}
           onQueueSend={() => setSendCampaignId(selectedCampaign?.id ?? null)}
-          onCancelSend={() => setCancelSendCampaignId(selectedCampaign?.id ?? null)}
+          onCancelSend={() =>
+            setCancelSendCampaignId(selectedCampaign?.id ?? null)
+          }
         />
 
         <NewsletterSubscribersCard

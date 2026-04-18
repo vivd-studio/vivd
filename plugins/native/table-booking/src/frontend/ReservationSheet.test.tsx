@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -8,6 +9,116 @@ import type {
 } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@vivd/ui", async () => {
+  const actual = await vi.importActual<any>("@vivd/ui");
+
+  return {
+    ...actual,
+    Badge: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+    Button: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    ),
+    Checkbox: ({
+      checked,
+      onCheckedChange,
+      ...props
+    }: {
+      checked?: boolean;
+      onCheckedChange?: (value: boolean) => void;
+    } & InputHTMLAttributes<HTMLInputElement>) => (
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onCheckedChange?.(event.target.checked)}
+        {...props}
+      />
+    ),
+    Input: (props: InputHTMLAttributes<HTMLInputElement>) => (
+      <input {...props} />
+    ),
+    Label: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & LabelHTMLAttributes<HTMLLabelElement>) => (
+      <label {...props}>{children}</label>
+    ),
+    Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    SelectTrigger: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectValue: () => <span>Select value</span>,
+    SelectContent: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLDivElement>) => (
+      <div data-testid="source-select-content" {...props}>
+        {children}
+      </div>
+    ),
+    SelectItem: ({
+      children,
+      value,
+    }: {
+      children: ReactNode;
+      value: string;
+    }) => <div data-value={value}>{children}</div>,
+    Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    SheetContent: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLDivElement>) => (
+      <div data-testid="reservation-sheet-content" {...props}>
+        {children}
+      </div>
+    ),
+    SheetDescription: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLParagraphElement>) => <p {...props}>{children}</p>,
+    SheetFooter: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+    SheetHeader: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+    SheetTitle: ({
+      children,
+      ...props
+    }: {
+      children: ReactNode;
+    } & HTMLAttributes<HTMLHeadingElement>) => <h2 {...props}>{children}</h2>,
+    Textarea: (props: TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+      <textarea {...props} />
+    ),
+  };
+});
 
 vi.mock("@/components/ui/badge", () => ({
   Badge: ({
@@ -80,13 +191,9 @@ vi.mock("@/components/ui/select", () => ({
       {children}
     </div>
   ),
-  SelectItem: ({
-    children,
-    value,
-  }: {
-    children: ReactNode;
-    value: string;
-  }) => <div data-value={value}>{children}</div>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
+    <div data-value={value}>{children}</div>
+  ),
 }));
 
 vi.mock("@/components/ui/sheet", () => ({

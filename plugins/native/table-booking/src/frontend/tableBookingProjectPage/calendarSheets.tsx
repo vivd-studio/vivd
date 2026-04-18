@@ -1,26 +1,24 @@
 import type { ChangeEvent } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
+  Badge,
+  Button,
+  Checkbox,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+  Textarea,
+} from "@vivd/ui";
 import {
   CAPACITY_MODE_LABELS,
   CAPACITY_MODE_OPTIONS,
@@ -564,7 +562,10 @@ export function HoursSheet({
           <SheetTitle>Manage hours</SheetTitle>
           <SheetDescription>
             {formatLongDate(selectedDate, timezone)} — currently following the{" "}
-            {override ? "date override" : `${dayLabel?.toLowerCase()} weekly template`}.
+            {override
+              ? "date override"
+              : `${dayLabel?.toLowerCase()} weekly template`}
+            .
           </SheetDescription>
         </SheetHeader>
 
@@ -581,7 +582,8 @@ export function HoursSheet({
                   emptyCopy="No weekly service windows for this weekday."
                 />
                 <p className="text-xs text-muted-foreground">
-                  Changes here update every {dayLabel?.toLowerCase()} across the calendar.
+                  Changes here update every {dayLabel?.toLowerCase()} across the
+                  calendar.
                 </p>
               </section>
 
@@ -623,7 +625,9 @@ export function HoursSheet({
                       <PeriodEditor
                         key={`${selectedDate}-${index}`}
                         period={period}
-                        defaultDurationMinutes={draft.defaultDurationMinutesNumber}
+                        defaultDurationMinutes={
+                          draft.defaultDurationMinutesNumber
+                        }
                         onChange={(next: TableBookingSchedulePeriod) =>
                           draft.updateOverridePeriod(selectedDate, index, next)
                         }
@@ -689,7 +693,10 @@ export function HoursSheet({
 
         <SheetFooter className="border-t px-6 py-4">
           <p className="mr-auto text-xs text-muted-foreground">
-            {formatScheduleSummaryLine(schedule.periods.length, schedule.isClosed)}
+            {formatScheduleSummaryLine(
+              schedule.periods.length,
+              schedule.isClosed,
+            )}
           </p>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Done

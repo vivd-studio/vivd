@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +53,69 @@ vi.mock("@/components/settings/SettingsPageShell", () => ({
   ),
 }));
 
+vi.mock("@vivd/ui", async () => {
+  const actual = await vi.importActual<any>("@vivd/ui");
+
+  return {
+    ...actual,
+    Select: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value: string;
+      onValueChange?: (value: string) => void;
+      children: ReactNode;
+    }) => (
+      <select
+        aria-label="mock-select"
+        value={value}
+        onChange={(event) => onValueChange?.(event.target.value)}
+      >
+        {children}
+      </select>
+    ),
+    SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+    SelectItem: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => <option value={value}>{children}</option>,
+    SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+    SelectValue: () => null,
+    AlertDialog: ({
+      open,
+      children,
+    }: {
+      open: boolean;
+      children: ReactNode;
+    }) => (open ? <div>{children}</div> : null),
+    AlertDialogAction: ({ children, ...props }: any) => (
+      <button {...props}>{children}</button>
+    ),
+    AlertDialogCancel: ({ children, ...props }: any) => (
+      <button {...props}>{children}</button>
+    ),
+    AlertDialogContent: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    AlertDialogDescription: ({ children }: { children: ReactNode }) => (
+      <p>{children}</p>
+    ),
+    AlertDialogFooter: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    AlertDialogHeader: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    AlertDialogTitle: ({ children }: { children: ReactNode }) => (
+      <h2>{children}</h2>
+    ),
+  };
+});
+
 vi.mock("@/components/ui/select", () => ({
   Select: ({
     value,
@@ -71,32 +135,37 @@ vi.mock("@/components/ui/select", () => ({
     </select>
   ),
   SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectItem: ({
-    value,
-    children,
-  }: {
-    value: string;
-    children: ReactNode;
-  }) => <option value={value}>{children}</option>,
+  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
   SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
   SelectValue: () => null,
 }));
 
 vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({
-    open,
-    children,
-  }: {
-    open: boolean;
-    children: ReactNode;
-  }) => (open ? <div>{children}</div> : null),
-  AlertDialogAction: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  AlertDialogCancel: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  AlertDialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  AlertDialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
-  AlertDialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  AlertDialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  AlertDialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? <div>{children}</div> : null,
+  AlertDialogAction: ({ children, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  AlertDialogCancel: ({ children, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  AlertDialogContent: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AlertDialogDescription: ({ children }: { children: ReactNode }) => (
+    <p>{children}</p>
+  ),
+  AlertDialogFooter: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AlertDialogHeader: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AlertDialogTitle: ({ children }: { children: ReactNode }) => (
+    <h2>{children}</h2>
+  ),
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -400,7 +469,9 @@ describe("NewsletterProjectPage", () => {
   it("keeps new draft fields visible after save until refreshed campaign data catches up", async () => {
     render(<NewsletterProjectPage projectSlug="site-1" />);
 
-    await waitFor(() => expect(screen.getByDisplayValue("Old draft")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Old draft")).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "New draft" }));
     fireEvent.change(screen.getByPlaceholderText("April launch update"), {
@@ -493,18 +564,24 @@ describe("NewsletterProjectPage", () => {
 
     render(<NewsletterProjectPage projectSlug="site-1" />);
 
-    await waitFor(() => expect(screen.getByDisplayValue("Campaign 1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Campaign 1")).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getAllByRole("button", { name: "Next" })[0]!);
 
-    await waitFor(() => expect(screen.getByDisplayValue("Campaign 21")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Campaign 21")).toBeInTheDocument(),
+    );
     expect(screen.getByText(/page 2 of 2/i)).toBeInTheDocument();
   });
 
   it("queues a saved draft for sending from the project page", async () => {
     render(<NewsletterProjectPage projectSlug="site-1" />);
 
-    await waitFor(() => expect(screen.getByDisplayValue("Old draft")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Old draft")).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Queue send" }));
 

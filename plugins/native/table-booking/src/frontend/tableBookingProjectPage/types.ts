@@ -1,13 +1,11 @@
-import type { RouterOutputs } from "@/lib/trpc";
+import type { RouterOutputs } from "@/plugins/host";
 import type {
   TableBookingDateOverride,
   TableBookingPluginConfig,
   TableBookingSchedulePeriod,
   TableBookingWeeklyScheduleEntry,
 } from "../../backend/config";
-import type {
-  TableBookingDayCapacityPayload as TableBookingDayCapacityPayloadFromBackend,
-} from "../../backend/ports";
+import type { TableBookingDayCapacityPayload as TableBookingDayCapacityPayloadFromBackend } from "../../backend/ports";
 import type {
   TableBookingBookingsPayload,
   TableBookingRecord,

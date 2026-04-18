@@ -14,19 +14,6 @@ type HtmlLayoutInput = {
   outroHtml?: string;
 };
 
-export type ContactSubmissionEmailField = {
-  label: string;
-  value: string;
-};
-
-export type ContactSubmissionEmailInput = {
-  projectSlug: string;
-  submittedAtLabel: string;
-  replyToEmail: string | null;
-  submittedFields: ContactSubmissionEmailField[];
-  unknownFields: Record<string, string>;
-};
-
 export type EmailTemplate = {
   subject: string;
   text: string;
@@ -60,63 +47,9 @@ function sanitizeTextLine(value: string): string {
   return value.replace(/[\r\n\t]+/g, " ").trim();
 }
 
-function formatRichText(value: string): string {
-  return escapeHtml(value).replace(/\n/g, "<br/>").trim();
-}
-
 function toGreetingName(rawName: string | null | undefined): string {
   const candidate = sanitizeTextLine(rawName || "");
   return candidate || DEFAULT_FALLBACK_GREETING;
-}
-
-function formatFieldsText(fields: ContactSubmissionEmailField[]): string {
-  return fields
-    .map((field) => `${sanitizeTextLine(field.label)}: ${field.value}`)
-    .join("\n");
-}
-
-function formatUnknownFieldsText(fields: Record<string, string>): string {
-  const entries = Object.entries(fields);
-  if (entries.length === 0) return "";
-  return entries
-    .map(([key, value]) => `${sanitizeTextLine(key)}: ${value}`)
-    .join("\n");
-}
-
-function formatFieldsHtml(
-  fields: ContactSubmissionEmailField[],
-  options: {
-    labelColor: string;
-    valueColor: string;
-    rowPadding: string;
-  },
-): string {
-  return fields
-    .map(
-      (field) =>
-        `<tr><td style="padding:${options.rowPadding};vertical-align:top;font-weight:600;color:${options.labelColor};width:190px;">${escapeHtml(
-          sanitizeTextLine(field.label),
-        )}</td><td style="padding:${options.rowPadding};vertical-align:top;color:${options.valueColor};">${formatRichText(
-          field.value,
-        )}</td></tr>`,
-    )
-    .join("");
-}
-
-function formatUnknownFieldsHtml(fields: Record<string, string>): string {
-  const entries = Object.entries(fields);
-  if (entries.length === 0) return "";
-
-  return entries
-    .map(
-      ([key, value]) =>
-        `<tr><td style="padding:8px 0;vertical-align:top;font-weight:600;color:${BRAND_COLORS.text};width:190px;">${escapeHtml(
-          sanitizeTextLine(key),
-        )}</td><td style="padding:8px 0;vertical-align:top;color:${BRAND_COLORS.muted};">${formatRichText(
-          value,
-        )}</td></tr>`,
-    )
-    .join("");
 }
 
 function uniqueNonEmptyParts(parts: Array<string | undefined>): string[] {
@@ -339,66 +272,6 @@ async function resolveBrandingOverride(
   return emailTemplateBrandingService.getResolvedBranding();
 }
 
-export async function buildContactSubmissionEmail(
-  input: ContactSubmissionEmailInput,
-  brandingOverride?: EmailTemplateBranding,
-): Promise<Pick<EmailTemplate, "text" | "html">> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const unknownFieldsText = formatUnknownFieldsText(input.unknownFields);
-  const unknownFieldsHtml = formatUnknownFieldsHtml(input.unknownFields);
-  const textBody = joinNonEmptyTextBlocks([
-    "You received a new message from your website contact form.",
-    `Project: ${input.projectSlug}\nReceived: ${input.submittedAtLabel}\nReply email from form: ${
-      input.replyToEmail || "(not provided)"
-    }`,
-    `Submitted details:\n${
-      formatFieldsText(input.submittedFields) || "(No fields submitted)"
-    }`,
-    unknownFieldsText ? `Additional details:\n${unknownFieldsText}` : "",
-    "Use the reply email from the form details above when responding.",
-    buildLegalTextFooter(branding),
-  ]);
-
-  const htmlBody = renderHtmlLayout({
-    branding,
-    preheader: `New contact form submission for ${input.projectSlug}`,
-    title: "New message from your website",
-    intro: "You received a new contact form submission.",
-    bodyHtml: [
-      `<div style="margin-bottom:20px;padding:14px 16px;background:#F8FAFC;border:1px solid ${BRAND_COLORS.border};border-left:4px solid ${BRAND_COLORS.accent};border-radius:12px;font-size:14px;color:#334155;line-height:1.7;">`,
-      `<div><strong style="color:${BRAND_COLORS.text};">Project:</strong> ${escapeHtml(
-        input.projectSlug,
-      )}</div>`,
-      `<div><strong style="color:${BRAND_COLORS.text};">Received:</strong> ${escapeHtml(
-        input.submittedAtLabel,
-      )}</div>`,
-      `<div><strong style="color:${BRAND_COLORS.text};">Reply email from form:</strong> ${escapeHtml(
-        input.replyToEmail || "Not provided",
-      )}</div>`,
-      `</div>`,
-      `<h3 style="margin:0 0 8px;font-size:16px;color:${BRAND_COLORS.text};">Submitted details</h3>`,
-      `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${formatFieldsHtml(
-        input.submittedFields,
-        {
-          labelColor: BRAND_COLORS.text,
-          valueColor: BRAND_COLORS.muted,
-          rowPadding: "10px 0",
-        },
-      )}</table>`,
-      unknownFieldsHtml
-        ? `<h3 style="margin:20px 0 8px;font-size:15px;color:${BRAND_COLORS.text};">Additional details</h3><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${unknownFieldsHtml}</table>`
-        : "",
-    ].join(""),
-    outroHtml:
-      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">Use the reply email from the form details above when responding.</p>`,
-  });
-
-  return {
-    text: textBody,
-    html: htmlBody,
-  };
-}
-
 export async function buildVerificationEmail(
   input: {
     recipientName?: string | null;
@@ -430,430 +303,7 @@ export async function buildVerificationEmail(
     )}</strong>.</p>`,
     actionLabel: "Verify email address",
     actionUrl: input.verificationUrl,
-    outroHtml:
-      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not create this account, you can safely ignore this email.</p>`,
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildNewsletterConfirmationEmail(
-  input: {
-    projectTitle: string;
-    recipientName?: string | null;
-    confirmUrl: string;
-    unsubscribeUrl: string;
-    expiresInSeconds: number;
-    mode: "newsletter" | "waitlist";
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your project";
-  const greetingName = toGreetingName(input.recipientName);
-  const expiresLabel = formatDurationLabel(input.expiresInSeconds);
-  const audienceLabel =
-    input.mode === "waitlist" ? "waitlist signup" : "newsletter signup";
-  const title =
-    input.mode === "waitlist"
-      ? "Confirm your waitlist signup"
-      : "Confirm your newsletter signup";
-  const actionLabel =
-    input.mode === "waitlist"
-      ? "Confirm waitlist signup"
-      : "Confirm newsletter signup";
-  const subject =
-    input.mode === "waitlist"
-      ? `Confirm your waitlist signup for ${projectTitle}`
-      : `Confirm your newsletter signup for ${projectTitle}`;
-
-  const text = joinNonEmptyTextBlocks([
-    `Hello ${greetingName},`,
-    `Please confirm your ${audienceLabel} for ${projectTitle}.`,
-    `Confirm signup: ${input.confirmUrl}`,
-    `This link expires in ${expiresLabel}.`,
-    `If you did not request this, you can ignore this email or cancel the signup here: ${input.unsubscribeUrl}`,
-    buildLegalTextFooter(branding),
-  ]);
-
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `${title} for ${projectTitle}`,
-    title,
-    intro: `Hello ${greetingName}, please confirm your ${audienceLabel} for ${projectTitle}.`,
-    bodyHtml: [
-      `<div style="margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border:1px solid ${BRAND_COLORS.border};border-left:4px solid ${BRAND_COLORS.accent};border-radius:12px;font-size:14px;color:#334155;line-height:1.7;">`,
-      `<div><strong style="color:${BRAND_COLORS.text};">Project:</strong> ${escapeHtml(
-        projectTitle,
-      )}</div>`,
-      `<div><strong style="color:${BRAND_COLORS.text};">Link expires:</strong> ${escapeHtml(
-        expiresLabel,
-      )}</div>`,
-      `</div>`,
-      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request this, you can ignore this email or <a href="${escapeHtml(
-        input.unsubscribeUrl,
-      )}" style="color:${BRAND_COLORS.link};text-decoration:none;font-weight:600;">cancel the signup</a>.</p>`,
-    ].join(""),
-    actionLabel,
-    actionUrl: input.confirmUrl,
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildNewsletterCampaignEmail(
-  input: {
-    projectTitle: string;
-    recipientName?: string | null;
-    subject: string;
-    body: string;
-    unsubscribeUrl?: string | null;
-    mode: "newsletter" | "waitlist";
-    isTest?: boolean;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your project";
-  const greetingName = toGreetingName(input.recipientName);
-  const subject = sanitizeTextLine(input.subject) || `Update from ${projectTitle}`;
-  const body = input.body.trim();
-  const isTest = Boolean(input.isTest);
-  const streamLabel = input.mode === "waitlist" ? "waitlist" : "newsletter";
-  const subjectLine = isTest ? `[Test] ${subject}` : subject;
-
-  const text = joinNonEmptyTextBlocks([
-    `Hello ${greetingName},`,
-    isTest
-      ? `This is a test send for the ${projectTitle} ${streamLabel} campaign.`
-      : `Here is the latest ${streamLabel} update from ${projectTitle}.`,
-    body,
-    input.unsubscribeUrl
-      ? `Unsubscribe: ${input.unsubscribeUrl}`
-      : isTest
-        ? "This was only a test send. No subscriber delivery was triggered."
-        : "",
-    buildLegalTextFooter(branding),
-  ]);
-
-  const bodyLinesHtml = body
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map(
-      (block) =>
-        `<p style="margin:0 0 16px;font-size:15px;line-height:1.8;color:${BRAND_COLORS.text};">${formatRichText(
-          block,
-        )}</p>`,
-    )
-    .join("");
-
-  const testNoteHtml = isTest
-    ? `<div style="margin-bottom:18px;padding:14px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-left:4px solid #F97316;border-radius:12px;font-size:14px;color:#9A3412;line-height:1.7;">This is a test send for the <strong>${escapeHtml(
-        projectTitle,
-      )}</strong> ${escapeHtml(streamLabel)} campaign. No subscriber broadcast has been triggered.</div>`
-    : "";
-  const unsubscribeHtml = input.unsubscribeUrl
-    ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you no longer want these emails, you can <a href="${escapeHtml(
-        input.unsubscribeUrl,
-      )}" style="color:${BRAND_COLORS.link};text-decoration:none;font-weight:600;">unsubscribe here</a>.</p>`
-    : "";
-
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `${subject} from ${projectTitle}`,
-    title: subject,
-    intro: isTest
-      ? `Hello ${greetingName}, this is a test send for the ${projectTitle} ${streamLabel} campaign.`
-      : `Hello ${greetingName}, here is the latest ${streamLabel} update from ${projectTitle}.`,
-    bodyHtml: [testNoteHtml, bodyLinesHtml, unsubscribeHtml].join(""),
-  });
-
-  return {
-    subject: subjectLine,
-    text,
-    html,
-  };
-}
-
-function renderBookingDetailsHtml(input: {
-  bookingDateTimeLabel: string;
-  partySize: number;
-  guestName?: string | null;
-  guestEmail?: string | null;
-  guestPhone?: string | null;
-  notes?: string | null;
-}): string {
-  const rows = [
-    `<div><strong style="color:${BRAND_COLORS.text};">When:</strong> ${escapeHtml(
-      input.bookingDateTimeLabel,
-    )}</div>`,
-    `<div><strong style="color:${BRAND_COLORS.text};">Party size:</strong> ${escapeHtml(
-      String(input.partySize),
-    )}</div>`,
-    input.guestName
-      ? `<div><strong style="color:${BRAND_COLORS.text};">Guest:</strong> ${escapeHtml(
-          sanitizeTextLine(input.guestName),
-        )}</div>`
-      : "",
-    input.guestEmail
-      ? `<div><strong style="color:${BRAND_COLORS.text};">Email:</strong> ${escapeHtml(
-          sanitizeTextLine(input.guestEmail),
-        )}</div>`
-      : "",
-    input.guestPhone
-      ? `<div><strong style="color:${BRAND_COLORS.text};">Phone:</strong> ${escapeHtml(
-          sanitizeTextLine(input.guestPhone),
-        )}</div>`
-      : "",
-    input.notes
-      ? `<div><strong style="color:${BRAND_COLORS.text};">Notes:</strong> ${formatRichText(
-          input.notes,
-        )}</div>`
-      : "",
-  ].filter(Boolean);
-
-  return [
-    `<div style="margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border:1px solid ${BRAND_COLORS.border};border-left:4px solid ${BRAND_COLORS.accent};border-radius:12px;font-size:14px;color:#334155;line-height:1.8;">`,
-    rows.join(""),
-    `</div>`,
-  ].join("");
-}
-
-export async function buildGuestBookingConfirmationEmail(
-  input: {
-    projectTitle: string;
-    guestName?: string | null;
-    partySize: number;
-    bookingDateTimeLabel: string;
-    cancelUrl: string;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your restaurant";
-  const greetingName = toGreetingName(input.guestName);
-  const subject = `Your table booking is confirmed for ${projectTitle}`;
-  const text = joinNonEmptyTextBlocks([
-    `Hello ${greetingName},`,
-    `Your table booking for ${projectTitle} is confirmed.`,
-    `When: ${input.bookingDateTimeLabel}`,
-    `Party size: ${input.partySize}`,
-    `Cancel booking: ${input.cancelUrl}`,
-    buildLegalTextFooter(branding),
-  ]);
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `Your booking is confirmed for ${projectTitle}`,
-    title: "Booking confirmed",
-    intro: `Hello ${greetingName}, your table booking for ${projectTitle} is confirmed.`,
-    bodyHtml: [
-      renderBookingDetailsHtml({
-        bookingDateTimeLabel: input.bookingDateTimeLabel,
-        partySize: input.partySize,
-      }),
-      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">If your plans change, you can cancel this booking using the link below.</p>`,
-    ].join(""),
-    actionLabel: "Cancel booking",
-    actionUrl: input.cancelUrl,
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildGuestBookingCancellationEmail(
-  input: {
-    projectTitle: string;
-    guestName?: string | null;
-    partySize: number;
-    bookingDateTimeLabel: string;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your restaurant";
-  const greetingName = toGreetingName(input.guestName);
-  const subject = `Your table booking was cancelled for ${projectTitle}`;
-  const text = joinNonEmptyTextBlocks([
-    `Hello ${greetingName},`,
-    `Your table booking for ${projectTitle} has been cancelled.`,
-    `When: ${input.bookingDateTimeLabel}`,
-    `Party size: ${input.partySize}`,
-    buildLegalTextFooter(branding),
-  ]);
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `Your booking was cancelled for ${projectTitle}`,
-    title: "Booking cancelled",
-    intro: `Hello ${greetingName}, your table booking for ${projectTitle} has been cancelled.`,
-    bodyHtml: renderBookingDetailsHtml({
-      bookingDateTimeLabel: input.bookingDateTimeLabel,
-      partySize: input.partySize,
-    }),
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildStaffNewBookingEmail(
-  input: {
-    projectTitle: string;
-    bookingDateTimeLabel: string;
-    partySize: number;
-    guestName: string;
-    guestEmail: string;
-    guestPhone: string;
-    notes?: string | null;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your restaurant";
-  const subject = `New table booking for ${projectTitle}`;
-  const text = joinNonEmptyTextBlocks([
-    `A new table booking was confirmed for ${projectTitle}.`,
-    [
-      `When: ${input.bookingDateTimeLabel}`,
-      `Party size: ${input.partySize}`,
-      `Guest: ${sanitizeTextLine(input.guestName)}`,
-      `Email: ${sanitizeTextLine(input.guestEmail)}`,
-      `Phone: ${sanitizeTextLine(input.guestPhone)}`,
-      input.notes ? `Notes: ${input.notes}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    buildLegalTextFooter(branding),
-  ]);
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `New table booking for ${projectTitle}`,
-    title: "New table booking",
-    intro: `A new booking was confirmed for ${projectTitle}.`,
-    bodyHtml: renderBookingDetailsHtml({
-      bookingDateTimeLabel: input.bookingDateTimeLabel,
-      partySize: input.partySize,
-      guestName: input.guestName,
-      guestEmail: input.guestEmail,
-      guestPhone: input.guestPhone,
-      notes: input.notes,
-    }),
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildStaffBookingCancellationEmail(
-  input: {
-    projectTitle: string;
-    bookingDateTimeLabel: string;
-    partySize: number;
-    guestName: string;
-    guestEmail: string;
-    guestPhone: string;
-    cancelledBy: "guest" | "staff";
-    notes?: string | null;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectTitle = sanitizeTextLine(input.projectTitle) || "your restaurant";
-  const cancelledByLabel =
-    input.cancelledBy === "guest" ? "The guest cancelled this booking." : "A staff member cancelled this booking.";
-  const subject = `Table booking cancelled for ${projectTitle}`;
-  const text = joinNonEmptyTextBlocks([
-    `A table booking for ${projectTitle} was cancelled.`,
-    cancelledByLabel,
-    [
-      `When: ${input.bookingDateTimeLabel}`,
-      `Party size: ${input.partySize}`,
-      `Guest: ${sanitizeTextLine(input.guestName)}`,
-      `Email: ${sanitizeTextLine(input.guestEmail)}`,
-      `Phone: ${sanitizeTextLine(input.guestPhone)}`,
-      input.notes ? `Notes: ${input.notes}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    buildLegalTextFooter(branding),
-  ]);
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `Table booking cancelled for ${projectTitle}`,
-    title: "Booking cancelled",
-    intro: cancelledByLabel,
-    bodyHtml: renderBookingDetailsHtml({
-      bookingDateTimeLabel: input.bookingDateTimeLabel,
-      partySize: input.partySize,
-      guestName: input.guestName,
-      guestEmail: input.guestEmail,
-      guestPhone: input.guestPhone,
-      notes: input.notes,
-    }),
-  });
-
-  return {
-    subject,
-    text,
-    html,
-  };
-}
-
-export async function buildContactRecipientVerificationEmail(
-  input: {
-    projectSlug: string;
-    verificationUrl: string;
-    expiresInSeconds: number;
-  },
-  brandingOverride?: EmailTemplateBranding,
-): Promise<EmailTemplate> {
-  const branding = await resolveBrandingOverride(brandingOverride);
-  const projectSlug = sanitizeTextLine(input.projectSlug) || "your project";
-  const expiresLabel = formatDurationLabel(input.expiresInSeconds);
-  const subject = `Verify contact recipient for ${projectSlug}`;
-  const text = joinNonEmptyTextBlocks([
-    "Please verify this email address to receive contact form notifications.",
-    `Project: ${projectSlug}`,
-    `Verify recipient email: ${input.verificationUrl}`,
-    `For your security, this link expires in ${expiresLabel}.`,
-    "If you did not request this, you can ignore this email.",
-    buildLegalTextFooter(branding),
-  ]);
-  const html = renderHtmlLayout({
-    branding,
-    preheader: `Verify contact recipient for ${projectSlug}`,
-    title: "Verify recipient email",
-    intro: "Please confirm this email address for contact form notifications.",
-    bodyHtml: joinNonEmptyTextBlocks([
-      `<p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};"><strong style="color:${BRAND_COLORS.text};">Project:</strong> ${escapeHtml(
-        projectSlug,
-      )}</p>`,
-      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">For your security, this link expires in <strong style="color:${BRAND_COLORS.text};">${escapeHtml(
-        expiresLabel,
-      )}</strong>.</p>`,
-    ]),
-    actionLabel: "Verify recipient email",
-    actionUrl: input.verificationUrl,
-    outroHtml:
-      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request this, you can ignore this email.</p>`,
+    outroHtml: `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not create this account, you can safely ignore this email.</p>`,
   });
 
   return {
@@ -880,7 +330,8 @@ export async function buildOrganizationInvitationEmail(
   const branding = await resolveBrandingOverride(brandingOverride);
   const greetingName = toGreetingName(input.recipientName);
   const productName = resolveProductName(branding);
-  const organizationName = sanitizeTextLine(input.organizationName) || "your organization";
+  const organizationName =
+    sanitizeTextLine(input.organizationName) || "your organization";
   const inviterLabel =
     sanitizeTextLine(input.inviterName || "") ||
     sanitizeTextLine(input.inviterEmail || "") ||
@@ -896,7 +347,9 @@ export async function buildOrganizationInvitationEmail(
   const text = joinNonEmptyTextBlocks([
     `Hello ${greetingName},`,
     `${inviterLabel} invited you to join ${organizationName} on ${productName}.`,
-    [`Role: ${sanitizeTextLine(input.roleLabel)}`, projectLine].filter(Boolean).join("\n"),
+    [`Role: ${sanitizeTextLine(input.roleLabel)}`, projectLine]
+      .filter(Boolean)
+      .join("\n"),
     accountStep,
     `Accept invitation: ${input.acceptUrl}`,
     `For your security, this link expires in ${expiresLabel}.`,
@@ -934,10 +387,11 @@ export async function buildOrganizationInvitationEmail(
     ]
       .filter(Boolean)
       .join(""),
-    actionLabel: input.existingAccount ? "Sign in and accept invite" : "Accept invitation",
+    actionLabel: input.existingAccount
+      ? "Sign in and accept invite"
+      : "Accept invitation",
     actionUrl: input.acceptUrl,
-    outroHtml:
-      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you were not expecting this invitation, you can ignore this email.</p>`,
+    outroHtml: `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you were not expecting this invitation, you can ignore this email.</p>`,
   });
 
   return {
@@ -978,8 +432,7 @@ export async function buildPasswordResetEmail(
     )}</strong>.</p>`,
     actionLabel: "Set a new password",
     actionUrl: input.resetUrl,
-    outroHtml:
-      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request a password reset, you can ignore this email.</p>`,
+    outroHtml: `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request a password reset, you can ignore this email.</p>`,
   });
 
   return {
