@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { calculateUsageFromSessionMessages } from "./render/sessionMetrics";
+import { deriveOpencodeControllerState } from "./controllerState";
 import { useOpencodeChat } from "./provider";
 import { sanitizeSessionError } from "./sync/errorPolicy";
 import { resolveCanonicalUserMessageId } from "./sync/optimisticMessages";
 import {
-  buildDerivedSessionError,
-  deriveChatActivityState,
-  findStaleRunningToolState,
   isActiveSessionStatus,
   isTerminalSessionStatusType,
-  selectMostRecentAttentionSessionId,
 } from "./runtime";
-import {
-  sessionPermissionRequest,
-  sessionQuestionRequest,
-} from "./questions/requestTree";
 import type { SanitizedSessionError } from "./sync/errorPolicy";
 
 type ControllerModel = {
@@ -104,88 +96,6 @@ export function useOpencodeChatController({
     },
     [providerSetSelectedSessionId],
   );
-
-  const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedSessionId) ?? null,
-    [sessions, selectedSessionId],
-  );
-  const attentionSessionId = useMemo(
-    () =>
-      selectMostRecentAttentionSessionId({
-        sessions,
-        sessionStatusById,
-        questionRequestsBySessionId,
-        permissionRequestsBySessionId,
-      }),
-    [
-      permissionRequestsBySessionId,
-      questionRequestsBySessionId,
-      sessionStatusById,
-      sessions,
-    ],
-  );
-  const activeQuestionRequest = useMemo(
-    () =>
-      sessionQuestionRequest(
-        sessions,
-        questionRequestsBySessionId,
-        selectedSessionId ?? attentionSessionId,
-      ) ?? null,
-    [attentionSessionId, questionRequestsBySessionId, selectedSessionId, sessions],
-  );
-  const activePermissionRequest = useMemo(
-    () =>
-      sessionPermissionRequest(
-        sessions,
-        permissionRequestsBySessionId,
-        selectedSessionId ?? attentionSessionId,
-      ) ?? null,
-    [
-      attentionSessionId,
-      permissionRequestsBySessionId,
-      selectedSessionId,
-      sessions,
-    ],
-  );
-  const hasBlockingRequest = Boolean(
-    activeQuestionRequest || activePermissionRequest,
-  );
-  const isReverted = Boolean(selectedSession?.revert);
-  const usage = useMemo(
-    () => calculateUsageFromSessionMessages(selectedMessages),
-    [selectedMessages],
-  );
-  const staleRunningToolState = useMemo(
-    () => findStaleRunningToolState(selectedMessages),
-    [selectedMessages],
-  );
-  const terminalPendingAssistantMessageId = useMemo(() => {
-    if (
-      !selectedSessionId ||
-      suppressedSessionId === selectedSessionId ||
-      !isTerminalSessionStatusType(sessionStatusType)
-    ) {
-      return null;
-    }
-
-    for (let index = selectedMessages.length - 1; index >= 0; index -= 1) {
-      const message = selectedMessages[index]?.info;
-      if (message?.role !== "assistant" || !message.id) {
-        continue;
-      }
-      if (typeof message.time?.completed === "number") {
-        continue;
-      }
-      return message.id;
-    }
-
-    return null;
-  }, [
-    selectedMessages,
-    selectedSessionId,
-    sessionStatusType,
-    suppressedSessionId,
-  ]);
 
   const buildRunTaskPayload = useCallback(
     (task: string, sessionId?: string | null) => ({
@@ -287,6 +197,61 @@ export function useOpencodeChatController({
       toast.error("Permission response failed", { description: error.message });
     },
   });
+
+  const controllerState = useMemo(
+    () =>
+      deriveOpencodeControllerState({
+        sessions,
+        selectedSessionId,
+        selectedMessages,
+        sessionStatusById,
+        questionRequestsBySessionId,
+        permissionRequestsBySessionId,
+        selectedSessionStatus: currentSessionStatus,
+        selectedSessionIsError: sessionMessagesIsError,
+        selectedSessionError: sessionMessagesError,
+        connectionState: connection.state,
+        connectionMessage: connection.message,
+        hasOptimisticUserMessage,
+        isSubmitting:
+          createSessionMutation.isPending ||
+          runTaskMutation.isPending ||
+          isSending,
+        suppressedSessionId,
+      }),
+    [
+      connection.message,
+      connection.state,
+      createSessionMutation.isPending,
+      currentSessionStatus,
+      hasOptimisticUserMessage,
+      isSending,
+      permissionRequestsBySessionId,
+      questionRequestsBySessionId,
+      runTaskMutation.isPending,
+      selectedMessages,
+      selectedSessionId,
+      sessionMessagesError,
+      sessionMessagesIsError,
+      sessionStatusById,
+      sessions,
+      suppressedSessionId,
+    ],
+  );
+  const {
+    selectedSession,
+    attentionSessionId,
+    activeQuestionRequest,
+    activePermissionRequest,
+    hasBlockingRequest,
+    isReverted,
+    usage,
+    staleRunningToolState,
+    terminalPendingAssistantMessageId,
+    derivedSessionError,
+    activityState,
+    sessionShowsRunActivity,
+  } = controllerState;
 
   const dispatchTaskToSession = useCallback(
     async (task: string, targetSessionId: string) => {
@@ -591,30 +556,6 @@ export function useOpencodeChatController({
     [projectSlug, respondPermissionMutation, version],
   );
 
-  const derivedSessionError = useMemo(
-    () =>
-      buildDerivedSessionError({
-        selectedSessionId,
-        messages: selectedMessages,
-        sessionMessagesIsError,
-        sessionMessagesError,
-        sessionStatus: currentSessionStatus,
-        connectionState: connection.state,
-        connectionMessage: connection.message,
-        suppressPendingAssistant: suppressedSessionId === selectedSessionId,
-      }),
-    [
-      selectedSessionId,
-      selectedMessages,
-      sessionMessagesIsError,
-      sessionMessagesError,
-      currentSessionStatus,
-      connection.state,
-      connection.message,
-      suppressedSessionId,
-    ],
-  );
-
   const sessionError =
     localSessionError ??
     (derivedSessionError &&
@@ -628,32 +569,6 @@ export function useOpencodeChatController({
       setDismissedDerivedErrorKey(derivedSessionError.key);
     }
   }, [derivedSessionError]);
-
-  const activityState = useMemo(
-    () =>
-      deriveChatActivityState({
-        messages: selectedMessages,
-        sessionStatus: currentSessionStatus,
-        hasOptimisticUserMessage,
-        isSubmitting:
-          createSessionMutation.isPending ||
-          runTaskMutation.isPending ||
-          isSending,
-        suppressPendingAssistant: suppressedSessionId === selectedSessionId,
-      }),
-    [
-      selectedMessages,
-      currentSessionStatus,
-      hasOptimisticUserMessage,
-      createSessionMutation.isPending,
-      runTaskMutation.isPending,
-      isSending,
-      selectedSessionId,
-      suppressedSessionId,
-    ],
-  );
-  const sessionShowsRunActivity =
-    activityState.isStreaming || isActiveSessionStatus(currentSessionStatus);
 
   useEffect(() => {
     if (

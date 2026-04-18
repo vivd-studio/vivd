@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   BellRing,
   CalendarDays,
   Loader2,
+  Monitor,
   NotebookPen,
   Settings2,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ROUTES } from "@/app/router";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import {
@@ -27,7 +31,11 @@ import { PLUGIN_READ_REFETCH_INTERVAL_MS } from "./tableBookingProjectPage/const
 import { TableBookingBookingsTab } from "./tableBookingProjectPage/BookingsTab";
 import { TableBookingCalendarTab } from "./tableBookingProjectPage/CalendarTab";
 import { TableBookingInstallTab } from "./tableBookingProjectPage/InstallTab";
-import { MetricCard, SectionCard } from "./tableBookingProjectPage/shared";
+import {
+  MetricCard,
+  SectionCard,
+  StatInline,
+} from "./tableBookingProjectPage/shared";
 import { TableBookingSetupTab } from "./tableBookingProjectPage/SetupTab";
 import type {
   SettingsTab,
@@ -43,6 +51,7 @@ import {
   formatDraftError,
   getMonthRange,
   serializeComparableConfig,
+  validateReservationDraft,
 } from "./tableBookingProjectPage/utils";
 import { useTableBookingCapacityAdjustmentEditor } from "./tableBookingProjectPage/useCapacityAdjustmentEditor";
 import { useTableBookingConfigDraft } from "./tableBookingProjectPage/useConfigDraft";
@@ -385,12 +394,27 @@ export default function TableBookingProjectPage({
   };
 
   const saveReservation = () => {
+    const validation = validateReservationDraft({
+      date: reservationEditor.reservationDate,
+      time: reservationEditor.reservationTime,
+      partySize: reservationEditor.reservationPartySize,
+      name: reservationEditor.reservationName,
+      email: reservationEditor.reservationEmail,
+      phone: reservationEditor.reservationPhone,
+      sendGuestNotification: reservationEditor.sendGuestNotification,
+    });
+    if (Object.keys(validation.errors).length > 0) {
+      reservationEditor.setReservationErrors(validation.errors);
+      return;
+    }
+
+    reservationEditor.clearReservationErrors();
     saveReservationMutation.mutate({
       slug: projectSlug,
       bookingId: reservationEditor.editingBookingId ?? undefined,
       date: reservationEditor.reservationDate,
       time: reservationEditor.reservationTime,
-      partySize: Number.parseInt(reservationEditor.reservationPartySize || "0", 10),
+      partySize: validation.partySize,
       name: reservationEditor.reservationName.trim(),
       email: reservationEditor.reservationEmail.trim(),
       phone: reservationEditor.reservationPhone.trim(),
@@ -478,6 +502,16 @@ export default function TableBookingProjectPage({
               {hasUnsavedChanges ? (
                 <Badge variant="secondary">Unsaved changes</Badge>
               ) : null}
+              <Button variant="outline" asChild>
+                <Link
+                  to={ROUTES.PROJECT_PLUGIN_OPERATOR(projectSlug, "table_booking")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Monitor className="h-4 w-4" />
+                  Open service mode
+                </Link>
+              </Button>
               <Button
                 onClick={handleSaveConfig}
                 disabled={
@@ -570,26 +604,41 @@ export default function TableBookingProjectPage({
               </div>
             ) : null}
 
-            <section className="grid gap-4 lg:grid-cols-3">
-              <MetricCard
-                label="Bookings today"
-                value={String(summary?.counts.bookingsToday ?? 0)}
-                note={`${summary?.counts.coversToday ?? 0} covers today`}
+            <section className="flex flex-wrap items-stretch gap-x-6 gap-y-3 rounded-xl border bg-card px-4 py-3">
+              <StatInline
                 icon={CalendarDays}
+                label="Today"
+                value={String(summary?.counts.bookingsToday ?? 0)}
+                note={`${summary?.counts.coversToday ?? 0} covers`}
               />
-              <MetricCard
+              <Separator
+                orientation="vertical"
+                className="hidden h-auto sm:block"
+              />
+              <StatInline
+                icon={Users}
                 label="Upcoming"
                 value={String(summary?.counts.upcomingBookings ?? 0)}
-                note={`${summary?.counts.upcomingCovers ?? 0} covers in the pipeline`}
-                icon={Users}
+                note={`${summary?.counts.upcomingCovers ?? 0} covers`}
               />
-              <MetricCard
-                label="Recent issues"
+              <Separator
+                orientation="vertical"
+                className="hidden h-auto sm:block"
+              />
+              <StatInline
+                icon={BellRing}
+                label="Issues"
                 value={String(
                   (summary?.counts.cancelled ?? 0) + (summary?.counts.noShow ?? 0),
                 )}
                 note={`${summary?.counts.cancelled ?? 0} cancelled · ${summary?.counts.noShow ?? 0} no-show`}
-                icon={BellRing}
+                tone={
+                  (summary?.counts.cancelled ?? 0) +
+                    (summary?.counts.noShow ?? 0) >
+                  0
+                    ? "warning"
+                    : "default"
+                }
               />
             </section>
 

@@ -4,7 +4,11 @@ import {
 } from "./LimiterStore";
 
 type ControlPlaneRateLimitAction =
-  | "auth"
+  | "auth_mutation"
+  | "auth_sign_in"
+  | "auth_sign_up"
+  | "auth_password_reset"
+  | "auth_verification"
   | "project_generation"
   | "project_publish"
   | "zip_import";
@@ -140,31 +144,106 @@ export class ControlPlaneRateLimitService {
 
   private getMode(action: ControlPlaneRateLimitAction): RateLimitMode {
     const specificEnvName = `VIVD_CONTROL_PLANE_RATE_LIMIT_${action.toUpperCase()}_MODE`;
-    const specific = readModeEnv(process.env[specificEnvName], "shadow");
     if (process.env[specificEnvName]) {
-      return specific;
+      return readModeEnv(
+        process.env[specificEnvName],
+        this.getDefaultMode(action),
+      );
     }
 
     return readModeEnv(
       process.env.VIVD_CONTROL_PLANE_RATE_LIMIT_MODE,
-      "shadow",
+      this.getDefaultMode(action),
     );
+  }
+
+  private getDefaultMode(action: ControlPlaneRateLimitAction): RateLimitMode {
+    switch (action) {
+      case "auth_sign_in":
+      case "auth_sign_up":
+      case "zip_import":
+        return "enforce";
+      default:
+        return "shadow";
+    }
   }
 
   private getBudgets(options: CheckRateLimitOptions): BudgetSpec[] {
     switch (options.action) {
-      case "auth":
+      case "auth_sign_in":
         return this.compactBudgets([
           options.requestIp
             ? {
                 scope: "ip",
                 subject: options.requestIp,
                 limit: readPositiveIntEnv(
-                  "VIVD_AUTH_RATE_LIMIT_IP_PER_MINUTE",
+                  "VIVD_AUTH_SIGN_IN_RATE_LIMIT_IP_PER_MINUTE",
+                  20,
+                ),
+                windowMs: ONE_MINUTE_MS,
+                envName: "VIVD_AUTH_SIGN_IN_RATE_LIMIT_IP_PER_MINUTE",
+              }
+            : null,
+        ]);
+      case "auth_sign_up":
+        return this.compactBudgets([
+          options.requestIp
+            ? {
+                scope: "ip",
+                subject: options.requestIp,
+                limit: readPositiveIntEnv(
+                  "VIVD_AUTH_SIGN_UP_RATE_LIMIT_IP_PER_10_MINUTES",
+                  10,
+                ),
+                windowMs: TEN_MINUTES_MS,
+                envName: "VIVD_AUTH_SIGN_UP_RATE_LIMIT_IP_PER_10_MINUTES",
+              }
+            : null,
+        ]);
+      case "auth_password_reset":
+        return this.compactBudgets([
+          options.requestIp
+            ? {
+                scope: "ip",
+                subject: options.requestIp,
+                limit: readPositiveIntEnv(
+                  "VIVD_AUTH_PASSWORD_RESET_RATE_LIMIT_IP_PER_10_MINUTES",
+                  12,
+                ),
+                windowMs: TEN_MINUTES_MS,
+                envName:
+                  "VIVD_AUTH_PASSWORD_RESET_RATE_LIMIT_IP_PER_10_MINUTES",
+              }
+            : null,
+        ]);
+      case "auth_verification":
+        return this.compactBudgets([
+          options.requestIp
+            ? {
+                scope: "ip",
+                subject: options.requestIp,
+                limit: readPositiveIntEnv(
+                  "VIVD_AUTH_VERIFICATION_RATE_LIMIT_IP_PER_10_MINUTES",
+                  20,
+                ),
+                windowMs: TEN_MINUTES_MS,
+                envName:
+                  "VIVD_AUTH_VERIFICATION_RATE_LIMIT_IP_PER_10_MINUTES",
+              }
+            : null,
+        ]);
+      case "auth_mutation":
+        return this.compactBudgets([
+          options.requestIp
+            ? {
+                scope: "ip",
+                subject: options.requestIp,
+                limit: readPositiveIntEnv(
+                  "VIVD_AUTH_MUTATION_RATE_LIMIT_IP_PER_MINUTE",
                   60,
                 ),
                 windowMs: ONE_MINUTE_MS,
-                envName: "VIVD_AUTH_RATE_LIMIT_IP_PER_MINUTE",
+                envName: "VIVD_AUTH_MUTATION_RATE_LIMIT_IP_PER_MINUTE",
               }
             : null,
         ]);

@@ -12,7 +12,6 @@ import { initializeGitRepository } from "../generator/gitUtils";
 import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
 import { buildService } from "../services/project/BuildService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
-import { controlPlaneRateLimitService } from "../services/system/ControlPlaneRateLimitService";
 import {
   deleteProjectVersionArtifactsFromBucket,
   uploadProjectPreviewToBucket,
@@ -363,25 +362,6 @@ export function createImportRouter(deps: {
         requestedOrganizationId || requestContext.organizationId;
       if (!organizationId) {
         return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const rateLimitDecision = await controlPlaneRateLimitService.checkAction({
-        action: "zip_import",
-        organizationId,
-        requestIp: requestContext.requestIp,
-        requestPath: req.path,
-        userId: session.user.id,
-      });
-      if (!rateLimitDecision.allowed) {
-        if (rateLimitDecision.retryAfterSeconds > 0) {
-          res.setHeader(
-            "Retry-After",
-            String(rateLimitDecision.retryAfterSeconds),
-          );
-        }
-        return res.status(429).json({
-          error: "Import budget exceeded. Please wait a moment and retry.",
-        });
       }
 
       // On tenant-pinned hosts, do not allow overriding the org via query params.

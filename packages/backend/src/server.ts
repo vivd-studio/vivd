@@ -23,7 +23,11 @@ import { publishService } from "./services/publish/PublishService";
 import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
 import { instanceSelfHostAdminService } from "./services/system/InstanceSelfHostAdminService";
 import { reloadCaddyConfig } from "./services/system/CaddyAdminService";
-import { controlPlaneRateLimitService } from "./services/system/ControlPlaneRateLimitService";
+import {
+  controlPlaneRateLimitService,
+  type ControlPlaneRateLimitAction,
+} from "./services/system/ControlPlaneRateLimitService";
+import { classifyAuthRateLimitAction } from "./services/system/AuthRateLimitPolicy";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,7 +57,7 @@ function shouldRateLimitAuthRequest(req: express.Request): boolean {
 }
 
 async function enforceExpressRateLimit(options: {
-  action: "auth" | "zip_import";
+  action: ControlPlaneRateLimitAction;
   message: string;
   organizationId?: string | null;
   req: express.Request;
@@ -179,8 +183,9 @@ app.use(express.json({ limit: "50mb" }));
 const authHandler = toNodeHandler(auth);
 app.all("/vivd-studio/api/auth/*path", async (req, res) => {
   if (shouldRateLimitAuthRequest(req)) {
+    const authAction = classifyAuthRateLimitAction(req.path);
     const allowed = await enforceExpressRateLimit({
-      action: "auth",
+      action: authAction,
       message: "Auth request budget exceeded. Please wait a moment and retry.",
       req,
       res,

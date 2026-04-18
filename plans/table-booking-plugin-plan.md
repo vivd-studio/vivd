@@ -2,8 +2,8 @@
 
 Date: 2026-04-16  
 Owner: plugins/product/backend/frontend  
-Status: core v1 shipped; next operator-capacity block planned  
-Last updated: 2026-04-17
+Status: core v1 shipped; operator-capacity desk shipped; fullscreen operator view planned (UX-expanded)  
+Last updated: 2026-04-18
 
 ## Implementation Note
 
@@ -15,17 +15,16 @@ The initial v1 is now live enough to cover the public booking path and a usable 
 - calendar-first project page with booking search and basic status actions
 - transactional guest/staff emails and generated install snippets
 
-That said, the current dashboard still manages the **online booking flow** better than the venue's **full working capacity**.
+That said, the current dashboard still behaves more like a good control-plane admin page than a live in-restaurant service station.
 
 The biggest remaining production gaps are:
 
-- no manual staff-entered reservations for phone or walk-in demand
-- no edit/reschedule flow when a guest calls the restaurant
-- no capacity adjustments that let operators hold back or reduce covers without rewriting the base schedule
-- no occupancy-first view of booked vs remaining covers per service window
-- no CSV export or equivalent operational handoff from the booking list
+- no fullscreen operator route that can stay open through service without the normal app chrome
+- no at-distance, high-contrast presentation mode tuned for restaurant lighting and quick scanning
+- no today-and-now-first operator layout for arrivals, occupancy, and quick updates
+- no service-screen-specific reliability affordances such as visible last-refresh state and degraded-mode messaging
 
-The recommended next implementation block should close those operator-capacity gaps before moving on to waitlist, reminders, multi-room inventory, or external sync.
+The recommended next implementation block should close those live-operation gaps before moving on to waitlist, reminders, multi-room inventory, or external sync.
 
 ## Goal
 
@@ -864,6 +863,159 @@ This block is done when all of the following are true:
 3. A project operator can reduce, hold back, or close capacity for a specific service window without rewriting the base weekly schedule.
 4. The dashboard shows enough occupancy state to manage a service day: booked covers, effective capacity, remaining covers, and filtered booking export.
 5. The plugin still deliberately stops short of table maps, multi-room inventory, waitlists, reminders, and third-party reservation sync.
+
+## Recommended Next Work Block: Fullscreen Operator View
+
+Treat the next slice as a dedicated **live service mode** for restaurant staff, not as another settings tab.
+
+Status: planned on 2026-04-18.
+
+### Goal
+
+Let a restaurant keep Table Booking open on a host stand or service station during live service:
+
+- fullscreen by default, outside the normal dashboard layout chrome
+- optimized for quick scanning from a short distance
+- safe to leave open for a whole shift with visible refresh/error state
+- focused on today's occupancy and upcoming arrivals instead of setup/install tasks
+
+The current operator-capacity desk already has the right data and mutations. This slice should change the operating surface, not rebuild the booking model.
+
+### Why this should be next
+
+- the plugin can now represent online, phone, walk-in, and staff-entered demand, but the current page still reads like an admin workspace
+- restaurants need a screen they can leave open during service without exposing setup tabs, plugin install copy, or shell navigation
+- live service needs stronger readability than the current muted control-plane presentation, especially in mixed or harsh lighting
+- this is a higher-value next step than jumping to waitlists or table maps because it makes the existing booking/capacity work usable in the room
+
+### In Scope
+
+#### 1. Route and ownership plan
+
+- add a fullscreen operator route outside `Layout`, guarded the same way as other project fullscreen surfaces
+- use a generic host-mounted plugin route, for example `/vivd-studio/projects/:projectSlug/plugins/:pluginId/operator`, instead of a table-booking-only host special case
+- extend the frontend plugin registry with an optional plugin-owned operator/fullscreen page export so the host stays generic while the table-booking UI stays plugin-owned
+- add an `Open operator view` entry point from the existing `TableBookingProjectPage`
+
+#### 2. Live operator surface
+
+- default to `today` and bias the layout toward `now`, `next arrivals`, and `selected service window`
+- keep the existing calendar/day-capacity model, but present it as a service board rather than a settings tab
+- show current and upcoming service windows with booked covers, effective capacity, remaining covers, and active adjustments
+- keep quick actions close to the data: add reservation, edit reservation, cancel, mark no-show, mark completed
+- keep manual reservation and capacity-adjustment drawers/sheets available from the operator surface
+- keep setup, install, and long-range configuration work on the normal plugin page instead of duplicating it here
+
+#### 3. Service presentation mode (contrast + lighting)
+
+Restaurant lighting is not uniform. Brunch is bright, dinner is dim, and the same stand may get both in one day. Treat "high contrast" as a **presentation mode**, not a single toggle.
+
+- expose three presentation modes, driven by the same operator-view-local CSS-variable layer:
+  - `normal` — matches the rest of the dashboard
+  - `hc-light` — boosted contrast for bright/harsh lighting
+  - `hc-dark` — boosted contrast for dim evening service (high contrast on a dark surface, so the screen is not a glare source)
+- persist the selected mode in browser storage for that surface
+- support deep-link/default activation through a query flag such as `?mode=hc-dark`, and honor `prefers-contrast: more` and `prefers-color-scheme: dark` when available as the initial defaults
+- implement all three modes as operator-view-local CSS variables/classes rather than a global theme-contract rewrite
+- increase contrast on text, borders, focus rings, and action states across all non-normal modes; reduce dependence on muted text
+- make status readable without color alone by keeping explicit labels/icons and stronger structural separation
+- commit to explicit sizing rather than "slightly larger":
+  - minimum touch target 44px; primary service actions 48px
+  - reservation row height large enough to read name + time + party size from roughly 1.5m away
+  - target viewport is a 10–13" tablet in landscape at a host stand; the layout must stay usable in portrait without horizontal scroll
+
+#### 3b. Destructive-action safety at the stand
+
+Staff tap fast, often with messy or gloved hands. Modal confirms slow service; missing undo is worse.
+
+- for `cancel_booking`, `mark_no_show`, and `mark_completed`, perform the action optimistically and show a persistent undo toast for ~8 seconds
+- undo should reverse the status change through the existing action surface, not by creating a new booking
+- only show a modal confirm when the action is irreversible in context (for example cancelling past the guest cancellation cutoff with notifications enabled)
+- keep destructive and non-destructive actions visually distinct even in HC modes — do not rely on a red tint alone
+
+#### 3c. Incoming-booking awareness
+
+Audio is intentionally out of scope, but staff still need to notice a new online booking between polls.
+
+- track the most recent booking id/timestamp the operator has seen on this surface
+- on each refresh, show a "N new since you looked" pill near the arrivals list when the set grows
+- pulse or tint the new rows for a few seconds after they appear, then settle to the normal row style
+- clearing the indicator is automatic once the operator interacts with the arrivals list
+- do not use this pattern for edits or cancellations originating from the same operator session
+
+#### 3d. Screen wake and session durability
+
+A stand tablet left open for a full shift will otherwise sleep, lock, or re-auth.
+
+- request a Screen Wake Lock (`navigator.wakeLock.request("screen")`) when the operator surface is visible, and release on unmount / tab hide
+- re-acquire the lock after visibility changes (the browser drops it when the tab goes background)
+- surface a small, dismissible note if the wake lock request fails (some browsers require a user gesture or HTTPS), so operators know the screen may sleep and can keep settings open as a workaround
+
+#### 3e. Freshness signaling
+
+The `last updated` timestamp alone is weak at scanning distance.
+
+- color the timestamp by staleness relative to the polling cadence:
+  - fresh (<1 poll interval): neutral
+  - warm (1–2 intervals): amber
+  - stale (>2 intervals or refresh error): red, plus the degraded banner
+- pair the timestamp with a small relative label (`just now`, `32s ago`) for quick read
+- the manual refresh control should live next to the timestamp, not in a settings menu
+
+#### 3f. Quick-add defaults for the host stand
+
+Manual reservation is the hot path during phone calls.
+
+- opening the "add reservation" drawer from the operator surface should pre-fill:
+  - date = today
+  - time = next available slot in the current/next service window
+  - party size = 2
+  - source channel = `phone`
+  - send-guest-notification = off by default for phone entries (staff will confirm verbally)
+- keep the drawer's focus on the name field so the operator can start typing immediately
+- preserve any in-progress drawer across background data refreshes
+
+#### 4. Live refresh and reliability
+
+- reuse the current polling model as the first slice instead of introducing websockets
+- keep the current `30s` data refresh baseline, but add a visible `last updated` timestamp plus a manual refresh action
+- show a clear degraded/offline banner when a refresh fails so operators know the board may be stale
+- preserve open drawers/forms across background refreshes where practical
+- keep live updates scoped to today/day-capacity and booking lists rather than reloading unrelated setup/install data
+
+#### 5. Frontend / implementation plan
+
+- extract the current booking/capacity query orchestration out of `TableBookingProjectPage.tsx` into a shared hook or model so the standard page and fullscreen operator view do not duplicate fetch/mutation wiring
+- create a dedicated plugin-owned surface such as `TableBookingOperatorPage.tsx` plus focused components under `tableBookingOperatorPage/*`
+- reuse the established fullscreen framing primitives in `packages/frontend/src/components/common/FramedHostShell.tsx` rather than inventing a new host shell
+- keep the host changes thin and generic:
+  - route helper in `packages/frontend/src/app/router/paths.ts`
+  - fullscreen route wiring in `packages/frontend/src/app/router/routes.tsx`
+  - optional plugin UI type/registry extension in `packages/frontend/src/plugins/types.ts` and `packages/frontend/src/plugins/registry.tsx`
+
+### Explicitly Out of Scope
+
+- websocket/live-push infrastructure
+- audio alerts or printer integrations
+- offline-first/PWA behavior
+- table maps or table assignment
+- multi-room inventory
+- waitlist workflows
+- reminder campaigns, deposits, or external sync
+
+### Exit Criteria For This Work Block
+
+This block is done when all of the following are true:
+
+1. A restaurant can open a dedicated fullscreen operator route for Table Booking and use it without the normal dashboard layout chrome.
+2. The operator surface shows today's service state clearly enough to run live: current/upcoming windows, booked covers, effective capacity, remaining covers, and upcoming reservations.
+3. Staff can still create/edit reservations and run the current status actions from that fullscreen surface without navigating back to the normal plugin page.
+4. Three presentation modes (`normal`, `hc-light`, `hc-dark`) exist, persist for that surface, respect `prefers-contrast`/`prefers-color-scheme` defaults, and materially increase readability in both bright and dim lighting.
+5. Refresh failures are explicit on screen, the `last updated` timestamp is color-coded by staleness, and operators can manually refresh without losing their place.
+6. Destructive status actions (cancel / no-show / completed) are reversible via an undo toast rather than modal confirms, and remain visually distinct in all three modes.
+7. New online bookings that arrive between polls are announced with a visible "N new" indicator on the arrivals list and do not require the operator to remember what they saw last.
+8. The operator surface requests a Screen Wake Lock while visible and re-acquires it after visibility changes, so a stand tablet can run a full shift without manual interaction.
+9. Manual reservation entry from the operator surface pre-fills today / next available slot / party of 2 / phone channel / notifications off, so a phone booking takes only name + phone + confirm.
 
 ## Recommended Future Work After This Block
 

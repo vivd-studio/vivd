@@ -86,7 +86,7 @@ async function enforceInviteRateLimit(input: {
   res: { setHeader(name: string, value: string): unknown };
 }) {
   const decision = await controlPlaneRateLimitService.checkAction({
-    action: "auth",
+    action: "auth_mutation",
     organizationId: input.organizationId,
     requestIp: input.requestIp,
     userId: input.userId,

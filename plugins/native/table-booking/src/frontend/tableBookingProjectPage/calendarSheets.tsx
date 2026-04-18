@@ -27,6 +27,7 @@ import {
   SOURCE_CHANNEL_OPTIONS,
   WEEKDAY_LABELS,
 } from "./constants";
+import type { PresentationMode } from "../tableBookingOperatorPage/presentationMode";
 import { PeriodEditor, SchedulePreview } from "./shared";
 import type {
   TableBookingCapacityAdjustmentRecord,
@@ -50,6 +51,7 @@ export function ReservationSheet({
   editor,
   selectedDate,
   timezone,
+  presentationMode,
   onSave,
   pending,
 }: {
@@ -58,10 +60,15 @@ export function ReservationSheet({
   editor: TableBookingReservationEditorState;
   selectedDate: string;
   timezone: string;
+  presentationMode?: PresentationMode;
   onSave: () => void;
   pending: boolean;
 }) {
   const isEditing = Boolean(editor.editingBookingId);
+  const portalModeProps =
+    presentationMode && presentationMode !== "normal"
+      ? { "data-tb-operator-mode": presentationMode }
+      : undefined;
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !pending) {
@@ -72,7 +79,10 @@ export function ReservationSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <SheetContent
+        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        {...portalModeProps}
+      >
         <SheetHeader className="border-b px-6 py-5">
           <SheetTitle>
             {isEditing ? "Edit reservation" : "New reservation"}
@@ -90,20 +100,44 @@ export function ReservationSheet({
               <Input
                 type="date"
                 value={editor.reservationDate}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationDate(event.target.value)
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  editor.setReservationDate(event.target.value);
+                  editor.clearReservationErrors(["date"]);
+                }}
+                aria-invalid={Boolean(editor.reservationErrors.date)}
+                className={
+                  editor.reservationErrors.date
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
                 }
               />
+              {editor.reservationErrors.date ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.date}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Time</Label>
               <Input
                 type="time"
                 value={editor.reservationTime}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationTime(event.target.value)
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  editor.setReservationTime(event.target.value);
+                  editor.clearReservationErrors(["time"]);
+                }}
+                aria-invalid={Boolean(editor.reservationErrors.time)}
+                className={
+                  editor.reservationErrors.time
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
                 }
               />
+              {editor.reservationErrors.time ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.time}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Party size</Label>
@@ -112,10 +146,22 @@ export function ReservationSheet({
                 min={1}
                 max={50}
                 value={editor.reservationPartySize}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationPartySize(event.target.value)
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  editor.setReservationPartySize(event.target.value);
+                  editor.clearReservationErrors(["partySize"]);
+                }}
+                aria-invalid={Boolean(editor.reservationErrors.partySize)}
+                className={
+                  editor.reservationErrors.partySize
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
                 }
               />
+              {editor.reservationErrors.partySize ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.partySize}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Source</Label>
@@ -130,7 +176,7 @@ export function ReservationSheet({
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent {...portalModeProps}>
                   {SOURCE_CHANNEL_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -143,31 +189,80 @@ export function ReservationSheet({
               <Label>Guest name</Label>
               <Input
                 value={editor.reservationName}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationName(event.target.value)
-                }
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  editor.setReservationName(event.target.value);
+                  editor.clearReservationErrors(["name"]);
+                }}
                 placeholder="Full name"
+                aria-invalid={Boolean(editor.reservationErrors.name)}
+                className={
+                  editor.reservationErrors.name
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
+                }
               />
+              {editor.reservationErrors.name ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.name}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Email</Label>
               <Input
                 type="email"
                 value={editor.reservationEmail}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationEmail(event.target.value)
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  const nextValue = event.target.value;
+                  editor.setReservationEmail(nextValue);
+                  if (!nextValue.trim() && editor.sendGuestNotification) {
+                    editor.setSendGuestNotification(false);
+                  }
+                  editor.clearReservationErrors(["email", "contact"]);
+                }}
+                placeholder="Optional if phone is filled"
+                aria-invalid={Boolean(editor.reservationErrors.email)}
+                className={
+                  editor.reservationErrors.email
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
                 }
               />
+              {editor.reservationErrors.email ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.email}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>
               <Input
                 value={editor.reservationPhone}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  editor.setReservationPhone(event.target.value)
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  editor.setReservationPhone(event.target.value);
+                  editor.clearReservationErrors(["phone", "contact"]);
+                }}
+                placeholder="Optional if email is filled"
+                aria-invalid={Boolean(editor.reservationErrors.phone)}
+                className={
+                  editor.reservationErrors.phone
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
                 }
               />
+              {editor.reservationErrors.phone ? (
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.phone}
+                </p>
+              ) : null}
             </div>
+            {editor.reservationErrors.contact ? (
+              <div className="sm:col-span-2">
+                <p className="text-xs text-destructive">
+                  {editor.reservationErrors.contact}
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Notes</Label>
               <Textarea
@@ -182,11 +277,19 @@ export function ReservationSheet({
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <Checkbox
                 checked={editor.sendGuestNotification}
+                disabled={!editor.reservationEmail.trim()}
                 onCheckedChange={(value: boolean | "indeterminate") =>
                   editor.setSendGuestNotification(Boolean(value))
                 }
               />
-              Send guest confirmation email after save
+              <span>
+                Send guest confirmation email after save
+                {!editor.reservationEmail.trim() ? (
+                  <span className="block text-xs text-muted-foreground">
+                    Add an email address to enable this.
+                  </span>
+                ) : null}
+              </span>
             </label>
           </div>
         </div>

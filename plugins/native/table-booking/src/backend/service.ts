@@ -3,6 +3,7 @@ import { getTableBookingSnippets } from "./snippets";
 import { createTableBookingServiceContext } from "./serviceContext";
 import {
   TableBookingCapacityError,
+  getMissingOperatorCapacityStorageErrorMessage,
   TableBookingPluginNotEnabledError,
   TableBookingQuotaExceededError,
   TableBookingReservationNotFoundError,
@@ -25,6 +26,7 @@ import type {
 
 export {
   TableBookingCapacityError,
+  getMissingOperatorCapacityStorageErrorMessage,
   TableBookingPluginNotEnabledError,
   TableBookingQuotaExceededError,
   TableBookingReservationNotFoundError,

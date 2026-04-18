@@ -51,7 +51,8 @@ export async function sendBookingCreatedEmails(
     options.reservation.serviceStartAt,
     options.config.timezone,
   );
-  const notifyGuest = options.notifyGuest ?? true;
+  const hasGuestEmail = options.reservation.guestEmail.trim().length > 0;
+  const notifyGuest = (options.notifyGuest ?? true) && hasGuestEmail;
   const notifyStaff = options.notifyStaff ?? true;
 
   const [guestEmail, staffEmail] = await Promise.all([
@@ -125,14 +126,17 @@ export async function sendGuestCancellationEmails(
     options.reservation.serviceStartAt,
     options.config.timezone,
   );
+  const hasGuestEmail = options.reservation.guestEmail.trim().length > 0;
 
   const [guestEmail, staffEmail] = await Promise.all([
-    deps.emailTemplates.buildGuestCancellationEmail({
-      projectTitle: options.projectTitle,
-      guestName: options.reservation.guestName,
-      partySize: options.reservation.partySize,
-      bookingDateTimeLabel,
-    }),
+    hasGuestEmail
+      ? deps.emailTemplates.buildGuestCancellationEmail({
+          projectTitle: options.projectTitle,
+          guestName: options.reservation.guestName,
+          partySize: options.reservation.partySize,
+          bookingDateTimeLabel,
+        })
+      : Promise.resolve(null),
     options.config.notificationRecipientEmails.length > 0
       ? deps.emailTemplates.buildStaffCancellationEmail({
           projectTitle: options.projectTitle,
@@ -148,18 +152,20 @@ export async function sendGuestCancellationEmails(
   ]);
 
   await Promise.all([
-    sendTransactionalEmail(deps, {
-      to: [options.reservation.guestEmail],
-      subject: guestEmail.subject,
-      text: guestEmail.text,
-      html: guestEmail.html,
-      metadata: {
-        plugin: "table_booking",
-        flow: "guest_cancellation",
-        project: options.reservation.projectSlug,
-        organization: options.reservation.organizationId,
-      },
-    }),
+    guestEmail
+      ? sendTransactionalEmail(deps, {
+          to: [options.reservation.guestEmail],
+          subject: guestEmail.subject,
+          text: guestEmail.text,
+          html: guestEmail.html,
+          metadata: {
+            plugin: "table_booking",
+            flow: "guest_cancellation",
+            project: options.reservation.projectSlug,
+            organization: options.reservation.organizationId,
+          },
+        })
+      : Promise.resolve(),
     staffEmail
       ? sendTransactionalEmail(deps, {
           to: options.config.notificationRecipientEmails,

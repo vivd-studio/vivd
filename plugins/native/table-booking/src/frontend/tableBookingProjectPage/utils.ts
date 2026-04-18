@@ -15,6 +15,7 @@ import type {
   TableBookingStatus,
   TableBookingWeeklyScheduleEntry,
 } from "./types";
+import type { TableBookingReservationErrors } from "./useReservationEditor";
 
 export function parseListInput(value: string): string[] {
   return Array.from(
@@ -359,6 +360,56 @@ export function formatDraftError(issue: {
 }): string {
   if (issue.path.length === 0) return issue.message;
   return `${issue.path.map((part) => String(part)).join(".")}: ${issue.message}`;
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validateReservationDraft(input: {
+  date: string;
+  time: string;
+  partySize: string;
+  name: string;
+  email: string;
+  phone: string;
+  sendGuestNotification: boolean;
+}): {
+  errors: TableBookingReservationErrors;
+  partySize: number;
+} {
+  const errors: TableBookingReservationErrors = {};
+  const date = input.date.trim();
+  const time = input.time.trim();
+  const partySize = Number.parseInt(input.partySize || "0", 10);
+  const name = input.name.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+
+  if (!date) {
+    errors.date = "Choose a reservation date.";
+  }
+  if (!time) {
+    errors.time = "Choose a reservation time.";
+  }
+  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) {
+    errors.partySize = "Party size must be between 1 and 50.";
+  }
+  if (!name) {
+    errors.name = "Guest name is required.";
+  }
+  if (!email && !phone) {
+    errors.contact = "Add at least one contact method.";
+  }
+  if (email && !EMAIL_PATTERN.test(email)) {
+    errors.email = "Enter a valid email address.";
+  }
+  if (phone && (phone.length < 3 || phone.length > 64)) {
+    errors.phone = "Enter a valid phone number.";
+  }
+  if (input.sendGuestNotification && !email) {
+    errors.email = "Guest confirmation email requires an email address.";
+  }
+
+  return { errors, partySize };
 }
 
 export function formatStatusLabel(status: TableBookingStatus): string {

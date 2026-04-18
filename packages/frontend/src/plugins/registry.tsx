@@ -25,3 +25,10 @@ export function getProjectPluginUi(pluginId: string): ProjectPluginUiDefinition 
     ...componentUi,
   };
 }
+
+export function getProjectPluginOperatorPage(
+  pluginId: string,
+): ProjectPluginUiDefinition["OperatorPage"] | null {
+  const componentUi = projectPluginComponentRegistry[pluginId];
+  return componentUi?.OperatorPage ?? null;
+}

@@ -6,8 +6,13 @@ export interface ProjectPluginPageProps {
   isEmbedded?: boolean;
 }
 
+export interface ProjectPluginOperatorPageProps {
+  projectSlug: string;
+}
+
 export interface ProjectPluginUiDefinition extends SharedProjectPluginUiDefinition {
   ProjectPage?: ComponentType<ProjectPluginPageProps>;
+  OperatorPage?: ComponentType<ProjectPluginOperatorPageProps>;
 }
 
 export interface FrontendPluginModule {

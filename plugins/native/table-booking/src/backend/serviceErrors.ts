@@ -5,6 +5,8 @@ type ErrorWithCause = {
 };
 
 let hasWarnedAboutMissingOperatorCapacityStorage = false;
+const TABLE_BOOKING_OPERATOR_CAPACITY_STORAGE_MIGRATION =
+  "0028_table_booking_operator_capacity.sql";
 
 function collectErrorChain(error: unknown): ErrorWithCause[] {
   const chain: ErrorWithCause[] = [];
@@ -28,10 +30,12 @@ function getErrorCode(error: ErrorWithCause | null | undefined): string {
   return typeof error?.code === "string" ? error.code.toUpperCase() : "";
 }
 
-export function isMissingOperatorCapacityStorageError(error: unknown): boolean {
+export function getMissingOperatorCapacityStorageErrorMessage(
+  error: unknown,
+): string | null {
   const chain = collectErrorChain(error);
 
-  return chain.some((entry) => {
+  const matchesMissingReservationColumns = chain.some((entry) => {
     const message = getErrorMessage(entry).toLowerCase();
     const code = getErrorCode(entry);
     const isMissingStorageMessage =
@@ -39,24 +43,37 @@ export function isMissingOperatorCapacityStorageError(error: unknown): boolean {
       message.includes("undefined column") ||
       message.includes("undefined table");
 
-    if (
+    return (
       (code === "42703" || isMissingStorageMessage) &&
       (message.includes("source_channel") ||
         message.includes("created_by_user_id") ||
         message.includes("updated_by_user_id"))
-    ) {
-      return true;
-    }
+    );
+  });
 
-    if (
+  const matchesMissingCapacityTable = chain.some((entry) => {
+    const message = getErrorMessage(entry).toLowerCase();
+    const code = getErrorCode(entry);
+    const isMissingStorageMessage =
+      message.includes("does not exist") ||
+      message.includes("undefined column") ||
+      message.includes("undefined table");
+
+    return (
       (code === "42P01" || isMissingStorageMessage) &&
       message.includes("table_booking_capacity_adjustment")
-    ) {
-      return true;
-    }
-
-    return false;
+    );
   });
+
+  if (!matchesMissingReservationColumns && !matchesMissingCapacityTable) {
+    return null;
+  }
+
+  return `Table Booking operator storage is unavailable or out of date. Run backend db:migrate to apply migration ${TABLE_BOOKING_OPERATOR_CAPACITY_STORAGE_MIGRATION}.`;
+}
+
+export function isMissingOperatorCapacityStorageError(error: unknown): boolean {
+  return getMissingOperatorCapacityStorageErrorMessage(error) !== null;
 }
 
 export function warnMissingOperatorCapacityStorage(error: unknown): void {
@@ -69,7 +86,7 @@ export function warnMissingOperatorCapacityStorage(error: unknown): void {
       .find((message) => message.length > 0) ?? "unknown error";
 
   console.warn(
-    `[Table Booking] operator-capacity storage is unavailable or out of date; falling back to legacy reservation reads. Run backend db:migrate to apply migration 0028_table_booking_operator_capacity.sql. Error: ${detail}`,
+    `[Table Booking] operator storage is unavailable or out of date; falling back to legacy reservation storage where possible. Run backend db:migrate to apply migration ${TABLE_BOOKING_OPERATOR_CAPACITY_STORAGE_MIGRATION}. Error: ${detail}`,
   );
 }
 

@@ -7,6 +7,7 @@ import { createTableBookingPluginBackendHooks } from "./integrationHooks";
 import { createTableBookingPluginModule } from "./module";
 import {
   TableBookingCapacityError,
+  getMissingOperatorCapacityStorageErrorMessage,
   TableBookingPluginNotEnabledError,
   TableBookingQuotaExceededError,
   TableBookingReservationNotFoundError,
@@ -83,6 +84,14 @@ export function createTableBookingPluginBackendContribution(
           return {
             code: "BAD_REQUEST" as const,
             message: error.message,
+          };
+        }
+        const storageErrorMessage =
+          getMissingOperatorCapacityStorageErrorMessage(error);
+        if (storageErrorMessage) {
+          return {
+            code: "BAD_REQUEST" as const,
+            message: storageErrorMessage,
           };
         }
         return null;

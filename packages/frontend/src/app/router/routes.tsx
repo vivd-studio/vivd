@@ -29,6 +29,9 @@ const ScratchWizard = lazy(() => import("@/pages/ScratchWizard"));
 const NoProjectAssigned = lazy(() => import("@/pages/NoProjectAssigned"));
 const ProjectPlugins = lazy(() => import("@/pages/ProjectPlugins"));
 const ProjectPluginPage = lazy(() => import("@/pages/ProjectPluginPage"));
+const ProjectPluginOperatorPage = lazy(
+  () => import("@/pages/ProjectPluginOperatorPage"),
+);
 const Layout = lazy(() =>
   import("@/components/shell/Layout").then((module) => ({
     default: module.Layout,
@@ -100,6 +103,16 @@ function ProjectPluginRoute() {
     <RequireAssignedProject>
       <RouteSuspense>
         <ProjectPluginPage />
+      </RouteSuspense>
+    </RequireAssignedProject>
+  );
+}
+
+function ProjectPluginOperatorRoute() {
+  return (
+    <RequireAssignedProject>
+      <RouteSuspense>
+        <ProjectPluginOperatorPage />
       </RouteSuspense>
     </RequireAssignedProject>
   );
@@ -353,6 +366,16 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         element={
           <RequireAuth>
             <FullscreenStudioRoute />
+          </RequireAuth>
+        }
+      />
+
+      {/* Plugin operator (service-mode) fullscreen - outside Layout */}
+      <Route
+        path="/vivd-studio/projects/:projectSlug/plugins/:pluginId/operator"
+        element={
+          <RequireAuth>
+            <ProjectPluginOperatorRoute />
           </RequireAuth>
         }
       />

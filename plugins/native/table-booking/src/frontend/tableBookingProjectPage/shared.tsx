@@ -1,7 +1,14 @@
 import type { ChangeEvent, ComponentType, ReactNode } from "react";
-import { Copy, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -72,6 +79,46 @@ export function MetricCard({
         </div>
       </div>
       {note ? <p className="mt-2 text-xs text-muted-foreground">{note}</p> : null}
+    </div>
+  );
+}
+
+export function StatInline({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone = "default",
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  note?: string;
+  tone?: "default" | "warning";
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background",
+          tone === "warning"
+            ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+            : "text-muted-foreground",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 leading-tight">
+        <div className="flex items-baseline gap-2">
+          <span className="text-xl font-semibold tabular-nums">{value}</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            {label}
+          </span>
+        </div>
+        {note ? (
+          <p className="truncate text-[11px] text-muted-foreground">{note}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -282,74 +329,140 @@ export function BookingRow({
   onMarkNoShow: () => void;
   onMarkCompleted: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isCancelled =
     booking.status === "cancelled_by_guest" ||
     booking.status === "cancelled_by_staff";
+  const startLabel = formatTime(booking.serviceStartAt, timeZone);
+  const endLabel = formatTime(booking.serviceEndAt, timeZone);
+  const sourceLine = booking.sourceHost
+    ? `${booking.sourceHost}${booking.sourcePath ?? ""}`
+    : null;
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">
-              {booking.guestName} · party of {booking.partySize}
+    <div
+      className={cn(
+        "rounded-lg border bg-card transition-colors",
+        expanded && "bg-muted/20",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
+        aria-expanded={expanded}
+      >
+        <span className="flex w-14 shrink-0 flex-col text-left leading-tight tabular-nums">
+          <span
+            className={cn(
+              "text-sm font-semibold",
+              isCancelled && "text-muted-foreground line-through",
+            )}
+          >
+            {startLabel}
+          </span>
+          <span className="text-[10px] text-muted-foreground">{endLabel}</span>
+        </span>
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={cn(
+              "truncate text-sm font-medium",
+              isCancelled && "text-muted-foreground line-through",
+            )}
+          >
+            {booking.guestName || "Guest"}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            · {booking.partySize}p
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <Badge
+            variant={getBookingStatusBadgeVariant(booking.status)}
+            className="text-[10px]"
+          >
+            {formatStatusLabel(booking.status)}
+          </Badge>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              expanded && "rotate-180",
+            )}
+          />
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="space-y-3 border-t px-3 py-3 text-sm">
+          <div className="space-y-1 text-muted-foreground">
+            <p>
+              <span className="text-foreground">
+                {formatDateTime(booking.serviceStartAt, timeZone)}
+              </span>{" "}
+              to {endLabel}
             </p>
-            <Badge variant={getBookingStatusBadgeVariant(booking.status)}>
-              {formatStatusLabel(booking.status)}
-            </Badge>
-            <Badge variant="outline">
-              {formatSourceChannelLabel(booking.sourceChannel)}
-            </Badge>
+            <p>
+              <Badge variant="outline" className="mr-2">
+                {formatSourceChannelLabel(booking.sourceChannel)}
+              </Badge>
+              {booking.guestEmail} · {booking.guestPhone}
+            </p>
+            {booking.notes ? (
+              <p>
+                <span className="text-foreground">Notes:</span> {booking.notes}
+              </p>
+            ) : null}
+            {sourceLine ? (
+              <p className="text-xs">Source: {sourceLine}</p>
+            ) : null}
           </div>
-          <p className="text-sm text-muted-foreground">
-            {formatDateTime(booking.serviceStartAt, timeZone)} to{" "}
-            {formatTime(booking.serviceEndAt, timeZone)}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {booking.guestEmail} · {booking.guestPhone}
-          </p>
-          {booking.notes ? (
-            <p className="text-sm text-muted-foreground">Notes: {booking.notes}</p>
-          ) : null}
-          {booking.sourceHost ? (
-            <p className="text-xs text-muted-foreground">
-              Source: {booking.sourceHost}
-              {booking.sourcePath ? booking.sourcePath : ""}
-            </p>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {onEdit ? (
+              <Button size="sm" onClick={onEdit}>
+                Edit
+              </Button>
+            ) : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actionPending}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={actionPending || isCancelled}
+                  onSelect={onCancel}
+                >
+                  Cancel booking
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={
+                    actionPending || isCancelled || booking.status === "no_show"
+                  }
+                  onSelect={onMarkNoShow}
+                >
+                  Mark no-show
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={
+                    actionPending ||
+                    isCancelled ||
+                    booking.status === "completed"
+                  }
+                  onSelect={onMarkCompleted}
+                >
+                  Mark completed
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {onEdit ? (
-            <Button size="sm" variant="outline" onClick={onEdit}>
-              Edit
-            </Button>
-          ) : null}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={actionPending || isCancelled}
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={actionPending || isCancelled || booking.status === "no_show"}
-            onClick={onMarkNoShow}
-          >
-            Mark no-show
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={actionPending || isCancelled || booking.status === "completed"}
-            onClick={onMarkCompleted}
-          >
-            Mark completed
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }

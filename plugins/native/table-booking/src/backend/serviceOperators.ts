@@ -13,10 +13,12 @@ import {
 } from "./serviceCapacity";
 import type { TableBookingServiceContext } from "./serviceContext";
 import {
+  isMissingOperatorCapacityStorageError,
   TableBookingCapacityError,
   TableBookingPluginNotEnabledError,
   TableBookingReservationNotFoundError,
   TableBookingValidationError,
+  warnMissingOperatorCapacityStorage,
 } from "./serviceErrors";
 import { sendBookingCreatedEmails, sendGuestCancellationEmails } from "./serviceNotifications";
 import { toCapacityAdjustmentRecord } from "./serviceRecords";
@@ -39,6 +41,35 @@ export function createTableBookingOperatorService(
     deps,
   } = context;
   const { tableBookingReservation, tableBookingCapacityAdjustment } = tables;
+  let operatorReservationWriteColumnsAvailablePromise: Promise<boolean> | null =
+    null;
+
+  async function supportsOperatorReservationWriteColumns() {
+    if (!operatorReservationWriteColumnsAvailablePromise) {
+      operatorReservationWriteColumnsAvailablePromise = (async () => {
+        try {
+          await db
+            .select({
+              sourceChannel: tableBookingReservation.sourceChannel,
+              createdByUserId: tableBookingReservation.createdByUserId,
+              updatedByUserId: tableBookingReservation.updatedByUserId,
+            })
+            .from(tableBookingReservation)
+            .limit(1);
+          return true;
+        } catch (error) {
+          if (!isMissingOperatorCapacityStorageError(error)) {
+            throw error;
+          }
+
+          warnMissingOperatorCapacityStorage(error);
+          return false;
+        }
+      })();
+    }
+
+    return operatorReservationWriteColumnsAvailablePromise;
+  }
 
   return {
     async upsertCapacityAdjustment(
@@ -193,13 +224,21 @@ export function createTableBookingOperatorService(
       const durationMinutes =
         matchingPeriod.durationMinutes ?? config.defaultDurationMinutes;
       const serviceEndAt = new Date(serviceStartAt.getTime() + durationMinutes * 60_000);
+      const operatorReservationWriteColumnsAvailable =
+        await supportsOperatorReservationWriteColumns();
 
       const normalizedGuestName = normalizeRequiredText(options.name, 120);
-      const normalizedGuestEmail = normalizeRequiredText(options.email, 320);
-      const normalizedGuestEmailLower = normalizeEmailAddress(options.email);
-      const normalizedGuestPhone = normalizeRequiredText(options.phone, 64);
+      const normalizedGuestEmail =
+        normalizeOptionalText(options.email, 320) ?? "";
+      const normalizedGuestEmailLower = normalizedGuestEmail
+        ? normalizeEmailAddress(normalizedGuestEmail)
+        : "";
+      const normalizedGuestPhone =
+        normalizeOptionalText(options.phone, 64) ?? "";
       const normalizedNotes = normalizeOptionalText(options.notes, 2000);
-      const sendGuestNotification = Boolean(options.sendGuestNotification);
+      const sendGuestNotification = Boolean(
+        options.sendGuestNotification && normalizedGuestEmail,
+      );
       const projectTitle = await context.readProjectTitle({
         organizationId: options.organizationId,
         projectSlug: options.projectSlug,
@@ -242,22 +281,27 @@ export function createTableBookingOperatorService(
         }
 
         if (options.bookingId && existingReservation) {
+          const updateValues = {
+            serviceDate: options.date,
+            serviceStartAt,
+            serviceEndAt,
+            partySize: options.partySize,
+            guestName: normalizedGuestName,
+            guestEmail: normalizedGuestEmail,
+            guestEmailNormalized: normalizedGuestEmailLower,
+            guestPhone: normalizedGuestPhone,
+            notes: normalizedNotes,
+            updatedAt: new Date(),
+            ...(operatorReservationWriteColumnsAvailable
+              ? {
+                  sourceChannel: options.sourceChannel,
+                  updatedByUserId: options.requestedByUserId ?? null,
+                }
+              : {}),
+          };
           const [updated] = await tx
             .update(tableBookingReservation)
-            .set({
-              serviceDate: options.date,
-              serviceStartAt,
-              serviceEndAt,
-              partySize: options.partySize,
-              guestName: normalizedGuestName,
-              guestEmail: normalizedGuestEmail,
-              guestEmailNormalized: normalizedGuestEmailLower,
-              guestPhone: normalizedGuestPhone,
-              notes: normalizedNotes,
-              sourceChannel: options.sourceChannel,
-              updatedByUserId: options.requestedByUserId ?? null,
-              updatedAt: new Date(),
-            })
+            .set(updateValues)
             .where(eq(tableBookingReservation.id, options.bookingId))
             .returning();
 
@@ -278,35 +322,40 @@ export function createTableBookingOperatorService(
         }
 
         const reservationId = randomUUID();
+        const insertValues = {
+          id: reservationId,
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          pluginInstanceId: pluginInstance.id,
+          status: "confirmed" as const,
+          serviceDate: options.date,
+          serviceStartAt,
+          serviceEndAt,
+          partySize: options.partySize,
+          guestName: normalizedGuestName,
+          guestEmail: normalizedGuestEmail,
+          guestEmailNormalized: normalizedGuestEmailLower,
+          guestPhone: normalizedGuestPhone,
+          notes: normalizedNotes,
+          sourceHost: null,
+          sourcePath: null,
+          referrerHost: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          lastIpHash: null,
+          confirmedAt: new Date(),
+          ...(operatorReservationWriteColumnsAvailable
+            ? {
+                sourceChannel: options.sourceChannel,
+                createdByUserId: options.requestedByUserId ?? null,
+                updatedByUserId: options.requestedByUserId ?? null,
+              }
+            : {}),
+        };
         const [inserted] = await tx
           .insert(tableBookingReservation)
-          .values({
-            id: reservationId,
-            organizationId: options.organizationId,
-            projectSlug: options.projectSlug,
-            pluginInstanceId: pluginInstance.id,
-            status: "confirmed",
-            serviceDate: options.date,
-            serviceStartAt,
-            serviceEndAt,
-            partySize: options.partySize,
-            guestName: normalizedGuestName,
-            guestEmail: normalizedGuestEmail,
-            guestEmailNormalized: normalizedGuestEmailLower,
-            guestPhone: normalizedGuestPhone,
-            notes: normalizedNotes,
-            sourceChannel: options.sourceChannel,
-            sourceHost: null,
-            sourcePath: null,
-            referrerHost: null,
-            utmSource: null,
-            utmMedium: null,
-            utmCampaign: null,
-            lastIpHash: null,
-            createdByUserId: options.requestedByUserId ?? null,
-            updatedByUserId: options.requestedByUserId ?? null,
-            confirmedAt: new Date(),
-          })
+          .values(insertValues)
           .returning();
 
         const rawCancelToken = sendGuestNotification

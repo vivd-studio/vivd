@@ -21,6 +21,9 @@ interface InstalledFrontendPluginModule {
       projectSlug: string;
       isEmbedded?: boolean;
     }>;
+    OperatorPage?: ComponentType<{
+      projectSlug: string;
+    }>;
   };
 }
 

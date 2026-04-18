@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import type { TableBookingRecord, TableBookingSourceChannel } from "./types";
 import { formatTimeInputValue } from "./utils";
 
+export type TableBookingReservationErrorKey =
+  | "date"
+  | "time"
+  | "partySize"
+  | "name"
+  | "email"
+  | "phone"
+  | "contact";
+export type TableBookingReservationErrors = Partial<
+  Record<TableBookingReservationErrorKey, string>
+>;
+
 export type TableBookingReservationEditorState = {
   editingBookingId: string | null;
   reservationDate: string;
@@ -23,6 +35,13 @@ export type TableBookingReservationEditorState = {
   setReservationSourceChannel: Dispatch<
     SetStateAction<TableBookingSourceChannel>
   >;
+  reservationErrors: TableBookingReservationErrors;
+  setReservationErrors: Dispatch<
+    SetStateAction<TableBookingReservationErrors>
+  >;
+  clearReservationErrors: (
+    keys?: TableBookingReservationErrorKey[],
+  ) => void;
   sendGuestNotification: boolean;
   setSendGuestNotification: Dispatch<SetStateAction<boolean>>;
   resetReservationEditor: (date?: string) => void;
@@ -55,6 +74,8 @@ export function useTableBookingReservationEditor(options: {
   const [reservationNotes, setReservationNotes] = useState("");
   const [reservationSourceChannel, setReservationSourceChannel] =
     useState<TableBookingSourceChannel>("phone");
+  const [reservationErrors, setReservationErrors] =
+    useState<TableBookingReservationErrors>({});
   const [sendGuestNotification, setSendGuestNotification] = useState(false);
 
   useEffect(() => {
@@ -63,6 +84,21 @@ export function useTableBookingReservationEditor(options: {
       setReservationTime("17:00");
     }
   }, [selectedDate, editingBookingId]);
+
+  const clearReservationErrors = (keys?: TableBookingReservationErrorKey[]) => {
+    if (!keys || keys.length === 0) {
+      setReservationErrors({});
+      return;
+    }
+
+    setReservationErrors((current) => {
+      const next = { ...current };
+      for (const key of keys) {
+        delete next[key];
+      }
+      return next;
+    });
+  };
 
   const resetReservationEditor = (date = selectedDate) => {
     setEditingBookingId(null);
@@ -74,6 +110,7 @@ export function useTableBookingReservationEditor(options: {
     setReservationPhone("");
     setReservationNotes("");
     setReservationSourceChannel("phone");
+    setReservationErrors({});
     setSendGuestNotification(false);
   };
 
@@ -87,6 +124,7 @@ export function useTableBookingReservationEditor(options: {
     setReservationPhone(booking.guestPhone);
     setReservationNotes(booking.notes ?? "");
     setReservationSourceChannel(booking.sourceChannel);
+    setReservationErrors({});
     setSendGuestNotification(false);
     setSelectedDate(booking.serviceDate);
     setVisibleMonth(booking.serviceDate.slice(0, 7));
@@ -111,6 +149,9 @@ export function useTableBookingReservationEditor(options: {
     setReservationNotes,
     reservationSourceChannel,
     setReservationSourceChannel,
+    reservationErrors,
+    setReservationErrors,
+    clearReservationErrors,
     sendGuestNotification,
     setSendGuestNotification,
     resetReservationEditor,

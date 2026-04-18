@@ -112,12 +112,6 @@ export function validateStaffReservationInput(options: {
   if (!tableBookingTimeStringSchema.safeParse(options.input.time).success) {
     throw new TableBookingValidationError("Time must use HH:MM format.");
   }
-  if (!emailSchema.safeParse(options.input.email).success) {
-    throw new TableBookingValidationError("A valid email address is required.");
-  }
-  if (!phoneSchema.safeParse(options.input.phone).success) {
-    throw new TableBookingValidationError("A valid phone number is required.");
-  }
   if (!guestNameSchema.safeParse(options.input.name).success) {
     throw new TableBookingValidationError("Guest name is required.");
   }
@@ -126,6 +120,26 @@ export function validateStaffReservationInput(options: {
   }
   if (!sourceChannelSchema.safeParse(options.input.sourceChannel).success) {
     throw new TableBookingValidationError("Choose a valid reservation source.");
+  }
+
+  const normalizedEmail = options.input.email.trim();
+  const normalizedPhone = options.input.phone.trim();
+
+  if (!normalizedEmail && !normalizedPhone) {
+    throw new TableBookingValidationError(
+      "Add an email address or phone number.",
+    );
+  }
+  if (normalizedEmail && !emailSchema.safeParse(normalizedEmail).success) {
+    throw new TableBookingValidationError("Enter a valid email address.");
+  }
+  if (normalizedPhone && !phoneSchema.safeParse(normalizedPhone).success) {
+    throw new TableBookingValidationError("Enter a valid phone number.");
+  }
+  if (options.input.sendGuestNotification && !normalizedEmail) {
+    throw new TableBookingValidationError(
+      "Guest confirmation email requires an email address.",
+    );
   }
 }
 
