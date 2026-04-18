@@ -2,8 +2,10 @@ import type { PluginStopFn } from "@vivd/plugin-sdk";
 import type { OrganizationPluginIssue, PluginSurfaceBadge } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./catalog";
-import type { BackendPluginIntegrationHooks } from "./descriptors";
-import { installedBackendPluginHostRegistrations } from "./hostRegistry";
+import {
+  backendPluginPackageDescriptors,
+  type BackendPluginIntegrationHooks,
+} from "./descriptors";
 
 export interface OrganizationPluginInstanceSnapshot {
   status: string | null;
@@ -26,10 +28,11 @@ const backendPluginHooks = new Map<
   PluginId,
   BackendPluginIntegrationHooks
 >(
-  installedBackendPluginHostRegistrations.map(({ manifest, registration }) => [
-    manifest.pluginId as PluginId,
-    registration.hooks,
-  ]),
+  backendPluginPackageDescriptors.flatMap((descriptor) =>
+    descriptor.backend.hooks
+      ? [[descriptor.pluginId as PluginId, descriptor.backend.hooks] as const]
+      : [],
+  ),
 );
 
 const organizationPluginHooks = new Map<

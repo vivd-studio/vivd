@@ -52,37 +52,20 @@ export type {
 };
 
 const pluginModules = Object.fromEntries(
-  []
+  backendPluginPackageDescriptors.map((descriptor) => [
+    descriptor.pluginId,
+    descriptor.backend.module,
+  ]),
 ) as Partial<Record<PluginId, PluginModule>>;
 
-let pluginModulesInitialized = false;
-
-function getPluginModulesRecord(): Partial<Record<PluginId, PluginModule>> {
-  if (!pluginModulesInitialized) {
-    Object.assign(
-      pluginModules,
-      Object.fromEntries(
-        backendPluginPackageDescriptors.map((descriptor) => [
-          descriptor.pluginId,
-          descriptor.backend.module,
-        ]),
-      ),
-    );
-    pluginModulesInitialized = true;
-  }
-
-  return pluginModules;
-}
-
 export function listPluginModules(): PluginModule[] {
-  const modules = getPluginModulesRecord();
   return listPluginDefinitions().flatMap((plugin) =>
-    modules[plugin.pluginId] ? [modules[plugin.pluginId]!] : [],
+    pluginModules[plugin.pluginId] ? [pluginModules[plugin.pluginId]!] : [],
   );
 }
 
 export function getOptionalPluginModule(pluginId: PluginId): PluginModule | null {
-  return getPluginModulesRecord()[pluginId] ?? null;
+  return pluginModules[pluginId] ?? null;
 }
 
 export function getPluginModule(pluginId: PluginId): PluginModule {

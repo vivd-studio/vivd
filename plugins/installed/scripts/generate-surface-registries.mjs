@@ -111,8 +111,6 @@ await writeFile(
   buildRegistryFile({
     imports: [
       'import {',
-      '  definePluginBundleEntry,',
-      '  definePluginBundleEntries,',
       '  definePluginPackageDescriptors,',
       '  extractPluginIds,',
       '} from "@vivd/plugin-sdk";',
@@ -125,23 +123,8 @@ ${makeDescriptorArray(
 )}
   ] as const);
 
-export const installedPluginDescriptors =
-  definePluginBundleEntries([
-${makeDescriptorArray(
-  installedPlugins.map((_, index) => {
-    const manifestAlias = manifestImportAlias(index);
-    return `definePluginBundleEntry({
-    pluginId: ${manifestAlias}.pluginId,
-    manifest: ${manifestAlias},
-  })`;
-  }),
-)}
-  ] as const);
-
 export const INSTALLED_PLUGIN_IDS = extractPluginIds(installedPluginManifests);
 export type InstalledPluginId = (typeof INSTALLED_PLUGIN_IDS)[number];
-export type InstalledPluginDescriptor =
-  (typeof installedPluginDescriptors)[number];
 
 export function listInstalledPluginAgentHints(
   enabledPluginIds?: readonly string[],
@@ -154,17 +137,17 @@ export function listInstalledPluginAgentHints(
   const seen = new Set<string>();
   const hints: string[] = [];
 
-  for (const descriptor of installedPluginDescriptors) {
-    if (!enabled.has(descriptor.pluginId)) continue;
+  for (const manifest of installedPluginManifests) {
+    if (!enabled.has(manifest.pluginId)) continue;
 
-    const definition = descriptor.manifest.definition;
+    const definition = manifest.definition;
     const agentHints =
       "agentHints" in definition && Array.isArray(definition.agentHints)
         ? definition.agentHints
         : [];
 
     for (const hint of agentHints) {
-      const line = \`\${descriptor.manifest.definition.name}: \${hint}\`;
+      const line = \`\${manifest.definition.name}: \${hint}\`;
       if (seen.has(line)) continue;
       seen.add(line);
       hints.push(line);

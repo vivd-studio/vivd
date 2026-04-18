@@ -209,17 +209,6 @@ export interface NativePluginBackendPackage<
   backend: PluginContributionFactory<TBackendDeps, TBackendContribution>;
 }
 
-export interface PluginBundleEntry<
-  TPluginId extends string = string,
-> {
-  pluginId: TPluginId;
-  manifest: PluginPackageManifest<TPluginId>;
-}
-
-export type PluginPackageInstallDescriptor<
-  TPluginId extends string = string,
-> = PluginBundleEntry<TPluginId>;
-
 export type PluginStopFn = () => void;
 
 export function definePluginPackageManifest<
@@ -228,26 +217,11 @@ export function definePluginPackageManifest<
   return manifest;
 }
 
-export function definePluginBundleEntry<
-  const T extends PluginBundleEntry,
->(entry: T): T {
-  return entry;
-}
-
-export function definePluginBundleEntries<
-  const T extends readonly PluginBundleEntry[],
->(entries: T): T {
-  return entries;
-}
-
 export function definePluginPackageDescriptors<
   const T extends readonly PluginPackageDescriptor[],
 >(descriptors: T): T {
   return descriptors;
 }
-
-export const definePluginPackageInstallDescriptor = definePluginBundleEntry;
-export const definePluginPackageInstallDescriptors = definePluginBundleEntries;
 
 export function isNativePluginPackageManifest(
   manifest: PluginPackageManifest,
