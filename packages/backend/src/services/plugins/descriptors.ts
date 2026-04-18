@@ -5,10 +5,10 @@ import type {
   PluginRouteDefinition as SharedPluginRouteDefinition,
   PluginStopFn,
 } from "@vivd/plugin-sdk";
+import { installedBackendPluginPackages } from "@vivd/installed-plugins/backend";
 import type express from "express";
 import type { Multer } from "multer";
-import { installedBackendPluginHostRegistrations } from "./hostRegistry";
-import { pluginEntitlementService } from "./PluginEntitlementService";
+import { backendPluginHostContext } from "./hostContext";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -108,12 +108,20 @@ export interface BackendPluginPackageDescriptor
 
 export const backendPluginPackageDescriptors =
   definePluginPackageDescriptors([
-    ...installedBackendPluginHostRegistrations.map(({ manifest, registration }) => ({
-      ...manifest,
-      backend: registration.createContribution({
-        pluginEntitlementService,
-      }),
-    })),
+    ...installedBackendPluginPackages.flatMap((pluginPackage) => {
+      const contribution =
+        pluginPackage.backend?.createHostContribution?.(
+          backendPluginHostContext,
+        ) ?? null;
+      if (!contribution) return [];
+
+      return [
+        {
+          ...pluginPackage,
+          backend: contribution,
+        },
+      ];
+    }),
   ] as const satisfies readonly BackendPluginPackageDescriptor[]);
 
 export function listBackendPublicPluginRouteDefinitions(): BackendPublicPluginRouteDefinition[] {

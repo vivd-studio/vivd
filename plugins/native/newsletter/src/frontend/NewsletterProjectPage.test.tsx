@@ -1,14 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import NewsletterProjectPage from "@vivd/plugin-newsletter/frontend/NewsletterProjectPage";
+import NewsletterProjectPage from "./NewsletterProjectPage";
 import {
   NEWSLETTER_CAMPAIGNS_READ_ID,
   NEWSLETTER_SUMMARY_READ_ID,
   type NewsletterCampaignsPayload,
   type NewsletterSubscribersPayload,
   type NewsletterSummaryPayload,
-} from "@vivd/plugin-newsletter/shared/summary";
+} from "../shared/summary";
 
 const {
   ensureUseMutationMock,

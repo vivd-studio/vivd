@@ -23,7 +23,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "test/**/*.test.{ts,tsx}",
+      "../../plugins/native/*/src/frontend/**/*.test.{ts,tsx}",
+    ],
     setupFiles: ["./test/setup.ts"],
   },
 });

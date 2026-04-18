@@ -133,7 +133,7 @@ vi.mock("@/components/ui/textarea", () => ({
   ),
 }));
 
-import { ReservationSheet } from "../../../../../plugins/native/table-booking/src/frontend/tableBookingProjectPage/calendarSheets";
+import { ReservationSheet } from "./tableBookingProjectPage/calendarSheets";
 
 function createReservationEditor() {
   return {

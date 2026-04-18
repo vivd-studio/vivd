@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
+import {
+  ContactRecipientVerificationEndpointUnavailableError,
+  buildContactFormSubmitEndpoint,
+  buildContactRecipientVerificationEndpoint,
+} from "@vivd/plugin-contact-form/backend/publicApi";
 
 const { resolvePolicyMock } = vi.hoisted(() => ({
   resolvePolicyMock: vi.fn(),
@@ -12,11 +17,9 @@ vi.mock("../src/services/system/InstallProfileService", () => ({
 }));
 
 import {
-  ContactRecipientVerificationEndpointUnavailableError,
-  getContactFormSubmitEndpoint,
-  getContactRecipientVerificationEndpoint,
-} from "../src/services/plugins/contactForm/publicApi";
-import { getPublicPluginApiBaseUrl } from "../src/services/plugins/runtime/publicApi";
+  getControlPlaneOrigin,
+  getPublicPluginApiBaseUrl,
+} from "../src/services/plugins/runtime/publicApi";
 
 const originalPublicPluginApiBaseUrl = process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
 const originalAppUrl = process.env.VIVD_APP_URL;
@@ -83,7 +86,11 @@ describe("plugin public API helpers", () => {
     delete process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
 
     await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://api.vivd.studio");
-    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
+    await expect(
+      getPublicPluginApiBaseUrl().then((baseUrl) =>
+        buildContactFormSubmitEndpoint(baseUrl),
+      ),
+    ).resolves.toBe(
       "https://api.vivd.studio/plugins/contact/v1/submit",
     );
   });
@@ -92,7 +99,11 @@ describe("plugin public API helpers", () => {
     process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL = "api.dev.vivd.local/";
 
     await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://api.dev.vivd.local");
-    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
+    await expect(
+      getPublicPluginApiBaseUrl().then((baseUrl) =>
+        buildContactFormSubmitEndpoint(baseUrl),
+      ),
+    ).resolves.toBe(
       "https://api.dev.vivd.local/plugins/contact/v1/submit",
     );
   });
@@ -130,7 +141,11 @@ describe("plugin public API helpers", () => {
     });
 
     await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://example.com");
-    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
+    await expect(
+      getPublicPluginApiBaseUrl().then((baseUrl) =>
+        buildContactFormSubmitEndpoint(baseUrl),
+      ),
+    ).resolves.toBe(
       "https://example.com/plugins/contact/v1/submit",
     );
   });
@@ -139,11 +154,11 @@ describe("plugin public API helpers", () => {
     delete process.env.VIVD_APP_URL;
     delete process.env.CONTROL_PLANE_HOST;
 
-    expect(
-      getContactRecipientVerificationEndpoint({
-        requestHost: "felixpahlke.vivd.studio",
-      }),
-    ).toBe(
+    const origin = getControlPlaneOrigin({
+      requestHost: "felixpahlke.vivd.studio",
+    });
+
+    expect(buildContactRecipientVerificationEndpoint(origin)).toBe(
       "https://felixpahlke.vivd.studio/vivd-studio/api/plugins/contact/v1/recipient-verify",
     );
   });
@@ -152,7 +167,7 @@ describe("plugin public API helpers", () => {
     delete process.env.VIVD_APP_URL;
     process.env.CONTROL_PLANE_HOST = "app.localhost:5173";
 
-    expect(getContactRecipientVerificationEndpoint()).toBe(
+    expect(buildContactRecipientVerificationEndpoint(getControlPlaneOrigin())).toBe(
       "http://app.localhost:5173/vivd-studio/api/plugins/contact/v1/recipient-verify",
     );
   });
@@ -163,7 +178,7 @@ describe("plugin public API helpers", () => {
     delete process.env.DOMAIN;
     delete process.env.BETTER_AUTH_URL;
 
-    expect(() => getContactRecipientVerificationEndpoint()).toThrow(
+    expect(() => buildContactRecipientVerificationEndpoint(getControlPlaneOrigin())).toThrow(
       ContactRecipientVerificationEndpointUnavailableError,
     );
   });

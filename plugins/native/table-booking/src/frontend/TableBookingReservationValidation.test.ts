@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateReservationDraft } from "../../../../../plugins/native/table-booking/src/frontend/tableBookingProjectPage/utils";
+import { validateReservationDraft } from "./tableBookingProjectPage/utils";
 
 describe("table booking reservation validation", () => {
   it("accepts phone-only reservations for operator saves", () => {

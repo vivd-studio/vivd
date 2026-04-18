@@ -2,15 +2,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { createContext, useContext, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import TableBookingProjectPage from "@vivd/plugin-table-booking/frontend/TableBookingProjectPage";
+import TableBookingProjectPage from "./TableBookingProjectPage";
 import {
   TABLE_BOOKING_DAY_CAPACITY_READ_ID,
   TABLE_BOOKING_BOOKINGS_READ_ID,
   TABLE_BOOKING_SUMMARY_READ_ID,
   type TableBookingBookingsPayload,
   type TableBookingSummaryPayload,
-} from "@vivd/plugin-table-booking/shared/summary";
-import { TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID } from "@vivd/plugin-table-booking/shared/operatorActions";
+} from "../shared/summary";
+import { TABLE_BOOKING_EXPORT_BOOKINGS_ACTION_ID } from "../shared/operatorActions";
 
 const {
   ensureUseMutationMock,

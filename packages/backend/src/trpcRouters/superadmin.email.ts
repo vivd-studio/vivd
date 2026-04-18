@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { superAdminProcedure } from "../trpc";
-import { getEmailFeedbackEndpoint } from "../services/plugins/contactForm/publicApi";
+import { buildEmailFeedbackEndpoint } from "@vivd/plugin-contact-form/backend/publicApi";
 import { emailDeliverabilityService } from "../services/email/deliverability";
 import {
   emailTemplateBrandingPatchInputSchema,
   emailTemplateBrandingService,
 } from "../services/email/templateBranding";
+import { getPublicPluginApiBaseUrl } from "../services/plugins/runtime/publicApi";
 
 const emailDeliverabilityPolicyInputSchema = z.object({
   autoSuppressBounces: z.boolean(),
@@ -15,19 +16,18 @@ const emailDeliverabilityPolicyInputSchema = z.object({
 });
 
 async function buildEmailOverviewPayload() {
-  const [overview, branding, sesEndpoint, resendEndpoint] = await Promise.all([
+  const [overview, branding, baseUrl] = await Promise.all([
     emailDeliverabilityService.getOverview(),
     emailTemplateBrandingService.getResolvedBranding(),
-    getEmailFeedbackEndpoint("ses"),
-    getEmailFeedbackEndpoint("resend"),
+    getPublicPluginApiBaseUrl(),
   ]);
 
   return {
     ...overview,
     templateBranding: branding,
     webhookEndpoints: {
-      ses: sesEndpoint,
-      resend: resendEndpoint,
+      ses: buildEmailFeedbackEndpoint(baseUrl, "ses"),
+      resend: buildEmailFeedbackEndpoint(baseUrl, "resend"),
     },
   };
 }

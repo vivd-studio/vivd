@@ -5,7 +5,7 @@ import {
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,
-} from "./analytics/module";
+} from "@vivd/plugin-analytics/backend/module";
 import type {
   PluginModule as SharedPluginModule,
 } from "@vivd/plugin-sdk";

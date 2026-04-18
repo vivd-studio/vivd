@@ -115,6 +115,35 @@ export async function ensureProjectPluginInstance(options: {
   }
 }
 
+export async function updateProjectPluginInstance(options: {
+  instanceId: string;
+  configJson?: unknown;
+  status?: string;
+  updatedAt?: Date;
+}): Promise<ProjectPluginInstanceRow | null> {
+  const updates: {
+    configJson?: unknown;
+    status?: string;
+    updatedAt: Date;
+  } = {
+    updatedAt: options.updatedAt ?? new Date(),
+  };
+  if (Object.prototype.hasOwnProperty.call(options, "configJson")) {
+    updates.configJson = options.configJson;
+  }
+  if (typeof options.status === "string") {
+    updates.status = options.status;
+  }
+
+  const [updated] = await db
+    .update(projectPluginInstance)
+    .set(updates)
+    .where(eq(projectPluginInstance.id, options.instanceId))
+    .returning();
+
+  return updated ?? null;
+}
+
 export function toProjectPluginInstanceSummary(
   row: ProjectPluginInstanceRow,
 ): ProjectPluginInstanceSummary {

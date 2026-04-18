@@ -114,6 +114,85 @@ export interface PluginContributionFactory<
   createContribution: (deps: TDeps) => TContribution;
 }
 
+export interface BackendHostSourceHeaders {
+  origin?: string | null;
+  referer?: string | null;
+}
+
+export interface BackendHostUtils {
+  extractSourceHostFromHeaders(
+    headers: BackendHostSourceHeaders,
+  ): string | null;
+  isHostAllowed(sourceHost: string | null, allowlist: string[]): boolean;
+  normalizeHostCandidate(raw: string | null | undefined): string | null;
+}
+
+export interface BackendHostProjectPluginInstanceService {
+  ensurePluginInstance(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: string;
+    defaultConfig: unknown;
+  }): Promise<{ row: any; created: boolean }>;
+  getPluginInstance(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: string;
+  }): Promise<any>;
+  updatePluginInstance(options: {
+    instanceId: string;
+    configJson?: unknown;
+    status?: string;
+    updatedAt?: Date;
+  }): Promise<any>;
+}
+
+export interface BackendHostContext {
+  db: any;
+  tables: Record<string, any>;
+  pluginEntitlementService: any;
+  projectPluginInstanceService: BackendHostProjectPluginInstanceService;
+  runtime: {
+    getPublicPluginApiBaseUrl(options?: {
+      requestHost?: string | null;
+    }): Promise<string>;
+    getControlPlaneOrigin(options?: {
+      requestHost?: string | null;
+    }): string;
+    inferProjectPluginSourceHosts(options: {
+      organizationId: string;
+      projectSlug: string;
+    }): Promise<string[]>;
+    hostUtils: BackendHostUtils;
+    env: {
+      nodeEnv?: string;
+      flyStudioPublicHost?: string;
+      flyStudioApp?: string;
+    };
+  };
+  email: {
+    deliveryService: any;
+    deliverabilityService: any;
+    isSesFeedbackAutoConfirmEnabled?: () => boolean;
+    templates: {
+      buildContactSubmissionEmail?: (...args: any[]) => Promise<any>;
+      buildContactRecipientVerificationEmail?: (...args: any[]) => Promise<any>;
+      buildNewsletterConfirmationEmail?: (...args: any[]) => Promise<any>;
+      buildNewsletterCampaignEmail?: (...args: any[]) => Promise<any>;
+      buildGuestBookingConfirmationEmail?: (...args: any[]) => Promise<any>;
+      buildGuestBookingCancellationEmail?: (...args: any[]) => Promise<any>;
+      buildStaffNewBookingEmail?: (...args: any[]) => Promise<any>;
+      buildStaffBookingCancellationEmail?: (...args: any[]) => Promise<any>;
+    };
+  };
+  system: {
+    installProfileService: {
+      getInstallProfile(): Promise<string>;
+      resolvePolicy(): Promise<unknown>;
+    };
+  };
+}
+
 export interface PluginPackageDescriptor<
   TPluginId extends string = string,
   TFrontend = unknown,
@@ -201,12 +280,21 @@ export interface NativePluginBackendPackage<
   TBackendDeps = unknown,
   TBackendContribution extends PluginContribution<TPluginId> = PluginContribution<TPluginId>,
   TFrontend = unknown,
+  THostContext = BackendHostContext,
 > extends NativePluginPackageManifest<
     TPluginId,
     TFrontend,
-    PluginContributionFactory<TBackendDeps, TBackendContribution>
+    PluginContributionFactory<TBackendDeps, TBackendContribution> & {
+      createHostContribution?: (
+        hostContext: THostContext,
+      ) => TBackendContribution;
+    }
   > {
-  backend: PluginContributionFactory<TBackendDeps, TBackendContribution>;
+  backend: PluginContributionFactory<TBackendDeps, TBackendContribution> & {
+    createHostContribution?: (
+      hostContext: THostContext,
+    ) => TBackendContribution;
+  };
 }
 
 export type PluginStopFn = () => void;

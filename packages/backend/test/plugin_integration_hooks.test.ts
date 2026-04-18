@@ -20,24 +20,35 @@ const {
   stopNewsletterJobMock: vi.fn(),
 }));
 
-vi.mock("../src/services/plugins/contactForm/backendHooks", () => ({
-  contactFormPluginBackendHooks: {
-    startBackgroundJobs: contactStartBackgroundJobsMock,
-    renameProjectSlugData: contactRenameProjectSlugDataMock,
-  },
-}));
-
-vi.mock("../src/services/plugins/analytics/backendHooks", () => ({
-  analyticsPluginBackendHooks: {
-    renameProjectSlugData: analyticsRenameProjectSlugDataMock,
-  },
-}));
-
-vi.mock("../src/services/plugins/newsletter/backendHooks", () => ({
-  newsletterPluginBackendHooks: {
-    startBackgroundJobs: newsletterStartBackgroundJobsMock,
-    renameProjectSlugData: newsletterRenameProjectSlugDataMock,
-  },
+vi.mock("../src/services/plugins/descriptors", () => ({
+  backendPluginPackageDescriptors: [
+    {
+      pluginId: "contact_form",
+      backend: {
+        hooks: {
+          startBackgroundJobs: contactStartBackgroundJobsMock,
+          renameProjectSlugData: contactRenameProjectSlugDataMock,
+        },
+      },
+    },
+    {
+      pluginId: "analytics",
+      backend: {
+        hooks: {
+          renameProjectSlugData: analyticsRenameProjectSlugDataMock,
+        },
+      },
+    },
+    {
+      pluginId: "newsletter",
+      backend: {
+        hooks: {
+          startBackgroundJobs: newsletterStartBackgroundJobsMock,
+          renameProjectSlugData: newsletterRenameProjectSlugDataMock,
+        },
+      },
+    },
+  ],
 }));
 
 import {

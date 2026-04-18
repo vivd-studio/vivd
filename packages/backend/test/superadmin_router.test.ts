@@ -216,18 +216,8 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   },
 }));
 
-vi.mock("../src/services/plugins/contactForm/turnstile", () => ({
-  contactFormTurnstileService: {
-    getAutomationConfigurationIssue: getTurnstileAutomationIssueMock,
-    prepareProjectWidgetCredentials: prepareTurnstileWidgetMock,
-    deleteWidget: deleteTurnstileWidgetMock,
-  },
-}));
-
-vi.mock("../src/services/plugins/contactForm/backendHooks", () => ({
-  contactFormPluginBackendHooks: {
-    buildOrganizationProjectSummaries: vi.fn(),
-    prepareProjectEntitlementFields: vi.fn(async (options) => {
+vi.mock("../src/services/plugins/integrationHooks", () => ({
+  preparePluginProjectEntitlementFields: vi.fn(async (options) => {
       const automationIssue = getTurnstileAutomationIssueMock();
       if (automationIssue) {
         throw new Error(automationIssue);
@@ -257,7 +247,7 @@ vi.mock("../src/services/plugins/contactForm/backendHooks", () => ({
         turnstileSecretKey: prepared.secretKey,
       };
     }),
-    cleanupProjectEntitlementFields: vi.fn(async (options) => {
+  cleanupPluginProjectEntitlementFields: vi.fn(async (options) => {
       const widgetId = options.existingProjectEntitlement?.turnstileWidgetId;
       if (options.state !== "enabled" && widgetId) {
         await deleteTurnstileWidgetMock(widgetId);
@@ -270,7 +260,6 @@ vi.mock("../src/services/plugins/contactForm/backendHooks", () => ({
         await deleteTurnstileWidgetMock(widgetId);
       }
     }),
-  },
 }));
 
 vi.mock("../src/auth", () => ({

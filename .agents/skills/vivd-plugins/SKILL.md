@@ -25,6 +25,7 @@ Vivd is in a mixed state:
 - plugin packages now expose manifests and surface-specific packages directly; the installed bundle in `plugins/installed` composes those manifests plus per-surface imports from one registry config instead of relying on per-plugin descriptor wrappers
 - the installed bundle order now lives in `plugins/installed/registry.config.mjs`; `plugins/installed/src/index.ts` and the generated surface files should be regenerated from that registry instead of edited by hand
 - config-time helpers for registry-driven plugin package matchers and source aliases now live in `plugins/installed/registry.helpers.mjs`, and root plugin-workspace fanout scripts should prefer that helper over repeating plugin package names by hand
+- backend host binding for native plugins now prefers `backend.createHostContribution(hostContext)` exposed by the plugin package; `packages/backend/src/services/plugins/descriptors.ts` builds those contributions directly from `plugins/installed`, so new per-plugin `hostPlugin.ts` or `hostRegistry.ts` files in backend are the wrong direction
 - `external_embed` plugins are still host-managed at runtime: they do not need native backend/frontend/CLI module exports, and backend should synthesize generic info/config/snippet behavior from the manifest instead of forcing a fake `PluginModule`
 
 Treat the architecture as:
@@ -153,8 +154,8 @@ Use this sequence:
 2. Wire the backend module.
    - Implement `PluginModule` behavior using shared contracts from `packages/shared`
    - Support generic info/config/action flows when possible
-   - Prefer a host adapter that binds backend runtime/services into a plugin-owned module factory
-   - Keep plugin-specific router payloads thin, but keep compatibility tRPC routers in backend host adapters rather than making extracted plugin packages import `@vivd/backend/src/...`
+   - Prefer a plugin-owned `backend.createHostContribution(hostContext)` that binds host runtime/services into the plugin package; do not add a new backend-side per-plugin `hostPlugin.ts`
+   - Keep plugin-specific router payloads thin, but keep compatibility tRPC routers as temporary backend host adapters rather than making extracted plugin packages import `@vivd/backend/src/...`
    - If organization overview, super-admin/plugin-entitlement flows, background jobs, or plugin-owned project-maintenance work need plugin-specific behavior, put that behavior in plugin-owned backend hooks and register it through `packages/backend/src/services/plugins/integrationHooks.ts`
 
 3. Wire shared UI metadata.
@@ -166,6 +167,8 @@ Use this sequence:
    - Register the frontend module in `packages/frontend/src/plugins/registry.tsx`
    - Use a generic fallback page unless the plugin needs custom UI
    - Put custom pages in the plugin package if the plugin is extracted
+   - Delete dead host-side re-export wrappers once callers import the plugin package directly; do not leave `packages/frontend/src/plugins/<plugin>/module.ts` around as inert compatibility clutter
+   - Keep plugin-specific frontend tests beside the plugin package UI where practical; let the frontend workspace Vitest config include them rather than storing plugin-only test files under `packages/frontend/src/plugins`
 
 5. Wire CLI ownership.
    - Keep the generic CLI grammar in `packages/cli/src/commands.ts`

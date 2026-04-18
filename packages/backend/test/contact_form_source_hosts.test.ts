@@ -1,38 +1,98 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BackendHostContext } from "@vivd/plugin-sdk";
 
-const { inferPluginSourceHostsMock, getInstallProfileMock } = vi.hoisted(() => ({
+const { inferPluginSourceHostsMock } = vi.hoisted(() => ({
   inferPluginSourceHostsMock: vi.fn(),
-  getInstallProfileMock: vi.fn(),
 }));
 
-vi.mock("@vivd/plugin-contact-form/backend/sourceHosts", () => ({
-  inferContactFormAutoSourceHosts: inferPluginSourceHostsMock,
-}));
+vi.mock("@vivd/plugin-contact-form/backend/sourceHosts", async () => {
+  const actual = await vi.importActual<
+    typeof import("@vivd/plugin-contact-form/backend/sourceHosts")
+  >("@vivd/plugin-contact-form/backend/sourceHosts");
 
-vi.mock("../src/services/system/InstallProfileService", () => ({
-  installProfileService: {
-    getInstallProfile: getInstallProfileMock,
-  },
-}));
+  return {
+    ...actual,
+    inferContactFormAutoSourceHosts: inferPluginSourceHostsMock,
+  };
+});
 
 import {
-  inferContactFormAutoSourceHosts,
   PLATFORM_STUDIO_PREVIEW_HOST,
-} from "../src/services/plugins/contactForm/sourceHosts";
+  inferVivdContactFormSourceHosts,
+} from "@vivd/plugin-contact-form/backend/plugin";
 
-describe("inferContactFormAutoSourceHosts", () => {
+function makeHostContext(installProfile: "platform" | "solo"): BackendHostContext {
+  return {
+    db: {
+      query: {
+        publishedSite: {
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        domain: {
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+      },
+    },
+    tables: {
+      publishedSite: {
+        organizationId: "organizationId",
+        projectSlug: "projectSlug",
+      },
+      domain: {
+        organizationId: "organizationId",
+        usage: "usage",
+        status: "status",
+      },
+    },
+    pluginEntitlementService: {},
+    projectPluginInstanceService: {
+      ensurePluginInstance: vi.fn(),
+      getPluginInstance: vi.fn(),
+      updatePluginInstance: vi.fn(),
+    },
+    runtime: {
+      getPublicPluginApiBaseUrl: vi.fn(),
+      getControlPlaneOrigin: vi.fn(),
+      inferProjectPluginSourceHosts: vi.fn(),
+      hostUtils: {
+        extractSourceHostFromHeaders: vi.fn(),
+        isHostAllowed: vi.fn(),
+        normalizeHostCandidate: vi.fn(),
+      },
+      env: {
+        nodeEnv: "test",
+        flyStudioPublicHost: undefined,
+        flyStudioApp: undefined,
+      },
+    },
+    email: {
+      deliveryService: {},
+      deliverabilityService: {},
+      templates: {},
+    },
+    system: {
+      installProfileService: {
+        getInstallProfile: vi.fn().mockResolvedValue(installProfile),
+        resolvePolicy: vi.fn(),
+      },
+    },
+  };
+}
+
+describe("inferVivdContactFormSourceHosts", () => {
   beforeEach(() => {
     inferPluginSourceHostsMock.mockReset();
-    getInstallProfileMock.mockReset();
     inferPluginSourceHostsMock.mockResolvedValue(["customer.example"]);
-    getInstallProfileMock.mockResolvedValue("platform");
   });
 
   it("adds the hosted Studio preview host for platform installs", async () => {
-    const hosts = await inferContactFormAutoSourceHosts({
-      organizationId: "org-1",
-      projectSlug: "dld-diagnostika",
-    });
+    const hosts = await inferVivdContactFormSourceHosts(
+      makeHostContext("platform"),
+      {
+        organizationId: "org-1",
+        projectSlug: "dld-diagnostika",
+      },
+    );
 
     expect(inferPluginSourceHostsMock).toHaveBeenCalledWith(
       {
@@ -48,9 +108,7 @@ describe("inferContactFormAutoSourceHosts", () => {
   });
 
   it("does not add the hosted Studio preview host for solo installs", async () => {
-    getInstallProfileMock.mockResolvedValue("solo");
-
-    const hosts = await inferContactFormAutoSourceHosts({
+    const hosts = await inferVivdContactFormSourceHosts(makeHostContext("solo"), {
       organizationId: "org-1",
       projectSlug: "dld-diagnostika",
     });
@@ -64,10 +122,13 @@ describe("inferContactFormAutoSourceHosts", () => {
       "customer.example",
     ]);
 
-    const hosts = await inferContactFormAutoSourceHosts({
-      organizationId: "org-1",
-      projectSlug: "dld-diagnostika",
-    });
+    const hosts = await inferVivdContactFormSourceHosts(
+      makeHostContext("platform"),
+      {
+        organizationId: "org-1",
+        projectSlug: "dld-diagnostika",
+      },
+    );
 
     expect(hosts).toEqual(["customer.example", PLATFORM_STUDIO_PREVIEW_HOST]);
   });

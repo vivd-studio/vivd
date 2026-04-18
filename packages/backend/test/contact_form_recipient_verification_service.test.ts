@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createContactFormRecipientVerificationService } from "@vivd/plugin-contact-form/backend/recipientVerification";
 
 const {
   projectPluginInstanceFindFirstMock,
@@ -44,35 +45,36 @@ const {
   };
 });
 
-vi.mock("../src/db", () => ({
-  db: {
-    query: {
-      projectPluginInstance: {
-        findFirst: projectPluginInstanceFindFirstMock,
-      },
-      organizationMember: {
-        findMany: organizationMemberFindManyMock,
-      },
-      contactFormRecipientVerification: {
-        findFirst: contactFormRecipientVerificationFindFirstMock,
-      },
-    },
-    transaction: dbTransactionMock,
-  },
-}));
-
-vi.mock("../src/services/email/templates", () => ({
-  buildContactRecipientVerificationEmail: vi.fn(),
-  buildContactSubmissionEmail: vi.fn(),
-}));
-
-vi.mock("../src/services/integrations/EmailDeliveryService", () => ({
-  getEmailDeliveryService: vi.fn(),
-}));
-
-import { contactFormRecipientVerificationService } from "../src/services/plugins/contactForm/recipientVerification";
-
 describe("contactFormRecipientVerificationService.markRecipientVerified", () => {
+  const contactFormRecipientVerificationService =
+    createContactFormRecipientVerificationService({
+      db: {
+        query: {
+          projectPluginInstance: {
+            findFirst: projectPluginInstanceFindFirstMock,
+          },
+          organizationMember: {
+            findMany: organizationMemberFindManyMock,
+          },
+          contactFormRecipientVerification: {
+            findFirst: contactFormRecipientVerificationFindFirstMock,
+          },
+        },
+        transaction: dbTransactionMock,
+      },
+      tables: {
+        contactFormRecipientVerification: { organizationId: "organizationId" },
+        organizationMember: { organizationId: "organizationId" },
+        projectPluginInstance: { id: "id" },
+      },
+      getContactRecipientVerificationEndpoint: () =>
+        "https://app.vivd.local/vivd-studio/api/plugins/contact/v1/recipient-verify",
+      buildRecipientVerificationEmail: vi.fn(),
+      emailDeliveryService: {
+        send: vi.fn(),
+      },
+    });
+
   beforeEach(() => {
     projectPluginInstanceFindFirstMock.mockReset();
     organizationMemberFindManyMock.mockReset();

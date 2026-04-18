@@ -1,4 +1,4 @@
-CREATE TABLE "project_plugin_access_request" (
+CREATE TABLE IF NOT EXISTS "project_plugin_access_request" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
 	"project_slug" text NOT NULL,
@@ -28,6 +28,6 @@ DO $$ BEGIN
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;--> statement-breakpoint
-CREATE UNIQUE INDEX "project_plugin_access_request_org_project_plugin_unique" ON "project_plugin_access_request" USING btree ("organization_id","project_slug","plugin_id");--> statement-breakpoint
-CREATE INDEX "project_plugin_access_request_org_project_idx" ON "project_plugin_access_request" USING btree ("organization_id","project_slug");--> statement-breakpoint
-CREATE INDEX "project_plugin_access_request_status_idx" ON "project_plugin_access_request" USING btree ("status");
+CREATE UNIQUE INDEX IF NOT EXISTS "project_plugin_access_request_org_project_plugin_unique" ON "project_plugin_access_request" USING btree ("organization_id","project_slug","plugin_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "project_plugin_access_request_org_project_idx" ON "project_plugin_access_request" USING btree ("organization_id","project_slug");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "project_plugin_access_request_status_idx" ON "project_plugin_access_request" USING btree ("status");
