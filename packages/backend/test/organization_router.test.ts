@@ -462,7 +462,7 @@ describe("organization router", () => {
     });
 
     expect(rateLimitCheckActionMock).toHaveBeenCalledWith({
-      action: "auth",
+      action: "auth_mutation",
       organizationId: "org-1",
       requestIp: "127.0.0.1",
       userId: "user-1",
@@ -520,7 +520,7 @@ describe("organization router", () => {
     });
 
     expect(rateLimitCheckActionMock).toHaveBeenCalledWith({
-      action: "auth",
+      action: "auth_mutation",
       organizationId: null,
       requestIp: "198.51.100.24",
       userId: null,
