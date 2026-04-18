@@ -28,3 +28,5 @@ export const contactFormPluginManifest = definePluginPackageManifest({
     mode: "native",
   },
 } as const satisfies NativePluginPackageManifest<"contact_form">);
+
+export default contactFormPluginManifest;

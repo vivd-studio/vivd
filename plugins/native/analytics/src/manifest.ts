@@ -28,3 +28,5 @@ export const analyticsPluginManifest = definePluginPackageManifest({
     mode: "native",
   },
 } as const satisfies NativePluginPackageManifest<"analytics">);
+
+export default analyticsPluginManifest;

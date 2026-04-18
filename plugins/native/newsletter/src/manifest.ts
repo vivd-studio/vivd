@@ -27,3 +27,5 @@ export const newsletterPluginManifest = definePluginPackageManifest({
     mode: "native",
   },
 } as const satisfies NativePluginPackageManifest<"newsletter">);
+
+export default newsletterPluginManifest;

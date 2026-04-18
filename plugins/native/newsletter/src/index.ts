@@ -22,7 +22,6 @@ export type {
   NewsletterPluginBackendContributionDeps,
 } from "./backend/contribution";
 export { createNewsletterPluginBackendHooks } from "./backend/integrationHooks";
-export { newsletterPluginDescriptor } from "./descriptor";
 export { newsletterCliModule } from "./cli/module";
 export { newsletterCliPluginPackage } from "./cli/plugin";
 export { newsletterFrontendPluginModule } from "./frontend/module";

@@ -209,18 +209,11 @@ export interface NativePluginBackendPackage<
   backend: PluginContributionFactory<TBackendDeps, TBackendContribution>;
 }
 
-export interface PluginPackageSurfaceExports {
-  backend?: string;
-  frontend?: string;
-  cli?: string;
-}
-
 export interface PluginBundleEntry<
   TPluginId extends string = string,
 > {
   pluginId: TPluginId;
   manifest: PluginPackageManifest<TPluginId>;
-  surfaceExports?: PluginPackageSurfaceExports;
 }
 
 export type PluginPackageInstallDescriptor<

@@ -47,7 +47,6 @@ export type {
   TableBookingAgendaPayload,
   TableBookingRecord,
 } from "./shared/summary";
-export { tableBookingPluginDescriptor } from "./descriptor";
 export { tableBookingCliModule } from "./cli/module";
 export { tableBookingCliPluginPackage } from "./cli/plugin";
 export { tableBookingFrontendPluginModule } from "./frontend/module";

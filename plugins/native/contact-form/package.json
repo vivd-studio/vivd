@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./descriptor": "./src/descriptor.ts",
     "./manifest": "./src/manifest.ts",
     "./backendHooks": "./src/backendHooks.ts",
     "./backend/config": "./src/backend/config.ts",

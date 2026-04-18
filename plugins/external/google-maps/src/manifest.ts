@@ -102,3 +102,5 @@ export const googleMapsPluginManifest = definePluginPackageManifest({
     },
   },
 } as const satisfies ExternalEmbedPluginPackageManifest<"google_maps">);
+
+export default googleMapsPluginManifest;

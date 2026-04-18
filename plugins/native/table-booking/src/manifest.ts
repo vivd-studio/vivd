@@ -27,3 +27,5 @@ export const tableBookingPluginManifest = definePluginPackageManifest({
     mode: "native",
   },
 } as const satisfies NativePluginPackageManifest<"table_booking">);
+
+export default tableBookingPluginManifest;

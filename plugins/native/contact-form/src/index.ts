@@ -11,7 +11,6 @@ export {
 } from "./backend/adminHooks";
 export { createContactFormPluginBackendHooks as createContactFormBackendHooks } from "./backendHooks";
 export { contactFormBackendPluginPackage } from "./backend/plugin";
-export { contactFormPluginDescriptor } from "./descriptor";
 export {
   createContactFormPluginBackendContribution,
 } from "./backend/contribution";

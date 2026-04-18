@@ -10,7 +10,6 @@ export type {
   AnalyticsPluginBackendContributionDeps,
 } from "./backend/ports";
 export { analyticsBackendPluginPackage } from "./backend/plugin";
-export { analyticsPluginDescriptor } from "./descriptor";
 export { analyticsCliModule } from "./cli/module";
 export { analyticsCliPluginPackage } from "./cli/plugin";
 export { analyticsFrontendPluginModule } from "./frontend/module";

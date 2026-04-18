@@ -22,7 +22,7 @@ Vivd is in a mixed state:
 - first-party native plugins currently live under `plugins/native/*`
 - host apps still own the generic plugin platform, registries, routing, and compatibility layers
 - the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
-- plugin packages now also export safe package descriptors (`src/descriptor.ts`) so host registries can derive plugin-owned definition/UI/CLI metadata from one package-level source instead of repeating separate arrays/maps per surface
+- plugin packages now expose manifests and surface-specific packages directly; the installed bundle in `plugins/installed` composes those manifests plus per-surface imports from one registry config instead of relying on per-plugin descriptor wrappers
 - the installed bundle order now lives in `plugins/installed/registry.config.mjs`; `plugins/installed/src/index.ts` and the generated surface files should be regenerated from that registry instead of edited by hand
 - config-time helpers for registry-driven plugin package matchers and source aliases now live in `plugins/installed/registry.helpers.mjs`, and root plugin-workspace fanout scripts should prefer that helper over repeating plugin package names by hand
 - `external_embed` plugins are still host-managed at runtime: they do not need native backend/frontend/CLI module exports, and backend should synthesize generic info/config/snippet behavior from the manifest instead of forcing a fake `PluginModule`
@@ -74,9 +74,9 @@ Start here when orienting:
 - Extracted plugin package example:
   - `plugins/external/google-maps/package.json`
   - `plugins/external/google-maps/src/manifest.ts`
-  - `plugins/external/google-maps/src/descriptor.ts`
+  - `plugins/external/google-maps/src/manifest.ts`
   - `plugins/native/analytics/package.json`
-  - `plugins/native/analytics/src/descriptor.ts`
+  - `plugins/native/analytics/src/manifest.ts`
   - `plugins/native/analytics/src/backend/config.ts`
   - `plugins/native/analytics/src/backend/module.ts`
   - `plugins/native/analytics/src/frontend/module.ts`
@@ -84,7 +84,7 @@ Start here when orienting:
   - `plugins/native/analytics/src/cli/module.ts`
   - `plugins/native/analytics/src/shared/projectUi.ts`
   - `plugins/native/contact-form/package.json`
-  - `plugins/native/contact-form/src/descriptor.ts`
+  - `plugins/native/contact-form/src/manifest.ts`
   - `plugins/native/contact-form/src/backendHooks.ts`
   - `plugins/native/contact-form/src/backend/config.ts`
   - `plugins/native/contact-form/src/backend/module.ts`
@@ -125,7 +125,7 @@ Aim for this boundary:
 - host apps keep the generic surface
 - plugin packages own their own behavior
 - the CLI grammar stays generic: `vivd plugins ...`
-- plugin packages contribute descriptors/renderers/help instead of inventing new top-level command trees
+- plugin packages contribute manifests/renderers/help instead of inventing new top-level command trees
 - frontend routes are mounted by the host, but plugin pages/panels are owned by the plugin
 
 Good examples:
@@ -144,9 +144,9 @@ Use this sequence:
 
 1. Define or update the plugin definition.
    - Keep the plugin definition in the plugin package
-   - Export a safe package descriptor from the plugin package
+   - Export a safe package manifest from the plugin package
    - Put short plugin-specific agent guidance in `definition.agentHints` when the agent needs durable rules that should follow the plugin everywhere
-   - Register the plugin through the host descriptor lists instead of adding separate hardcoded arrays/maps per surface
+   - Register the plugin through the installed-plugin registry and host contribution lists instead of adding separate hardcoded arrays/maps per surface
 
 2. Wire the backend module.
    - Implement `PluginModule` behavior using shared contracts from `packages/shared`
