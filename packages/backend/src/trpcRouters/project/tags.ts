@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure, projectMemberProcedure } from "../../trpc";
+import { projectAdminProcedure, projectMemberProcedure } from "../../trpc";
 import { getManifest } from "../../generator/versionUtils";
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import {
@@ -17,7 +17,7 @@ export const projectTagProcedures = {
     });
     return { tags };
   }),
-  updateTags: adminProcedure
+  updateTags: projectAdminProcedure
     .input(
       z.object({
         slug: z.string().min(1),
@@ -61,7 +61,7 @@ export const projectTagProcedures = {
         tags: normalizedTags,
       };
     }),
-  renameTag: adminProcedure
+  renameTag: projectAdminProcedure
     .input(
       z.object({
         fromTag: z.string().min(1),
@@ -106,7 +106,7 @@ export const projectTagProcedures = {
         updatedProjects: result.updatedSlugs.length,
       };
     }),
-  deleteTag: adminProcedure
+  deleteTag: projectAdminProcedure
     .input(
       z.object({
         tag: z.string().min(1),
@@ -146,7 +146,7 @@ export const projectTagProcedures = {
         updatedProjects: result.updatedSlugs.length,
       };
     }),
-  setTagColor: adminProcedure
+  setTagColor: projectAdminProcedure
     .input(
       z.object({
         tag: z.string().min(1),

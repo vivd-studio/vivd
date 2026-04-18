@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { adminProcedure, projectMemberProcedure } from "../../trpc";
+import { projectAdminProcedure, projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { buildService } from "../../services/project/BuildService";
 import { detectProjectType } from "../../devserver/projectType";
@@ -137,7 +137,7 @@ export const previewProcedures = {
       };
     }),
 
-  setPublicPreviewEnabled: adminProcedure
+  setPublicPreviewEnabled: projectAdminProcedure
     .input(
       z.object({
         slug: z.string(),

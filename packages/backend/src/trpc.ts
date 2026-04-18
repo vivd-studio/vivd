@@ -8,6 +8,8 @@ export {
   studioOrgProcedure,
   orgAdminProcedure,
   superAdminProcedure,
+  teamMemberProcedure,
+  projectAdminProcedure,
   projectMemberProcedure,
   studioStartProcedure,
   studioHardRestartProcedure,

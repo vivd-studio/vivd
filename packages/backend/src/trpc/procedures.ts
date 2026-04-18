@@ -373,7 +373,7 @@ export const studioProjectProcedure = studioOrgProcedure
   .use(enforceClientEditorProjectAccess)
   .use(enforceStudioProjectAccess);
 
-export const adminProcedure = orgProcedure.use(
+export const teamMemberProcedure = orgProcedure.use(
   enforceStudioUserActionProjectAccess,
 ).use(
   async function isTeamMember(opts) {
@@ -388,6 +388,12 @@ export const adminProcedure = orgProcedure.use(
     return opts.next();
   },
 );
+export const projectAdminProcedure = orgAdminProcedure.use(
+  enforceStudioUserActionProjectAccess,
+);
+// Legacy alias: this procedure allows any non-client-editor team member.
+// Prefer `projectAdminProcedure` or `orgAdminProcedure` for new privileged mutations.
+export const adminProcedure = teamMemberProcedure;
 export const generationProcedure = adminProcedure.use(
   createControlPlaneRateLimitMiddleware({
     action: "project_generation",

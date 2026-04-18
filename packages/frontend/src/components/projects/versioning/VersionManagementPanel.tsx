@@ -19,6 +19,7 @@ interface VersionManagementPanelProps {
   projectSlug: string;
   versions: VersionInfo[];
   publishedVersion?: number | null;
+  canDeleteVersions?: boolean;
   onVersionDeleted?: () => void;
 }
 
@@ -28,6 +29,7 @@ export function VersionManagementPanel({
   projectSlug,
   versions,
   publishedVersion,
+  canDeleteVersions = true,
   onVersionDeleted,
 }: VersionManagementPanelProps) {
   const utils = trpc.useUtils();
@@ -94,6 +96,12 @@ export function VersionManagementPanel({
   const canDeleteVersion = (
     version: VersionInfo,
   ): { canDelete: boolean; reason?: string } => {
+    if (!canDeleteVersions) {
+      return {
+        canDelete: false,
+        reason: "Organization admin access required",
+      };
+    }
     if (version.version === publishedVersion) {
       return {
         canDelete: false,

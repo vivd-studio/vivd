@@ -24,7 +24,7 @@ import {
 } from "@/components/common/FramedHostShell";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
-import { authClient } from "@/lib/auth-client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import {
   type StudioRuntimeSession,
@@ -183,13 +183,10 @@ export default function ProjectFullscreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameSlugInput, setRenameSlugInput] = useState(projectSlug ?? "");
-  const { data: session } = authClient.useSession();
-  const { data: membership } = trpc.organization.getMyMembership.useQuery(
-    undefined,
-    { enabled: !!session },
-  );
-  const canManagePreview = membership?.organizationRole !== "client_editor";
-  const canRenameProject = membership?.organizationRole !== "client_editor";
+  const { isAdmin } = usePermissions();
+  const canManagePreview = isAdmin;
+  const canRenameProject = isAdmin;
+  const canDeleteProject = isAdmin;
   const isRenamePending = renameSlugMutation.isPending;
 
   const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
@@ -600,14 +597,16 @@ export default function ProjectFullscreen() {
                 Rename project slug
               </DropdownMenuItem>
             ) : null}
-            <DropdownMenuItem
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-              disabled={isRenamePending}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete project
-            </DropdownMenuItem>
+            {canDeleteProject ? (
+              <DropdownMenuItem
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                disabled={isRenamePending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete project
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </>
@@ -870,7 +869,7 @@ export default function ProjectFullscreen() {
         </AlertDialog>
 
         <AlertDialog
-          open={showDeleteConfirm}
+          open={canDeleteProject && showDeleteConfirm}
           onOpenChange={setShowDeleteConfirm}
         >
           <AlertDialogContent>
@@ -1045,7 +1044,10 @@ export default function ProjectFullscreen() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog
+        open={canDeleteProject && showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete project?</AlertDialogTitle>

@@ -265,6 +265,8 @@ describe("InitialGenerationService", () => {
     expect(task).toContain("src/content/media/shared/logo.png");
     expect(task).toContain("canonical home for Astro-managed site assets");
     expect(task).toContain("Prefer Astro's `Image` component from `astro:assets`");
+    expect(task).toContain("you may generate exactly one new hero image");
+    expect(task).toContain("do not generate any other new images during the initial run");
     expect(task).toContain("does not create CMS preview ownership");
     expect(task).toContain("Bind derived CMS display variants too");
     expect(task).toContain("src={entry.data.image}");

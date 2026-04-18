@@ -24,6 +24,7 @@ interface ProjectCardHeaderProps {
   statusLabel: string;
   statusColor: ProjectStatusBadgeVariant;
   isCompleted: boolean;
+  canManageTags: boolean;
   canRenameProject: boolean;
   isRenamePending: boolean;
   isTitleUpdatePending: boolean;
@@ -66,6 +67,7 @@ export function ProjectCardHeader({
   statusLabel,
   statusColor,
   isCompleted,
+  canManageTags,
   canRenameProject,
   isRenamePending,
   isTitleUpdatePending,
@@ -182,10 +184,12 @@ export function ProjectCardHeader({
           >
             <div
               ref={tagsAreaAnchorRef}
-              className="flex h-[22px] max-w-[200px] cursor-pointer flex-nowrap justify-end gap-1 overflow-hidden text-right"
-              title="Click to edit labels"
+              className={`flex h-[22px] max-w-[200px] flex-nowrap justify-end gap-1 overflow-hidden text-right ${
+                canManageTags ? "cursor-pointer" : ""
+              }`}
+              title={canManageTags ? "Click to edit labels" : "Project labels"}
               onClick={(event) => {
-                if (isRenamePending) return;
+                if (isRenamePending || !canManageTags) return;
                 event.stopPropagation();
                 onOpenTagsPopover();
               }}

@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { adminProcedure } from "../../../trpc";
+import { projectAdminProcedure } from "../../../trpc";
 import { db } from "../../../db";
 import {
   projectMember,
@@ -89,7 +89,7 @@ export const projectMaintenanceDestructiveProcedures = {
    * Delete a project permanently.
    * Requires typing the project name to confirm deletion (GitHub-style safety).
    */
-  delete: adminProcedure
+  delete: projectAdminProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -202,7 +202,7 @@ export const projectMaintenanceDestructiveProcedures = {
    * Requires typing "v{N}" to confirm deletion.
    * Cannot delete published versions or the only remaining version.
    */
-  deleteVersion: adminProcedure
+  deleteVersion: projectAdminProcedure
     .input(
       z.object({
         slug: z.string(),

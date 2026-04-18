@@ -590,6 +590,7 @@ Keep the project as Astro with the existing Tailwind setup. Do not replace the f
 Use uploaded source assets from \`${preferredAssetRoot}/\` when relevant.
 Treat \`src/content/media/\` as the canonical home for Astro-managed site assets. If the workspace still has legacy scratch assets under \`images/\`, you may reuse them, but prefer keeping final managed assets under \`src/content/media/\`.
 Prefer Astro's \`Image\` component from \`astro:assets\` for almost all images. Use plain \`<img>\` only when \`Image\` is not practical.
+Reuse uploaded or referenced imagery wherever it can support the page. If no suitable hero image is provided, you may generate exactly one new hero image for the page. Apart from that single fallback hero image, do not generate any other new images during the initial run.
 For Astro CMS-backed sections, remember that rendering \`item.data.*\` or \`entry.data.*\` directly only prints the current value and does not create CMS preview ownership. Use \`CmsText\` or \`cmsTextBindingAttrs(...)\` on the actual visible render point for every CMS-owned text occurrence.
 Bind derived CMS display variants too. If a CMS field is shown as initials, badges, ratings, labels, truncated text, or any other computed string, the visible derived output still needs the CMS binding.
 When using \`CmsImage\`, always pass the actual image field value as \`src={entry.data.image}\` or the equivalent field expression; metadata without \`src\` is incomplete.

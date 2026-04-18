@@ -3,15 +3,6 @@ import path from "path";
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
-export const BUILD_CACHE_PATHS_TO_UNTRACK = [
-  ".astro",
-  "node_modules",
-  "dist",
-  ".next",
-  ".nuxt",
-  ".output",
-];
-
 export function normalizeProjectSlug(input: string, fieldName: string): string {
   const normalized = input.trim().toLowerCase();
   if (!normalized) {
@@ -62,9 +53,4 @@ export function moveDirectory(fromPath: string, toPath: string): void {
     fs.cpSync(fromPath, toPath, { recursive: true });
     fs.rmSync(fromPath, { recursive: true, force: true });
   }
-}
-
-export async function loadGitService() {
-  const { gitService } = await import("../../../services/integrations/GitService");
-  return gitService;
 }

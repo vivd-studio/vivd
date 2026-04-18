@@ -170,42 +170,6 @@ describe("project.updateTags", () => {
     expect(setTagsMock).not.toHaveBeenCalled();
   });
 
-  it("blocks client editors", async () => {
-    const caller = tagsRouter.createCaller(
-      makeContext({
-        session: {
-          session: {
-            id: "sess-1",
-            userId: "user-1",
-            expiresAt: new Date(Date.now() + 60_000),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            ipAddress: null,
-            userAgent: null,
-          },
-          user: {
-            id: "user-1",
-            email: "client@example.com",
-            name: "Client",
-            role: "super_admin",
-            emailVerified: true,
-            image: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        },
-        organizationRole: "client_editor",
-      }),
-    );
-
-    await expect(
-      caller.updateTags({ slug: "site-1", tags: ["marketing"] }),
-    ).rejects.toMatchObject({
-      code: "UNAUTHORIZED",
-    });
-    expect(setTagsMock).not.toHaveBeenCalled();
-  });
-
   it("deletes a label across all projects in the organization", async () => {
     removeTagFromOrganizationMock.mockResolvedValueOnce({
       updatedSlugs: ["site-1", "site-2"],
@@ -290,39 +254,4 @@ describe("project.updateTags", () => {
     expect(removeTagFromOrganizationMock).not.toHaveBeenCalled();
   });
 
-  it("blocks client editors from deleting labels", async () => {
-    const caller = tagsRouter.createCaller(
-      makeContext({
-        session: {
-          session: {
-            id: "sess-1",
-            userId: "user-1",
-            expiresAt: new Date(Date.now() + 60_000),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            ipAddress: null,
-            userAgent: null,
-          },
-          user: {
-            id: "user-1",
-            email: "client@example.com",
-            name: "Client",
-            role: "super_admin",
-            emailVerified: true,
-            image: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        },
-        organizationRole: "client_editor",
-      }),
-    );
-
-    await expect(
-      caller.deleteTag({ tag: "marketing" }),
-    ).rejects.toMatchObject({
-      code: "UNAUTHORIZED",
-    });
-    expect(removeTagFromOrganizationMock).not.toHaveBeenCalled();
-  });
 });

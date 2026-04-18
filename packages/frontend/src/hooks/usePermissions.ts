@@ -38,7 +38,7 @@ export function usePermissions() {
     // the same AI editing surface inside that assigned project.
     canUseAgent: true,
     canUseAiImages: true,
-    canManageProjects: !isClientEditor,
+    canManageProjects: isAdmin,
     canManageUsers: isAdmin,
     canAccessMaintenance: isSuperAdmin,
   };

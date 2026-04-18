@@ -24,62 +24,27 @@ export interface BackendPluginProjectUsageCount {
   count: number;
 }
 
-const backendPluginHooks = new Map<
-  PluginId,
-  BackendPluginIntegrationHooks
->(
-  backendPluginPackageDescriptors.flatMap((descriptor) =>
+function listBackendPluginHookEntries(): Array<
+  readonly [PluginId, BackendPluginIntegrationHooks]
+> {
+  // Resolve hook descriptors lazily so plugin host context initialization can
+  // finish before we touch the installed backend registry.
+  return (backendPluginPackageDescriptors ?? []).flatMap((descriptor) =>
     descriptor.backend.hooks
       ? [[descriptor.pluginId as PluginId, descriptor.backend.hooks] as const]
       : [],
-  ),
-);
-
-const organizationPluginHooks = new Map<
-  PluginId,
-  (options: {
-    organizationId: string;
-    projectSlugs: string[];
-    instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
-  }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>
->(
-  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
-    hooks.buildOrganizationProjectSummaries
-      ? [
-          [
-            pluginId,
-            hooks.buildOrganizationProjectSummaries,
-          ] as const,
-        ]
-      : [],
-  ),
-);
-
-const pluginUsageHooks = new Map<
-  PluginId,
-  (options: {
-    organizationId?: string;
-    startedAt: Date;
-  }) => Promise<BackendPluginProjectUsageCount[]>
->(
-  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
-    hooks.listProjectUsageCounts
-      ? [
-          [
-            pluginId,
-            hooks.listProjectUsageCounts,
-          ] as const,
-        ]
-      : [],
-  ),
-);
+  );
+}
 
 export async function listPluginProjectUsageCounts(options: {
   pluginId: PluginId;
   organizationId?: string;
   startedAt: Date;
 }): Promise<BackendPluginProjectUsageCount[]> {
-  const hook = pluginUsageHooks.get(options.pluginId);
+  const hook = listBackendPluginHookEntries().find(
+    ([pluginId, hooks]) =>
+      pluginId === options.pluginId && hooks.listProjectUsageCounts,
+  )?.[1].listProjectUsageCounts;
   if (!hook) return [];
   return hook(options);
 }
@@ -90,7 +55,10 @@ export async function buildOrganizationPluginProjectSummaries(options: {
   projectSlugs: string[];
   instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
 }): Promise<Map<string, OrganizationPluginProjectIntegrationSummary>> {
-  const hook = organizationPluginHooks.get(options.pluginId);
+  const hook = listBackendPluginHookEntries().find(
+    ([pluginId, hooks]) =>
+      pluginId === options.pluginId && hooks.buildOrganizationProjectSummaries,
+  )?.[1].buildOrganizationProjectSummaries;
   if (!hook) return new Map();
   return hook(options);
 }
@@ -123,45 +91,21 @@ interface SuperAdminEntitlementHook {
   }): Promise<void>;
 }
 
-const superAdminEntitlementHooks = new Map<PluginId, SuperAdminEntitlementHook>(
-  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) => {
-    const prepare = hooks.prepareProjectEntitlementFields;
-    const cleanup = hooks.cleanupProjectEntitlementFields;
-    if (!prepare || !cleanup) return [];
+function getSuperAdminEntitlementHook(
+  pluginId: PluginId,
+): SuperAdminEntitlementHook | null {
+  const hooks = listBackendPluginHookEntries().find(
+    ([candidatePluginId]) => candidatePluginId === pluginId,
+  )?.[1];
+  const prepare = hooks?.prepareProjectEntitlementFields;
+  const cleanup = hooks?.cleanupProjectEntitlementFields;
+  if (!prepare || !cleanup) return null;
 
-    return [
-      [
-        pluginId,
-        {
-          prepareProjectEntitlementFields: prepare,
-          cleanupProjectEntitlementFields: cleanup,
-        },
-      ] as const,
-    ];
-  }),
-);
-
-const projectSlugRenameHooks = new Map<
-  PluginId,
-  NonNullable<BackendPluginIntegrationHooks["renameProjectSlugData"]>
->(
-  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
-    hooks.renameProjectSlugData
-      ? [[pluginId, hooks.renameProjectSlugData] as const]
-      : [],
-  ),
-);
-
-const backgroundJobHooks = new Map<
-  PluginId,
-  NonNullable<BackendPluginIntegrationHooks["startBackgroundJobs"]>
->(
-  [...backendPluginHooks.entries()].flatMap(([pluginId, hooks]) =>
-    hooks.startBackgroundJobs
-      ? [[pluginId, hooks.startBackgroundJobs] as const]
-      : [],
-  ),
-);
+  return {
+    prepareProjectEntitlementFields: prepare,
+    cleanupProjectEntitlementFields: cleanup,
+  };
+}
 
 export async function preparePluginProjectEntitlementFields(options: {
   pluginId: PluginId;
@@ -171,7 +115,7 @@ export async function preparePluginProjectEntitlementFields(options: {
   turnstileEnabled: boolean;
   existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
 }): Promise<PreparedPluginEntitlementFields> {
-  const hook = superAdminEntitlementHooks.get(options.pluginId);
+  const hook = getSuperAdminEntitlementHook(options.pluginId);
   if (!hook) {
     return {
       turnstileEnabled: options.turnstileEnabled,
@@ -190,7 +134,7 @@ export async function cleanupPluginProjectEntitlementFields(options: {
   turnstileEnabled: boolean;
   existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
 }): Promise<void> {
-  const hook = superAdminEntitlementHooks.get(options.pluginId);
+  const hook = getSuperAdminEntitlementHook(options.pluginId);
   if (!hook) return;
   await hook.cleanupProjectEntitlementFields(options);
 }
@@ -204,8 +148,9 @@ export async function renamePluginProjectDataForSlugChange(options: {
   newSlug: string;
 }): Promise<number> {
   let movedRows = 0;
-  for (const hook of projectSlugRenameHooks.values()) {
-    movedRows += await hook(options);
+  for (const [, hooks] of listBackendPluginHookEntries()) {
+    if (!hooks.renameProjectSlugData) continue;
+    movedRows += await hooks.renameProjectSlugData(options);
   }
   return movedRows;
 }
@@ -221,8 +166,10 @@ function normalizePluginStopFns(
 }
 
 export function startInstalledPluginBackgroundJobs(): PluginStopFn {
-  const stopFns = [...backgroundJobHooks.values()].flatMap((hook) =>
-    normalizePluginStopFns(hook()),
+  const stopFns = listBackendPluginHookEntries().flatMap(([, hooks]) =>
+    hooks.startBackgroundJobs
+      ? normalizePluginStopFns(hooks.startBackgroundJobs())
+      : [],
   );
   let stopped = false;
 

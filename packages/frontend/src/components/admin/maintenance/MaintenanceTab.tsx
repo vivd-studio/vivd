@@ -10,9 +10,6 @@ type MaintenanceAction =
   | "migrateProcessFiles"
   | "migrateProjectMetadataToDb"
   | "exportProjectsToObjectStorage"
-  | "templateAddMissing"
-  | "templateOverwrite"
-  | "fixGitignore"
   | "thumbnailsMissing";
 
 export function MaintenanceTab() {
@@ -63,36 +60,6 @@ export function MaintenanceTab() {
       },
     });
 
-  const templateFilesMutation =
-    trpc.project.migrateProjectTemplateFiles.useMutation({
-      onSuccess: (data) => {
-        toast.success("Template files updated", {
-          description: `Touched ${data.versionsTouched}/${data.versionsScanned} versions`,
-        });
-      },
-      onError: (err: any) => {
-        toast.error("Template migration failed", {
-          description: err?.message || "Unknown error",
-        });
-      },
-    });
-
-  const fixGitignoreMutation = trpc.project.fixGitignoreAll.useMutation({
-    onSuccess: (data) => {
-      toast.success("Gitignore fix completed", {
-        description:
-          data.versionsFixed > 0
-            ? `Fixed ${data.versionsFixed}/${data.versionsScanned} versions (untracked: ${data.totalUntracked.join(", ")})`
-            : `All ${data.versionsScanned} versions already clean`,
-      });
-    },
-    onError: (err: any) => {
-      toast.error("Gitignore fix failed", {
-        description: err?.message || "Unknown error",
-      });
-    },
-  });
-
   const thumbnailsMutation = trpc.project.regenerateAllThumbnails.useMutation({
     onSuccess: (data) => {
       toast.success("Thumbnail regeneration completed", {
@@ -137,33 +104,6 @@ export function MaintenanceTab() {
           confirmLabel: "Export Projects",
           isPending: exportMutation.isPending,
           onConfirm: () => exportMutation.mutate(),
-        };
-      case "templateAddMissing":
-        return {
-          title: "Add missing template files?",
-          description:
-            "This will add missing .gitignore files in object storage for all project versions across all tenants.",
-          confirmLabel: "Add Missing Files",
-          isPending: templateFilesMutation.isPending,
-          onConfirm: () => templateFilesMutation.mutate({ overwrite: false }),
-        };
-      case "templateOverwrite":
-        return {
-          title: "Overwrite template files?",
-          description:
-            "This will overwrite .gitignore in object storage for all project versions across all tenants.",
-          confirmLabel: "Overwrite Files",
-          isPending: templateFilesMutation.isPending,
-          onConfirm: () => templateFilesMutation.mutate({ overwrite: true }),
-        };
-      case "fixGitignore":
-        return {
-          title: "Fix gitignore for all projects?",
-          description:
-            "This will untrack build cache directories (.astro, node_modules, dist, etc.) that were accidentally committed. Changes will be committed automatically.",
-          confirmLabel: "Fix Gitignore",
-          isPending: fixGitignoreMutation.isPending,
-          onConfirm: () => fixGitignoreMutation.mutate(),
         };
       case "thumbnailsMissing":
         return {
@@ -359,110 +299,6 @@ export function MaintenanceTab() {
                       </li>
                     ))}
                 </ul>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="border-t pt-3 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Ensure project template files (<code>.gitignore</code>) exist in
-              every project version&apos;s bucket source artifact across all tenants.
-              Use overwrite to update all existing template files after changing
-              templates.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                onClick={() => setConfirmAction("templateAddMissing")}
-                disabled={templateFilesMutation.isPending}
-              >
-                {templateFilesMutation.isPending ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : null}
-                Add Missing Template Files
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmAction("templateOverwrite")}
-                disabled={templateFilesMutation.isPending}
-              >
-                {templateFilesMutation.isPending ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : null}
-                Overwrite & Update Template Files
-              </Button>
-              {templateFilesMutation.data ? (
-                <span className="text-sm text-muted-foreground">
-                  {templateFilesMutation.data.written[".gitignore"]}{" "}
-                  <code>.gitignore</code> files across{" "}
-                  {templateFilesMutation.data.versionsTouched}/
-                  {templateFilesMutation.data.versionsScanned} versions
-                  {templateFilesMutation.data.errors.length
-                    ? ` • ${templateFilesMutation.data.errors.length} error(s)`
-                    : ""}
-                </span>
-              ) : null}
-            </div>
-            {templateFilesMutation.data?.errors.length ? (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium mb-2">Errors</div>
-                <ul className="space-y-1 text-muted-foreground">
-                  {templateFilesMutation.data.errors.slice(0, 5).map((e, idx) => (
-                    <li key={idx}>
-                      {e.slug}: {e.error}
-                    </li>
-                  ))}
-                </ul>
-                {templateFilesMutation.data.errors.length > 5 ? (
-                  <div className="text-muted-foreground mt-2">
-                    …and {templateFilesMutation.data.errors.length - 5} more
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="border-t pt-3 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Fix gitignore issues by untracking build cache directories (
-              <code>.astro</code>, <code>node_modules</code>, <code>dist</code>,
-              etc.) that were accidentally committed before being added to{" "}
-              <code>.gitignore</code>.
-            </p>
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setConfirmAction("fixGitignore")}
-                disabled={fixGitignoreMutation.isPending}
-              >
-                {fixGitignoreMutation.isPending ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : null}
-                Fix Gitignore (All Projects)
-              </Button>
-              {fixGitignoreMutation.data ? (
-                <span className="text-sm text-muted-foreground">
-                  Fixed {fixGitignoreMutation.data.versionsFixed}/
-                  {fixGitignoreMutation.data.versionsScanned} versions
-                  {fixGitignoreMutation.data.errors.length
-                    ? ` • ${fixGitignoreMutation.data.errors.length} error(s)`
-                    : ""}
-                </span>
-              ) : null}
-            </div>
-            {fixGitignoreMutation.data?.errors.length ? (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium mb-2">Errors</div>
-                <ul className="space-y-1 text-muted-foreground">
-                  {fixGitignoreMutation.data.errors.slice(0, 5).map((e, idx) => (
-                    <li key={idx}>
-                      {e.slug}/v{e.version}: {e.error}
-                    </li>
-                  ))}
-                </ul>
-                {fixGitignoreMutation.data.errors.length > 5 ? (
-                  <div className="text-muted-foreground mt-2">
-                    …and {fixGitignoreMutation.data.errors.length - 5} more
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { PROJECT_VERSION_MANUAL_STATUS_VALUES } from "@vivd/shared/types";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { adminProcedure, orgAdminProcedure } from "../../../trpc";
+import { orgAdminProcedure, projectAdminProcedure } from "../../../trpc";
 import { db } from "../../../db";
 import {
   pluginEntitlement,
@@ -93,7 +93,7 @@ export const projectMaintenanceStatusAndIdentityProcedures = {
       }),
     ),
 
-  updateTitle: adminProcedure
+  updateTitle: projectAdminProcedure
     .input(
       z.object({
         slug: z.string().min(1),
@@ -130,7 +130,7 @@ export const projectMaintenanceStatusAndIdentityProcedures = {
    * - project must be unpublished
    * - copy bucket prefix first, then DB cutover in transaction
    */
-  renameSlug: adminProcedure
+  renameSlug: projectAdminProcedure
     .input(
       z.object({
         oldSlug: z.string().min(1),

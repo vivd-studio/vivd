@@ -21,7 +21,7 @@ import {
   FramedViewport,
 } from "@/components/common/FramedHostShell";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
-import { authClient } from "@/lib/auth-client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import {
   type StudioRuntimeSession,
@@ -268,13 +268,10 @@ export default function EmbeddedStudio() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameSlugInput, setRenameSlugInput] = useState(projectSlug ?? "");
-  const { data: session } = authClient.useSession();
-  const { data: membership } = trpc.organization.getMyMembership.useQuery(
-    undefined,
-    { enabled: !!session },
-  );
-  const canManagePreview = membership?.organizationRole !== "client_editor";
-  const canRenameProject = membership?.organizationRole !== "client_editor";
+  const { isAdmin } = usePermissions();
+  const canManagePreview = isAdmin;
+  const canRenameProject = isAdmin;
+  const canDeleteProject = isAdmin;
   const isRenamePending = renameSlugMutation.isPending;
   const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (studioUrlQuery.data?.status !== "running") return null;
@@ -680,6 +677,7 @@ export default function EmbeddedStudio() {
       canDownloadSelectedVersion={isSelectedVersionCompleted}
       isRegenerateThumbnailPending={regenerateThumbnailMutation.isPending}
       canRenameProject={canRenameProject}
+      canDeleteProject={canDeleteProject}
       projectHeaderPluginShortcuts={projectHeaderPluginShortcuts}
       onEdit={handleEdit}
       onOpenPublish={() => setPublishDialogOpen(true)}

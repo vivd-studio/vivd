@@ -36,6 +36,7 @@ type EmbeddedStudioHeaderProps = {
   canDownloadSelectedVersion: boolean;
   isRegenerateThumbnailPending: boolean;
   canRenameProject: boolean;
+  canDeleteProject: boolean;
   projectHeaderPluginShortcuts: ResolvedProjectPluginShortcut[];
   onEdit: () => void;
   onOpenPublish: () => void;
@@ -67,6 +68,7 @@ export function EmbeddedStudioHeader({
   canDownloadSelectedVersion,
   isRegenerateThumbnailPending,
   canRenameProject,
+  canDeleteProject,
   projectHeaderPluginShortcuts,
   onEdit,
   onOpenPublish,
@@ -235,14 +237,16 @@ export function EmbeddedStudioHeader({
               Rename project slug
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem
-            onClick={onOpenDelete}
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-            disabled={isRenamePending}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete project
-          </DropdownMenuItem>
+          {canDeleteProject ? (
+            <DropdownMenuItem
+              onClick={onOpenDelete}
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              disabled={isRenamePending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete project
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </>

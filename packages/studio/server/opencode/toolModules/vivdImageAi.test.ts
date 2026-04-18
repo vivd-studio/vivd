@@ -53,6 +53,8 @@ describe("vivdImageAiToolDefinition", () => {
   const originalApiKey = process.env.OPENROUTER_API_KEY;
   const originalProjectSlug = process.env.VIVD_PROJECT_SLUG;
   const originalProjectVersion = process.env.VIVD_PROJECT_VERSION;
+  const originalImageAiMaxParallel =
+    process.env.STUDIO_OPENCODE_IMAGE_AI_MAX_PARALLEL;
   const samplePngBase64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6V7kQAAAAASUVORK5CYII=";
 
@@ -69,12 +71,19 @@ describe("vivdImageAiToolDefinition", () => {
     process.env.OPENROUTER_API_KEY = "test-key";
     delete process.env.VIVD_PROJECT_SLUG;
     delete process.env.VIVD_PROJECT_VERSION;
+    delete process.env.STUDIO_OPENCODE_IMAGE_AI_MAX_PARALLEL;
   });
 
   afterEach(() => {
     process.env.OPENROUTER_API_KEY = originalApiKey;
     process.env.VIVD_PROJECT_SLUG = originalProjectSlug;
     process.env.VIVD_PROJECT_VERSION = originalProjectVersion;
+    if (typeof originalImageAiMaxParallel === "string") {
+      process.env.STUDIO_OPENCODE_IMAGE_AI_MAX_PARALLEL =
+        originalImageAiMaxParallel;
+    } else {
+      delete process.env.STUDIO_OPENCODE_IMAGE_AI_MAX_PARALLEL;
+    }
   });
 
   it("returns a limit error and skips provider calls when image generation is blocked", async () => {
@@ -205,6 +214,75 @@ describe("vivdImageAiToolDefinition", () => {
       expect(result.ok).toBe(true);
       expect(reportImageGenerationMock).toHaveBeenCalledTimes(1);
       expect(fs.existsSync(path.join(workspaceDir, result.output.path))).toBe(true);
+    } finally {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
+  it("queues image generations so no more than three run in parallel by default", async () => {
+    isConnectedModeMock.mockReturnValue(false);
+
+    let active = 0;
+    let maxActive = 0;
+    const releases: Array<() => void> = [];
+    let generationIndex = 0;
+
+    createImageGenerationMock.mockImplementation(() => {
+      generationIndex += 1;
+      const currentIndex = generationIndex;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+
+      return new Promise((resolve) => {
+        releases.push(() => {
+          active -= 1;
+          resolve({
+            data: { id: `gen_${currentIndex}` },
+            generationId: `gen_${currentIndex}`,
+          });
+        });
+      });
+    });
+    extractImageFromResponseMock.mockReturnValue(`data:image/png;base64,${samplePngBase64}`);
+
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-image-ai-queue-"));
+
+    const waitForCallCount = async (expected: number) => {
+      for (let index = 0; index < 50; index += 1) {
+        if (createImageGenerationMock.mock.calls.length >= expected) return;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(createImageGenerationMock.mock.calls.length).toBeGreaterThanOrEqual(expected);
+    };
+
+    try {
+      const runs = Array.from({ length: 4 }, (_, index) =>
+        vivdImageAiToolDefinition.execute(
+          {
+            prompt: `Generate hero image ${index + 1}`,
+            images: [],
+            operation: "create",
+            outputDir: "",
+          },
+          { directory: workspaceDir },
+        ),
+      );
+
+      await waitForCallCount(3);
+      expect(createImageGenerationMock).toHaveBeenCalledTimes(3);
+      expect(maxActive).toBe(3);
+
+      releases.shift()?.();
+      await waitForCallCount(4);
+      expect(createImageGenerationMock).toHaveBeenCalledTimes(4);
+
+      while (releases.length > 0) {
+        releases.shift()?.();
+      }
+
+      const results = (await Promise.all(runs)).map((raw) => JSON.parse(raw));
+      expect(results.every((entry) => entry.ok === true)).toBe(true);
+      expect(maxActive).toBe(3);
     } finally {
       fs.rmSync(workspaceDir, { recursive: true, force: true });
     }

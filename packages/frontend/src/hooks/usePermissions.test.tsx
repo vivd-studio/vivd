@@ -58,4 +58,13 @@ describe("usePermissions", () => {
     expect(result.current.canManageProjects).toBe(false);
     expect(result.current.canManageUsers).toBe(false);
   });
+
+  it("does not treat ordinary members as project admins", () => {
+    const { result } = renderHook(() => usePermissions());
+
+    expect(result.current.organizationRole).toBe("member");
+    expect(result.current.isAdmin).toBe(false);
+    expect(result.current.canManageProjects).toBe(false);
+    expect(result.current.canManageUsers).toBe(false);
+  });
 });

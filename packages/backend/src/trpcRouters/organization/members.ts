@@ -11,10 +11,7 @@ import {
   user as userTable,
 } from "../../db/schema";
 import { orgAdminProcedure } from "../../trpc";
-import {
-  getGlobalUserRoleForMemberRole,
-  memberRoleSchema,
-} from "./shared";
+import { getGlobalUserRoleForMemberRole, memberRoleSchema } from "./shared";
 
 async function ensureProjectExists(organizationId: string, projectSlug: string) {
   const project = await db.query.projectMeta.findFirst({
@@ -262,6 +259,11 @@ export const organizationMembershipProcedures = {
           eq(organizationMember.userId, input.userId),
         ),
         columns: { role: true },
+        with: {
+          user: {
+            columns: { role: true },
+          },
+        },
       });
 
       if (!membership) {
@@ -278,6 +280,16 @@ export const organizationMembershipProcedures = {
         });
       }
 
+      if (
+        membership.user.role === "super_admin" &&
+        ctx.session.user.role !== "super_admin"
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Super-admin accounts can only be managed by super-admins",
+        });
+      }
+
       if (input.role === "client_editor" && input.projectSlug) {
         await ensureProjectExists(organizationId, input.projectSlug);
       }
@@ -291,12 +303,6 @@ export const organizationMembershipProcedures = {
             eq(organizationMember.userId, input.userId),
           ),
         );
-
-      const globalRole = getGlobalUserRoleForMemberRole(input.role);
-      await db
-        .update(userTable)
-        .set({ role: globalRole })
-        .where(eq(userTable.id, input.userId));
 
       if (input.role === "client_editor" && input.projectSlug) {
         await upsertProjectAssignment({
@@ -340,6 +346,11 @@ export const organizationMembershipProcedures = {
           eq(organizationMember.userId, input.userId),
         ),
         columns: { role: true },
+        with: {
+          user: {
+            columns: { role: true },
+          },
+        },
       });
 
       if (!membership) {
@@ -353,6 +364,16 @@ export const organizationMembershipProcedures = {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Owner password cannot be reset by organization admins",
+        });
+      }
+
+      if (
+        membership.user.role === "super_admin" &&
+        ctx.session.user.role !== "super_admin"
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Super-admin accounts can only be managed by super-admins",
         });
       }
 
@@ -393,6 +414,11 @@ export const organizationMembershipProcedures = {
           eq(organizationMember.userId, input.userId),
         ),
         columns: { role: true },
+        with: {
+          user: {
+            columns: { role: true },
+          },
+        },
       });
 
       if (!membership) {
@@ -403,6 +429,16 @@ export const organizationMembershipProcedures = {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Owner cannot be removed in v1",
+        });
+      }
+
+      if (
+        membership.user.role === "super_admin" &&
+        ctx.session.user.role !== "super_admin"
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Super-admin accounts can only be managed by super-admins",
         });
       }
 

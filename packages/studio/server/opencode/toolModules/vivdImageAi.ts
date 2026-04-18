@@ -4,7 +4,10 @@ import path from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
 import { isConnectedMode } from "@vivd/shared";
-import { WEBP_QUALITY } from "../../config.js";
+import {
+  WEBP_QUALITY,
+  getStudioOpencodeImageAiMaxParallel,
+} from "../../config.js";
 import {
   createImageGeneration,
   extractImageFromResponse,
@@ -33,6 +36,10 @@ const IMAGE_EXTENSIONS = new Set([
   ".svg",
   ".avif",
 ]);
+const imageGenerationQueueState = {
+  active: 0,
+  waiters: [] as Array<() => void>,
+};
 
 type ImageOperation = "auto" | "create" | "edit";
 
@@ -41,6 +48,12 @@ interface ResolvedImageInput {
   relativePath: string;
   mimeType: string;
   base64: string;
+}
+
+interface ImageGenerationSlot {
+  queuedMs: number;
+  active: number;
+  release: () => void;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -117,6 +130,69 @@ function ensureUniqueFilePath(filePath: string): string {
     candidate = path.join(parsed.dir, `${parsed.name}-${index}${parsed.ext}`);
   }
   return candidate;
+}
+
+function formatBytesToMiB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MiB`;
+}
+
+function formatMemoryUsageForLog(): string {
+  const usage = process.memoryUsage();
+  return [
+    `rss=${formatBytesToMiB(usage.rss)}`,
+    `heapUsed=${formatBytesToMiB(usage.heapUsed)}`,
+    `external=${formatBytesToMiB(usage.external)}`,
+    `arrayBuffers=${formatBytesToMiB(usage.arrayBuffers)}`,
+  ].join(" ");
+}
+
+function describeImagePayload(imagePayload: string): string {
+  if (imagePayload.startsWith("http")) {
+    return "remote-url";
+  }
+
+  if (imagePayload.startsWith("data:image")) {
+    const mime = imagePayload.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/)?.[1];
+    return `${mime ?? "inline-image"} length=${imagePayload.length}`;
+  }
+
+  return `inline-base64 length=${imagePayload.length}`;
+}
+
+async function acquireImageGenerationSlot(
+  toolName: string,
+  maxParallel: number,
+): Promise<ImageGenerationSlot> {
+  const queuedAt = Date.now();
+
+  if (imageGenerationQueueState.active >= maxParallel) {
+    console.log(
+      `[${toolName}] queueing image generation active=${imageGenerationQueueState.active}/${maxParallel} waiting=${imageGenerationQueueState.waiters.length + 1} memory=${formatMemoryUsageForLog()}`,
+    );
+    await new Promise<void>((resolve) => {
+      imageGenerationQueueState.waiters.push(resolve);
+    });
+  }
+
+  imageGenerationQueueState.active += 1;
+  let released = false;
+
+  return {
+    queuedMs: Date.now() - queuedAt,
+    active: imageGenerationQueueState.active,
+    release: () => {
+      if (released) return;
+      released = true;
+      imageGenerationQueueState.active = Math.max(
+        0,
+        imageGenerationQueueState.active - 1,
+      );
+      const next = imageGenerationQueueState.waiters.shift();
+      if (next) {
+        next();
+      }
+    },
+  };
 }
 
 async function decodeGeneratedImage(imagePayload: string): Promise<Buffer> {
@@ -262,6 +338,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
   async execute(args: VivdImageAiArgs, context) {
     const toolName = "vivd_image_ai";
     const startedAt = Date.now();
+    const maxParallel = getStudioOpencodeImageAiMaxParallel();
     const apiKey = (process.env.OPENROUTER_API_KEY || "").trim();
     if (!apiKey) {
       return JSON.stringify(
@@ -328,7 +405,15 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
       );
     }
 
+    let slot: ImageGenerationSlot | null = null;
+
     try {
+      slot = await acquireImageGenerationSlot(toolName, maxParallel);
+      console.log(
+        `[${toolName}] slot acquired active=${slot.active}/${maxParallel} queuedMs=${slot.queuedMs} memory=${formatMemoryUsageForLog()}`,
+      );
+
+      let totalInputBytes = 0;
       const resolvedInputs: ResolvedImageInput[] = dedupedImages.map((imagePath) => {
         const absolutePath = safeJoin(context.directory, imagePath);
         if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
@@ -339,6 +424,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
         }
 
         const buffer = fs.readFileSync(absolutePath);
+        totalInputBytes += buffer.length;
         return {
           absolutePath,
           relativePath: imagePath,
@@ -346,6 +432,9 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
           base64: buffer.toString("base64"),
         };
       });
+      console.log(
+        `[${toolName}] prepared inputs op=${operation} count=${resolvedInputs.length} totalBytes=${totalInputBytes} memory=${formatMemoryUsageForLog()}`,
+      );
 
       const model = operation === "edit" ? IMAGE_EDITING_MODEL : IMAGE_CREATION_MODEL;
       const textPrompt = buildPrompt(prompt, operation, resolvedInputs.length);
@@ -372,6 +461,9 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
       if (!imagePayload) {
         throw new Error("OpenRouter response did not contain an image output.");
       }
+      console.log(
+        `[${toolName}] extracted image payload=${describeImagePayload(imagePayload)} memory=${formatMemoryUsageForLog()}`,
+      );
 
       const outputDir = resolveOutputDirectory(
         context.directory,
@@ -403,6 +495,9 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
       );
 
       const generatedBuffer = await decodeGeneratedImage(imagePayload);
+      console.log(
+        `[${toolName}] decoded image bytes=${generatedBuffer.byteLength} memory=${formatMemoryUsageForLog()}`,
+      );
       await sharp(generatedBuffer).webp({ quality: WEBP_QUALITY }).toFile(outputAbsolutePath);
 
       const outputRelativePath = normalizeRelativePath(
@@ -443,7 +538,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
       }
 
       console.log(
-        `[${toolName}] success op=${operation} output=${outputRelativePath} bytes=${writtenBytes} elapsedMs=${Date.now() - startedAt}`,
+        `[${toolName}] success op=${operation} output=${outputRelativePath} bytes=${writtenBytes} elapsedMs=${Date.now() - startedAt} memory=${formatMemoryUsageForLog()}`,
       );
 
       return JSON.stringify(
@@ -470,6 +565,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
       if (stack) {
         console.error(stack);
       }
+      console.error(`[${toolName}] memory=${formatMemoryUsageForLog()}`);
       return JSON.stringify(
         {
           tool: toolName,
@@ -483,6 +579,8 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageA
         null,
         2,
       );
+    } finally {
+      slot?.release();
     }
   },
 };

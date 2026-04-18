@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, adminProcedure } from "../trpc";
+import { router, orgAdminProcedure } from "../trpc";
 import { usageService } from "../services/usage/UsageService";
 import { limitsService } from "../services/usage/LimitsService";
 
@@ -7,21 +7,21 @@ export const usageRouter = router({
   /**
    * Get current usage status including limits and warnings
    */
-  status: adminProcedure.query(async ({ ctx }) => {
+  status: orgAdminProcedure.query(async ({ ctx }) => {
     return await limitsService.checkLimits(ctx.organizationId!);
   }),
 
   /**
    * Get current usage aggregates (without limits info)
    */
-  current: adminProcedure.query(async ({ ctx }) => {
+  current: orgAdminProcedure.query(async ({ ctx }) => {
     return await usageService.getCurrentUsage(ctx.organizationId!);
   }),
 
   /**
    * Get usage history for dashboard/reporting
    */
-  history: adminProcedure
+  history: orgAdminProcedure
     .input(
       z
         .object({
@@ -37,7 +37,7 @@ export const usageRouter = router({
   /**
    * Get usage aggregated by session
    */
-  sessions: adminProcedure
+  sessions: orgAdminProcedure
     .input(
       z
         .object({
@@ -53,7 +53,7 @@ export const usageRouter = router({
   /**
    * Get usage aggregated by flow (OpenRouter direct calls)
    */
-  flows: adminProcedure
+  flows: orgAdminProcedure
     .input(
       z
         .object({

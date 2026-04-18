@@ -6,9 +6,8 @@ import { Card } from "@vivd/ui";
 
 import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
-import { authClient } from "@/lib/auth-client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { getTagColor } from "@/lib/tagColors";
-import { trpc } from "@/lib/trpc";
 import { getProjectPluginPresentation } from "@/plugins/presentation";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { toast } from "sonner";
@@ -49,15 +48,8 @@ export function ProjectCard({
   isRegenerating,
 }: ProjectCardProps) {
   const navigate = useNavigate();
-  const { data: session } = authClient.useSession();
   const { config } = useAppConfig();
-  const { data: membership } = trpc.organization.getMyMembership.useQuery(
-    undefined,
-    {
-      enabled: !!session && config.hasHostOrganizationAccess,
-    },
-  );
-  const isSuperAdmin = session?.user?.role === "super_admin";
+  const { isAdmin } = usePermissions();
 
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1,
@@ -128,12 +120,11 @@ export function ProjectCard({
     },
   });
 
-  const canManagePreview = membership?.organizationRole !== "client_editor";
-  const canRenameProject = membership?.organizationRole !== "client_editor";
-  const canOverrideProjectStatus =
-    isSuperAdmin ||
-    membership?.organizationRole === "owner" ||
-    membership?.organizationRole === "admin";
+  const canManagePreview = isAdmin;
+  const canRenameProject = isAdmin;
+  const canDeleteProject = isAdmin;
+  const canManageTags = isAdmin;
+  const canOverrideProjectStatus = isAdmin;
   const isRenamePending = renameSlugMutation.isPending;
   const isTitleUpdatePending = updateTitleMutation.isPending;
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
@@ -306,7 +297,9 @@ export function ProjectCard({
           suppressActionsCloseAutoFocusRef={suppressActionsCloseAutoFocusRef}
           actionsMenuItemAnchorRef={actionsMenuItemAnchorRef}
           canManagePreview={canManagePreview}
+          canManageTags={canManageTags}
           canRenameProject={canRenameProject}
+          canDeleteProject={canDeleteProject}
           canOverrideProjectStatus={canOverrideProjectStatus}
           isCompleted={isCompleted}
           isProcessing={isProcessing}
@@ -373,6 +366,7 @@ export function ProjectCard({
           statusLabel={statusLabel}
           statusColor={statusColor}
           isCompleted={isCompleted}
+          canManageTags={canManageTags}
           canRenameProject={canRenameProject}
           isRenamePending={isRenamePending}
           isTitleUpdatePending={isTitleUpdatePending}
@@ -522,6 +516,7 @@ export function ProjectCard({
         projectSlug={project.slug}
         versions={versions}
         publishedVersion={project.publishedVersion}
+        canDeleteVersions={canDeleteProject}
       />
 
       <PublishSiteDialog

@@ -38,7 +38,9 @@ interface ProjectCardActionsMenuProps {
   suppressActionsCloseAutoFocusRef: MutableRefObject<boolean>;
   actionsMenuItemAnchorRef: MutableRefObject<Measurable>;
   canManagePreview: boolean;
+  canManageTags: boolean;
   canRenameProject: boolean;
+  canDeleteProject: boolean;
   canOverrideProjectStatus: boolean;
   isCompleted: boolean;
   isProcessing: boolean;
@@ -76,7 +78,9 @@ export function ProjectCardActionsMenu({
   suppressActionsCloseAutoFocusRef,
   actionsMenuItemAnchorRef,
   canManagePreview,
+  canManageTags,
   canRenameProject,
+  canDeleteProject,
   canOverrideProjectStatus,
   isCompleted,
   isProcessing,
@@ -190,24 +194,26 @@ export function ProjectCardActionsMenu({
             </DropdownMenuItem>
           );
         })}
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            const target = event.currentTarget as HTMLElement | null;
-            if (!target) return;
-            const rect = target.getBoundingClientRect();
-            const frozenRect = new DOMRect(rect.x, rect.y, rect.width, 0);
-            actionsMenuItemAnchorRef.current = {
-              getBoundingClientRect: () => frozenRect,
-            };
-            suppressActionsCloseAutoFocusRef.current = true;
-            onActionsMenuOpenChange(false);
-            requestAnimationFrame(() => onOpenTagsPopoverFromActions());
-          }}
-        >
-          <Tags className="w-4 h-4 mr-2" />
-          Edit labels
-        </DropdownMenuItem>
+        {canManageTags ? (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              const target = event.currentTarget as HTMLElement | null;
+              if (!target) return;
+              const rect = target.getBoundingClientRect();
+              const frozenRect = new DOMRect(rect.x, rect.y, rect.width, 0);
+              actionsMenuItemAnchorRef.current = {
+                getBoundingClientRect: () => frozenRect,
+              };
+              suppressActionsCloseAutoFocusRef.current = true;
+              onActionsMenuOpenChange(false);
+              requestAnimationFrame(() => onOpenTagsPopoverFromActions());
+            }}
+          >
+            <Tags className="w-4 h-4 mr-2" />
+            Edit labels
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={onDownloadZip} disabled={!isCompleted}>
           <Download className="w-4 h-4 mr-2" />
           Download as ZIP
@@ -277,13 +283,15 @@ export function ProjectCardActionsMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem
-          onClick={onDelete}
-          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-        >
-          <Trash2 className="w-4 h-4 mr-2" />
-          Delete project
-        </DropdownMenuItem>
+        {canDeleteProject ? (
+          <DropdownMenuItem
+            onClick={onDelete}
+            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete project
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
