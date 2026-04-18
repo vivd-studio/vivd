@@ -20,8 +20,6 @@ import type {
   TableBookingSourceChannel,
   TableBookingStatus,
 } from "./types";
-import type { TableBookingReservationEditorState } from "./useReservationEditor";
-
 type BookingsTabProps = {
   timezone: string;
   bookingStatus: "all" | TableBookingStatus;
@@ -51,8 +49,8 @@ type BookingsTabProps = {
   exportBookings: () => void;
   exportPending: boolean;
   actionPending: boolean;
-  reservationEditor: TableBookingReservationEditorState;
   runBookingAction: (actionId: string, bookingId: string) => void;
+  onEditBooking: (booking: TableBookingBookingsPayload["rows"][number]) => void;
 };
 
 export function TableBookingBookingsTab({
@@ -79,8 +77,8 @@ export function TableBookingBookingsTab({
   exportBookings,
   exportPending,
   actionPending,
-  reservationEditor,
   runBookingAction,
+  onEditBooking,
 }: BookingsTabProps) {
   return (
     <SectionCard
@@ -225,7 +223,7 @@ export function TableBookingBookingsTab({
               booking={booking}
               timeZone={timezone}
               actionPending={actionPending}
-              onEdit={() => reservationEditor.startEditingReservation(booking)}
+              onEdit={() => onEditBooking(booking)}
               onCancel={() => runBookingAction("cancel_booking", booking.id)}
               onMarkNoShow={() => runBookingAction("mark_no_show", booking.id)}
               onMarkCompleted={() =>

@@ -863,6 +863,90 @@ export async function buildContactRecipientVerificationEmail(
   };
 }
 
+export async function buildOrganizationInvitationEmail(
+  input: {
+    recipientName?: string | null;
+    organizationName: string;
+    inviterName?: string | null;
+    inviterEmail?: string | null;
+    roleLabel: string;
+    projectTitle?: string | null;
+    acceptUrl: string;
+    expiresInSeconds: number;
+    existingAccount: boolean;
+  },
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplate> {
+  const branding = await resolveBrandingOverride(brandingOverride);
+  const greetingName = toGreetingName(input.recipientName);
+  const productName = resolveProductName(branding);
+  const organizationName = sanitizeTextLine(input.organizationName) || "your organization";
+  const inviterLabel =
+    sanitizeTextLine(input.inviterName || "") ||
+    sanitizeTextLine(input.inviterEmail || "") ||
+    `a ${productName} admin`;
+  const expiresLabel = formatDurationLabel(input.expiresInSeconds);
+  const accountStep = input.existingAccount
+    ? "Sign in with your existing account, then accept the invitation."
+    : "Create your account and choose your password from the invite flow.";
+  const projectLine = input.projectTitle
+    ? `Assigned project: ${sanitizeTextLine(input.projectTitle)}`
+    : "";
+  const subject = `You've been invited to ${organizationName} on ${productName}`;
+  const text = joinNonEmptyTextBlocks([
+    `Hello ${greetingName},`,
+    `${inviterLabel} invited you to join ${organizationName} on ${productName}.`,
+    [`Role: ${sanitizeTextLine(input.roleLabel)}`, projectLine].filter(Boolean).join("\n"),
+    accountStep,
+    `Accept invitation: ${input.acceptUrl}`,
+    `For your security, this link expires in ${expiresLabel}.`,
+    "If you were not expecting this invitation, you can ignore this email.",
+    buildLegalTextFooter(branding),
+  ]);
+  const html = renderHtmlLayout({
+    branding,
+    preheader: `You're invited to ${organizationName} on ${productName}`,
+    title: "You're invited",
+    intro: `Hello ${greetingName}, ${inviterLabel} invited you to join ${organizationName} on ${productName}.`,
+    bodyHtml: [
+      `<div style="margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border:1px solid ${BRAND_COLORS.border};border-left:4px solid ${BRAND_COLORS.accent};border-radius:12px;font-size:14px;color:#334155;line-height:1.8;">`,
+      `<div><strong style="color:${BRAND_COLORS.text};">Organization:</strong> ${escapeHtml(
+        organizationName,
+      )}</div>`,
+      `<div><strong style="color:${BRAND_COLORS.text};">Role:</strong> ${escapeHtml(
+        sanitizeTextLine(input.roleLabel),
+      )}</div>`,
+      input.projectTitle
+        ? `<div><strong style="color:${BRAND_COLORS.text};">Assigned project:</strong> ${escapeHtml(
+            sanitizeTextLine(input.projectTitle),
+          )}</div>`
+        : "",
+      `<div><strong style="color:${BRAND_COLORS.text};">Invite sent by:</strong> ${escapeHtml(
+        inviterLabel,
+      )}</div>`,
+      `<div><strong style="color:${BRAND_COLORS.text};">Link expires:</strong> ${escapeHtml(
+        expiresLabel,
+      )}</div>`,
+      `</div>`,
+      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">${escapeHtml(
+        accountStep,
+      )}</p>`,
+    ]
+      .filter(Boolean)
+      .join(""),
+    actionLabel: input.existingAccount ? "Sign in and accept invite" : "Accept invitation",
+    actionUrl: input.acceptUrl,
+    outroHtml:
+      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you were not expecting this invitation, you can ignore this email.</p>`,
+  });
+
+  return {
+    subject,
+    text,
+    html,
+  };
+}
+
 export async function buildPasswordResetEmail(
   input: {
     recipientName?: string | null;

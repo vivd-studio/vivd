@@ -66,16 +66,26 @@ function makeAdmin(overrides: Record<string, unknown> = {}) {
     userForm: {
       email: "",
       name: "",
-      password: "",
       organizationRole: "admin",
       projectSlug: "",
     },
     setUserForm: vi.fn(),
-    createUser: {
+    inviteMember: {
       isPending: false,
       error: null,
       mutate: vi.fn(),
     },
+    resendInvitation: {
+      isPending: false,
+      mutate: vi.fn(),
+    },
+    cancelInvitation: {
+      isPending: false,
+      mutate: vi.fn(),
+    },
+    invitationsLoading: false,
+    invitationsError: null,
+    invitations: [],
     membersLoading: false,
     membersError: null,
     members: [],

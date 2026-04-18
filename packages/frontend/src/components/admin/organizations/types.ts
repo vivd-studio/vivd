@@ -21,6 +21,8 @@ export type OrganizationProject =
   RouterOutputs["superadmin"]["listOrganizationProjects"]["projects"][number];
 export type OrganizationDomain =
   RouterOutputs["superadmin"]["listOrganizationDomains"]["domains"][number];
+export type OrganizationInvitation =
+  RouterOutputs["superadmin"]["listOrganizationInvitations"]["invitations"][number];
 
 export type OrgForm = {
   slug: string;
@@ -30,7 +32,6 @@ export type OrgForm = {
 export type UserForm = {
   email: string;
   name: string;
-  password: string;
   organizationRole: OrganizationRole;
   projectSlug: string;
 };

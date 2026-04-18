@@ -1,29 +1,23 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   BellRing,
   CalendarDays,
   Loader2,
   NotebookPen,
-  RefreshCw,
   Settings2,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ROUTES } from "@/app/router";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAppConfig } from "@/lib/AppConfigContext";
-import { authClient } from "@/lib/auth-client";
-import { formatDocumentTitle } from "@/lib/brand";
-import { trpc, type RouterOutputs } from "@/lib/trpc";
+import { trpc } from "@/lib/trpc";
 import {
-  getPluginAccessRequestLabel,
-  getProjectPluginPresentation,
-  isPluginAccessRequestPending,
-} from "@/plugins/presentation";
+  ProjectPluginAccessActions,
+  ProjectPluginPageActions,
+  useProjectPluginPageModel,
+} from "@/plugins/projectPageScaffold";
 import { tableBookingPluginConfigSchema } from "../backend/config";
 import {
   TABLE_BOOKING_BOOKINGS_READ_ID,
@@ -58,14 +52,39 @@ export default function TableBookingProjectPage({
   projectSlug,
   isEmbedded = false,
 }: TableBookingProjectPageProps) {
-  const { config } = useAppConfig();
-  const utils = trpc.useUtils();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
-  const canEnablePlugin = session?.user?.role === "super_admin";
-  const canRequestPluginAccess =
-    !isSessionPending && !canEnablePlugin && Boolean(config.supportEmail);
-  const typedPluginId =
-    "table_booking" as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
+  const {
+    utils,
+    isSessionPending,
+    typedPluginId,
+    pluginInfo: rawPluginInfo,
+    pluginInfoQuery,
+    projectTitle,
+    PluginIcon,
+    canEnablePlugin,
+    canRequestPluginAccess,
+    pluginEnabled,
+    needsEnable,
+    isRequestPending,
+    requestAccessLabel,
+    ensureMutation,
+    requestAccessMutation,
+    invalidatePluginPage,
+    refreshPluginPage,
+  } = useProjectPluginPageModel({
+    projectSlug,
+    pluginId: "table_booking",
+    isEmbedded,
+    documentTitle: ({ projectTitle }) => `${projectTitle} Table Booking`,
+    enableToast: {
+      success: "Table Booking enabled",
+      error: "Failed to enable Table Booking",
+    },
+    requestAccessToast: {
+      success: "Access request sent",
+      error: "Failed to send access request",
+    },
+    invalidateOnEnable: ({ utils }) => [() => utils.plugins.read.invalidate()],
+  });
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("calendar");
   const [selectedDate, setSelectedDate] = useState(
@@ -74,6 +93,8 @@ export default function TableBookingProjectPage({
   const [visibleMonth, setVisibleMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
+  const [reservationSheetOpen, setReservationSheetOpen] = useState(false);
+  const [capacitySheetOpen, setCapacitySheetOpen] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<"all" | TableBookingStatus>(
     "all",
   );
@@ -86,15 +107,8 @@ export default function TableBookingProjectPage({
   const [bookingOffset, setBookingOffset] = useState(0);
   const limit = 100;
 
-  const projectListQuery = trpc.project.list.useQuery(undefined, {
-    enabled: !!projectSlug,
-  });
-  const pluginInfoQuery = trpc.plugins.info.useQuery(
-    { slug: projectSlug, pluginId: typedPluginId },
-    { enabled: !!projectSlug },
-  );
   const pluginReadQueriesEnabled =
-    !!projectSlug && pluginInfoQuery.data?.enabled === true;
+    !!projectSlug && pluginEnabled;
   const monthRange = getMonthRange(visibleMonth);
 
   const summaryQuery = trpc.plugins.read.useQuery(
@@ -193,29 +207,10 @@ export default function TableBookingProjectPage({
     },
   );
 
-  const ensureMutation = trpc.plugins.ensure.useMutation({
-    onSuccess: async () => {
-      toast.success("Table Booking enabled");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug: projectSlug }),
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
-    },
-    onError: (error) => {
-      toast.error("Failed to enable Table Booking", {
-        description: error.message,
-      });
-    },
-  });
-
   const saveConfigMutation = trpc.plugins.updateConfig.useMutation({
     onSuccess: async () => {
       toast.success("Booking settings saved");
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginPage([() => utils.plugins.read.invalidate()]);
     },
     onError: (error) => {
       toast.error("Failed to save settings", {
@@ -227,10 +222,7 @@ export default function TableBookingProjectPage({
   const actionMutation = trpc.plugins.action.useMutation({
     onSuccess: async () => {
       toast.success("Booking updated");
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-      ]);
+      await invalidatePluginPage([() => utils.plugins.read.invalidate()]);
     },
     onError: (error) => {
       toast.error("Booking action failed", {
@@ -244,14 +236,15 @@ export default function TableBookingProjectPage({
       toast.success(
         variables.bookingId ? "Reservation updated" : "Reservation created",
       );
+      setReservationSheetOpen(false);
       reservationEditor.resetReservationEditor(variables.date);
-      await Promise.all([
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.plugins.read.invalidate(),
-        utils.plugins.tableBooking.dayCapacity.invalidate({
-          slug: projectSlug,
-          serviceDate: variables.date,
-        }),
+      await invalidatePluginPage([
+        () => utils.plugins.read.invalidate(),
+        () =>
+          utils.plugins.tableBooking.dayCapacity.invalidate({
+            slug: projectSlug,
+            serviceDate: variables.date,
+          }),
       ]);
     },
     onError: (error) => {
@@ -317,7 +310,7 @@ export default function TableBookingProjectPage({
     },
   });
 
-  const pluginInfo = pluginInfoQuery.data as TableBookingPluginInfo | undefined;
+  const pluginInfo = rawPluginInfo as TableBookingPluginInfo | undefined;
   const draft = useTableBookingConfigDraft(pluginInfo?.config);
   const reservationEditor = useTableBookingReservationEditor({
     selectedDate,
@@ -342,39 +335,9 @@ export default function TableBookingProjectPage({
     | TableBookingBookingsPayload
     | undefined;
 
-  const projectTitle =
-    projectListQuery.data?.projects?.find((project) => project.slug === projectSlug)
-      ?.title ?? projectSlug;
-
-  useEffect(() => {
-    if (!projectSlug) return;
-    document.title = formatDocumentTitle(`${projectTitle} Table Booking`);
-    return () => {
-      document.title = formatDocumentTitle();
-    };
-  }, [projectSlug, projectTitle]);
-
   useEffect(() => {
     setBookingOffset(0);
   }, [bookingStatus, bookingSourceChannel, bookingSearch, startDate, endDate]);
-
-  const pluginEnabled = !!pluginInfo?.enabled;
-  const needsEnable =
-    (pluginInfo?.entitled ?? false) && !pluginEnabled && !pluginInfo?.instanceId;
-  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
-  const PluginIcon = pluginPresentation.icon;
-  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
-    onSuccess: async () => {
-      toast.success("Access request sent");
-      await pluginInfoQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error("Failed to send access request", {
-        description: error.message,
-      });
-    },
-  });
-  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const isRefreshing =
     pluginInfoQuery.isFetching ||
     summaryQuery.isFetching ||
@@ -496,29 +459,20 @@ export default function TableBookingProjectPage({
       description="Operate bookings from a calendar-first view, then adjust hours and widget settings without dropping into raw config."
       className={isEmbedded ? "mx-auto w-full max-w-7xl px-4 py-4 sm:px-6" : undefined}
       actions={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {!isEmbedded ? (
-            <Button variant="outline" asChild>
-              <Link to={ROUTES.PROJECT_PLUGINS(projectSlug)}>Back to plugins</Link>
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => {
-              void Promise.all([
-                pluginInfoQuery.refetch(),
-                summaryQuery.refetch(),
-                monthBookingsQuery.refetch(),
-                dayCapacityQuery.refetch(),
-                selectedDateBookingsQuery.refetch(),
-                bookingsQuery.refetch(),
-              ]);
-            }}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+        <ProjectPluginPageActions
+          projectSlug={projectSlug}
+          isEmbedded={isEmbedded}
+          onRefresh={() => {
+            void refreshPluginPage([
+              () => summaryQuery.refetch(),
+              () => monthBookingsQuery.refetch(),
+              () => dayCapacityQuery.refetch(),
+              () => selectedDateBookingsQuery.refetch(),
+              () => bookingsQuery.refetch(),
+            ]);
+          }}
+          isRefreshing={isRefreshing}
+        >
           {pluginEnabled ? (
             <>
               {hasUnsavedChanges ? (
@@ -543,7 +497,7 @@ export default function TableBookingProjectPage({
               </Button>
             </>
           ) : null}
-        </div>
+        </ProjectPluginPageActions>
       }
     >
       <div className={isEmbedded ? "mx-auto max-w-7xl space-y-5" : "space-y-5"}>
@@ -575,46 +529,30 @@ export default function TableBookingProjectPage({
                     : "Table Booking access is managed from the admin plugin settings."}
               </p>
             </div>
-            {!pluginEnabled && needsEnable && canEnablePlugin ? (
-              <Button
-                variant="outline"
-                onClick={() =>
+            {!pluginEnabled ? (
+              <ProjectPluginAccessActions
+                canEnablePlugin={needsEnable && canEnablePlugin}
+                canRequestPluginAccess={
+                  !(needsEnable && canEnablePlugin) && canRequestPluginAccess
+                }
+                isEnablePending={ensureMutation.isPending}
+                isRequestPending={isRequestPending}
+                isRequestSubmitting={requestAccessMutation.isPending}
+                requestAccessLabel={requestAccessLabel}
+                onEnable={() =>
                   ensureMutation.mutate({
                     slug: projectSlug,
                     pluginId: typedPluginId,
                   })
                 }
-                disabled={ensureMutation.isPending}
-              >
-                {ensureMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Enabling...
-                  </>
-                ) : (
-                  "Enable for this project"
-                )}
-              </Button>
-            ) : !pluginEnabled && canRequestPluginAccess ? (
-              <Button
-                variant="outline"
-                onClick={() =>
+                onRequestAccess={() =>
                   requestAccessMutation.mutate({
                     slug: projectSlug,
                     pluginId: typedPluginId,
                   })
                 }
-                disabled={isRequestPending || requestAccessMutation.isPending}
-              >
-                {requestAccessMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  getPluginAccessRequestLabel(pluginInfo?.accessRequest)
-                )}
-              </Button>
+                size="default"
+              />
             ) : null}
           </div>
           {pluginInfoQuery.error ? (
@@ -711,6 +649,10 @@ export default function TableBookingProjectPage({
                     deleteCapacityAdjustmentMutation.isPending
                   }
                   runBookingAction={runBookingAction}
+                  reservationSheetOpen={reservationSheetOpen}
+                  setReservationSheetOpen={setReservationSheetOpen}
+                  capacitySheetOpen={capacitySheetOpen}
+                  setCapacitySheetOpen={setCapacitySheetOpen}
                 />
               </TabsContent>
 
@@ -744,8 +686,11 @@ export default function TableBookingProjectPage({
                   actionPending={
                     actionMutation.isPending || saveReservationMutation.isPending
                   }
-                  reservationEditor={reservationEditor}
                   runBookingAction={runBookingAction}
+                  onEditBooking={(booking) => {
+                    reservationEditor.startEditingReservation(booking);
+                    setReservationSheetOpen(true);
+                  }}
                 />
               </TabsContent>
 

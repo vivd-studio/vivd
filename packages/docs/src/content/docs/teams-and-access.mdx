@@ -5,8 +5,8 @@ description: Manage organization members, choose the right role, and understand 
 
 import { Aside } from "@astrojs/starlight/components";
 
-Use `Organization` -> `Members` to add people, change roles, reset passwords, and
-remove access.
+Use `Organization` -> `Members` to invite people, change roles, resend or cancel
+pending invites, reset passwords when needed, and remove access.
 
 For most teams, this is the only access screen that matters. The install-wide
 `Super Admin` surface is separate and is only relevant for the person operating the
@@ -41,14 +41,33 @@ In other words: for normal end users, think in terms of **Owner**, **Admin**, an
 
 From the `Members` tab, organization admins and owners can:
 
-- add an existing account by email
-- create a new account directly from the organization workspace
+- send an invite email to a new or existing teammate
+- track pending invites and resend or cancel them
 - change a member between `User` and `Admin`
 - remove a member from the organization
-- reset another member's password when local password auth is used
+- reset another member's password when local password auth is used and recovery is needed
 
 `Users` cannot manage people or organization settings, but they can still do normal
 project work inside the projects they already have access to.
+
+## Invite-first onboarding
+
+Vivd uses invite-only member onboarding instead of public signup:
+
+- Admins send an invite from the organization workspace.
+- The invitee opens the email link and either creates their own password or signs in
+  with an existing account that matches the invited email address.
+- Membership is attached only after the invite is accepted.
+- `Client Editor` invites still carry the single assigned project automatically.
+
+This keeps mailbox proof tied to the invite email while avoiding the old manual
+"admin creates your password for you" handoff.
+
+<Aside type="note" title="Password reset is a recovery tool">
+  Password reset still exists for local password auth, but it is no longer the normal
+  way to onboard a new teammate. Use invites first, and use password reset only when
+  someone already has an account and needs help regaining access.
+</Aside>
 
 ## Guardrails you should expect
 

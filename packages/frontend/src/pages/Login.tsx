@@ -19,10 +19,17 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
+function resolveNextPath(rawNext: string | null): string | null {
+    if (!rawNext) return null
+    if (!rawNext.startsWith("/") || rawNext.startsWith("//")) return null
+    return rawNext
+}
+
 export default function Login() {
     const [searchParams] = useSearchParams()
     const wasReset = searchParams.get("reset") === "success"
     const wasVerified = searchParams.get("verified") === "1"
+    const nextPath = resolveNextPath(searchParams.get("next"))
     const docsUrl = getDocsUrl("/")
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -38,7 +45,7 @@ export default function Login() {
             password: data.password,
         }, {
             onSuccess: () => {
-                hardRedirect(ROUTES.DASHBOARD)
+                hardRedirect(nextPath || ROUTES.DASHBOARD)
             },
             onError: (ctx) => {
                 form.setError("root", { message: ctx.error.message })

@@ -23,6 +23,11 @@ import {
   organizationIdSchema,
   organizationSlugSchema,
 } from "../lib/organizationIdentifiers";
+import {
+  getOrganizationInvitationStorageErrorMessage,
+  organizationInvitationService,
+} from "../services/auth/OrganizationInvitationService";
+import { controlPlaneRateLimitService } from "../services/system/ControlPlaneRateLimitService";
 
 const organizationRoleSchema = z.enum([
   "owner",
@@ -72,6 +77,37 @@ function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
 ): "user" {
   return "user";
+}
+
+async function enforceInviteRateLimit(input: {
+  organizationId: string | null;
+  requestIp: string | null;
+  userId: string | null;
+  res: { setHeader(name: string, value: string): unknown };
+}) {
+  const decision = await controlPlaneRateLimitService.checkAction({
+    action: "auth",
+    organizationId: input.organizationId,
+    requestIp: input.requestIp,
+    userId: input.userId,
+  });
+
+  if (!decision.allowed) {
+    if (decision.retryAfterSeconds > 0) {
+      input.res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+    }
+    throw new Error("Invite request budget exceeded. Please wait a moment and retry.");
+  }
+}
+
+function getOrganizationInvitationErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return (
+    getOrganizationInvitationStorageErrorMessage(error) ??
+    (error instanceof Error ? error.message : fallback)
+  );
 }
 
 export const organizationSuperAdminProcedures = {
@@ -295,6 +331,27 @@ export const organizationSuperAdminProcedures = {
           },
         })),
       };
+    }),
+
+  listOrganizationInvitations: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+      }),
+    )
+    .query(async ({ input }) => {
+      try {
+        return await organizationInvitationService.listOrganizationInvitations(
+          input.organizationId,
+        );
+      } catch (error) {
+        throw new Error(
+          getOrganizationInvitationErrorMessage(
+            error,
+            "Failed to load invitations",
+          ),
+        );
+      }
     }),
 
   listOrganizationProjects: superAdminProcedure
@@ -596,6 +653,106 @@ export const organizationSuperAdminProcedures = {
         .set({ name: input.name })
         .where(eq(organization.id, input.organizationId));
       return { success: true };
+    }),
+
+  inviteOrganizationMember: superAdminProcedure
+    .input(
+      z
+        .object({
+          organizationId: organizationIdSchema,
+          email: z.string().email(),
+          name: z.string().min(1).max(128).optional(),
+          organizationRole: organizationRoleSchema.optional().default("admin"),
+          projectSlug: z.string().min(1).optional(),
+        })
+        .refine(
+          (data) =>
+            data.organizationRole === "client_editor" ? !!data.projectSlug : true,
+          {
+            message: "Project is required for client editor accounts",
+            path: ["projectSlug"],
+          },
+        ),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await enforceInviteRateLimit({
+        organizationId: input.organizationId,
+        requestIp: ctx.requestIp,
+        userId: ctx.session.user.id,
+        res: ctx.res,
+      });
+
+      try {
+        return await organizationInvitationService.inviteMember({
+          organizationId: input.organizationId,
+          email: input.email,
+          inviteeName: input.name,
+          role: input.organizationRole,
+          projectSlug: input.projectSlug,
+          inviterId: ctx.session.user.id,
+        });
+      } catch (error) {
+        throw new Error(
+          getOrganizationInvitationErrorMessage(
+            error,
+            "Failed to send invitation",
+          ),
+        );
+      }
+    }),
+
+  resendOrganizationInvitation: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        invitationId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await enforceInviteRateLimit({
+        organizationId: input.organizationId,
+        requestIp: ctx.requestIp,
+        userId: ctx.session.user.id,
+        res: ctx.res,
+      });
+
+      try {
+        return await organizationInvitationService.resendInvite({
+          organizationId: input.organizationId,
+          invitationId: input.invitationId,
+        });
+      } catch (error) {
+        throw new Error(
+          getOrganizationInvitationErrorMessage(
+            error,
+            "Failed to resend invitation",
+          ),
+        );
+      }
+    }),
+
+  cancelOrganizationInvitation: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        invitationId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      try {
+        await organizationInvitationService.cancelInvite({
+          organizationId: input.organizationId,
+          invitationId: input.invitationId,
+        });
+        return { success: true };
+      } catch (error) {
+        throw new Error(
+          getOrganizationInvitationErrorMessage(
+            error,
+            "Failed to cancel invitation",
+          ),
+        );
+      }
     }),
 
   createOrganizationUser: superAdminProcedure

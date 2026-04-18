@@ -16,6 +16,7 @@ export const ROUTES = {
   LOGIN: "/vivd-studio/login",
   FORGOT_PASSWORD: "/vivd-studio/forgot-password",
   RESET_PASSWORD: "/vivd-studio/reset-password",
+  INVITE_ACCEPT: "/vivd-studio/invite",
 
   // Main app (inside layout)
   DASHBOARD: "/vivd-studio",

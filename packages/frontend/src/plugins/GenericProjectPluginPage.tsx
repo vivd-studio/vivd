@@ -1,23 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { ROUTES } from "@/app/router";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppConfig } from "@/lib/AppConfigContext";
-import { authClient } from "@/lib/auth-client";
-import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
-  getPluginAccessRequestLabel,
-  getProjectPluginPresentation,
-  isPluginAccessRequestPending,
-} from "./presentation";
+  ProjectPluginAccessActions,
+  ProjectPluginPageActions,
+  useProjectPluginPageModel,
+} from "./projectPageScaffold";
 
 type GenericProjectPluginPageProps = {
   projectSlug: string;
@@ -53,41 +48,30 @@ export default function GenericProjectPluginPage({
   pluginId,
   isEmbedded = false,
 }: GenericProjectPluginPageProps) {
-  const { config } = useAppConfig();
-  const utils = trpc.useUtils();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
-  const canManageProjectPlugins = session?.user?.role === "super_admin";
-  const canRequestPluginAccess =
-    !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
-  const typedPluginId = pluginId as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
-
-  const infoQuery = trpc.plugins.info.useQuery(
-    { slug: projectSlug, pluginId: typedPluginId },
-    { enabled: Boolean(projectSlug && pluginId) },
-  );
-  const projectListQuery = trpc.project.list.useQuery(undefined, {
-    enabled: !!projectSlug,
-  });
-  const ensureMutation = trpc.plugins.ensure.useMutation({
-    onSuccess: async () => {
-      toast.success("Plugin enabled for this project");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug: projectSlug }),
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-        utils.project.list.invalidate(),
-      ]);
-    },
-    onError: (error) => {
-      toast.error("Failed to enable plugin", { description: error.message });
-    },
-  });
-  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
-    onSuccess: async () => {
-      toast.success("Access request sent");
-      await utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId });
-    },
-    onError: (error) => {
-      toast.error("Failed to send access request", { description: error.message });
+  const {
+    utils,
+    typedPluginId,
+    pluginInfo,
+    pluginInfoQuery: infoQuery,
+    pluginPresentation,
+    PluginIcon,
+    canEnablePlugin: canManageProjectPlugins,
+    canRequestPluginAccess,
+    isRequestPending,
+    requestAccessLabel,
+    disabledCopy,
+    ensureMutation,
+    requestAccessMutation,
+    refreshPluginPage,
+  } = useProjectPluginPageModel({
+    projectSlug,
+    pluginId,
+    isEmbedded,
+    documentTitle: ({ projectTitle, pluginInfo, pluginPresentation }) =>
+      `${projectTitle} ${pluginInfo?.catalog.name ?? pluginPresentation.title}`,
+    enableToast: {
+      success: "Plugin enabled for this project",
+      error: "Failed to enable plugin",
     },
   });
   const updateConfigMutation = trpc.plugins.updateConfig.useMutation({
@@ -102,51 +86,15 @@ export default function GenericProjectPluginPage({
     },
   });
 
-  const pluginInfo = infoQuery.data;
-  const projectTitle =
-    projectListQuery.data?.projects?.find((project) => project.slug === projectSlug)?.title ??
-    projectSlug;
   const badge = pluginInfo
     ? formatInstallBadge(pluginInfo.entitlementState, pluginInfo.enabled)
     : { label: "Loading", variant: "secondary" as const };
-  const pluginPresentation = getProjectPluginPresentation(pluginId, projectSlug);
-  const PluginIcon = pluginPresentation.icon;
-  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const [configText, setConfigText] = useState("{}");
 
   useEffect(() => {
     if (!pluginInfo) return;
     setConfigText(prettyJson(pluginInfo.config ?? pluginInfo.defaultConfig ?? {}));
   }, [pluginInfo]);
-
-  useEffect(() => {
-    if (!projectSlug) return;
-    const name = pluginInfo?.catalog.name ?? pluginId;
-    document.title = formatDocumentTitle(`${projectTitle} ${name}`);
-    return () => {
-      document.title = formatDocumentTitle();
-    };
-  }, [pluginId, pluginInfo?.catalog.name, projectSlug, projectTitle]);
-
-  const disabledCopy = useMemo(() => {
-    if (!pluginInfo) return "Loading plugin info...";
-    if (pluginInfo.entitlementState === "enabled" && !pluginInfo.enabled) {
-      if (isSessionPending) {
-        return `${pluginInfo.catalog.name} is available for this instance but has not been enabled for this project yet.`;
-      }
-      return canManageProjectPlugins
-        ? `${pluginInfo.catalog.name} is available for this instance but has not been enabled for this project yet.`
-        : `${pluginInfo.catalog.name} is available for this instance, but a super-admin still needs to enable it for this project.`;
-    }
-    if (pluginInfo.entitlementState === "suspended") {
-      return canManageProjectPlugins
-        ? `${pluginInfo.catalog.name} is suspended for this project. You can enable it again directly here.`
-        : `${pluginInfo.catalog.name} is suspended for this project.`;
-    }
-    return canManageProjectPlugins
-      ? `${pluginInfo.catalog.name} is not active for this project yet. You can enable it directly here.`
-      : `${pluginInfo.catalog.name} access is managed in the admin plugin settings. Ask a super-admin to enable it for this project.`;
-  }, [canManageProjectPlugins, isSessionPending, pluginInfo]);
   const handleSaveConfig = () => {
     let parsedConfig: Record<string, unknown>;
     try {
@@ -177,26 +125,14 @@ export default function GenericProjectPluginPage({
       }
       className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
       actions={
-        <div className="flex items-center gap-2">
-          {!isEmbedded ? (
-            <Button variant="outline" asChild>
-              <Link to={ROUTES.PROJECT_PLUGINS(projectSlug)}>Back to plugins</Link>
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => {
-              void Promise.all([
-                projectListQuery.refetch(),
-                infoQuery.refetch(),
-              ]);
-            }}
-            disabled={infoQuery.isLoading}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
+        <ProjectPluginPageActions
+          projectSlug={projectSlug}
+          isEmbedded={isEmbedded}
+          onRefresh={() => {
+            void refreshPluginPage();
+          }}
+          isRefreshing={infoQuery.isFetching}
+        />
       }
     >
       <div className={isEmbedded ? "mx-auto max-w-3xl space-y-4" : "max-w-3xl space-y-4"}>
@@ -215,49 +151,27 @@ export default function GenericProjectPluginPage({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {!pluginInfo?.enabled && canManageProjectPlugins ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                {!pluginInfo?.enabled ? (
+                  <ProjectPluginAccessActions
+                    canEnablePlugin={canManageProjectPlugins}
+                    canRequestPluginAccess={canRequestPluginAccess}
+                    isEnablePending={ensureMutation.isPending}
+                    isRequestPending={isRequestPending}
+                    isRequestSubmitting={requestAccessMutation.isPending}
+                    requestAccessLabel={requestAccessLabel}
+                    onEnable={() =>
                       ensureMutation.mutate({
                         slug: projectSlug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={ensureMutation.isPending}
-                  >
-                    {ensureMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Enabling...
-                      </>
-                    ) : (
-                      "Enable for this project"
-                    )}
-                  </Button>
-                ) : null}
-                {!pluginInfo?.enabled && canRequestPluginAccess ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                    onRequestAccess={() =>
                       requestAccessMutation.mutate({
                         slug: projectSlug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={isRequestPending || requestAccessMutation.isPending}
-                  >
-                    {requestAccessMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      getPluginAccessRequestLabel(pluginInfo?.accessRequest)
-                    )}
-                  </Button>
+                  />
                 ) : null}
                 <Badge variant={badge.variant}>{badge.label}</Badge>
               </div>

@@ -1,8 +1,7 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
-import { BarChart3, Loader2, RefreshCw } from "lucide-react";
-import { trpc, type RouterOutputs } from "@/lib/trpc";
-import { ROUTES } from "@/app/router";
+import { type ReactNode, useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import { BarChart3 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,14 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
-import { useAppConfig } from "@/lib/AppConfigContext";
-import { formatDocumentTitle } from "@/lib/brand";
-import { authClient } from "@/lib/auth-client";
-import {
-  getPluginAccessRequestLabel,
-  isPluginAccessRequestPending,
-} from "@/plugins/presentation";
-import { toast } from "sonner";
+import { ProjectPluginAccessActions, ProjectPluginPageActions, useProjectPluginPageModel } from "@/plugins/projectPageScaffold";
 import {
   ANALYTICS_SUMMARY_READ_ID,
   type AnalyticsSummaryPayload,
@@ -165,63 +157,42 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function AnalyticsProjectPage() {
-  const { config } = useAppConfig();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
-  const utils = trpc.useUtils();
   const slug = projectSlug || "";
-  const typedPluginId = "analytics" as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
   const [rangeDays, setRangeDays] = useState<AnalyticsRange>(30);
   const isEmbedded = useMemo(
     () => new URLSearchParams(location.search).get("embedded") === "1",
     [location.search],
   );
 
-  const analyticsInfoQuery = trpc.plugins.info.useQuery(
-    { slug, pluginId: typedPluginId },
-    { enabled: !!projectSlug },
-  );
-  const projectListQuery = trpc.project.list.useQuery(undefined, {
-    enabled: !!projectSlug,
-  });
-  const projectTitle =
-    projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
-  const analyticsEnabled = !!analyticsInfoQuery.data?.enabled;
-  const analyticsEntitled = analyticsInfoQuery.data?.entitled ?? false;
-  const analyticsNeedsProjectEnable =
-    analyticsEntitled && !analyticsEnabled && !analyticsInfoQuery.data?.instanceId;
-  const canEnableProjectAnalytics = session?.user?.role === "super_admin";
-  const canRequestAnalyticsAccess =
-    !isSessionPending && !canEnableProjectAnalytics && Boolean(config.supportEmail);
-  const analyticsEnsureMutation = trpc.plugins.ensure.useMutation({
-    onSuccess: async () => {
-      toast.success("Analytics enabled for this project");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug }),
-        utils.plugins.info.invalidate({ slug, pluginId: typedPluginId }),
-      ]);
+  const {
+    typedPluginId,
+    pluginInfoQuery: analyticsInfoQuery,
+    canEnablePlugin: canEnableProjectAnalytics,
+    canRequestPluginAccess: canRequestAnalyticsAccess,
+    pluginEnabled: analyticsEnabled,
+    needsEnable: analyticsNeedsProjectEnable,
+    isRequestPending,
+    requestAccessLabel,
+    disabledCopy,
+    ensureMutation: analyticsEnsureMutation,
+    requestAccessMutation,
+    refreshPluginPage,
+  } = useProjectPluginPageModel({
+    projectSlug: slug,
+    pluginId: "analytics",
+    isEmbedded,
+    documentTitle: ({ projectTitle }) => `${projectTitle} Analytics`,
+    enableToast: {
+      success: "Analytics enabled for this project",
+      error: "Failed to enable Analytics",
     },
-    onError: (error) => {
-      toast.error("Failed to enable Analytics", {
-        description: error.message,
-      });
+    requestAccessToast: {
+      success: "Access request sent",
+      error: "Failed to send access request",
     },
   });
-  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
-    onSuccess: async () => {
-      toast.success("Access request sent");
-      await analyticsInfoQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error("Failed to send access request", {
-        description: error.message,
-      });
-    },
-  });
-  const isRequestPending = isPluginAccessRequestPending(
-    analyticsInfoQuery.data?.accessRequest,
-  );
 
   const analyticsSummaryQuery = trpc.plugins.read.useQuery(
     {
@@ -291,20 +262,10 @@ export default function AnalyticsProjectPage() {
   }, [analyticsSummary, dailyRows]);
 
   const handleRefresh = () => {
-    const refetches: Array<Promise<unknown>> = [analyticsInfoQuery.refetch()];
-    if (analyticsEnabled) {
-      refetches.push(analyticsSummaryQuery.refetch());
-    }
-    void Promise.all(refetches);
+    void refreshPluginPage(
+      analyticsEnabled ? [() => analyticsSummaryQuery.refetch()] : [],
+    );
   };
-
-  useEffect(() => {
-    if (!projectSlug) return;
-    document.title = formatDocumentTitle(`${projectTitle} Analytics`);
-    return () => {
-      document.title = formatDocumentTitle();
-    };
-  }, [projectSlug, projectTitle]);
 
   if (!projectSlug) {
     return <div className="text-sm text-muted-foreground">Missing project slug.</div>;
@@ -316,21 +277,13 @@ export default function AnalyticsProjectPage() {
       description={`Business analytics dashboard for ${projectSlug}.`}
       className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
       actions={
-        <div className="flex items-center gap-2">
-          {!isEmbedded ? (
-            <Button variant="outline" asChild>
-              <Link to={ROUTES.PROJECT(projectSlug)}>Back to project</Link>
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={analyticsInfoQuery.isLoading || analyticsSummaryQuery.isLoading}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
+        <ProjectPluginPageActions
+          projectSlug={projectSlug}
+          isEmbedded={isEmbedded}
+          backTarget="project"
+          onRefresh={handleRefresh}
+          isRefreshing={analyticsInfoQuery.isFetching || analyticsSummaryQuery.isFetching}
+        />
       }
     >
       <Card>
@@ -390,56 +343,32 @@ export default function AnalyticsProjectPage() {
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>
-                  {analyticsNeedsProjectEnable
-                    ? isSessionPending
-                      ? "Analytics is available for this instance but has not been enabled for this project yet."
-                      : canEnableProjectAnalytics
-                      ? "Analytics is available for this instance but has not been enabled for this project yet."
-                      : "Analytics is available for this instance, but a super-admin still needs to enable it for this project."
-                    : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in the admin plugin settings."}
+                  {disabledCopy}
                 </span>
-                {analyticsNeedsProjectEnable && canEnableProjectAnalytics ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                {analyticsNeedsProjectEnable || canRequestAnalyticsAccess ? (
+                  <ProjectPluginAccessActions
+                    canEnablePlugin={analyticsNeedsProjectEnable && canEnableProjectAnalytics}
+                    canRequestPluginAccess={
+                      !(analyticsNeedsProjectEnable && canEnableProjectAnalytics) &&
+                      canRequestAnalyticsAccess
+                    }
+                    isEnablePending={analyticsEnsureMutation.isPending}
+                    isRequestPending={isRequestPending}
+                    isRequestSubmitting={requestAccessMutation.isPending}
+                    requestAccessLabel={requestAccessLabel}
+                    onEnable={() =>
                       analyticsEnsureMutation.mutate({
                         slug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={analyticsEnsureMutation.isPending}
-                  >
-                    {analyticsEnsureMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Enabling...
-                      </>
-                    ) : (
-                      "Enable for this project"
-                    )}
-                  </Button>
-                ) : canRequestAnalyticsAccess ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                    onRequestAccess={() =>
                       requestAccessMutation.mutate({
                         slug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={isRequestPending || requestAccessMutation.isPending}
-                  >
-                    {requestAccessMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      getPluginAccessRequestLabel(analyticsInfoQuery.data?.accessRequest)
-                    )}
-                  </Button>
+                  />
                 ) : null}
               </div>
             </div>

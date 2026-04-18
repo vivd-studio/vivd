@@ -246,25 +246,39 @@ export function OrganizationsTab({
           <MembersPanel
             selectedOrg={admin.selectedOrg}
             projects={admin.projects}
+            invitations={admin.invitations}
+            invitationsLoading={admin.invitationsLoading}
+            invitationsError={admin.invitationsError}
             userForm={admin.userForm}
             setUserForm={admin.setUserForm}
-            createUserPending={admin.createUser.isPending}
-            createUserError={
-              admin.createUser.error?.message ?? admin.createUser.error
+            invitePending={admin.inviteMember.isPending}
+            inviteError={
+              admin.inviteMember.error?.message ?? admin.inviteMember.error
             }
-            onCreateUser={(isExistingAccount) =>
-              admin.createUser.mutate({
+            onInviteMember={() =>
+              admin.inviteMember.mutate({
                 organizationId: admin.selectedOrg!.id,
                 email: admin.userForm.email,
-                name: isExistingAccount ? undefined : admin.userForm.name,
-                password: isExistingAccount
-                  ? undefined
-                  : admin.userForm.password,
+                name: admin.userForm.name.trim() || undefined,
                 organizationRole: admin.userForm.organizationRole,
                 projectSlug:
                   admin.userForm.organizationRole === "client_editor"
                     ? admin.userForm.projectSlug
                     : undefined,
+              })
+            }
+            resendInvitationPending={admin.resendInvitation.isPending}
+            cancelInvitationPending={admin.cancelInvitation.isPending}
+            onResendInvitation={(invitationId) =>
+              admin.resendInvitation.mutate({
+                organizationId: admin.selectedOrg!.id,
+                invitationId,
+              })
+            }
+            onCancelInvitation={(invitationId) =>
+              admin.cancelInvitation.mutate({
+                organizationId: admin.selectedOrg!.id,
+                invitationId,
               })
             }
             membersLoading={admin.membersLoading}

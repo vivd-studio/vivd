@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import * as z from "zod";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RotateCcw, XCircle } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,11 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { trpc } from "@/lib/trpc";
 import type {
   EditableOrganizationRole,
   MemberEdits,
   Organization,
+  OrganizationInvitation,
   OrganizationMember,
   OrganizationProject,
   OrganizationRole,
@@ -33,11 +32,18 @@ import type {
 type Props = {
   selectedOrg: Organization;
   projects: OrganizationProject[];
+  invitations: OrganizationInvitation[];
+  invitationsLoading: boolean;
+  invitationsError: unknown;
   userForm: UserForm;
   setUserForm: Dispatch<SetStateAction<UserForm>>;
-  createUserPending: boolean;
-  createUserError: unknown;
-  onCreateUser: (isExistingAccount: boolean) => void;
+  invitePending: boolean;
+  inviteError: unknown;
+  onInviteMember: () => void;
+  resendInvitationPending: boolean;
+  cancelInvitationPending: boolean;
+  onResendInvitation: (invitationId: string) => void;
+  onCancelInvitation: (invitationId: string) => void;
   membersLoading: boolean;
   membersError: unknown;
   members: OrganizationMember[];
@@ -71,24 +77,56 @@ function ProjectSelect({
             {project.title || project.slug}
           </SelectItem>
         ))}
-        {projects.length === 0 && (
+        {projects.length === 0 ? (
           <SelectItem value="__no_projects" disabled>
             No projects
           </SelectItem>
-        )}
+        ) : null}
       </SelectContent>
     </Select>
   );
 }
 
+function formatInviteState(state: string): string {
+  switch (state) {
+    case "pending":
+      return "Pending";
+    case "expired":
+      return "Expired";
+    case "canceled":
+      return "Canceled";
+    case "accepted":
+      return "Accepted";
+    default:
+      return state;
+  }
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 export function MembersPanel({
   selectedOrg: _selectedOrg,
   projects,
+  invitations,
+  invitationsLoading,
+  invitationsError,
   userForm,
   setUserForm,
-  createUserPending,
-  createUserError,
-  onCreateUser,
+  invitePending,
+  inviteError,
+  onInviteMember,
+  resendInvitationPending,
+  cancelInvitationPending,
+  onResendInvitation,
+  onCancelInvitation,
   membersLoading,
   membersError,
   members,
@@ -102,38 +140,24 @@ export function MembersPanel({
   const [addOpen, setAddOpen] = useState(false);
 
   const normalizedEmail = userForm.email.trim().toLowerCase();
-  const emailIsValid = z.string().email().safeParse(normalizedEmail).success;
-
-  const emailLookup = trpc.superadmin.lookupUserByEmail.useQuery(
-    { email: normalizedEmail },
-    {
-      enabled: emailIsValid,
-      retry: false,
-      staleTime: 30_000,
-    },
-  );
-
-  const isExistingAccount = emailLookup.data?.exists ?? false;
-
-  const disableAddUser =
-    createUserPending ||
+  const disableInvite =
+    invitePending ||
     !normalizedEmail ||
-    (!isExistingAccount && (!userForm.name.trim() || userForm.password.length < 8)) ||
     (userForm.organizationRole === "client_editor" && !userForm.projectSlug);
 
   return (
     <div className="space-y-4">
       <Collapsible open={addOpen} onOpenChange={setAddOpen}>
         <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1 px-2 -ml-2">
+          <Button variant="ghost" size="sm" className="gap-1 -ml-2 px-2">
             <ChevronRight
               className={`h-4 w-4 transition-transform ${addOpen ? "rotate-90" : ""}`}
             />
-            Add member
+            Invite member
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="rounded-lg border bg-card p-4 mt-2 space-y-3">
+          <div className="mt-2 space-y-3 rounded-lg border bg-card p-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Email</Label>
@@ -148,13 +172,10 @@ export function MembersPanel({
                     }))
                   }
                 />
-                {emailLookup.data?.exists ? (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Existing account detected — name/password not required.
-                  </div>
-                ) : emailLookup.isFetching ? (
-                  <div className="text-xs text-muted-foreground mt-1">Checking account…</div>
-                ) : null}
+                <div className="text-xs text-muted-foreground">
+                  The invite email lets them create an account or sign in with an
+                  existing one.
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Role</Label>
@@ -178,38 +199,20 @@ export function MembersPanel({
                   </SelectContent>
                 </Select>
               </div>
-              {!isExistingAccount && (
-                <div className="space-y-1.5">
-                  <Label>Name</Label>
-                  <Input
-                    placeholder="Full name"
-                    value={userForm.name}
-                    onChange={(e) =>
-                      setUserForm((state) => ({
-                        ...state,
-                        name: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              )}
-              {!isExistingAccount && (
-                <div className="space-y-1.5">
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="Min. 8 characters"
-                    value={userForm.password}
-                    onChange={(e) =>
-                      setUserForm((state) => ({
-                        ...state,
-                        password: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              )}
-              {userForm.organizationRole === "client_editor" && (
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input
+                  placeholder="Full name (optional)"
+                  value={userForm.name}
+                  onChange={(e) =>
+                    setUserForm((state) => ({
+                      ...state,
+                      name: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              {userForm.organizationRole === "client_editor" ? (
                 <div className="space-y-1.5">
                   <Label>Assigned project</Label>
                   <ProjectSelect
@@ -223,22 +226,96 @@ export function MembersPanel({
                     projects={projects}
                   />
                 </div>
+              ) : (
+                <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                  Invitees will land in the organization workspace after they accept.
+                </div>
               )}
             </div>
             <div className="flex justify-end">
-              <Button
-                onClick={() => onCreateUser(isExistingAccount)}
-                disabled={disableAddUser}
-              >
-                {createUserPending ? "Creating..." : "Add user"}
+              <Button onClick={onInviteMember} disabled={disableInvite}>
+                {invitePending ? "Sending..." : "Send invite"}
               </Button>
             </div>
-            {Boolean(createUserError) && (
-              <div className="text-sm text-red-500">{String(createUserError)}</div>
-            )}
+            {Boolean(inviteError) ? (
+              <div className="text-sm text-red-500">{String(inviteError)}</div>
+            ) : null}
           </div>
         </CollapsibleContent>
       </Collapsible>
+
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Pending invites</div>
+        {invitationsLoading ? (
+          <LoadingSpinner message="Loading invites..." className="justify-start" />
+        ) : invitationsError ? (
+          <div className="text-red-500">
+            Failed to load invites: {String(invitationsError)}
+          </div>
+        ) : invitations.length > 0 ? (
+          <div className="rounded-lg border bg-card divide-y">
+            {invitations.map((invitation) => (
+              <div
+                key={invitation.id}
+                className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate font-medium">{invitation.email}</div>
+                    <Badge
+                      variant={
+                        invitation.state === "pending"
+                          ? "default"
+                          : invitation.state === "expired"
+                            ? "secondary"
+                            : "outline"
+                      }
+                    >
+                      {formatInviteState(invitation.state)}
+                    </Badge>
+                  </div>
+                  <div className="truncate text-sm text-muted-foreground">
+                    {invitation.role}
+                    {invitation.projectTitle ? ` · ${invitation.projectTitle}` : ""}
+                    {invitation.inviteeName ? ` · ${invitation.inviteeName}` : ""}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Sent {formatDateTime(invitation.lastSentAt)} · Expires{" "}
+                    {formatDateTime(invitation.expiresAt)}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={resendInvitationPending}
+                    onClick={() => onResendInvitation(invitation.id)}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Resend
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={
+                      invitation.state === "canceled" || cancelInvitationPending
+                    }
+                    onClick={() => onCancelInvitation(invitation.id)}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+            No pending invites.
+          </div>
+        )}
+      </div>
 
       {membersLoading ? (
         <LoadingSpinner message="Loading members..." className="justify-start" />
@@ -269,13 +346,13 @@ export function MembersPanel({
             return (
               <div
                 key={member.id}
-                className="p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between"
               >
                 <div className="min-w-0">
-                  <div className="font-medium truncate">
+                  <div className="truncate font-medium">
                     {member.user.name || member.user.email}
                   </div>
-                  <div className="text-sm text-muted-foreground truncate">
+                  <div className="truncate text-sm text-muted-foreground">
                     {member.user.email}
                   </div>
                 </div>
@@ -309,7 +386,7 @@ export function MembersPanel({
                     </SelectContent>
                   </Select>
 
-                  {edit.role === "client_editor" && (
+                  {edit.role === "client_editor" ? (
                     <ProjectSelect
                       value={edit.projectSlug}
                       onChange={(value) =>
@@ -324,48 +401,50 @@ export function MembersPanel({
                       projects={projects}
                       triggerClassName="w-[220px]"
                     />
-                  )}
+                  ) : null}
 
-                  {member.user.role === "super_admin" && (
+                  {member.user.role === "super_admin" ? (
                     <Badge variant="secondary">Super Admin</Badge>
-                  )}
+                  ) : null}
 
-                  <>
-                      <Button
-                        size="sm"
-                        disabled={!canSave || updateMemberRolePending}
-                        onClick={() =>
-                          onSaveMember(
-                            member.userId,
-                            edit.role,
-                            edit.role === "client_editor" ? edit.projectSlug : undefined,
-                          )
-                        }
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        disabled={removeMemberPending}
-                        onClick={() => {
-                          if (!window.confirm(`Remove ${member.user.email} from this organization?`)) {
-                            return;
-                          }
-                          onRemoveMember(member.userId);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    disabled={!canSave || updateMemberRolePending}
+                    onClick={() =>
+                      onSaveMember(
+                        member.userId,
+                        edit.role,
+                        edit.role === "client_editor" ? edit.projectSlug : undefined,
+                      )
+                    }
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    disabled={removeMemberPending}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `Remove ${member.user.email} from this organization?`,
+                        )
+                      ) {
+                        return;
+                      }
+                      onRemoveMember(member.userId);
+                    }}
+                  >
+                    Remove
+                  </Button>
                 </div>
               </div>
             );
           })}
-          {members.length === 0 && (
+          {members.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground">No members</div>
-          )}
+          ) : null}
         </div>
       )}
     </div>

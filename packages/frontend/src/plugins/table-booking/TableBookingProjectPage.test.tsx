@@ -513,8 +513,8 @@ describe("TableBookingProjectPage", () => {
     );
 
     expect(screen.getByText("Schedule calendar")).toBeInTheDocument();
-    expect(screen.getByText("Service-window capacity")).toBeInTheDocument();
-    expect(screen.getByText("2 bookings · 4 covers")).toBeInTheDocument();
+    expect(screen.getByText("Overall capacity")).toBeInTheDocument();
+    expect(screen.getByText("4 covers in the pipeline")).toBeInTheDocument();
 
     const monthCall = readUseQueryMock.mock.calls.find(
       (call) =>

@@ -22,7 +22,6 @@ const EMPTY_LIMITS_FORM: LimitsForm = {
 const EMPTY_USER_FORM: UserForm = {
   email: "",
   name: "",
-  password: "",
   organizationRole: "admin",
   projectSlug: "",
 };
@@ -63,6 +62,11 @@ export function useOrganizationsAdmin(
   );
 
   const projectsQuery = trpc.superadmin.listOrganizationProjects.useQuery(
+    { organizationId: selectedOrgId },
+    { enabled: Boolean(selectedOrgId) },
+  );
+
+  const invitationsQuery = trpc.superadmin.listOrganizationInvitations.useQuery(
     { organizationId: selectedOrgId },
     { enabled: Boolean(selectedOrgId) },
   );
@@ -149,15 +153,50 @@ export function useOrganizationsAdmin(
     },
   });
 
-  const createUser = trpc.superadmin.createOrganizationUser.useMutation({
+  const inviteMember = trpc.superadmin.inviteOrganizationMember.useMutation({
     onSuccess: async (data) => {
       setUserForm(EMPTY_USER_FORM);
-      await membersQuery.refetch();
-      await utils.superadmin.listOrganizations.invalidate();
-      toast.success(data.created ? "User created" : "Member added");
+      await invitationsQuery.refetch();
+      toast.success(
+        data.deliveryAccepted ? "Invitation sent" : "Invitation created",
+        data.deliveryAccepted
+          ? undefined
+          : {
+              description:
+                "The invite is saved, but email delivery was not confirmed. You can resend it from the pending invites list.",
+            },
+      );
     },
     onError: (err) => {
-      toast.error("Failed to create user", { description: err.message });
+      toast.error("Failed to send invitation", { description: err.message });
+    },
+  });
+
+  const resendInvitation = trpc.superadmin.resendOrganizationInvitation.useMutation({
+    onSuccess: async (data) => {
+      await invitationsQuery.refetch();
+      toast.success(
+        data.deliveryAccepted ? "Invitation resent" : "Invitation refreshed",
+        data.deliveryAccepted
+          ? undefined
+          : {
+              description:
+                "The invite was refreshed, but email delivery was not confirmed.",
+            },
+      );
+    },
+    onError: (err) => {
+      toast.error("Failed to resend invitation", { description: err.message });
+    },
+  });
+
+  const cancelInvitation = trpc.superadmin.cancelOrganizationInvitation.useMutation({
+    onSuccess: async () => {
+      await invitationsQuery.refetch();
+      toast.success("Invitation canceled");
+    },
+    onError: (err) => {
+      toast.error("Failed to cancel invitation", { description: err.message });
     },
   });
 
@@ -286,7 +325,9 @@ export function useOrganizationsAdmin(
     createOrg,
     userForm,
     setUserForm,
-    createUser,
+    inviteMember,
+    resendInvitation,
+    cancelInvitation,
     limitsForm,
     setLimitsForm,
     patchLimits,
@@ -309,6 +350,9 @@ export function useOrganizationsAdmin(
     usageError: usageQuery.error,
     projects: projectsQuery.data?.projects ?? [],
     projectsLoading: projectsQuery.isLoading,
+    invitations: invitationsQuery.data?.invitations ?? [],
+    invitationsLoading: invitationsQuery.isLoading,
+    invitationsError: invitationsQuery.error,
     domains: domainsQuery.data?.domains ?? [],
     domainsLoading: domainsQuery.isLoading,
     domainsError: domainsQuery.error,

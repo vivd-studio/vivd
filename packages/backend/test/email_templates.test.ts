@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildContactSubmissionEmail,
   buildNewsletterConfirmationEmail,
+  buildOrganizationInvitationEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
   formatDurationLabel,
@@ -112,6 +113,38 @@ describe("email templates", () => {
     expect(email.html).toContain("Confirm waitlist signup");
     expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/confirm?token=abc");
     expect(email.html).toContain("https://api.example.com/plugins/newsletter/v1/unsubscribe?token=def");
+  });
+
+  it("renders organization invitation email for invite-first onboarding", async () => {
+    const email = await buildOrganizationInvitationEmail(
+      {
+        recipientName: "Pat",
+        organizationName: "Acme Studio",
+        inviterName: "Morgan",
+        roleLabel: "Client Editor",
+        projectTitle: "Launch Site",
+        acceptUrl: "https://acme.example.com/vivd-studio/invite?token=abc",
+        expiresInSeconds: 604_800,
+        existingAccount: false,
+      },
+      {
+        displayName: "Example Studio",
+        supportEmail: "support@example.com",
+      },
+    );
+
+    expect(email.subject).toBe("You've been invited to Acme Studio on Example Studio");
+    expect(email.text).toContain("Morgan invited you to join Acme Studio on Example Studio.");
+    expect(email.text).toContain("Role: Client Editor");
+    expect(email.text).toContain("Assigned project: Launch Site");
+    expect(email.text).toContain("Create your account and choose your password from the invite flow.");
+    expect(email.text).toContain(
+      "Accept invitation: https://acme.example.com/vivd-studio/invite?token=abc",
+    );
+    expect(email.text).toContain("expires in 7 days");
+    expect(email.html).toContain("Accept invitation");
+    expect(email.html).toContain("Launch Site");
+    expect(email.html).toContain("support@example.com");
   });
 
   it("formats durations with practical units", () => {

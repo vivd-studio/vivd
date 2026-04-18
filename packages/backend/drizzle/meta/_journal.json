@@ -197,6 +197,13 @@
       "when": 1776430442600,
       "tag": "0028_table_booking_operator_capacity",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1776448433872,
+      "tag": "0029_organization_member_invites",
+      "breakpoints": true
     }
   ]
 }

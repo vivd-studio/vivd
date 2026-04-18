@@ -1,6 +1,6 @@
 {
-  "id": "0fe8120b-935b-4779-8f46-461701267ec0",
-  "prevId": "fd7e1677-e858-4d44-9b73-d41440084258",
+  "id": "74109176-8208-4587-99ce-73e0ccd9bd23",
+  "prevId": "0fe8120b-935b-4779-8f46-461701267ec0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1969,11 +1969,29 @@
           "primaryKey": false,
           "notNull": true
         },
+        "invitee_name": {
+          "name": "invitee_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "role": {
           "name": "role",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "project_slug": {
+          "name": "project_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -1988,14 +2006,45 @@
           "primaryKey": false,
           "notNull": false
         },
+        "accepted_by_user_id": {
+          "name": "accepted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true
         },
+        "last_sent_at": {
+          "name": "last_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canceled_at": {
+          "name": "canceled_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -2047,6 +2096,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "organization_invitation_token_hash_idx": {
+          "name": "organization_invitation_token_hash_idx",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2069,6 +2133,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "inviter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "organization_invitation_accepted_by_user_id_user_id_fk": {
+          "name": "organization_invitation_accepted_by_user_id_user_id_fk",
+          "tableFrom": "organization_invitation",
+          "tableTo": "user",
+          "columnsFrom": [
+            "accepted_by_user_id"
           ],
           "columnsTo": [
             "id"

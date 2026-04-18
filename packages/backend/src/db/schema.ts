@@ -155,18 +155,32 @@ export const organizationInvitation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
+    inviteeName: text("invitee_name"),
     role: text("role").notNull(),
-    status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'rejected' | 'canceled'
+    projectSlug: text("project_slug"),
+    tokenHash: text("token_hash"),
+    status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'canceled'
     inviterId: text("inviter_id").references(() => user.id, {
       onDelete: "set null",
     }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     expiresAt: timestamp("expires_at").notNull(),
+    lastSentAt: timestamp("last_sent_at"),
+    acceptedAt: timestamp("accepted_at"),
+    canceledAt: timestamp("canceled_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
   },
   (table) => [
     index("organization_invitation_org_idx").on(table.organizationId),
     index("organization_invitation_email_idx").on(table.email),
     index("organization_invitation_status_idx").on(table.status),
+    index("organization_invitation_token_hash_idx").on(table.tokenHash),
   ],
 );
 
@@ -1385,6 +1399,10 @@ export const organizationInvitationRelations = relations(
     }),
     inviter: one(user, {
       fields: [organizationInvitation.inviterId],
+      references: [user.id],
+    }),
+    acceptedByUser: one(user, {
+      fields: [organizationInvitation.acceptedByUserId],
       references: [user.id],
     }),
   }),

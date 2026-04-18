@@ -16,6 +16,7 @@ import {
 const Login = lazy(() => import("@/pages/Login"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const InviteAccept = lazy(() => import("@/pages/InviteAccept"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Signup = lazy(() => import("@/pages/Signup"));
 const Organization = lazy(() => import("@/pages/Organization"));
@@ -215,6 +216,14 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         element={
           <RouteSuspense>
             <ResetPassword />
+          </RouteSuspense>
+        }
+      />
+      <Route
+        path={ROUTES.INVITE_ACCEPT}
+        element={
+          <RouteSuspense>
+            <InviteAccept />
           </RouteSuspense>
         }
       />

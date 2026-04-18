@@ -1,15 +1,12 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   ChevronDown,
   Copy,
   Loader2,
   Plus,
-  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ROUTES } from "@/app/router";
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,15 +33,12 @@ import {
 } from "@/components/ui/select";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppConfig } from "@/lib/AppConfigContext";
-import { authClient } from "@/lib/auth-client";
-import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import {
-  getPluginAccessRequestLabel,
-  getProjectPluginPresentation,
-  isPluginAccessRequestPending,
-} from "@/plugins/presentation";
+  ProjectPluginAccessActions,
+  ProjectPluginPageActions,
+  useProjectPluginPageModel,
+} from "@/plugins/projectPageScaffold";
 
 type ContactFormFieldType = "text" | "email" | "textarea";
 
@@ -242,53 +236,40 @@ export default function ContactFormProjectPage({
   projectSlug,
   isEmbedded = false,
 }: ContactFormProjectPageProps) {
-  const { config } = useAppConfig();
-  const utils = trpc.useUtils();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
-  const canManageProjectPlugins = session?.user?.role === "super_admin";
-  const canRequestPluginAccess =
-    !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
-  const typedPluginId = "contact_form" as RouterOutputs["plugins"]["catalog"]["plugins"][number]["pluginId"];
-
-  const infoQuery = trpc.plugins.info.useQuery(
-    { slug: projectSlug, pluginId: typedPluginId },
-    { enabled: !!projectSlug },
-  );
-  const projectListQuery = trpc.project.list.useQuery(undefined, {
-    enabled: !!projectSlug,
-  });
-  const ensureMutation = trpc.plugins.ensure.useMutation({
-    onSuccess: async () => {
-      toast.success("Contact Form enabled for this project");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug: projectSlug }),
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-      ]);
+  const {
+    typedPluginId,
+    pluginInfoQuery: infoQuery,
+    pluginEnabled,
+    needsEnable: contactNeedsProjectEnable,
+    pluginPresentation,
+    PluginIcon,
+    canEnablePlugin: canManageProjectPlugins,
+    canRequestPluginAccess,
+    isRequestPending,
+    requestAccessLabel,
+    disabledCopy,
+    ensureMutation,
+    requestAccessMutation,
+    invalidatePluginPage,
+    refreshPluginPage,
+  } = useProjectPluginPageModel({
+    projectSlug,
+    pluginId: "contact_form",
+    isEmbedded,
+    documentTitle: ({ projectTitle }) => `${projectTitle} Contact Form`,
+    enableToast: {
+      success: "Contact Form enabled for this project",
+      error: "Failed to enable Contact Form",
     },
-    onError: (error) => {
-      toast.error("Failed to enable Contact Form", {
-        description: error.message,
-      });
-    },
-  });
-  const requestAccessMutation = trpc.plugins.requestAccess.useMutation({
-    onSuccess: async () => {
-      toast.success("Access request sent");
-      await utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId });
-    },
-    onError: (error) => {
-      toast.error("Failed to send access request", {
-        description: error.message,
-      });
+    requestAccessToast: {
+      success: "Access request sent",
+      error: "Failed to send access request",
     },
   });
   const updateConfigMutation = trpc.plugins.updateConfig.useMutation({
     onSuccess: async () => {
       toast.success("Contact Form configuration saved");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug: projectSlug }),
-        utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId }),
-      ]);
+      await invalidateContactFormPage();
     },
     onError: (error) => {
       toast.error("Failed to save Contact Form configuration", {
@@ -321,7 +302,7 @@ export default function ContactFormProjectPage({
 
       setSelectedRecipientOption("");
       setCustomRecipientEmail("");
-      await utils.plugins.info.invalidate({ slug: projectSlug, pluginId: typedPluginId });
+      await invalidateContactFormPage();
     },
     onError: (error) => {
       toast.error("Failed to update recipient verification", {
@@ -331,15 +312,6 @@ export default function ContactFormProjectPage({
   });
 
   const pluginInfo = getContactFormInfo(infoQuery.data);
-  const projectTitle =
-    projectListQuery.data?.projects?.find((project) => project.slug === projectSlug)?.title ??
-    projectSlug;
-  const pluginEnabled = !!pluginInfo?.enabled;
-  const contactNeedsProjectEnable =
-    pluginInfo?.entitlementState === "enabled" && !pluginEnabled && !pluginInfo?.instanceId;
-  const pluginPresentation = getProjectPluginPresentation(typedPluginId, projectSlug);
-  const PluginIcon = pluginPresentation.icon;
-  const isRequestPending = isPluginAccessRequestPending(pluginInfo?.accessRequest);
   const snippets = pluginInfo?.snippets;
   const inferredAutoSourceHosts = pluginInfo?.usage?.inferredAutoSourceHosts || [];
   const effectiveSourceHosts = pluginInfo?.usage?.effectiveSourceHosts || [];
@@ -356,14 +328,7 @@ export default function ContactFormProjectPage({
     DEFAULT_CONTACT_FORM_FIELDS,
   );
   const manualSourceHostsConfigured = parseListInput(sourceHostsInput).length > 0;
-
-  useEffect(() => {
-    if (!projectSlug) return;
-    document.title = formatDocumentTitle(`${projectTitle} Contact Form`);
-    return () => {
-      document.title = formatDocumentTitle();
-    };
-  }, [projectSlug, projectTitle]);
+  const invalidateContactFormPage = () => invalidatePluginPage();
 
   useEffect(() => {
     if (!pluginInfo?.config) return;
@@ -371,14 +336,16 @@ export default function ContactFormProjectPage({
     setSourceHostsInput(formatListInput(pluginInfo.config.sourceHosts));
     setRedirectHostsInput(formatListInput(pluginInfo.config.redirectHostAllowlist));
     setFormFieldsInput(
-      (pluginInfo.config.formFields || DEFAULT_CONTACT_FORM_FIELDS).map((field) => ({
-        key: field.key || "",
-        label: field.label || "",
-        type: field.type || "text",
-        required: field.required ?? true,
-        placeholder: field.placeholder || "",
-        rows: field.type === "textarea" ? (field.rows ?? 5) : undefined,
-      })),
+      (pluginInfo.config.formFields || DEFAULT_CONTACT_FORM_FIELDS).map(
+        (field: EditableContactFormField) => ({
+          key: field.key || "",
+          label: field.label || "",
+          type: field.type || "text",
+          required: field.required ?? true,
+          placeholder: field.placeholder || "",
+          rows: field.type === "textarea" ? (field.rows ?? 5) : undefined,
+        }),
+      ),
     );
   }, [
     pluginInfo?.instanceId,
@@ -532,36 +499,20 @@ export default function ContactFormProjectPage({
     );
   };
 
-  const contactDisabledCopy = contactNeedsProjectEnable
-    ? isSessionPending
-      ? "Contact Form is available for this instance but has not been enabled for this project yet."
-      : canManageProjectPlugins
-      ? "Contact Form is available for this instance but has not been enabled for this project yet."
-      : "Contact Form is available for this instance, but a super-admin still needs to enable it for this project."
-    : "Contact Form access is managed in the admin plugin settings. Ask a super-admin to enable access for this project.";
   return (
     <SettingsPageShell
       title="Contact Form"
       description={`Configure the Contact Form plugin for ${projectSlug}.`}
       className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
       actions={
-        <div className="flex items-center gap-2">
-          {!isEmbedded ? (
-            <Button variant="outline" asChild>
-              <Link to={ROUTES.PROJECT_PLUGINS(projectSlug)}>Back to plugins</Link>
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => {
-              void Promise.all([projectListQuery.refetch(), infoQuery.refetch()]);
-            }}
-            disabled={infoQuery.isLoading}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
+        <ProjectPluginPageActions
+          projectSlug={projectSlug}
+          isEmbedded={isEmbedded}
+          onRefresh={() => {
+            void refreshPluginPage();
+          }}
+          isRefreshing={infoQuery.isFetching}
+        />
       }
     >
       <FormContent className={isEmbedded ? "mx-auto max-w-3xl" : "max-w-3xl"}>
@@ -581,48 +532,30 @@ export default function ContactFormProjectPage({
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                {contactNeedsProjectEnable && canManageProjectPlugins ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                {!pluginEnabled ? (
+                  <ProjectPluginAccessActions
+                    canEnablePlugin={contactNeedsProjectEnable && canManageProjectPlugins}
+                    canRequestPluginAccess={
+                      !(contactNeedsProjectEnable && canManageProjectPlugins) &&
+                      canRequestPluginAccess
+                    }
+                    isEnablePending={ensureMutation.isPending}
+                    isRequestPending={isRequestPending}
+                    isRequestSubmitting={requestAccessMutation.isPending}
+                    requestAccessLabel={requestAccessLabel}
+                    onEnable={() =>
                       ensureMutation.mutate({
                         slug: projectSlug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={ensureMutation.isPending}
-                  >
-                    {ensureMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Enabling...
-                      </>
-                    ) : (
-                      "Enable for this project"
-                    )}
-                  </Button>
-                ) : !pluginEnabled && canRequestPluginAccess ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
+                    onRequestAccess={() =>
                       requestAccessMutation.mutate({
                         slug: projectSlug,
                         pluginId: typedPluginId,
                       })
                     }
-                    disabled={isRequestPending || requestAccessMutation.isPending}
-                  >
-                    {requestAccessMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      getPluginAccessRequestLabel(pluginInfo?.accessRequest)
-                    )}
-                  </Button>
+                  />
                 ) : null}
                 <Badge variant={pluginEnabled ? "default" : "secondary"}>
                   {pluginEnabled
@@ -644,7 +577,7 @@ export default function ContactFormProjectPage({
 
             {!pluginEnabled ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                {contactDisabledCopy}
+                {disabledCopy}
               </div>
             ) : null}
 
@@ -687,33 +620,35 @@ export default function ContactFormProjectPage({
 
                     {pendingRecipients.length > 0 ? (
                       <div className="space-y-2">
-                        {pendingRecipients.map((entry) => (
-                          <div
-                            key={entry.email}
-                            className="flex items-center justify-between rounded-md border border-dashed px-3 py-2"
-                          >
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{entry.email}</span>
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                Pending
-                              </Badge>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                handleRequestRecipientVerification(
-                                  entry.email,
-                                  "resend_recipient",
-                                )
-                              }
-                              disabled={actionMutation.isPending}
+                        {pendingRecipients.map(
+                          (entry: ContactRecipientDirectory["pending"][number]) => (
+                            <div
+                              key={entry.email}
+                              className="flex items-center justify-between rounded-md border border-dashed px-3 py-2"
                             >
-                              Resend
-                            </Button>
-                          </div>
-                        ))}
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>{entry.email}</span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Pending
+                                </Badge>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleRequestRecipientVerification(
+                                    entry.email,
+                                    "resend_recipient",
+                                  )
+                                }
+                                disabled={actionMutation.isPending}
+                              >
+                                Resend
+                              </Button>
+                            </div>
+                          ),
+                        )}
                       </div>
                     ) : null}
 
@@ -731,20 +666,22 @@ export default function ContactFormProjectPage({
                               <SelectValue placeholder="Select organization email" />
                             </SelectTrigger>
                             <SelectContent>
-                              {recipientOptions.map((option) => (
-                                <SelectItem
-                                  key={option.email}
-                                  value={option.email}
-                                  disabled={option.isVerified || option.isPending}
-                                >
-                                  {option.email}
-                                  {option.isVerified
-                                    ? " (Verified)"
-                                    : option.isPending
-                                      ? " (Pending)"
-                                      : ""}
-                                </SelectItem>
-                              ))}
+                              {recipientOptions.map(
+                                (option: ContactRecipientDirectory["options"][number]) => (
+                                  <SelectItem
+                                    key={option.email}
+                                    value={option.email}
+                                    disabled={option.isVerified || option.isPending}
+                                  >
+                                    {option.email}
+                                    {option.isVerified
+                                      ? " (Verified)"
+                                      : option.isPending
+                                        ? " (Pending)"
+                                        : ""}
+                                  </SelectItem>
+                                ),
+                              )}
                             </SelectContent>
                           </Select>
                           <Button

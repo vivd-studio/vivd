@@ -424,3 +424,84 @@ export function getBookingStatusBadgeVariant(
   if (status === "no_show") return "secondary";
   return "outline";
 }
+
+export function getScheduleMaxConcurrentCovers(
+  periods: TableBookingSchedulePeriod[],
+): number {
+  let total = 0;
+  for (const period of periods) {
+    total += period.maxConcurrentCovers;
+  }
+  return total;
+}
+
+export function getWeekStartDate(date: string): string {
+  const current = new Date(`${date}T12:00:00.000Z`);
+  const dayOfWeek = current.getUTCDay();
+  const mondayOffset = (dayOfWeek + 6) % 7;
+  current.setUTCDate(current.getUTCDate() - mondayOffset);
+  return `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, "0")}-${String(current.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function buildWeekDates(startDate: string): string[] {
+  const start = new Date(`${startDate}T12:00:00.000Z`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  });
+}
+
+export function addDaysToIsoDate(date: string, offset: number): string {
+  const current = new Date(`${date}T12:00:00.000Z`);
+  current.setUTCDate(current.getUTCDate() + offset);
+  return `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, "0")}-${String(current.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function parseTimeToMinutes(value: string): number {
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number.parseInt(hoursRaw || "0", 10);
+  const minutes = Number.parseInt(minutesRaw || "0", 10);
+  return hours * 60 + minutes;
+}
+
+export function formatTimeFromMinutes(total: number): string {
+  const clamped = Math.max(0, Math.min(24 * 60, total));
+  const hours = Math.floor(clamped / 60);
+  const minutes = clamped % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function getBookingMinutesInTimezone(
+  value: string,
+  timeZone: string,
+): number {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number.parseInt(
+    parts.find((part) => part.type === "hour")?.value ?? "0",
+    10,
+  );
+  const minute = Number.parseInt(
+    parts.find((part) => part.type === "minute")?.value ?? "0",
+    10,
+  );
+  return hour * 60 + minute;
+}
+
+export function formatShortWeekdayDay(date: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    weekday: "short",
+    day: "numeric",
+  }).formatToParts(new Date(`${date}T12:00:00.000Z`));
+  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return `${weekday} ${day}`;
+}

@@ -18,6 +18,13 @@ const {
   updateMock,
   updateSetMock,
   updateWhereMock,
+  invitationServiceInviteMemberMock,
+  invitationServiceListInvitationsMock,
+  invitationServiceGetPublicInviteMock,
+  invitationServiceAcceptInviteWithSignupMock,
+  invitationServiceAcceptInviteForUserMock,
+  getOrganizationInvitationStorageErrorMessageMock,
+  rateLimitCheckActionMock,
   getTenantHostsForOrganizationsMock,
   inferTenantBaseDomainFromHostMock,
   ensureManagedTenantDomainForOrganizationMock,
@@ -58,6 +65,13 @@ const {
     updateMock,
     updateSetMock,
     updateWhereMock,
+    invitationServiceInviteMemberMock: vi.fn(),
+    invitationServiceListInvitationsMock: vi.fn(),
+    invitationServiceGetPublicInviteMock: vi.fn(),
+    invitationServiceAcceptInviteWithSignupMock: vi.fn(),
+    invitationServiceAcceptInviteForUserMock: vi.fn(),
+    getOrganizationInvitationStorageErrorMessageMock: vi.fn(),
+    rateLimitCheckActionMock: vi.fn(),
     getTenantHostsForOrganizationsMock: vi.fn(),
     inferTenantBaseDomainFromHostMock: vi.fn(),
     ensureManagedTenantDomainForOrganizationMock: vi.fn(),
@@ -95,6 +109,26 @@ vi.mock("../src/services/publish/DomainService", () => ({
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
     resolvePolicy: resolvePolicyMock,
+  },
+}));
+
+vi.mock("../src/services/auth/OrganizationInvitationService", () => ({
+  getOrganizationInvitationStorageErrorMessage:
+    getOrganizationInvitationStorageErrorMessageMock,
+  organizationInvitationService: {
+    inviteMember: invitationServiceInviteMemberMock,
+    listOrganizationInvitations: invitationServiceListInvitationsMock,
+    getPublicInvite: invitationServiceGetPublicInviteMock,
+    acceptInviteWithSignup: invitationServiceAcceptInviteWithSignupMock,
+    acceptInviteForUser: invitationServiceAcceptInviteForUserMock,
+    resendInvite: vi.fn(),
+    cancelInvite: vi.fn(),
+  },
+}));
+
+vi.mock("../src/services/system/ControlPlaneRateLimitService", () => ({
+  controlPlaneRateLimitService: {
+    checkAction: rateLimitCheckActionMock,
   },
 }));
 
@@ -171,6 +205,13 @@ describe("organization router", () => {
     updateMock.mockReset();
     updateSetMock.mockReset();
     updateWhereMock.mockReset();
+    invitationServiceInviteMemberMock.mockReset();
+    invitationServiceListInvitationsMock.mockReset();
+    invitationServiceGetPublicInviteMock.mockReset();
+    invitationServiceAcceptInviteWithSignupMock.mockReset();
+    invitationServiceAcceptInviteForUserMock.mockReset();
+    getOrganizationInvitationStorageErrorMessageMock.mockReset();
+    rateLimitCheckActionMock.mockReset();
     getTenantHostsForOrganizationsMock.mockReset();
     inferTenantBaseDomainFromHostMock.mockReset();
     ensureManagedTenantDomainForOrganizationMock.mockReset();
@@ -190,6 +231,11 @@ describe("organization router", () => {
     updateSetMock.mockImplementation(() => ({ where: updateWhereMock }));
     updateMock.mockImplementation(() => ({ set: updateSetMock }));
 
+    getOrganizationInvitationStorageErrorMessageMock.mockReturnValue(null);
+    rateLimitCheckActionMock.mockResolvedValue({
+      allowed: true,
+      retryAfterSeconds: 0,
+    });
     findProjectMetaManyMock.mockResolvedValue([]);
     findProjectPluginInstanceManyMock.mockResolvedValue([]);
     findPluginEntitlementManyMock.mockResolvedValue([]);
@@ -397,6 +443,98 @@ describe("organization router", () => {
     expect(findOrganizationMock).toHaveBeenCalled();
     expect(updateSetMock).toHaveBeenCalledWith({ activeOrganizationId: "Org_A2" });
     expect(result).toEqual({ success: true, tenantHost: "tenant-two.localhost" });
+  });
+
+  it("sends organization invites through the invitation service", async () => {
+    invitationServiceInviteMemberMock.mockResolvedValueOnce({
+      invitationId: "invite-1",
+      deliveryAccepted: true,
+    });
+    const caller = organizationRouter.createCaller(
+      makeContext({ requestIp: "127.0.0.1" }),
+    );
+
+    const result = await caller.inviteMember({
+      email: "teammate@example.com",
+      name: "Pat",
+      role: "client_editor",
+      projectSlug: "launch-site",
+    });
+
+    expect(rateLimitCheckActionMock).toHaveBeenCalledWith({
+      action: "auth",
+      organizationId: "org-1",
+      requestIp: "127.0.0.1",
+      userId: "user-1",
+    });
+    expect(invitationServiceInviteMemberMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      email: "teammate@example.com",
+      inviteeName: "Pat",
+      role: "client_editor",
+      projectSlug: "launch-site",
+      inviterId: "user-1",
+    });
+    expect(result).toEqual({
+      invitationId: "invite-1",
+      deliveryAccepted: true,
+    });
+  });
+
+  it("returns an actionable message when invite storage is out of date", async () => {
+    invitationServiceListInvitationsMock.mockRejectedValueOnce(
+      new Error(
+        'Failed query: select "organizationInvitation"."invitee_name" from "organization_invitation" "organizationInvitation" column "invitee_name" does not exist',
+      ),
+    );
+    getOrganizationInvitationStorageErrorMessageMock.mockReturnValueOnce(
+      "Organization invite storage is unavailable or out of date. Run backend db:migrate to apply migration 0029_organization_member_invites.sql.",
+    );
+    const caller = organizationRouter.createCaller(makeContext());
+
+    await expect(caller.listInvitations()).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Organization invite storage is unavailable or out of date. Run backend db:migrate to apply migration 0029_organization_member_invites.sql.",
+    });
+  });
+
+  it("accepts invite signup through the public invitation flow", async () => {
+    invitationServiceAcceptInviteWithSignupMock.mockResolvedValueOnce({
+      email: "teammate@example.com",
+      organizationId: "org-1",
+      tenantHost: "tenant-one.localhost",
+    });
+    const caller = organizationRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationId: null,
+        requestIp: "198.51.100.24",
+      }),
+    );
+
+    const result = await caller.acceptInviteWithSignup({
+      token: "invite-token",
+      name: "Pat",
+      password: "hunter22!",
+    });
+
+    expect(rateLimitCheckActionMock).toHaveBeenCalledWith({
+      action: "auth",
+      organizationId: null,
+      requestIp: "198.51.100.24",
+      userId: null,
+    });
+    expect(invitationServiceAcceptInviteWithSignupMock).toHaveBeenCalledWith({
+      token: "invite-token",
+      name: "Pat",
+      password: "hunter22!",
+    });
+    expect(result).toEqual({
+      email: "teammate@example.com",
+      organizationId: "org-1",
+      tenantHost: "tenant-one.localhost",
+    });
   });
 
   it("allows super-admin selection and persists active org even when suspended", async () => {
