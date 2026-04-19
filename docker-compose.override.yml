@@ -101,6 +101,12 @@ services:
             - node_modules/
             - dist/
         - action: sync
+          path: ./packages/ui
+          target: /app/packages/ui
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/theme
           target: /app/packages/theme
           ignore:
@@ -130,6 +136,8 @@ services:
           path: ./plugins/native/table-booking/package.json
         - action: rebuild
           path: ./packages/frontend/package.json
+        - action: rebuild
+          path: ./packages/ui/package.json
         - action: rebuild
           path: ./packages/theme/package.json
         - action: rebuild

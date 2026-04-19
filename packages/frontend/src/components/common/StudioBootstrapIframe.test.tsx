@@ -149,24 +149,61 @@ describe("StudioBootstrapIframe", () => {
     }
   });
 
-  it("treats bootstrap API error documents as load failures instead of successful loads", () => {
+  it("retries one bootstrap-class failure silently before surfacing it", () => {
     frameHref = "http://app.localhost:4100/vivd-studio/api/bootstrap";
     frameBodyText = '{"error":"Invalid bootstrap token"}';
-    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+    const submitSpy = vi
+      .spyOn(HTMLFormElement.prototype, "submit")
+      .mockImplementation(() => {});
     const onLoad = vi.fn();
     const onError = vi.fn();
 
     renderBootstrapIframe({ onLoad, onError });
+    expect(submitSpy).toHaveBeenCalledTimes(1);
 
     fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
 
     expect(onLoad).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(submitSpy).toHaveBeenCalledTimes(2);
+
+    fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
+
     expect(onError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Invalid bootstrap token",
         source: "bootstrap",
       }),
     );
+  });
+
+  it("keeps the startup skeleton path for transient bootstrap startup responses and retries", async () => {
+    vi.useFakeTimers();
+    frameHref = "http://app.localhost:4100/vivd-studio/api/bootstrap";
+    frameBodyText = "Studio is starting up. Please retry shortly.";
+    const submitSpy = vi
+      .spyOn(HTMLFormElement.prototype, "submit")
+      .mockImplementation(() => {});
+    const onLoad = vi.fn();
+    const onError = vi.fn();
+
+    try {
+      renderBootstrapIframe({ onLoad, onError });
+      expect(submitSpy).toHaveBeenCalledTimes(1);
+
+      fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
+
+      expect(onLoad).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+
+      expect(submitSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resubmits when the clean target changes while the iframe is still blank", () => {

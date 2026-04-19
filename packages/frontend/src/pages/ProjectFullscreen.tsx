@@ -9,7 +9,7 @@ import {
 } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
-import { Button, Input, Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import { Button, Input, Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
 
 import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
@@ -26,7 +26,7 @@ import {
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
+import { listEnabledNativeProjectPluginPresentations } from "@/plugins/presentation";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -75,11 +75,10 @@ export default function ProjectFullscreen() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const currentVersion = project?.currentVersion || 1;
   const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
-  const projectHeaderPluginShortcuts = projectSlug
-    ? getProjectPluginShortcuts({
+  const enabledPluginEntries = projectSlug
+    ? listEnabledNativeProjectPluginPresentations({
         enabledPluginIds: project?.enabledPlugins ?? [],
         projectSlug,
-        surface: "project-header",
       })
     : [];
 
@@ -332,7 +331,6 @@ export default function ProjectFullscreen() {
   const {
     studioVisible,
     studioReady,
-    studioLoadTimedOut,
     studioLoadErrored,
     studioLoadError,
     handleStudioIframeLoad,
@@ -440,44 +438,59 @@ export default function ProjectFullscreen() {
             disabled={isRenamePending}
             className="h-8 rounded-md px-3"
           >
-            Edit
+            Start Studio
           </Button>
         ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPublishDialogOpen(true)}
-              disabled={isRenamePending}
-              className="h-8 rounded-md px-3"
-            >
-              Publish
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
-              disabled={isRenamePending}
-              className="h-8 rounded-md px-3"
-            >
-              <Plug className="mr-1.5 h-4 w-4" />
-              Plugins
-            </Button>
-            {projectHeaderPluginShortcuts.map((shortcut) => {
-              const ShortcutIcon = shortcut.icon;
-              return (
-            <Button
-              key={`header-shortcut-${shortcut.pluginId}`}
-              variant="outline"
-              size="icon"
-              onClick={() => navigate(shortcut.path)}
-              title={shortcut.label}
-              disabled={isRenamePending}
-              className="h-8 w-8 rounded-md"
-            >
-              <ShortcutIcon className="h-4 w-4" />
-            </Button>
-          );
-        })}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPublishDialogOpen(true)}
+          disabled={isRenamePending}
+          className="h-8 rounded-md px-3"
+        >
+          Publish
+        </Button>
+        <TooltipProvider delayDuration={100}>
+          {enabledPluginEntries.map((plugin) => {
+            const PluginIcon = plugin.icon;
+            return (
+              <Tooltip key={`header-plugin-${plugin.pluginId}`}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      if (plugin.path) {
+                        navigate(plugin.path);
+                      }
+                    }}
+                    aria-label={plugin.title}
+                    disabled={isRenamePending || !plugin.path}
+                    className="h-8 w-8 rounded-md"
+                  >
+                    <PluginIcon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{plugin.title}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
+                aria-label="Open plugins"
+                disabled={isRenamePending}
+                className="h-8 w-8 rounded-md"
+              >
+                <Plug className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Plugins</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -574,16 +587,20 @@ export default function ProjectFullscreen() {
               <Plug className="mr-2 h-4 w-4" />
               Plugins
             </DropdownMenuItem>
-            {projectHeaderPluginShortcuts.map((shortcut) => {
-              const ShortcutIcon = shortcut.icon;
+            {enabledPluginEntries.map((plugin) => {
+              const PluginIcon = plugin.icon;
               return (
                 <DropdownMenuItem
-                  key={`menu-shortcut-${shortcut.pluginId}`}
-                  onClick={() => navigate(shortcut.path)}
-                  disabled={isRenamePending}
+                  key={`menu-plugin-${plugin.pluginId}`}
+                  onClick={() => {
+                    if (plugin.path) {
+                      navigate(plugin.path);
+                    }
+                  }}
+                  disabled={isRenamePending || !plugin.path}
                 >
-                  <ShortcutIcon className="mr-2 h-4 w-4" />
-                  {shortcut.label}
+                  <PluginIcon className="mr-2 h-4 w-4" />
+                  {plugin.title}
                 </DropdownMenuItem>
               );
             })}
@@ -784,7 +801,7 @@ export default function ProjectFullscreen() {
                       {externalPreview?.status
                         ? ` (${externalPreview.status})`
                         : ""}. Click{" "}
-                      <span className="font-medium text-foreground">Edit</span>{" "}
+                      <span className="font-medium text-foreground">Start Studio</span>{" "}
                       to start a studio machine.
                     </div>
                     {thumbnailSrc ? (
@@ -930,7 +947,7 @@ export default function ProjectFullscreen() {
 
           {!studioVisible ? (
             <div className="absolute inset-0 z-10 bg-background">
-              {studioLoadTimedOut || studioLoadErrored ? (
+              {studioLoadErrored ? (
                 <div className="flex h-full w-full items-center justify-center px-6">
                   <StudioLoadFailurePanel
                     failure={studioLoadError}

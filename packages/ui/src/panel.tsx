@@ -21,7 +21,7 @@ const panelVariants = cva(
   {
     variants: {
       tone: {
-        default: "border-border bg-surface-panel shadow-sm",
+        default: "border-border bg-surface-panel vivd-panel-elevation",
         sunken: "border-border bg-surface-sunken shadow-none",
         dashed: "border-dashed border-border bg-transparent shadow-none",
       },

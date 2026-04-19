@@ -26,6 +26,50 @@ function parseStructuredErrorPayload(
   }
 }
 
+function normalizeBodyText(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() || "";
+}
+
+function looksLikeStartupPendingMessage(message: string): boolean {
+  return (
+    message.includes("studio is starting up") ||
+    message.includes("please retry shortly") ||
+    message.includes("studio bootstrap unavailable")
+  );
+}
+
+export function isStudioIframeStartupPending(options: {
+  pathname?: string | null;
+  bodyText?: string | null;
+}): boolean {
+  const pathname = options.pathname?.trim().toLowerCase() || "";
+  const bodyText = normalizeBodyText(options.bodyText);
+  const parsed = parseStructuredErrorPayload(options.bodyText?.trim() || "");
+  const parsedStatus = parsed?.status?.trim().toLowerCase();
+  const parsedError = normalizeBodyText(parsed?.error);
+
+  if (parsedStatus === "starting" || parsedStatus === "installing") {
+    return true;
+  }
+
+  if (looksLikeStartupPendingMessage(bodyText)) {
+    return true;
+  }
+
+  if (parsedError && looksLikeStartupPendingMessage(parsedError)) {
+    return true;
+  }
+
+  if (
+    pathname.includes("/vivd-studio/api/bootstrap") &&
+    (bodyText.includes("starting") || parsedError.includes("starting"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function detectStudioIframeFailure(options: {
   pathname?: string | null;
   bodyText?: string | null;
@@ -33,6 +77,10 @@ export function detectStudioIframeFailure(options: {
   const pathname = options.pathname?.trim().toLowerCase() || "";
   const bodyText = options.bodyText?.trim() || "";
   const parsed = parseStructuredErrorPayload(bodyText);
+
+  if (isStudioIframeStartupPending(options)) {
+    return null;
+  }
 
   if (pathname.includes("/vivd-studio/api/bootstrap")) {
     return {

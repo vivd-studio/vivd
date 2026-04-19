@@ -9,6 +9,8 @@ const MAX_SHORT_TEXT = 160;
 const MAX_LONG_TEXT = 500;
 const MAX_URL_LENGTH = 2_048;
 const MAX_EMAIL_LENGTH = 320;
+const OFFICIAL_HOSTED_SUPPORT_EMAIL = "hello@vivd.studio";
+const OFFICIAL_HOSTED_DOMAIN = "vivd.studio";
 
 const emailTemplateBrandingStoredSchema = z
   .object({
@@ -78,6 +80,51 @@ function normalizeOptionalUrl(value: unknown): string | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+function normalizeOptionalHost(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  try {
+    const hostname = /^https?:\/\//i.test(trimmed)
+      ? new URL(trimmed).hostname
+      : new URL(`https://${trimmed}`).hostname;
+    return hostname.trim().toLowerCase() || undefined;
+  } catch {
+    const hostname = trimmed
+      .replace(/^https?:\/\//i, "")
+      .split("/")[0]
+      ?.split(":")[0]
+      ?.trim()
+      .toLowerCase();
+    return hostname || undefined;
+  }
+}
+
+function isOfficialHostedControlPlaneHost(hostname: string | undefined): boolean {
+  if (!hostname) return false;
+  return hostname === OFFICIAL_HOSTED_DOMAIN || hostname.endsWith(`.${OFFICIAL_HOSTED_DOMAIN}`);
+}
+
+function resolveHostedDefaultSupportEmail(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const hostCandidates = [
+    env.VIVD_APP_URL,
+    env.BETTER_AUTH_URL,
+    env.CONTROL_PLANE_HOST,
+    env.BACKEND_URL,
+    env.DOMAIN,
+  ];
+
+  const officialHosted = hostCandidates.some((candidate) =>
+    isOfficialHostedControlPlaneHost(normalizeOptionalHost(candidate)),
+  );
+  if (!officialHosted) return undefined;
+
+  return OFFICIAL_HOSTED_SUPPORT_EMAIL;
+}
+
 function normalizeEmailTemplateBranding(
   value: Partial<Record<EmailTemplateBrandingKey, unknown>> | null | undefined,
 ): EmailTemplateBranding {
@@ -132,9 +179,22 @@ export class EmailTemplateBrandingService {
       Promise.resolve(readEnvBootstrap()),
     ]);
 
-    return normalizeEmailTemplateBranding({
+    const resolved = normalizeEmailTemplateBranding({
       ...envBootstrap,
       ...stored,
+    });
+    if (resolved.supportEmail) {
+      return resolved;
+    }
+
+    const hostedDefaultSupportEmail = resolveHostedDefaultSupportEmail(process.env);
+    if (!hostedDefaultSupportEmail) {
+      return resolved;
+    }
+
+    return normalizeEmailTemplateBranding({
+      ...resolved,
+      supportEmail: hostedDefaultSupportEmail,
     });
   }
 

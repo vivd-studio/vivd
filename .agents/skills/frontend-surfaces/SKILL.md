@@ -29,6 +29,12 @@ get the right shade automatically for every theme × light/dark combination.
 Rule of thumb: **panel sits on page, sunken sits on panel, raised floats
 above.** Inputs are always `surface-input`.
 
+Elevation direction flips between modes. In **light mode** sunken is *darker*
+than panel (classic inset); in **dark mode** sunken is *lighter* than panel,
+because the page is already the darkest layer and a darker-than-panel nested
+surface reads as a hole, not a well. The primitives handle this for you —
+don't try to pick bg classes by eye.
+
 Definitions live in `packages/theme/theme.css` under the "Semantic Surface
 Tokens" block. Do not edit per-theme values without also sanity-checking every
 theme × light/dark combination visually.

@@ -6,8 +6,8 @@ import { cn } from "./utils";
  * StatTile — a nested metric tile that sits inside a Panel.
  *
  * Uses surface-sunken so it recedes against the parent Panel. Replaces the
- * hand-rolled "rounded border bg-card p-4" / "rounded-xl border bg-background/70 p-4"
- * variants that were drifting across the admin surfaces.
+ * hand-rolled metric tile containers that were drifting across the admin
+ * surfaces.
  *
  * Compose the contents with the provided sub-components to keep typography
  * consistent across the app.
@@ -20,7 +20,7 @@ const StatTile = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-4 text-foreground",
+      "flex flex-col gap-3 rounded-md border border-border/80 bg-surface-sunken p-4 text-foreground vivd-tile-elevation",
       className,
     )}
     {...props}
@@ -79,7 +79,7 @@ const StatTileHelper = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-xs text-muted-foreground", className)}
+    className={cn("text-xs leading-5 text-muted-foreground", className)}
     {...props}
   />
 ));

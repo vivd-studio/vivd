@@ -1,9 +1,9 @@
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Separator } from "@vivd/ui";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Separator, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
-import type { ResolvedProjectPluginShortcut } from "@/plugins/shortcuts";
+import type { ProjectPluginPresentation } from "@/plugins/presentation";
 import {
   Copy,
   Download,
@@ -37,7 +37,7 @@ type EmbeddedStudioHeaderProps = {
   isRegenerateThumbnailPending: boolean;
   canRenameProject: boolean;
   canDeleteProject: boolean;
-  projectHeaderPluginShortcuts: ResolvedProjectPluginShortcut[];
+  enabledPluginEntries: ProjectPluginPresentation[];
   onEdit: () => void;
   onOpenPublish: () => void;
   onOpenPlugins: () => void;
@@ -69,7 +69,7 @@ export function EmbeddedStudioHeader({
   isRegenerateThumbnailPending,
   canRenameProject,
   canDeleteProject,
-  projectHeaderPluginShortcuts,
+  enabledPluginEntries,
   onEdit,
   onOpenPublish,
   onOpenPlugins,
@@ -99,7 +99,7 @@ export function EmbeddedStudioHeader({
           disabled={isRenamePending}
           className="h-8 rounded-md px-3"
         >
-          Edit
+          Start Studio
         </Button>
       )}
       <Button
@@ -111,32 +111,47 @@ export function EmbeddedStudioHeader({
       >
         Publish
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onOpenPlugins}
-        disabled={isRenamePending}
-        className="h-8 rounded-md px-3"
-      >
-        <Plug className="mr-1.5 h-4 w-4" />
-        Plugins
-      </Button>
-      {projectHeaderPluginShortcuts.map((shortcut) => {
-        const ShortcutIcon = shortcut.icon;
-        return (
-          <Button
-            key={`header-shortcut-${shortcut.pluginId}`}
-            variant="outline"
-            size="icon"
-            onClick={() => onNavigate(shortcut.path)}
-            title={shortcut.label}
-            disabled={isRenamePending}
-            className="h-8 w-8 rounded-md"
-          >
-            <ShortcutIcon className="h-4 w-4" />
-          </Button>
-        );
-      })}
+      <TooltipProvider delayDuration={100}>
+        {enabledPluginEntries.map((plugin) => {
+          const PluginIcon = plugin.icon;
+          return (
+            <Tooltip key={`header-plugin-${plugin.pluginId}`}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    if (plugin.path) {
+                      onNavigate(plugin.path);
+                    }
+                  }}
+                  aria-label={plugin.title}
+                  disabled={isRenamePending || !plugin.path}
+                  className="h-8 w-8 rounded-md"
+                >
+                  <PluginIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{plugin.title}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onOpenPlugins}
+              aria-label="Open plugins"
+              disabled={isRenamePending}
+              className="h-8 w-8 rounded-md"
+            >
+              <Plug className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Plugins</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <Separator orientation="vertical" className="mx-0.5 h-4" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -214,16 +229,20 @@ export function EmbeddedStudioHeader({
             <Plug className="mr-2 h-4 w-4" />
             Plugins
           </DropdownMenuItem>
-          {projectHeaderPluginShortcuts.map((shortcut) => {
-            const ShortcutIcon = shortcut.icon;
+          {enabledPluginEntries.map((plugin) => {
+            const PluginIcon = plugin.icon;
             return (
               <DropdownMenuItem
-                key={`menu-shortcut-${shortcut.pluginId}`}
-                onClick={() => onNavigate(shortcut.path)}
-                disabled={isRenamePending}
+                key={`menu-plugin-${plugin.pluginId}`}
+                onClick={() => {
+                  if (plugin.path) {
+                    onNavigate(plugin.path);
+                  }
+                }}
+                disabled={isRenamePending || !plugin.path}
               >
-                <ShortcutIcon className="mr-2 h-4 w-4" />
-                {shortcut.label}
+                <PluginIcon className="mr-2 h-4 w-4" />
+                {plugin.title}
               </DropdownMenuItem>
             );
           })}

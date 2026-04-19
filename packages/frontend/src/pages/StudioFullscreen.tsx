@@ -336,7 +336,6 @@ export default function StudioFullscreen() {
   const {
     studioVisible,
     studioReady,
-    studioLoadTimedOut,
     studioLoadErrored,
     studioLoadError,
     handleStudioIframeLoad,
@@ -491,7 +490,7 @@ export default function StudioFullscreen() {
 
       {!studioVisible ? (
         <div className="absolute inset-0 z-10 bg-background">
-          {studioLoadTimedOut || studioLoadErrored ? (
+          {studioLoadErrored ? (
             <div className="flex h-full w-full items-center justify-center px-6">
               <StudioLoadFailurePanel
                 failure={studioLoadError}

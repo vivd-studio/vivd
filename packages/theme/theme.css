@@ -1087,8 +1087,10 @@
    - surface-page     : App canvas. The thing everything sits on.
    - surface-panel    : Primary elevated container. Section shells, side rails.
    - surface-sunken   : Nested well inside a panel. Stat tiles, inline callouts.
-                        In dark modes this goes toward --background (darker than panel);
-                        in light modes toward --muted (darker than panel).
+                        Light mode: toward --muted (darker than panel, classic inset).
+                        Dark mode: uses the normal card step above the rail-toned
+                        panel, because a nested surface that goes darker reads as
+                        a hole instead of a well.
    - surface-raised   : Floating surfaces above everything. Popovers, dropdowns, menus.
    - surface-input    : Form field background. One step sunken from whatever contains it.
 
@@ -1099,19 +1101,89 @@
   :root {
     --surface-page: var(--background);
     --surface-panel: var(--card);
-    --surface-sunken: var(--muted);
+    --surface-sunken: 220 12% 97%;
     --surface-raised: var(--popover);
     --surface-input: var(--muted);
   }
 
+  [data-color-theme="natural"] {
+    --surface-sunken: 40 18% 96%;
+  }
+  [data-color-theme="vivd-green"] {
+    --surface-sunken: 40 16% 96%;
+  }
+  [data-color-theme="vivd-sharp"] {
+    --surface-sunken: 0 0% 97%;
+  }
+  [data-color-theme="ocean"] {
+    --surface-sunken: 210 30% 98%;
+  }
+  [data-color-theme="aurora"] {
+    --surface-sunken: 232 24% 95%;
+  }
+  [data-color-theme="mono"] {
+    --surface-sunken: 0 0% 97%;
+  }
+
+  /* Dark mode: first-level shells should match the standard card tone used by
+     the existing admin surfaces. Nested wells then step up slightly lighter so
+     inner regions still separate from the parent panel without relying on any
+     highlight or shadow treatment. */
   .dark {
-    /* In dark themes, --muted is lighter than --card, so sunken flips to --background */
-    --surface-sunken: var(--background);
+    --surface-panel: var(--card);
+    --surface-sunken: 224 40% 17%;
     --surface-input: var(--muted);
+  }
+  [data-color-theme="natural"].dark,
+  .dark[data-color-theme="natural"] {
+    --surface-sunken: 20 18% 20%;
+  }
+  [data-color-theme="vivd-green"].dark,
+  .dark[data-color-theme="vivd-green"] {
+    --surface-sunken: 20 22% 19%;
+  }
+  [data-color-theme="vivd-sharp"].dark,
+  .dark[data-color-theme="vivd-sharp"] {
+    --surface-sunken: 0 0% 16%;
+  }
+  [data-color-theme="ocean"].dark,
+  .dark[data-color-theme="ocean"] {
+    --surface-sunken: 217 33% 26%;
+  }
+  [data-color-theme="aurora"].dark,
+  .dark[data-color-theme="aurora"] {
+    --surface-sunken: 228 18% 16%;
+  }
+  [data-color-theme="mono"].dark,
+  .dark[data-color-theme="mono"] {
+    --surface-sunken: 0 0% 15%;
   }
 }
 
 @layer components {
+  /* Elevation for the Panel primitive's default tone.
+     Light mode: subtle drop shadow — classic "sitting on paper" cue.
+     Dark mode: no faux lift. Tone separation alone is enough. */
+  .vivd-panel-elevation {
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.03),
+      0 1px 2px 0 rgb(0 0 0 / 0.02);
+  }
+
+  .dark .vivd-panel-elevation {
+    box-shadow: none;
+  }
+
+  .vivd-tile-elevation {
+    box-shadow: none;
+  }
+
+  .dark .vivd-tile-elevation {
+    box-shadow:
+      inset 0 1px 0 0 hsl(var(--foreground) / 0.035),
+      0 1px 2px 0 rgb(0 0 0 / 0.12);
+  }
+
   .vivd-surface-field {
     border: 1px solid hsl(var(--border) / 0.9);
     background: hsl(var(--card));

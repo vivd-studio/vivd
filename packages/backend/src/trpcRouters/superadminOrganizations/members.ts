@@ -26,9 +26,19 @@ export const organizationMemberSuperAdminProcedures = {
       const normalizedEmail = input.email.toLowerCase();
       const existingUser = await db.query.user.findFirst({
         where: eq(userTable.email, normalizedEmail),
-        columns: { id: true },
+        columns: { id: true, email: true, name: true, role: true },
       });
-      return { exists: !!existingUser };
+      return {
+        exists: !!existingUser,
+        user: existingUser
+          ? {
+              id: existingUser.id,
+              email: existingUser.email,
+              name: existingUser.name,
+              role: existingUser.role,
+            }
+          : null,
+      };
     }),
 
   listOrganizationMembers: superAdminProcedure

@@ -8,7 +8,7 @@ import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getTagColor } from "@/lib/tagColors";
-import { getProjectPluginPresentation } from "@/plugins/presentation";
+import { listEnabledNativeProjectPluginPresentations } from "@/plugins/presentation";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { toast } from "sonner";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
@@ -156,9 +156,10 @@ export function ProjectCard({
     projectSlug: project.slug,
     surface: "project-card",
   });
-  const enabledPluginEntries = (project.enabledPlugins ?? []).map((pluginId) =>
-    getProjectPluginPresentation(pluginId, project.slug),
-  );
+  const enabledPluginEntries = listEnabledNativeProjectPluginPresentations({
+    enabledPluginIds: project.enabledPlugins ?? [],
+    projectSlug: project.slug,
+  });
 
   useEffect(() => {
     if (project.currentVersion && project.currentVersion !== selectedVersion) {

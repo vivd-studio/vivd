@@ -8,11 +8,14 @@ import {
 
 import {
   detectStudioIframeFailure,
+  isStudioIframeStartupPending,
   type StudioIframeFailure,
 } from "@/lib/studioIframeFailure";
 
 const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
 const BOOTSTRAP_RETRY_DELAYS_MS = [1_500, 4_000];
+const STARTUP_RESPONSE_RETRY_DELAY_MS = 1_500;
+const MAX_SILENT_BOOTSTRAP_FAILURE_RETRIES = 1;
 
 type StudioBootstrapIframeProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -48,6 +51,8 @@ export function StudioBootstrapIframe({
   onError,
 }: StudioBootstrapIframeProps) {
   const bootstrapFormRef = useRef<HTMLFormElement | null>(null);
+  const startupRetryTimerRef = useRef<number | null>(null);
+  const silentBootstrapFailureRetriesRef = useRef(0);
   const shouldBootstrap = Boolean(bootstrapAction && bootstrapToken);
   const lastSubmittedFingerprintRef = useRef<string | null>(null);
   const bootstrapFingerprint = useMemo(
@@ -86,6 +91,7 @@ export function StudioBootstrapIframe({
   useEffect(() => {
     if (!shouldBootstrap || !bootstrapFingerprint) {
       lastSubmittedFingerprintRef.current = null;
+      silentBootstrapFailureRetriesRef.current = 0;
       return;
     }
 
@@ -120,20 +126,81 @@ export function StudioBootstrapIframe({
     };
   }, [bootstrapFingerprint, iframeRef, shouldBootstrap]);
 
+  useEffect(() => {
+    return () => {
+      if (startupRetryTimerRef.current !== null) {
+        window.clearTimeout(startupRetryTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleBootstrapRetry = (delayMs = STARTUP_RESPONSE_RETRY_DELAY_MS) => {
+    const form = bootstrapFormRef.current;
+    if (!form || !bootstrapFingerprint) return;
+
+    if (startupRetryTimerRef.current !== null) {
+      window.clearTimeout(startupRetryTimerRef.current);
+    }
+
+    startupRetryTimerRef.current = window.setTimeout(() => {
+      if (lastSubmittedFingerprintRef.current !== bootstrapFingerprint) {
+        return;
+      }
+      form.submit();
+      startupRetryTimerRef.current = null;
+    }, delayMs);
+  };
+
   const handleIframeLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
     const iframe = event.currentTarget;
     let failure: StudioIframeFailure | null = null;
+    let pathname = "";
+    let bodyText = "";
+
+    try {
+      pathname = iframe.contentWindow?.location?.pathname || "";
+      bodyText = iframe.contentDocument?.body?.textContent || "";
+    } catch {
+      pathname = "";
+      bodyText = "";
+    }
+
+    if (
+      shouldBootstrap &&
+      isStudioIframeStartupPending({
+        pathname,
+        bodyText,
+      })
+    ) {
+      scheduleBootstrapRetry();
+      return;
+    }
 
     try {
       failure = detectStudioIframeFailure({
-        pathname: iframe.contentWindow?.location?.pathname,
-        bodyText: iframe.contentDocument?.body?.textContent,
+        pathname,
+        bodyText,
       });
     } catch {
       failure = null;
     }
 
     if (failure) {
+      if (
+        shouldBootstrap &&
+        failure.source === "bootstrap" &&
+        silentBootstrapFailureRetriesRef.current <
+          MAX_SILENT_BOOTSTRAP_FAILURE_RETRIES
+      ) {
+        silentBootstrapFailureRetriesRef.current += 1;
+        bootstrapFormRef.current?.submit();
+        return;
+      }
+
+      if (startupRetryTimerRef.current !== null) {
+        window.clearTimeout(startupRetryTimerRef.current);
+        startupRetryTimerRef.current = null;
+      }
       onError?.(failure);
       return;
     }

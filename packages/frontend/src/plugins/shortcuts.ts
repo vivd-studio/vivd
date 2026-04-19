@@ -6,6 +6,7 @@ import {
 } from "@vivd/plugin-sdk";
 import type { LucideIcon } from "lucide-react";
 import { getPluginUiIcon } from "./icons";
+import { isNativeProjectPluginId } from "./presentation";
 import { frontendSharedProjectPluginUiRegistry } from "./sharedUiRegistry";
 
 export interface ResolvedProjectPluginShortcut {
@@ -28,18 +29,20 @@ export function getProjectPluginShortcuts(options: {
     enabledPluginIds: options.enabledPluginIds,
     registry: frontendSharedProjectPluginUiRegistry,
     surface: options.surface,
-  }).map((entry) => ({
-    pluginId: entry.pluginId,
-    enabled: entry.enabled,
-    label: entry.shortcut.label,
-    path: buildProjectPluginRoutePath(
-      options.projectSlug,
-      entry.pluginId,
-      entry.shortcut.route,
-    ),
-    icon: getPluginUiIcon(entry.shortcut.icon),
-    keywords: entry.shortcut.keywords ?? [],
-    expandedWidth: entry.shortcut.expandedWidth,
-    activationSupport: entry.shortcut.activationSupport,
-  }));
+  })
+    .filter((entry) => isNativeProjectPluginId(entry.pluginId))
+    .map((entry) => ({
+      pluginId: entry.pluginId,
+      enabled: entry.enabled,
+      label: entry.shortcut.label,
+      path: buildProjectPluginRoutePath(
+        options.projectSlug,
+        entry.pluginId,
+        entry.shortcut.route,
+      ),
+      icon: getPluginUiIcon(entry.shortcut.icon),
+      keywords: entry.shortcut.keywords ?? [],
+      expandedWidth: entry.shortcut.expandedWidth,
+      activationSupport: entry.shortcut.activationSupport,
+    }));
 }

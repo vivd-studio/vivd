@@ -17,7 +17,6 @@ type EmbeddedStudioLiveSurfaceProps = {
   studioUserActionToken: string | null;
   studioVisible: boolean;
   studioReady: boolean;
-  studioLoadTimedOut: boolean;
   studioLoadErrored: boolean;
   studioLoadError: StudioIframeFailure | null;
   onStudioIframeLoad: () => void;
@@ -41,7 +40,6 @@ export function EmbeddedStudioLiveSurface({
   studioUserActionToken,
   studioVisible,
   studioReady,
-  studioLoadTimedOut,
   studioLoadErrored,
   studioLoadError,
   onStudioIframeLoad,
@@ -75,7 +73,7 @@ export function EmbeddedStudioLiveSurface({
 
         {!studioVisible ? (
           <div className="absolute inset-0 z-10 bg-background">
-            {studioLoadTimedOut || studioLoadErrored ? (
+            {studioLoadErrored ? (
               <div className="flex h-full w-full items-center justify-center px-6">
                 <StudioLoadFailurePanel
                   failure={studioLoadError}

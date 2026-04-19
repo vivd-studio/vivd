@@ -1,8 +1,11 @@
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, Loader2 } from "lucide-react";
 import {
   Button,
   Callout,
-  CalloutTitle,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Panel,
   PanelContent,
   PanelDescription,
@@ -28,6 +31,7 @@ export function StudioLoadFailurePanel({
   onHardRestart,
   isHardRestartPending,
 }: StudioLoadFailurePanelProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const copy = describeStudioIframeFailure(failure);
   const details = [
     failure?.status ? `Status: ${failure.status}` : null,
@@ -44,12 +48,28 @@ export function StudioLoadFailurePanel({
       </PanelHeader>
       <PanelContent className="space-y-4">
         {details ? (
-          <Callout tone="warn" icon={<AlertTriangle />}>
-            <CalloutTitle>Technical details</CalloutTitle>
-            <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-              {details}
-            </pre>
-          </Callout>
+          <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              >
+                <span>{detailsOpen ? "Hide error details" : "Show error details"}</span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 transition-transform ${
+                    detailsOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <Callout tone="warn" icon={<AlertTriangle />}>
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+                  {details}
+                </pre>
+              </Callout>
+            </CollapsibleContent>
+          </Collapsible>
         ) : null}
 
         <div className="flex flex-wrap items-center justify-center gap-2">

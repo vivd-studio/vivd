@@ -18,6 +18,16 @@ describe("getProjectPluginShortcuts", () => {
     });
   });
 
+  it("filters external embed plugins out of host shortcuts", () => {
+    const shortcuts = getProjectPluginShortcuts({
+      enabledPluginIds: ["google_maps", "analytics"],
+      projectSlug: "bettinis-bikinis",
+      surface: "project-card",
+    });
+
+    expect(shortcuts.map((shortcut) => shortcut.pluginId)).toEqual(["analytics"]);
+  });
+
   it("does not expose direct project shortcuts for disabled plugins on host surfaces", () => {
     const shortcuts = getProjectPluginShortcuts({
       enabledPluginIds: [],

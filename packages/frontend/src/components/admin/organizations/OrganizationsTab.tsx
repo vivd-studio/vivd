@@ -1,7 +1,6 @@
-import type { ReactNode } from "react";
-import { FolderKanban, Globe2, Users } from "lucide-react";
+import { FolderKanban, Globe2, Users, type LucideIcon } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Panel, PanelContent, StatTile, StatusPill, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+import { Badge, Panel, PanelContent, StatusPill, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
 
 import { DomainsPanel } from "./components/DomainsPanel";
 import { MembersPanel } from "./components/MembersPanel";
@@ -17,50 +16,19 @@ type Props = {
   onOrgDeleted?: (fallbackId: string) => void;
 };
 
-type OverviewMetaItemProps = {
-  label: string;
-  value: ReactNode;
-  helper: string;
-};
-
-type OverviewStatRowProps = {
+type CountChipProps = {
+  icon: LucideIcon;
   label: string;
   value: string;
-  helper: string;
-  icon: typeof Users;
 };
 
-function OverviewMetaItem({ label, value, helper }: OverviewMetaItemProps) {
+function CountChip({ icon: Icon, label, value }: CountChipProps) {
   return (
-    <StatTile className="gap-1">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium text-foreground">{value}</dd>
-      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
-    </StatTile>
-  );
-}
-
-function OverviewStatRow({
-  label,
-  value,
-  helper,
-  icon: Icon,
-}: OverviewStatRowProps) {
-  return (
-    <StatTile className="flex-row items-start gap-3">
-      <div className="rounded-md border border-border bg-surface-panel p-2 text-muted-foreground">
-        <Icon className="size-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-sm text-muted-foreground">{label}</dt>
-          <dd className="text-lg font-semibold tracking-tight text-foreground tabular-nums">
-            {value}
-          </dd>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
-      </div>
-    </StatTile>
+    <div className="inline-flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-1.5 text-sm">
+      <Icon className="size-3.5 text-muted-foreground" />
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground tabular-nums">{value}</span>
+    </div>
   );
 }
 
@@ -88,123 +56,75 @@ export function OrganizationsTab({
     return <div className="text-muted-foreground">Organization not found.</div>;
   }
 
-  const repoPrefix = admin.selectedOrg.githubRepoPrefix?.trim();
-
   return (
     <div className="space-y-6">
       <Panel>
-        <PanelContent className="grid gap-6 p-5 pt-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill
-                tone={admin.selectedOrg.status === "active" ? "success" : "danger"}
-                dot
-              >
-                {admin.selectedOrg.status}
-              </StatusPill>
-              {admin.usage?.limits.blocked ? (
-                <StatusPill tone="danger">Credits blocked</StatusPill>
-              ) : null}
-              {admin.usage?.limits.imageGenBlocked ? (
-                <StatusPill tone="warn">Image generation blocked</StatusPill>
-              ) : null}
-              {admin.selectedOrg.id === "default" ? (
-                <Badge variant="outline">Default organization</Badge>
-              ) : null}
-            </div>
+        <PanelContent className="flex flex-col gap-4 p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill
+              tone={admin.selectedOrg.status === "active" ? "success" : "danger"}
+              dot
+            >
+              {admin.selectedOrg.status}
+            </StatusPill>
+            {admin.usage?.limits.blocked ? (
+              <StatusPill tone="danger">Credits blocked</StatusPill>
+            ) : null}
+            {admin.usage?.limits.imageGenBlocked ? (
+              <StatusPill tone="warn">Image generation blocked</StatusPill>
+            ) : null}
+            {admin.selectedOrg.id === "default" ? (
+              <Badge variant="outline">Default organization</Badge>
+            ) : null}
+          </div>
 
-            <div className="space-y-2">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+            <div className="min-w-0 space-y-1.5">
               <h2 className="text-2xl font-semibold tracking-tight">
                 {admin.selectedOrg.name}
               </h2>
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                Manage members, domains, usage budgets, and repository defaults for{" "}
-                <span className="font-mono text-foreground/80">
-                  {admin.selectedOrg.slug}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <span>
+                  slug{" "}
+                  <span className="font-mono text-foreground/80">
+                    {admin.selectedOrg.slug}
+                  </span>
                 </span>
-                .
-              </p>
+                <span aria-hidden className="opacity-40">
+                  ·
+                </span>
+                <span>
+                  ID{" "}
+                  <span className="font-mono text-foreground/80">
+                    {admin.selectedOrg.id}
+                  </span>
+                </span>
+              </div>
             </div>
 
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <OverviewMetaItem
-                label="Slug"
-                value={
-                  <span className="font-mono text-sm">{admin.selectedOrg.slug}</span>
-                }
-                helper="Used in URLs, org switching, and tenant scoping."
-              />
-              <OverviewMetaItem
-                label="Organization ID"
-                value={
-                  <span className="font-mono text-sm">{admin.selectedOrg.id}</span>
-                }
-                helper="Stable internal identifier for admin and backend workflows."
-              />
-              <OverviewMetaItem
-                label="Repository prefix"
-                value={
-                  repoPrefix ? (
-                    <span className="font-mono text-sm">{repoPrefix}</span>
-                  ) : (
-                    "Uses slug fallback"
-                  )
-                }
-                helper={
-                  repoPrefix
-                    ? "Applied to auto-created GitHub repositories for this organization."
-                    : "New repositories default to the organization slug."
-                }
-              />
-              <OverviewMetaItem
-                label="Scope"
-                value={
-                  admin.selectedOrg.id === "default"
-                    ? "Platform fallback organization"
-                    : "Tenant organization"
-                }
-                helper={
-                  admin.selectedOrg.id === "default"
-                    ? "This stays available as the default tenant and cannot be deleted."
-                    : "Standard org with its own members, projects, domains, and limits."
-                }
-              />
-            </dl>
-          </div>
-
-          <div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-medium">Workspace summary</h3>
-              <p className="text-sm text-muted-foreground">
-                Current footprint for this organization.
-              </p>
-            </div>
-            <dl className="mt-4 space-y-2">
-              <OverviewStatRow
+            <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+              <CountChip
+                icon={Users}
                 label="Members"
                 value={String(admin.selectedOrg.memberCount)}
-                helper="People who currently have access to this organization."
-                icon={Users}
               />
-              <OverviewStatRow
-                label="Projects"
-                value={admin.projectsLoading ? "..." : String(admin.projects.length)}
-                helper="Projects assigned to this org right now."
+              <CountChip
                 icon={FolderKanban}
+                label="Projects"
+                value={admin.projectsLoading ? "…" : String(admin.projects.length)}
               />
-              <OverviewStatRow
-                label="Domains"
-                value={admin.domainsLoading ? "..." : String(admin.domains.length)}
-                helper="Managed tenant hosts and publish targets."
+              <CountChip
                 icon={Globe2}
+                label="Domains"
+                value={admin.domainsLoading ? "…" : String(admin.domains.length)}
               />
-            </dl>
+            </div>
           </div>
         </PanelContent>
       </Panel>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList variant="underline" className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="usage" className="shrink-0">
             Usage & Limits
           </TabsTrigger>
@@ -249,6 +169,30 @@ export function OrganizationsTab({
             invitationsError={admin.invitationsError}
             userForm={admin.userForm}
             setUserForm={admin.setUserForm}
+            existingUserLookup={admin.existingUserLookup}
+            existingUserLookupLoading={admin.existingUserLookupLoading}
+            existingUserLookupError={
+              admin.existingUserLookupError?.message ??
+              admin.existingUserLookupError
+            }
+            addExistingPending={admin.addExistingMember.isPending}
+            addExistingError={
+              admin.addExistingMember.error?.message ??
+              admin.addExistingMember.error
+            }
+            onAddExistingMember={() =>
+              admin.addExistingMember.mutate({
+                organizationId: admin.selectedOrg!.id,
+                email: admin.userForm.email,
+                name: admin.userForm.name.trim() || undefined,
+                password: admin.userForm.password.trim() || undefined,
+                organizationRole: admin.userForm.organizationRole,
+                projectSlug:
+                  admin.userForm.organizationRole === "client_editor"
+                    ? admin.userForm.projectSlug
+                    : undefined,
+              })
+            }
             invitePending={admin.inviteMember.isPending}
             inviteError={
               admin.inviteMember.error?.message ?? admin.inviteMember.error

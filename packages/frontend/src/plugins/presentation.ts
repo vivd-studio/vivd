@@ -1,4 +1,8 @@
-import { buildProjectPluginRoutePath } from "@vivd/plugin-sdk";
+import { installedPluginManifests } from "@vivd/installed-plugins";
+import {
+  buildProjectPluginRoutePath,
+  isNativePluginPackageManifest,
+} from "@vivd/plugin-sdk";
 import { Plug, type LucideIcon } from "lucide-react";
 import { getPluginUiIcon } from "./icons";
 import { getFrontendSharedProjectPluginUi } from "./sharedUiRegistry";
@@ -42,6 +46,41 @@ export function getProjectPluginPresentation(
         )
       : null,
   };
+}
+
+export type ProjectPluginPresentation = ReturnType<
+  typeof getProjectPluginPresentation
+>;
+
+const nativeProjectPluginIds = new Set<string>(
+  installedPluginManifests
+    .filter(isNativePluginPackageManifest)
+    .map((manifest) => manifest.pluginId),
+);
+
+export function isNativeProjectPluginId(pluginId: string): boolean {
+  return nativeProjectPluginIds.has(pluginId);
+}
+
+export function listEnabledNativeProjectPluginPresentations(options: {
+  enabledPluginIds?: readonly string[];
+  projectSlug?: string;
+}): ProjectPluginPresentation[] {
+  const seen = new Set<string>();
+
+  return (options.enabledPluginIds ?? [])
+    .map((pluginId) => pluginId.trim())
+    .filter((pluginId) => pluginId.length > 0)
+    .filter((pluginId) => {
+      if (!isNativeProjectPluginId(pluginId) || seen.has(pluginId)) {
+        return false;
+      }
+      seen.add(pluginId);
+      return true;
+    })
+    .map((pluginId) =>
+      getProjectPluginPresentation(pluginId, options.projectSlug),
+    );
 }
 
 export function isPluginAccessRequestPending(value?: {

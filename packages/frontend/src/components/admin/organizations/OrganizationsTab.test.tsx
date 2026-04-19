@@ -66,10 +66,19 @@ function makeAdmin(overrides: Record<string, unknown> = {}) {
     userForm: {
       email: "",
       name: "",
+      password: "",
       organizationRole: "admin",
       projectSlug: "",
     },
     setUserForm: vi.fn(),
+    existingUserLookup: null,
+    existingUserLookupLoading: false,
+    existingUserLookupError: null,
+    addExistingMember: {
+      isPending: false,
+      error: null,
+      mutate: vi.fn(),
+    },
     inviteMember: {
       isPending: false,
       error: null,
@@ -160,10 +169,10 @@ describe("OrganizationsTab", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Acme" })).toBeInTheDocument();
-    expect(screen.getByText("Workspace summary")).toBeInTheDocument();
-    expect(screen.getAllByText("Organization ID")).not.toHaveLength(0);
-    expect(screen.getByText("Repository defaults")).toBeInTheDocument();
-    expect(screen.getByText("acme-web-<project-slug>")).toBeInTheDocument();
+    expect(screen.getAllByText("Members")).not.toHaveLength(0);
+    expect(screen.getAllByText("Projects")).not.toHaveLength(0);
+    expect(screen.getAllByText("Domains")).not.toHaveLength(0);
+    expect(screen.getByText("acme-web")).toBeInTheDocument();
   });
 
   it("keeps delete disabled for the default organization", () => {

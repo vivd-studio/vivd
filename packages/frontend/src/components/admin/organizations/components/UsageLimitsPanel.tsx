@@ -68,7 +68,7 @@ function UsageStatCard({ label, current, limit, helper }: UsageStatCardProps) {
 
   return (
     <StatTile>
-      <StatTileLabel className="text-xs font-medium uppercase tracking-[0.16em]">
+      <StatTileLabel className="text-[13px] font-medium text-muted-foreground">
         {label}
       </StatTileLabel>
       <div className="flex items-end justify-between gap-3">
@@ -87,7 +87,7 @@ function UsageStatCard({ label, current, limit, helper }: UsageStatCardProps) {
       {!unlimited ? (
         <Progress value={pct} className={`mt-2 h-2 ${progressToneClass(pct)}`} />
       ) : (
-        <div className="mt-2 h-2 rounded-full bg-muted" />
+        <div className="mt-2 h-2 rounded-full bg-border/80" />
       )}
       <StatTileHelper>{helper}</StatTileHelper>
     </StatTile>

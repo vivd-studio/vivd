@@ -22,7 +22,7 @@ import {
 } from "@/components/common/FramedHostShell";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
+import { listEnabledNativeProjectPluginPresentations } from "@/plugins/presentation";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -42,7 +42,7 @@ const EMBEDDED_PROJECT_HEADER_INSET_CLASS =
  * EmbeddedStudio - Project page inside the main app shell.
  *
  * Default: show a fast, prebuilt preview (or placeholder).
- * User clicks "Edit" to start a studio machine and embed it in an iframe.
+ * User clicks "Start Studio" to boot a studio machine and embed it in an iframe.
  */
 export default function EmbeddedStudio() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
@@ -67,11 +67,10 @@ export default function EmbeddedStudio() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
   const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
-  const projectHeaderPluginShortcuts = projectSlug
-    ? getProjectPluginShortcuts({
+  const enabledPluginEntries = projectSlug
+    ? listEnabledNativeProjectPluginPresentations({
         enabledPluginIds: project?.enabledPlugins ?? [],
         projectSlug,
-        surface: "project-header",
       })
     : [];
 
@@ -455,7 +454,6 @@ export default function EmbeddedStudio() {
   const {
     studioVisible,
     studioReady,
-    studioLoadTimedOut,
     studioLoadErrored,
     studioLoadError,
     handleStudioIframeLoad,
@@ -679,7 +677,7 @@ export default function EmbeddedStudio() {
       isRegenerateThumbnailPending={regenerateThumbnailMutation.isPending}
       canRenameProject={canRenameProject}
       canDeleteProject={canDeleteProject}
-      projectHeaderPluginShortcuts={projectHeaderPluginShortcuts}
+      enabledPluginEntries={enabledPluginEntries}
       onEdit={handleEdit}
       onOpenPublish={() => setPublishDialogOpen(true)}
       onOpenPlugins={handleOpenPlugins}
@@ -809,7 +807,6 @@ export default function EmbeddedStudio() {
           studioUserActionToken={studioUserActionToken}
           studioVisible={studioVisible}
           studioReady={studioReady}
-          studioLoadTimedOut={studioLoadTimedOut}
           studioLoadErrored={studioLoadErrored}
           studioLoadError={studioLoadError}
           onStudioIframeLoad={handleStudioIframeLoad}
@@ -847,7 +844,7 @@ export default function EmbeddedStudio() {
                       {externalPreview?.status
                         ? ` (${externalPreview.status})`
                         : ""}. Click{" "}
-                      <span className="font-medium text-foreground">Edit</span>{" "}
+                      <span className="font-medium text-foreground">Start Studio</span>{" "}
                       to start a studio machine.
                     </div>
                     {thumbnailSrc ? (

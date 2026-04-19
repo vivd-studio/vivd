@@ -501,7 +501,7 @@ describe("EmbeddedStudio", () => {
     expect(screen.getByText("Starting studio...")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Starting..." })).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Start Studio" }),
     ).not.toBeInTheDocument();
   });
 
@@ -552,7 +552,7 @@ describe("EmbeddedStudio", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Reconnecting studio")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Start Studio" }),
     ).not.toBeInTheDocument();
   });
 
@@ -568,7 +568,7 @@ describe("EmbeddedStudio", () => {
 
     renderEmbeddedStudio();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Studio" }));
 
     expect(startStudioMutate).toHaveBeenCalledWith({
       slug: "site-1",
@@ -591,7 +591,7 @@ describe("EmbeddedStudio", () => {
     });
 
     renderEmbeddedStudio();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Studio" }));
 
     const latestCall = getStudioUrlUseQueryMock.mock.calls.at(-1);
     const options = latestCall?.[1] as
@@ -1092,18 +1092,17 @@ describe("EmbeddedStudio", () => {
         await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 100);
       });
 
+      expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
       expect(
-        screen.getByText("Studio is taking longer than usual"),
-      ).toBeInTheDocument();
+        screen.queryByText("Studio is taking longer than usual"),
+      ).not.toBeInTheDocument();
 
       currentDocument = shellDocument;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_100);
       });
 
-      expect(
-        screen.queryByText("Studio is taking longer than usual"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "vivd:host:theme" }),
         window.location.origin,
@@ -1216,9 +1215,10 @@ describe("EmbeddedStudio", () => {
         await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 100);
       });
 
+      expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
       expect(
-        screen.getByText("Studio is taking longer than usual"),
-      ).toBeInTheDocument();
+        screen.queryByText("Studio is taking longer than usual"),
+      ).not.toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(
         `${window.location.origin}/_studio/runtime-123/health`,
         expect.objectContaining({

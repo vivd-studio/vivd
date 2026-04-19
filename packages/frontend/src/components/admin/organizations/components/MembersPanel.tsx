@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { ChevronRight, RotateCcw, XCircle } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, FieldDescription, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill } from "@vivd/ui";
+import { Badge, Button, Callout, CalloutDescription, CalloutTitle, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, FieldDescription, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
 
 import type {
   EditableOrganizationRole,
@@ -12,6 +12,7 @@ import type {
   OrganizationMember,
   OrganizationProject,
   OrganizationRole,
+  OrganizationUserLookup,
   UserForm,
 } from "../types";
 
@@ -23,6 +24,12 @@ type Props = {
   invitationsError: unknown;
   userForm: UserForm;
   setUserForm: Dispatch<SetStateAction<UserForm>>;
+  existingUserLookup: OrganizationUserLookup | null;
+  existingUserLookupLoading: boolean;
+  existingUserLookupError: unknown;
+  addExistingPending: boolean;
+  addExistingError: unknown;
+  onAddExistingMember: () => void;
   invitePending: boolean;
   inviteError: unknown;
   onInviteMember: () => void;
@@ -106,6 +113,12 @@ export function MembersPanel({
   invitationsError,
   userForm,
   setUserForm,
+  existingUserLookup,
+  existingUserLookupLoading,
+  existingUserLookupError,
+  addExistingPending,
+  addExistingError,
+  onAddExistingMember,
   invitePending,
   inviteError,
   onInviteMember,
@@ -124,8 +137,22 @@ export function MembersPanel({
   onRemoveMember,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"existing" | "invite">("invite");
 
   const normalizedEmail = userForm.email.trim().toLowerCase();
+  const lookupUser = existingUserLookup?.user ?? null;
+  const existingMember = members.find(
+    (member) => member.user.email.trim().toLowerCase() === normalizedEmail,
+  );
+  const creatingNewUser = normalizedEmail.length > 0 && !lookupUser && !existingUserLookupLoading;
+  const disableAddExisting =
+    addExistingPending ||
+    !normalizedEmail ||
+    existingUserLookupLoading ||
+    Boolean(existingMember) ||
+    (creatingNewUser &&
+      (!userForm.name.trim() || userForm.password.trim().length < 8)) ||
+    (userForm.organizationRole === "client_editor" && !userForm.projectSlug);
   const disableInvite =
     invitePending ||
     !normalizedEmail ||
@@ -139,97 +166,280 @@ export function MembersPanel({
             <ChevronRight
               className={`h-4 w-4 transition-transform ${addOpen ? "rotate-90" : ""}`}
             />
-            Invite member
+            Invite or add member
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <Panel tone="sunken" className="mt-2 space-y-3 p-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="invite-email" required>
-                  Email
-                </FieldLabel>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={userForm.email}
-                  onChange={(e) =>
-                    setUserForm((state) => ({
-                      ...state,
-                      email: e.target.value,
-                    }))
-                  }
-                />
-                <FieldDescription>
-                  The invite email lets them create an account or sign in with an
-                  existing one.
-                </FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel>Role</FieldLabel>
-                <Select
-                  value={userForm.organizationRole}
-                  onValueChange={(value) =>
-                    setUserForm((state) => ({
-                      ...state,
-                      organizationRole: value as OrganizationRole,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner">Owner</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="member">User</SelectItem>
-                    <SelectItem value="client_editor">Client Editor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="invite-name">Name</FieldLabel>
-                <Input
-                  id="invite-name"
-                  placeholder="Full name (optional)"
-                  value={userForm.name}
-                  onChange={(e) =>
-                    setUserForm((state) => ({
-                      ...state,
-                      name: e.target.value,
-                    }))
-                  }
-                />
-              </Field>
-              {userForm.organizationRole === "client_editor" ? (
-                <Field>
-                  <FieldLabel>Assigned project</FieldLabel>
-                  <ProjectSelect
-                    value={userForm.projectSlug}
-                    onChange={(value) =>
-                      setUserForm((state) => ({
-                        ...state,
-                        projectSlug: value,
-                      }))
-                    }
-                    projects={projects}
-                  />
-                </Field>
-              ) : (
-                <div className="rounded-md border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                  Invitees will land in the organization workspace after they accept.
+          <Panel className="mt-2 p-4">
+            <Tabs
+              value={addMode}
+              onValueChange={(value) => setAddMode(value as "existing" | "invite")}
+              className="space-y-4"
+            >
+              <TabsList variant="underline" className="w-full justify-start">
+                <TabsTrigger value="invite">Invite member</TabsTrigger>
+                <TabsTrigger value="existing">Add member</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="invite" className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="invite-email" required>
+                      Email
+                    </FieldLabel>
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      placeholder="user@example.com"
+                      value={userForm.email}
+                      onChange={(e) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          email: e.target.value,
+                        }))
+                      }
+                    />
+                    <FieldDescription>
+                      The invite email lets them create an account or sign in with an
+                      existing one.
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Role</FieldLabel>
+                    <Select
+                      value={userForm.organizationRole}
+                      onValueChange={(value) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          organizationRole: value as OrganizationRole,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="member">User</SelectItem>
+                        <SelectItem value="client_editor">Client Editor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="invite-name">Name</FieldLabel>
+                    <Input
+                      id="invite-name"
+                      placeholder="Full name (optional)"
+                      value={userForm.name}
+                      onChange={(e) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          name: e.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  {userForm.organizationRole === "client_editor" ? (
+                    <Field>
+                      <FieldLabel>Assigned project</FieldLabel>
+                      <ProjectSelect
+                        value={userForm.projectSlug}
+                        onChange={(value) =>
+                          setUserForm((state) => ({
+                            ...state,
+                            projectSlug: value,
+                          }))
+                        }
+                        projects={projects}
+                      />
+                    </Field>
+                  ) : (
+                    <Callout tone="info">
+                      <CalloutTitle>Organization access starts after acceptance</CalloutTitle>
+                      <CalloutDescription>
+                        Invitees land in the organization workspace after they accept.
+                      </CalloutDescription>
+                    </Callout>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={onInviteMember} disabled={disableInvite}>
-                {invitePending ? "Sending..." : "Send invite"}
-              </Button>
-            </div>
-            {Boolean(inviteError) ? (
-              <div className="text-sm text-destructive">{String(inviteError)}</div>
-            ) : null}
+                <div className="flex justify-end">
+                  <Button onClick={onInviteMember} disabled={disableInvite}>
+                    {invitePending ? "Sending..." : "Send invite"}
+                  </Button>
+                </div>
+                {Boolean(inviteError) ? (
+                  <div className="text-sm text-destructive">{String(inviteError)}</div>
+                ) : null}
+              </TabsContent>
+
+              <TabsContent value="existing" className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="member-email" required>
+                      Email
+                    </FieldLabel>
+                    <Input
+                      id="member-email"
+                      type="email"
+                      placeholder="user@example.com"
+                      value={userForm.email}
+                      onChange={(e) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          email: e.target.value,
+                        }))
+                      }
+                    />
+                    <FieldDescription>
+                      Add an existing account immediately, or create a new member with
+                      a password.
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Role</FieldLabel>
+                    <Select
+                      value={userForm.organizationRole}
+                      onValueChange={(value) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          organizationRole: value as OrganizationRole,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="member">User</SelectItem>
+                        <SelectItem value="client_editor">Client Editor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="member-name" required={creatingNewUser}>
+                      Name
+                    </FieldLabel>
+                    <Input
+                      id="member-name"
+                      placeholder="Full name"
+                      value={userForm.name}
+                      onChange={(e) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          name: e.target.value,
+                        }))
+                      }
+                    />
+                    {creatingNewUser ? (
+                      <FieldDescription>
+                        Required when creating a new account from this panel.
+                      </FieldDescription>
+                    ) : null}
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="member-password" required={creatingNewUser}>
+                      Password
+                    </FieldLabel>
+                    <Input
+                      id="member-password"
+                      type="password"
+                      placeholder="At least 8 characters"
+                      value={userForm.password}
+                      onChange={(e) =>
+                        setUserForm((state) => ({
+                          ...state,
+                          password: e.target.value,
+                        }))
+                      }
+                    />
+                    {creatingNewUser ? (
+                      <FieldDescription>
+                        Required when no account exists yet for this email.
+                      </FieldDescription>
+                    ) : (
+                      <FieldDescription>
+                        Leave blank when attaching an existing account.
+                      </FieldDescription>
+                    )}
+                  </Field>
+                  {userForm.organizationRole === "client_editor" ? (
+                    <Field>
+                      <FieldLabel>Assigned project</FieldLabel>
+                      <ProjectSelect
+                        value={userForm.projectSlug}
+                        onChange={(value) =>
+                          setUserForm((state) => ({
+                            ...state,
+                            projectSlug: value,
+                          }))
+                        }
+                        projects={projects}
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+
+                {normalizedEmail ? (
+                  existingUserLookupError ? (
+                    <Callout tone="danger">
+                      <CalloutTitle>Account lookup failed</CalloutTitle>
+                      <CalloutDescription>
+                        {String(existingUserLookupError)}
+                      </CalloutDescription>
+                    </Callout>
+                  ) : existingMember ? (
+                    <Callout tone="warn">
+                      <CalloutTitle>User is already a member</CalloutTitle>
+                      <CalloutDescription>
+                        {existingMember.user.email} already belongs to this organization.
+                      </CalloutDescription>
+                    </Callout>
+                  ) : existingUserLookupLoading ? (
+                    <Callout tone="info">
+                      <CalloutTitle>Checking for an existing account</CalloutTitle>
+                      <CalloutDescription>
+                        Looking up this email before enabling direct add.
+                      </CalloutDescription>
+                    </Callout>
+                  ) : lookupUser ? (
+                    <Callout tone="success">
+                      <CalloutTitle>Existing account found</CalloutTitle>
+                      <CalloutDescription>
+                        {lookupUser.name || lookupUser.email} will be added immediately as{" "}
+                        {userForm.organizationRole === "member"
+                          ? "User"
+                          : userForm.organizationRole === "client_editor"
+                            ? "Client Editor"
+                            : userForm.organizationRole}
+                        .
+                      </CalloutDescription>
+                    </Callout>
+                  ) : (
+                    <Callout tone="warn">
+                      <CalloutTitle>No existing account found</CalloutTitle>
+                      <CalloutDescription>
+                        Fill in name and password to create the account and add the
+                        member immediately.
+                      </CalloutDescription>
+                    </Callout>
+                  )
+                ) : null}
+
+                <div className="flex justify-end">
+                  <Button onClick={onAddExistingMember} disabled={disableAddExisting}>
+                    {addExistingPending ? "Adding..." : "Add member"}
+                  </Button>
+                </div>
+                {Boolean(addExistingError) ? (
+                  <div className="text-sm text-destructive">
+                    {String(addExistingError)}
+                  </div>
+                ) : null}
+              </TabsContent>
+            </Tabs>
           </Panel>
         </CollapsibleContent>
       </Collapsible>

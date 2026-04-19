@@ -22,6 +22,7 @@ const EMPTY_LIMITS_FORM: LimitsForm = {
 const EMPTY_USER_FORM: UserForm = {
   email: "",
   name: "",
+  password: "",
   organizationRole: "admin",
   projectSlug: "",
 };
@@ -54,6 +55,15 @@ export function useOrganizationsAdmin(
   const membersQuery = trpc.superadmin.listOrganizationMembers.useQuery(
     { organizationId: selectedOrgId },
     { enabled: Boolean(selectedOrgId) },
+  );
+
+  const normalizedUserEmail = userForm.email.trim().toLowerCase();
+
+  const existingUserLookupQuery = trpc.superadmin.lookupUserByEmail.useQuery(
+    { email: normalizedUserEmail },
+    {
+      enabled: Boolean(normalizedUserEmail),
+    },
   );
 
   const usageQuery = trpc.superadmin.getOrganizationUsage.useQuery(
@@ -169,6 +179,18 @@ export function useOrganizationsAdmin(
     },
     onError: (err) => {
       toast.error("Failed to send invitation", { description: err.message });
+    },
+  });
+
+  const addExistingMember = trpc.superadmin.createOrganizationUser.useMutation({
+    onSuccess: async () => {
+      setUserForm(EMPTY_USER_FORM);
+      await membersQuery.refetch();
+      await utils.superadmin.listOrganizations.invalidate();
+      toast.success("Member added");
+    },
+    onError: (err) => {
+      toast.error("Failed to add member", { description: err.message });
     },
   });
 
@@ -325,6 +347,10 @@ export function useOrganizationsAdmin(
     createOrg,
     userForm,
     setUserForm,
+    existingUserLookup: existingUserLookupQuery.data ?? null,
+    existingUserLookupLoading: existingUserLookupQuery.isFetching,
+    existingUserLookupError: existingUserLookupQuery.error,
+    addExistingMember,
     inviteMember,
     resendInvitation,
     cancelInvitation,

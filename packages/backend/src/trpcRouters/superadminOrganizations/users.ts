@@ -101,7 +101,7 @@ export const organizationUserCreationSuperAdminProcedures = {
       }
 
       if (!input.name || !input.password) {
-        throw new Error("Name and password are required to create a new user");
+        throw new Error("Name and password are required to create a new member");
       }
 
       const created = await auth.api.createUser({
