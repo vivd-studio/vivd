@@ -1,6 +1,21 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
+  Label,
+  Panel,
+  PanelContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@vivd/ui";
 
 import type { OrgForm, Organization } from "../types";
 
@@ -73,7 +88,8 @@ export function OrganizationsSelectorCard({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="rounded-lg border bg-card p-4 mt-2 space-y-3">
+          <Panel tone="sunken" className="mt-2">
+            <PanelContent className="space-y-3 pt-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="space-y-1.5 flex-1">
                 <Label htmlFor="org-slug">Slug</Label>
@@ -113,7 +129,8 @@ export function OrganizationsSelectorCard({
             {Boolean(createOrgError) && (
               <div className="text-sm text-red-500">{String(createOrgError)}</div>
             )}
-          </div>
+            </PanelContent>
+          </Panel>
         </CollapsibleContent>
       </Collapsible>
     </div>

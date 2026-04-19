@@ -3,9 +3,23 @@ import {
   TrendingUp,
   Coins,
   Image as ImageIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Card, CardContent, CardHeader, CardTitle } from "@vivd/ui";
+import {
+  Callout,
+  CalloutTitle,
+  Panel,
+  PanelContent,
+  PanelHeader,
+  PanelTitle,
+  Progress,
+  StatTile,
+  StatTileHelper,
+  StatTileLabel,
+  StatTileMeta,
+  StatTileValue,
+} from "@vivd/ui";
 
 import { trpc } from "@/lib/trpc";
 import { formatCredits, formatDollarsAsCredits } from "@vivd/shared";
@@ -23,17 +37,17 @@ export function UsageStatsCard() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      <Panel>
+        <PanelHeader>
+          <PanelTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-green-600" />
             Usage Statistics
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center py-8">
+          </PanelTitle>
+        </PanelHeader>
+        <PanelContent className="flex items-center justify-center py-8">
           <LoadingSpinner message="Loading usage..." />
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     );
   }
 
@@ -81,213 +95,152 @@ export function UsageStatsCard() {
   })();
 
   const maxDailyCost = Math.max(...last8Days.map((d) => d.cost), 0.01);
+  const progressToneClass = (pct: number) => {
+    if (pct >= 1) return "[&>div]:bg-destructive";
+    if (pct >= 0.8) return "[&>div]:bg-amber-500";
+    return "[&>div]:bg-emerald-500";
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Panel>
+      <PanelHeader>
+        <PanelTitle className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-green-600" />
           Usage Statistics
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
+        </PanelTitle>
+      </PanelHeader>
+      <PanelContent className="space-y-6">
         {/* Current Usage Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Daily Credits */}
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Daily Credits
-              </span>
+          <StatTile>
+            <StatTileLabel>
+              <span>Daily Credits</span>
               <Coins className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold">
+            </StatTileLabel>
+            <StatTileValue>
               {formatCredits(usageStatus.usage.daily.current)}
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            </StatTileValue>
+            <div className="space-y-2">
+              <StatTileMeta>
                 <span>of {formatCredits(usageStatus.usage.daily.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.daily.percentage * 100)}%
                 </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    usageStatus.usage.daily.percentage >= 1
-                      ? "bg-destructive"
-                      : usageStatus.usage.daily.percentage >= 0.8
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{
-                    width: `${Math.min(
-                      usageStatus.usage.daily.percentage * 100,
-                      100,
-                    )}%`,
-                  }}
-                />
-              </div>
+              </StatTileMeta>
+              <Progress
+                value={Math.min(usageStatus.usage.daily.percentage * 100, 100)}
+                className={`h-2 ${progressToneClass(usageStatus.usage.daily.percentage)}`}
+              />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <StatTileHelper>
               Resets: {formatDate(usageStatus.nextReset?.daily)}
-            </div>
-          </div>
+            </StatTileHelper>
+          </StatTile>
 
           {/* Weekly Credits */}
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Weekly Credits
-              </span>
+          <StatTile>
+            <StatTileLabel>
+              <span>Weekly Credits</span>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold">
+            </StatTileLabel>
+            <StatTileValue>
               {formatCredits(usageStatus.usage.weekly.current)}
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            </StatTileValue>
+            <div className="space-y-2">
+              <StatTileMeta>
                 <span>of {formatCredits(usageStatus.usage.weekly.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.weekly.percentage * 100)}%
                 </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    usageStatus.usage.weekly.percentage >= 1
-                      ? "bg-destructive"
-                      : usageStatus.usage.weekly.percentage >= 0.8
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{
-                    width: `${Math.min(
-                      usageStatus.usage.weekly.percentage * 100,
-                      100,
-                    )}%`,
-                  }}
-                />
-              </div>
+              </StatTileMeta>
+              <Progress
+                value={Math.min(usageStatus.usage.weekly.percentage * 100, 100)}
+                className={`h-2 ${progressToneClass(usageStatus.usage.weekly.percentage)}`}
+              />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <StatTileHelper>
               Resets: {formatDate(usageStatus.nextReset?.weekly)}
-            </div>
-          </div>
+            </StatTileHelper>
+          </StatTile>
 
           {/* Monthly Credits */}
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Monthly Credits
-              </span>
+          <StatTile>
+            <StatTileLabel>
+              <span>Monthly Credits</span>
               <Coins className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold">
+            </StatTileLabel>
+            <StatTileValue>
               {formatCredits(usageStatus.usage.monthly.current)}
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            </StatTileValue>
+            <div className="space-y-2">
+              <StatTileMeta>
                 <span>of {formatCredits(usageStatus.usage.monthly.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.monthly.percentage * 100)}%
                 </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    usageStatus.usage.monthly.percentage >= 1
-                      ? "bg-destructive"
-                      : usageStatus.usage.monthly.percentage >= 0.8
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{
-                    width: `${Math.min(
-                      usageStatus.usage.monthly.percentage * 100,
-                      100,
-                    )}%`,
-                  }}
-                />
-              </div>
+              </StatTileMeta>
+              <Progress
+                value={Math.min(usageStatus.usage.monthly.percentage * 100, 100)}
+                className={`h-2 ${progressToneClass(usageStatus.usage.monthly.percentage)}`}
+              />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <StatTileHelper>
               Resets: {formatDate(usageStatus.nextReset?.monthly)}
-            </div>
-          </div>
+            </StatTileHelper>
+          </StatTile>
 
           {/* Image Generations */}
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Image Generations
-              </span>
+          <StatTile>
+            <StatTileLabel>
+              <span>Image Generations</span>
               <ImageIcon className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold">
+            </StatTileLabel>
+            <StatTileValue>
               {usageStatus.usage.imageGen.current}
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            </StatTileValue>
+            <div className="space-y-2">
+              <StatTileMeta>
                 <span>of {usageStatus.usage.imageGen.limit} this month</span>
                 <span>
                   {Math.round(usageStatus.usage.imageGen.percentage * 100)}%
                 </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    usageStatus.usage.imageGen.percentage >= 1
-                      ? "bg-destructive"
-                      : usageStatus.usage.imageGen.percentage >= 0.8
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{
-                    width: `${Math.min(
-                      usageStatus.usage.imageGen.percentage * 100,
-                      100,
-                    )}%`,
-                  }}
-                />
-              </div>
+              </StatTileMeta>
+              <Progress
+                value={Math.min(
+                  usageStatus.usage.imageGen.percentage * 100,
+                  100,
+                )}
+                className={`h-2 ${progressToneClass(usageStatus.usage.imageGen.percentage)}`}
+              />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <StatTileHelper>
               Resets: {formatDate(usageStatus.nextReset?.monthly)}
-            </div>
-          </div>
+            </StatTileHelper>
+          </StatTile>
         </div>
 
         {/* Warnings */}
         {usageStatus.warnings.length > 0 && (
-          <div
-            className={`rounded-lg p-4 ${
-              usageStatus.blocked
-                ? "bg-destructive/10 border-destructive/50"
-                : "bg-yellow-500/10 border-yellow-500/50"
-            } border`}
-          >
-            <div
-              className={`font-medium text-sm ${
-                usageStatus.blocked
-                  ? "text-destructive"
-                  : "text-yellow-700 dark:text-yellow-500"
-              }`}
-            >
+          <Callout tone={usageStatus.blocked ? "danger" : "warn"} icon={<AlertTriangle />}>
+            <CalloutTitle>
               {usageStatus.blocked ? "Usage Blocked" : "Usage Warnings"}
-            </div>
-            <ul className="mt-2 space-y-1">
+            </CalloutTitle>
+            <div className="text-sm leading-snug text-muted-foreground">
+              <ul className="space-y-1">
               {usageStatus.warnings.map((warning, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
+                <li key={i}>
                   {warning}
                 </li>
               ))}
-            </ul>
-          </div>
+              </ul>
+            </div>
+          </Callout>
         )}
 
         {/* Last 8 Days Chart */}
-        <div className="space-y-3">
+        <Panel tone="sunken">
+          <PanelContent className="space-y-3 pt-5">
           <h4 className="text-sm font-medium text-muted-foreground">
             Last 8 Days
           </h4>
@@ -310,7 +263,7 @@ export function UsageStatsCard() {
                   >
                     {formatDollarsAsCredits(cost)}
                   </div>
-                  <div className="w-full bg-muted rounded-t flex-1 flex items-end">
+                  <div className="w-full rounded-t bg-surface-panel flex-1 flex items-end">
                     <div
                       className={`w-full rounded-t transition-all ${
                         isToday ? "bg-primary" : "bg-primary/60"
@@ -352,7 +305,8 @@ export function UsageStatsCard() {
               );
             })}
           </div>
-        </div>
+          </PanelContent>
+        </Panel>
 
         {/* Session Usage (OpenCode) */}
         <div className="space-y-3">
@@ -369,7 +323,7 @@ export function UsageStatsCard() {
           </h4>
           <FlowUsageTable days={30} />
         </div>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

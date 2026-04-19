@@ -1,6 +1,15 @@
 import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
 import { formatDollarsAsCredits } from "@vivd/shared";
+import {
+  Panel,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@vivd/ui";
 
 interface SessionUsageTableProps {
   days: number;
@@ -27,49 +36,42 @@ export function SessionUsageTable({ days }: SessionUsageTableProps) {
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border p-8 flex justify-center">
+      <Panel tone="sunken" className="flex justify-center p-8">
         <LoadingSpinner message="Loading sessions..." />
-      </div>
+      </Panel>
     );
   }
 
   if (!sessions || sessions.length === 0) {
     return (
-      <div className="rounded-lg border p-8 text-center text-muted-foreground text-sm">
+      <Panel
+        tone="sunken"
+        className="p-8 text-center text-sm text-muted-foreground"
+      >
         No session usage recorded yet.
-      </div>
+      </Panel>
     );
   }
 
   return (
-    <div className="rounded-lg border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Last Active
-            </th>
-            <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Session
-            </th>
-            <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Credits
-            </th>
-            <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Project
-            </th>
-            <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Events
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+    <Panel tone="sunken" className="overflow-hidden p-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Last Active</TableHead>
+            <TableHead>Session</TableHead>
+            <TableHead>Credits</TableHead>
+            <TableHead>Project</TableHead>
+            <TableHead>Events</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {sessions.map((session) => (
-            <tr key={session.sessionId} className="border-t">
-              <td className="px-4 py-2 text-muted-foreground">
+            <TableRow key={session.sessionId}>
+              <TableCell className="text-muted-foreground">
                 {formatDate(session.lastActive)}
-              </td>
-              <td className="px-4 py-2">
+              </TableCell>
+              <TableCell>
                 {session.sessionTitle ? (
                   <div className="flex flex-col">
                     <span
@@ -87,20 +89,20 @@ export function SessionUsageTable({ days }: SessionUsageTableProps) {
                     {session.sessionId?.slice(0, 8)}...
                   </span>
                 )}
-              </td>
-              <td className="px-4 py-2 font-mono font-medium">
+              </TableCell>
+              <TableCell className="font-mono font-medium">
                 {formatDollarsAsCredits(session.totalCost)}
-              </td>
-              <td className="px-4 py-2 text-muted-foreground">
+              </TableCell>
+              <TableCell className="text-muted-foreground">
                 {session.projectSlug || "—"}
-              </td>
-              <td className="px-4 py-2 text-muted-foreground">
+              </TableCell>
+              <TableCell className="text-muted-foreground">
                 {session.eventCount}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Panel>
   );
 }

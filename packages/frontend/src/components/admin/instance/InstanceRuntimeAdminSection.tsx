@@ -1,7 +1,22 @@
 import type { ChangeEvent } from "react";
 import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import type { RouterOutputs } from "@/lib/trpc";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@vivd/ui";
 
 
 type InstanceSoftware = RouterOutputs["superadmin"]["getInstanceSoftware"];
@@ -61,31 +76,34 @@ export function InstanceRuntimeAdminSection({
 }: InstanceRuntimeAdminSectionProps) {
   return (
     <>
-      <Card
+      <Panel
         id="instance-software"
         className="scroll-mt-6 border-border/70 shadow-sm"
       >
-        <CardHeader>
-          <CardTitle>Software</CardTitle>
-          <CardDescription>Review the running deployment version and release status.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+        <PanelHeader>
+          <PanelTitle>Software</PanelTitle>
+          <PanelDescription>Review the running deployment version and release status.</PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Current release</Label>
-              <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <Panel tone="sunken">
+                <PanelContent className="px-3 py-2 pt-3">
                 <div className="font-medium">{currentSoftwareLabel}</div>
                 <p className="text-sm text-muted-foreground">
                   {software?.currentImageTag
                     ? `Configured image tag: ${software.currentImageTag}`
                     : "The running image does not expose a release tag yet."}
                 </p>
-              </div>
+                </PanelContent>
+              </Panel>
             </div>
 
             <div className="space-y-2">
               <Label>Latest known release</Label>
-              <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <Panel tone="sunken">
+                <PanelContent className="px-3 py-2 pt-3">
                 <div className="font-medium">
                   {softwareIsLoading ? "Loading..." : latestSoftwareLabel}
                 </div>
@@ -96,7 +114,8 @@ export function InstanceRuntimeAdminSection({
                       ? "This install is already on the latest known release."
                       : "Latest release metadata is available, but the running version could not be compared reliably."}
                 </p>
-              </div>
+                </PanelContent>
+              </Panel>
             </div>
           </div>
 
@@ -173,18 +192,18 @@ export function InstanceRuntimeAdminSection({
               </Button>
             ) : null}
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
       {selfHostAdminFeaturesVisible ? (
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader>
-            <CardTitle>Network</CardTitle>
-            <CardDescription>
+        <Panel className="border-border/70 shadow-sm">
+          <PanelHeader>
+            <PanelTitle>Network</PanelTitle>
+            <PanelDescription>
               Configure the main public host and how HTTPS is handled for this instance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
+            </PanelDescription>
+          </PanelHeader>
+          <PanelContent className="space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="instance-network-public-host">Public host</Label>
@@ -271,8 +290,8 @@ export function InstanceRuntimeAdminSection({
                 Save network
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </PanelContent>
+        </Panel>
       ) : null}
     </>
   );

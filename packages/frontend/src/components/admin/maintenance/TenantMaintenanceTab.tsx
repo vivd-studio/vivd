@@ -2,7 +2,22 @@ import { useState } from "react";
 import { Loader2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { Button, Card, CardContent, CardHeader, CardTitle, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { FormContent } from "@/components/settings/SettingsPageShell";
 
@@ -44,19 +59,20 @@ export function TenantMaintenanceTab() {
   return (
     <>
       <FormContent>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <Panel>
+        <PanelHeader>
+          <PanelTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5 text-blue-600" />
             Organization Maintenance
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
+          </PanelTitle>
+          <PanelDescription>
             These operations run only for your currently active organization.
-          </p>
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-4">
 
-          <div className="rounded-lg border bg-card p-4 space-y-3">
+          <Panel tone="sunken">
+            <PanelContent className="space-y-3 pt-5">
             <div>
               <div className="font-medium">Thumbnails</div>
               <p className="text-sm text-muted-foreground">
@@ -73,9 +89,10 @@ export function TenantMaintenanceTab() {
                 Generate Missing
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+            </PanelContent>
+          </Panel>
+        </PanelContent>
+      </Panel>
       </FormContent>
 
       <AlertDialog open={!!confirmConfig} onOpenChange={(open) => !open && setConfirmAction(null)}>

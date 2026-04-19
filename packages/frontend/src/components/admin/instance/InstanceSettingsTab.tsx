@@ -3,7 +3,18 @@ import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Input, Label } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { useAppConfig } from "@/lib/AppConfigContext";
 import {
@@ -481,36 +492,42 @@ export function InstanceSettingsTab() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle>General</CardTitle>
-          <CardDescription>Review routing, topology, and instance-wide defaults.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <Panel className="border-border/70 shadow-sm">
+        <PanelHeader>
+          <PanelTitle>General</PanelTitle>
+          <PanelDescription>Review routing, topology, and instance-wide defaults.</PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-5">
           <div className="space-y-2">
             <Label>Install profile</Label>
             {selfHostCompatibilityEnabled ? (
               <>
-                <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
+                <Panel tone="sunken" className="max-w-xs">
+                  <PanelContent className="flex items-center gap-2 px-3 py-2 pt-3">
                   <Badge variant="secondary">Solo</Badge>
                   <span className="text-sm text-muted-foreground">
                     Internal compatibility profile
                   </span>
-                </div>
+                  </PanelContent>
+                </Panel>
               </>
             ) : isPlatformInstall ? (
               <>
-                <div className="flex max-w-xs items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
+                <Panel tone="sunken" className="max-w-xs">
+                  <PanelContent className="flex items-center gap-2 px-3 py-2 pt-3">
                   <Badge variant="secondary">Platform</Badge>
                   <span className="text-sm text-muted-foreground">
                     Hosted control plane profile
                   </span>
-                </div>
+                  </PanelContent>
+                </Panel>
               </>
             ) : (
-              <div className="max-w-xs rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                Loading profile...
-              </div>
+              <Panel tone="sunken" className="max-w-xs">
+                <PanelContent className="px-3 py-2 pt-3 text-sm text-muted-foreground">
+                  Loading profile...
+                </PanelContent>
+              </Panel>
             )}
           </div>
 
@@ -527,13 +544,15 @@ export function InstanceSettingsTab() {
           {settings?.network.publicOrigin ? (
             <div className="space-y-2">
               <Label>Resolved public origin</Label>
-              <div className="max-w-xl rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                {settings.network.publicOrigin}
-              </div>
+              <Panel tone="sunken" className="max-w-xl">
+                <PanelContent className="px-3 py-2 pt-3 text-sm text-muted-foreground">
+                  {settings.network.publicOrigin}
+                </PanelContent>
+              </Panel>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
       <InstanceRuntimeAdminSection
         selfHostAdminFeaturesVisible={selfHostAdminFeaturesVisible}
@@ -564,18 +583,18 @@ export function InstanceSettingsTab() {
       />
 
       {isPlatformInstall ? (
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader>
-            <CardTitle>Capabilities</CardTitle>
-            <CardDescription>
+        <Panel className="border-border/70 shadow-sm">
+          <PanelHeader>
+            <PanelTitle>Capabilities</PanelTitle>
+            <PanelDescription>
               Enable the instance capabilities you want exposed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </PanelDescription>
+          </PanelHeader>
+          <PanelContent className="space-y-4">
             {CAPABILITY_META.map((entry) => (
               <label
                 key={entry.key}
-                className="flex items-start gap-3 rounded-lg border p-3"
+                className="flex items-start gap-3 rounded-md border border-border/80 bg-surface-sunken p-3"
               >
                 <Checkbox
                   checked={capabilities[entry.key]}
@@ -601,19 +620,19 @@ export function InstanceSettingsTab() {
                 Save capabilities
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </PanelContent>
+        </Panel>
       ) : null}
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle>Instance Limits</CardTitle>
-          <CardDescription>
+      <Panel className="border-border/70 shadow-sm">
+        <PanelHeader>
+          <PanelTitle>Instance Limits</PanelTitle>
+          <PanelDescription>
             These defaults sit above env bootstrap values and below any org-level overrides
             when that capability is enabled.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="grid gap-4 md:grid-cols-2">
           {LIMIT_FIELDS.map((field) => (
             <div key={field.key} className="space-y-2">
               <Label htmlFor={`instance-limit-${field.key}`}>{field.label}</Label>
@@ -639,8 +658,8 @@ export function InstanceSettingsTab() {
               Save limits
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

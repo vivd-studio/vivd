@@ -104,17 +104,52 @@ and similar constructions.
 ```tsx
 import { StatusPill } from "@vivd/ui/status-pill";
 
-<StatusPill tone="success" dot>Active</StatusPill>
+<StatusPill tone="success">Active</StatusPill>
 <StatusPill tone="warn">Not installed</StatusPill>
 <StatusPill tone="danger">Blocked</StatusPill>
 <StatusPill tone="neutral">Default</StatusPill>
 
 // tones: neutral | info | success | warn | danger
-// dot adds a small tinted indicator dot before the text
+// dot is optional and should be used sparingly, not as the default status treatment
 ```
 
 Use for binary / enum status (Active, Deployed, Not deployed, Blocked, …).
-Keep `<Badge>` for count / label chips.
+Keep `<Badge>` for count / label chips. `StatusPill` now shares the same
+compact squared chip geometry and height rhythm as `Badge`; the distinction is
+semantic, not a separate rounded shape language.
+
+### `<Table>` — dense data views
+
+```tsx
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "@vivd/ui/table";
+
+<Panel tone="sunken" className="overflow-hidden p-0">
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead>Project</TableHead>
+        <TableHead>Status</TableHead>
+        <TableHead>Updated</TableHead>
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      <TableRow>
+        <TableCell>Acme</TableCell>
+        <TableCell><StatusPill tone="success">Deployed</StatusPill></TableCell>
+        <TableCell>Apr 19</TableCell>
+      </TableRow>
+    </TableBody>
+  </Table>
+</Panel>
+```
+
+Use for real tabular data, especially admin/operator screens. The header band
+should read as a control surface with stronger typography, but it should stay
+within the surface stack, not collapse back to the row background or become a
+near-black toolbar. Use the shared table-header treatment instead of inventing
+one per screen.
 
 ### `<Field>` — form field shell
 
@@ -138,8 +173,7 @@ wiring.
 | Element                                                | Radius        |
 | ------------------------------------------------------ | ------------- |
 | `Panel` — section containers                           | `rounded-xl`  |
-| `StatTile`, inputs, buttons, `Callout`                 | `rounded-md`  |
-| `StatusPill` — all status chips                        | `rounded-full`|
+| `StatTile`, inputs, buttons, `Callout`, `Badge`, `StatusPill` | `rounded-md`  |
 | Everything else                                        | avoid         |
 
 Do not mix `rounded-lg`, `rounded-2xl`, etc. on app-level code. Shift
@@ -157,7 +191,10 @@ reaching for one, swap in the primitive instead.
   `<Panel>`.
 - `rounded-xl border bg-card p-4` / `rounded-lg border bg-background/70 p-4`
   constructions for stat tiles. Use `<StatTile>`.
-- `rounded-full border bg-background px-2 py-1` chips. Use `<StatusPill>`.
+- `rounded-md border bg-background px-2 py-1` status chips. Use `<StatusPill>`.
+- Hand-rolled table headers like `thead className="bg-surface-*"` plus repeated
+  `th`/`td` spacing classes. Use `<Table>` primitives so header contrast,
+  label typography, and row states stay aligned.
 - `rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900
   dark:bg-orange-950/30` warning boxes, and similar uses of raw tailwind color
   palettes (`bg-orange-*`, `bg-yellow-*`, `bg-red-*`, `text-orange-*`) for UI

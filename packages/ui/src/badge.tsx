@@ -12,7 +12,7 @@ const badgeVariants = cva(
         default:
           `border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80 ${darkSemanticBadgeTones.default}`,
         success:
-          `border-transparent bg-emerald-600 text-white shadow hover:bg-emerald-700 ${darkSemanticBadgeTones.success}`,
+          `border-transparent bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] shadow hover:bg-[hsl(var(--success-hover))] ${darkSemanticBadgeTones.success}`,
         secondary:
           "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive:

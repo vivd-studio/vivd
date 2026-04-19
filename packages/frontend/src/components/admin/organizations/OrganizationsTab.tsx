@@ -61,10 +61,7 @@ export function OrganizationsTab({
       <Panel>
         <PanelContent className="flex flex-col gap-4 p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill
-              tone={admin.selectedOrg.status === "active" ? "success" : "danger"}
-              dot
-            >
+            <StatusPill tone={admin.selectedOrg.status === "active" ? "success" : "danger"}>
               {admin.selectedOrg.status}
             </StatusPill>
             {admin.usage?.limits.blocked ? (

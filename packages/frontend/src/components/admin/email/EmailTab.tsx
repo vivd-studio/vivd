@@ -3,7 +3,30 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Input, Label } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Checkbox,
+  Input,
+  Label,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+  StatTileLabel,
+  StatTileValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@vivd/ui";
 
 
 type BrandingState = {
@@ -188,20 +211,22 @@ export function EmailTab() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Email Identity</CardTitle>
-          <CardDescription>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Email Identity</PanelTitle>
+          <PanelDescription>
             Optional branding and legal footer for transactional emails. Leave fields
             blank to keep the default email footer minimal.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-4">
+          <Panel tone="sunken">
+            <PanelContent className="pt-5 text-sm text-muted-foreground">
             {usesMinimalFooter
               ? "No email identity details configured. Transactional emails will stay minimal and omit footer/legal details."
               : "Configured values below will be used in transactional email headers and footers for this instance."}
-          </div>
+            </PanelContent>
+          </Panel>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -310,18 +335,18 @@ export function EmailTab() {
               )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
-      <Card>
-        <CardHeader>
+      <Panel>
+        <PanelHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Email Deliverability</CardTitle>
-              <CardDescription>
+              <PanelTitle>Email Deliverability</PanelTitle>
+              <PanelDescription>
                 Global bounce/complaint suppression and feedback handling across email
                 providers.
-              </CardDescription>
+              </PanelDescription>
             </div>
             <Button
               variant="outline"
@@ -332,17 +357,20 @@ export function EmailTab() {
               Refresh
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </PanelHeader>
+        <PanelContent className="space-y-4">
           {overviewQuery.error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load email deliverability overview: {overviewQuery.error.message}
-            </div>
+            <Callout tone="danger">
+              <CalloutTitle>Failed to load email deliverability overview</CalloutTitle>
+              <CalloutDescription>
+                {overviewQuery.error.message}
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <section className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Email provider</p>
+            <StatTile>
+              <StatTileLabel>Email provider</StatTileLabel>
               <div className="mt-2 flex items-center gap-2">
                 <Badge variant="default">{overview?.provider.name || "unknown"}</Badge>
                 <Badge variant={overview?.provider.webhookSecretConfigured ? "default" : "secondary"}>
@@ -351,31 +379,32 @@ export function EmailTab() {
                     : "No webhook secret"}
                 </Badge>
               </div>
-            </section>
+            </StatTile>
 
-            <section className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Suppressed recipients</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight">
+            <StatTile>
+              <StatTileLabel>Suppressed recipients</StatTileLabel>
+              <StatTileValue className="mt-1">
                 {formatInteger(overview?.metrics.suppressedRecipientCount ?? 0)}
-              </p>
-            </section>
+              </StatTileValue>
+            </StatTile>
 
-            <section className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Bounce events</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight">
+            <StatTile>
+              <StatTileLabel>Bounce events</StatTileLabel>
+              <StatTileValue className="mt-1">
                 {formatInteger(overview?.metrics.bounceEventCount ?? 0)}
-              </p>
-            </section>
+              </StatTileValue>
+            </StatTile>
 
-            <section className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Complaint events</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight">
+            <StatTile>
+              <StatTileLabel>Complaint events</StatTileLabel>
+              <StatTileValue className="mt-1">
                 {formatInteger(overview?.metrics.complaintEventCount ?? 0)}
-              </p>
-            </section>
+              </StatTileValue>
+            </StatTile>
           </div>
 
-          <section className="rounded-lg border bg-card p-4 space-y-3">
+          <Panel tone="sunken">
+            <PanelContent className="space-y-3 pt-5">
             <h3 className="text-sm font-medium">Feedback webhooks</h3>
 
             <div className="space-y-1">
@@ -403,9 +432,11 @@ export function EmailTab() {
                 Auto-confirm subscriptions: {overview?.provider.autoConfirmSubscriptionsEnabled ? "enabled" : "disabled"}
               </p>
             </div>
-          </section>
+            </PanelContent>
+          </Panel>
 
-          <section className="rounded-lg border bg-card p-4 space-y-3">
+          <Panel tone="sunken">
+            <PanelContent className="space-y-3 pt-5">
             <h3 className="text-sm font-medium">Global policy</h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -487,9 +518,11 @@ export function EmailTab() {
                 )}
               </Button>
             </div>
-          </section>
+            </PanelContent>
+          </Panel>
 
-          <section className="rounded-lg border bg-card p-4 space-y-3">
+          <Panel tone="sunken">
+            <PanelContent className="space-y-3 pt-5">
             <h3 className="text-sm font-medium">Suppressed recipients</h3>
             {overviewQuery.isLoading ? (
               <LoadingSpinner
@@ -497,27 +530,27 @@ export function EmailTab() {
                 className="justify-start"
               />
             ) : overview && overview.suppressedRecipients.length > 0 ? (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/30">
-                    <tr className="text-left">
-                      <th className="px-3 py-2 font-medium">Email</th>
-                      <th className="px-3 py-2 font-medium">Reason</th>
-                      <th className="px-3 py-2 font-medium">Provider</th>
-                      <th className="px-3 py-2 font-medium">Last seen</th>
-                      <th className="px-3 py-2 font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <Panel tone="sunken" className="overflow-x-auto p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-3">Email</TableHead>
+                      <TableHead className="px-3">Reason</TableHead>
+                      <TableHead className="px-3">Provider</TableHead>
+                      <TableHead className="px-3">Last seen</TableHead>
+                      <TableHead className="px-3">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {overview.suppressedRecipients.map((entry) => (
-                      <tr key={`${entry.email}-${entry.reason}`} className="border-t">
-                        <td className="px-3 py-2 text-xs break-all">{entry.email}</td>
-                        <td className="px-3 py-2 capitalize">{entry.reason}</td>
-                        <td className="px-3 py-2">{entry.provider}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                      <TableRow key={`${entry.email}-${entry.reason}`}>
+                        <TableCell className="px-3 py-2 text-xs break-all">{entry.email}</TableCell>
+                        <TableCell className="px-3 py-2 capitalize">{entry.reason}</TableCell>
+                        <TableCell className="px-3 py-2">{entry.provider}</TableCell>
+                        <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                           {formatDateTime(entry.lastRecordedAt)}
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <Button
                             size="sm"
                             variant="outline"
@@ -528,56 +561,59 @@ export function EmailTab() {
                           >
                             Unsuppress
                           </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </Panel>
             ) : (
               <p className="text-sm text-muted-foreground">No suppressed recipients yet.</p>
             )}
-          </section>
+            </PanelContent>
+          </Panel>
 
-          <section className="rounded-lg border bg-card p-4 space-y-3">
+          <Panel tone="sunken">
+            <PanelContent className="space-y-3 pt-5">
             <h3 className="text-sm font-medium">Recent feedback events</h3>
             {overview && overview.recentEvents.length > 0 ? (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/30">
-                    <tr className="text-left">
-                      <th className="px-3 py-2 font-medium">Time</th>
-                      <th className="px-3 py-2 font-medium">Type</th>
-                      <th className="px-3 py-2 font-medium">Recipient</th>
-                      <th className="px-3 py-2 font-medium">Provider</th>
-                      <th className="px-3 py-2 font-medium">Scope</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <Panel tone="sunken" className="overflow-x-auto p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-3">Time</TableHead>
+                      <TableHead className="px-3">Type</TableHead>
+                      <TableHead className="px-3">Recipient</TableHead>
+                      <TableHead className="px-3">Provider</TableHead>
+                      <TableHead className="px-3">Scope</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {overview.recentEvents.map((event, index) => (
-                      <tr key={`${event.email}-${event.occurredAt}-${index}`} className="border-t">
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                      <TableRow key={`${event.email}-${event.occurredAt}-${index}`}>
+                        <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                           {formatDateTime(event.occurredAt)}
-                        </td>
-                        <td className="px-3 py-2 capitalize">{event.type}</td>
-                        <td className="px-3 py-2 text-xs break-all">{event.email}</td>
-                        <td className="px-3 py-2">{event.provider}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="px-3 py-2 capitalize">{event.type}</TableCell>
+                        <TableCell className="px-3 py-2 text-xs break-all">{event.email}</TableCell>
+                        <TableCell className="px-3 py-2">{event.provider}</TableCell>
+                        <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                           {event.organizationId && event.projectSlug
                             ? `${event.organizationId}/${event.projectSlug}`
                             : "Global"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </Panel>
             ) : (
               <p className="text-sm text-muted-foreground">No feedback events received yet.</p>
             )}
-          </section>
-        </CardContent>
-      </Card>
+            </PanelContent>
+          </Panel>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

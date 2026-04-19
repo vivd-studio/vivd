@@ -515,4 +515,61 @@ describe("useStudioIframeLifecycle", () => {
 
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
   });
+
+  it("only surfaces iframe errors after they persist beyond the startup grace window", async () => {
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    act(() => {
+      latestValue?.handleStudioIframeError({
+        message: "Invalid bootstrap token",
+        source: "bootstrap",
+      });
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(false);
+    expect(latestValue?.studioLoadError).toMatchObject({
+      message: "Invalid bootstrap token",
+      source: "bootstrap",
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_900);
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(true);
+  });
+
+  it("keeps the startup skeleton when a transient iframe error recovers quickly", async () => {
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    act(() => {
+      latestValue?.handleStudioIframeError({
+        message: "Studio is starting up. Please retry shortly.",
+        source: "bootstrap",
+      });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+
+    act(() => {
+      latestValue?.handleStudioIframeLoad();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(false);
+    expect(latestValue?.studioLoadError).toBeNull();
+  });
 });

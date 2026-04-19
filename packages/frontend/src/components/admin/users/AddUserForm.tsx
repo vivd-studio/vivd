@@ -3,7 +3,25 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { Button, Input, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  Button,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Input,
+  Panel,
+  PanelContent,
+  PanelHeader,
+  PanelTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@vivd/ui";
 
 import { authClient } from "@/lib/auth-client";
 import { addUserSchema, type AddUserFormValues } from "./schemas";
@@ -56,8 +74,14 @@ export function AddUserForm({ onSuccess, onCancel }: AddUserFormProps) {
   };
 
   return (
-    <div className="rounded-lg border bg-card p-4 animate-in slide-in-from-top-4 duration-300">
-      <h3 className="font-semibold mb-4">Add New User</h3>
+    <Panel
+      tone="sunken"
+      className="animate-in slide-in-from-top-4 duration-300"
+    >
+      <PanelHeader>
+        <PanelTitle>Add New User</PanelTitle>
+      </PanelHeader>
+      <PanelContent>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -146,6 +170,7 @@ export function AddUserForm({ onSuccess, onCancel }: AddUserFormProps) {
           </div>
         </form>
       </Form>
-    </div>
+      </PanelContent>
+    </Panel>
   );
 }

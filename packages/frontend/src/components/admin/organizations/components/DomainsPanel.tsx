@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill } from "@vivd/ui";
+import { Badge, Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Input, Panel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusPill, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@vivd/ui";
 
 import type { Organization, OrganizationDomain } from "../types";
 
@@ -118,44 +118,44 @@ export function DomainsPanel({
 
       {!domainsLoading && !domainsError && (
         <Panel className="overflow-auto p-0">
-          <table className="w-full text-sm">
-            <thead className="bg-surface-sunken text-muted-foreground">
-              <tr className="text-left">
-                <th className="px-3 py-2 font-medium">Domain</th>
-                <th className="px-3 py-2 font-medium">Usage</th>
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Verification</th>
-                <th className="px-3 py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-3">Domain</TableHead>
+                <TableHead className="px-3">Usage</TableHead>
+                <TableHead className="px-3">Type</TableHead>
+                <TableHead className="px-3">Status</TableHead>
+                <TableHead className="px-3">Verification</TableHead>
+                <TableHead className="px-3">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {sortedDomains.map((row) => {
                 const managedHost = isManagedTenantHost(row);
                 const removeDisabled = managedHost && row.status === "active";
                 const nextStatus: DomainStatus = row.status === "active" ? "disabled" : "active";
 
                 return (
-                  <tr key={row.id} className="border-t align-top">
-                    <td className="px-3 py-2">
+                  <TableRow key={row.id}>
+                    <TableCell className="px-3 py-2">
                       <div className="font-mono text-xs">{row.domain}</div>
                       {managedHost && (
                         <div className="text-[11px] text-muted-foreground mt-1">
                           Managed tenant host (read-only usage)
                         </div>
                       )}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <Badge variant={row.usage === "tenant_host" ? "secondary" : "outline"}>
                         {row.usage}
                       </Badge>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <Badge variant={row.type === "managed_subdomain" ? "secondary" : "outline"}>
                         {row.type}
                       </Badge>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <StatusPill
                         tone={
                           row.status === "active"
@@ -164,20 +164,19 @@ export function DomainsPanel({
                               ? "warn"
                               : "neutral"
                         }
-                        dot
                       >
                         {row.status}
                       </StatusPill>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <div>{formatDate(row.verifiedAt)}</div>
                       {row.verificationToken && (
                         <code className="text-[11px] text-muted-foreground break-all">
                           {row.verificationToken}
                         </code>
                       )}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
@@ -242,19 +241,19 @@ export function DomainsPanel({
                           Remove
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
               {sortedDomains.length === 0 && (
-                <tr>
-                  <td className="px-3 py-4 text-muted-foreground" colSpan={6}>
+                <TableRow>
+                  <TableCell className="px-3 py-4 text-muted-foreground" colSpan={6}>
                     No domains configured yet.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </Panel>
       )}
 

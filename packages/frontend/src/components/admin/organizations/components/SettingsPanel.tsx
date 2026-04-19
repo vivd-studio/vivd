@@ -84,10 +84,7 @@ export function SettingsPanel({
               label="Status"
               value={
                 <div className="flex items-center gap-2">
-                  <StatusPill
-                    tone={selectedOrg.status === "active" ? "success" : "danger"}
-                    dot
-                  >
+                  <StatusPill tone={selectedOrg.status === "active" ? "success" : "danger"}>
                     {selectedOrg.status}
                   </StatusPill>
                   {selectedOrg.id === "default" ? (

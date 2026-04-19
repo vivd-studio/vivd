@@ -2,7 +2,14 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Shield, UserPlus, AlertCircle } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Card, CardContent, CardHeader, CardTitle, Button } from "@vivd/ui";
+import {
+  Button,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -59,17 +66,17 @@ export function UsersTab() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Panel>
+        <PanelHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2">
+              <PanelTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-blue-600" />
                 Users ({users?.length})
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
+              </PanelTitle>
+              <PanelDescription>
                 Global roles are system-wide. Organization roles are managed per org.
-              </p>
+              </PanelDescription>
             </div>
             <Button
               onClick={() => setIsAddUserOpen(!isAddUserOpen)}
@@ -79,8 +86,8 @@ export function UsersTab() {
               Add User
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        </PanelHeader>
+        <PanelContent className="space-y-6">
           {isAddUserOpen && (
             <AddUserForm
               onSuccess={() => setIsAddUserOpen(false)}
@@ -97,8 +104,8 @@ export function UsersTab() {
               onDelete={setDeleteConfirmUser}
             />
           )}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
       <EditUserDialog
         user={editingUser}

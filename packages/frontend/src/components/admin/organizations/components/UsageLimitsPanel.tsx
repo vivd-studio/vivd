@@ -140,10 +140,7 @@ export function UsageLimitsPanel({
                     </PanelDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusPill
-                      tone={usage.limits.blocked ? "danger" : "success"}
-                      dot
-                    >
+                    <StatusPill tone={usage.limits.blocked ? "danger" : "success"}>
                       {usage.limits.blocked ? "Blocked" : "Active"}
                     </StatusPill>
                     {usage.limits.imageGenBlocked ? (

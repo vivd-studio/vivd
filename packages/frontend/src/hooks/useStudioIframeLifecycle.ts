@@ -23,6 +23,7 @@ import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery
 
 const EARLY_STALL_RECOVERY_DELAY_MS = 6_000;
 const EARLY_STALL_RECOVERY_TIMEOUT_MS = 4_000;
+const STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS = 4_000;
 
 function isIframeStillOnAboutBlank(
   iframe: HTMLIFrameElement | null,
@@ -96,7 +97,15 @@ export function useStudioIframeLifecycle({
   const attemptedEarlyRecoveryRef = useRef(false);
   const attemptedEarlyBlankReloadRef = useRef(false);
   const attemptedCrossOriginTimeoutReloadRef = useRef(false);
+  const pendingStudioLoadErrorTimerRef = useRef<number | null>(null);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
+
+  const clearPendingStudioLoadError = useCallback(() => {
+    if (pendingStudioLoadErrorTimerRef.current !== null) {
+      window.clearTimeout(pendingStudioLoadErrorTimerRef.current);
+      pendingStudioLoadErrorTimerRef.current = null;
+    }
+  }, []);
 
   const postMessageToStudio = useCallback(
     (message: VivdHostBridgeMessage) => {
@@ -148,19 +157,22 @@ export function useStudioIframeLifecycle({
   }, [requestStudioReadyCheck, syncSidebarToStudio, syncThemeToStudio]);
 
   const markStudioReady = useCallback(() => {
+    clearPendingStudioLoadError();
     studioReadyRef.current = true;
     setStudioReady(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
     setStudioLoadError(null);
-  }, []);
+  }, [clearPendingStudioLoadError]);
 
   const markStudioVisible = useCallback(() => {
+    clearPendingStudioLoadError();
     studioVisibleRef.current = true;
     setStudioVisible(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
-  }, []);
+    setStudioLoadError(null);
+  }, [clearPendingStudioLoadError]);
 
   const handleStudioReady = useCallback(() => {
     const wasReady = studioReadyRef.current;
@@ -208,25 +220,33 @@ export function useStudioIframeLifecycle({
   ]);
 
   const handleStudioIframeLoad = useCallback(() => {
+    clearPendingStudioLoadError();
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
     setStudioLoadError(null);
     void tryMarkStudioVisibleFromIframe();
     requestStudioBridgeSync();
     void tryMarkStudioReadyFromIframe();
   }, [
+    clearPendingStudioLoadError,
     requestStudioBridgeSync,
     tryMarkStudioReadyFromIframe,
     tryMarkStudioVisibleFromIframe,
   ]);
 
   const handleStudioIframeError = useCallback((failure?: StudioIframeFailure) => {
-    setStudioLoadErrored(true);
+    clearPendingStudioLoadError();
     setStudioLoadError(
       failure ?? {
         message: "Studio failed to load",
         source: "network",
       },
     );
-  }, []);
+    pendingStudioLoadErrorTimerRef.current = window.setTimeout(() => {
+      pendingStudioLoadErrorTimerRef.current = null;
+      setStudioLoadErrored(true);
+    }, STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS);
+  }, [clearPendingStudioLoadError]);
 
   const recheckStudioReadiness = useCallback(() => {
     if (!studioBaseUrl) return;
@@ -394,7 +414,14 @@ export function useStudioIframeLifecycle({
   }, [reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
+    return () => {
+      clearPendingStudioLoadError();
+    };
+  }, [clearPendingStudioLoadError]);
+
+  useEffect(() => {
     if (!studioBaseUrl) {
+      clearPendingStudioLoadError();
       studioVisibleRef.current = false;
       setStudioVisible(false);
       studioReadyRef.current = false;
@@ -405,6 +432,7 @@ export function useStudioIframeLifecycle({
       return;
     }
 
+    clearPendingStudioLoadError();
     studioVisibleRef.current = false;
     setStudioVisible(false);
     studioReadyRef.current = false;
@@ -418,7 +446,7 @@ export function useStudioIframeLifecycle({
     }, STUDIO_LOAD_TIMEOUT_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [reloadNonce, studioBaseUrl]);
+  }, [clearPendingStudioLoadError, reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
     if (

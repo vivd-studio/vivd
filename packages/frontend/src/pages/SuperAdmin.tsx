@@ -290,12 +290,10 @@ export default function SuperAdmin() {
                 </div>
                 {organizations.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill tone="success" dot>
-                      {activeOrganizationCount} active
-                    </StatusPill>
-                    <StatusPill tone="neutral">
+                    <Badge variant="outline">{activeOrganizationCount} active</Badge>
+                    <Badge variant="outline">
                       {organizations.length - activeOrganizationCount} non-active
-                    </StatusPill>
+                    </Badge>
                   </div>
                 ) : null}
               </div>

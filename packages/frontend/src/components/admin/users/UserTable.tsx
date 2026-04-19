@@ -1,5 +1,19 @@
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@vivd/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Panel,
+  StatusPill,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@vivd/ui";
 
 import type { User } from "../types";
 
@@ -26,64 +40,37 @@ export function UserTable({
   };
 
   return (
-    <div className="relative w-full overflow-auto rounded-lg border bg-card">
-      <table className="w-full caption-bottom text-sm text-left">
-        <thead className="[&_tr]:border-b">
-          <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Name
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Email
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Verified
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Global Role
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Assigned Project
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Created At
-            </th>
-            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="[&_tr:last-child]:border-0">
+    <Panel tone="sunken" className="relative overflow-auto p-0">
+      <Table className="text-left">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Verified</TableHead>
+            <TableHead>Global Role</TableHead>
+            <TableHead>Assigned Project</TableHead>
+            <TableHead>Created At</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {users.map((user) => (
-            <tr
-              key={user.id}
-              className="border-b transition-colors hover:bg-muted/50"
-            >
-              <td className="p-4 align-middle font-medium">{user.name}</td>
-              <td className="p-4 align-middle">{user.email}</td>
-              <td className="p-4 align-middle">
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    user.emailVerified
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                      : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                  }`}
-                >
+            <TableRow key={user.id}>
+              <TableCell className="font-medium">{user.name}</TableCell>
+              <TableCell>{user.email}</TableCell>
+              <TableCell>
+                <StatusPill tone={user.emailVerified ? "success" : "warn"}>
                   {user.emailVerified ? "Verified" : "Unverified"}
-                </span>
-              </td>
-              <td className="p-4 align-middle">
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
-                    user.role === "super_admin"
-                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                      : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
-                  }`}
+                </StatusPill>
+              </TableCell>
+              <TableCell>
+                <StatusPill
+                  tone={user.role === "super_admin" ? "info" : "neutral"}
                 >
                   {getGlobalRoleLabel(user.role)}
-                </span>
-              </td>
-              <td className="p-4 align-middle">
+                </StatusPill>
+              </TableCell>
+              <TableCell>
                 {user.role === "client_editor" ? (
                   <span className="text-sm font-medium">
                     {projectMap.get(user.id) || "—"}
@@ -91,11 +78,11 @@ export function UserTable({
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
-              </td>
-              <td className="p-4 align-middle text-muted-foreground">
+              </TableCell>
+              <TableCell className="text-muted-foreground">
                 {new Date(user.createdAt).toLocaleDateString()}
-              </td>
-              <td className="p-4 align-middle">
+              </TableCell>
+              <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -124,11 +111,11 @@ export function UserTable({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Panel>
   );
 }

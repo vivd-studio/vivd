@@ -156,6 +156,16 @@ export {
   StatTileValue,
 } from "./stat-tile";
 export { StatusPill, statusPillVariants } from "./status-pill";
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./table";
 export { Toaster } from "./sonner";
 export type { ToasterProps } from "./sonner";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";

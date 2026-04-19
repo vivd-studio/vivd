@@ -12,7 +12,37 @@ import {
 import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { readStudioRuntimeOrigins } from "@/lib/studioRuntimeSession";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@vivd/ui";
 
 
 type StudioMachine =
@@ -400,13 +430,13 @@ export function MachinesTab() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Panel>
+        <PanelHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2">
+            <PanelTitle className="flex items-center gap-2">
               <Server className="h-5 w-5 text-blue-600" />
               Studio Machines
-            </CardTitle>
+            </PanelTitle>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -521,13 +551,19 @@ export function MachinesTab() {
               </div>
             ) : null}
           </div>
-        </CardHeader>
+          <PanelDescription className="mt-2">
+            Inspect runtime machine state, reconcile drift, and manage image overrides.
+          </PanelDescription>
+        </PanelHeader>
 
-        <CardContent className="space-y-4">
+        <PanelContent className="space-y-4">
           {listError ? (
-            <div className="text-sm text-red-500">
+            <Callout tone="danger">
+              <CalloutTitle>Failed to list machines</CalloutTitle>
+              <CalloutDescription>
               Failed to list machines: {listError}
-            </div>
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -550,76 +586,76 @@ export function MachinesTab() {
               <Loader2 className="animate-spin h-8 w-8 text-blue-600" />
             </div>
           ) : machines.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
+            <Panel tone="sunken" className="p-4 text-sm text-muted-foreground">
               No studio machines found.
-            </div>
+            </Panel>
           ) : (
-            <div className="rounded-lg border bg-card overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-muted-foreground">
-                  <tr className="text-left">
-                    <th className="px-3 py-2 font-medium">
+            <Panel tone="sunken" className="overflow-auto p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-3">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                         onClick={() => toggleSort("identity")}
                       >
                         Org / Project
                         {sortIconFor("identity")}
                       </button>
-                    </th>
-                    <th className="px-3 py-2 font-medium">
+                    </TableHead>
+                    <TableHead className="px-3">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                         onClick={() => toggleSort("state")}
                       >
                         State
                         {sortIconFor("state")}
                       </button>
-                    </th>
-                    <th className="px-3 py-2 font-medium">
+                    </TableHead>
+                    <TableHead className="px-3">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                         onClick={() => toggleSort("age")}
                       >
                         Age
                         {sortIconFor("age")}
                       </button>
-                    </th>
-                    <th className="px-3 py-2 font-medium">Placement</th>
-                    <th className="px-3 py-2 font-medium">
+                    </TableHead>
+                    <TableHead className="px-3">Placement</TableHead>
+                    <TableHead className="px-3">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                         onClick={() => toggleSort("image")}
                       >
                         Image
                         {sortIconFor("image")}
                       </button>
-                    </th>
-                    <th className="px-3 py-2 font-medium">
+                    </TableHead>
+                    <TableHead className="px-3">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                         onClick={() => toggleSort("machine")}
                       >
                         {machineLabel}
                         {sortIconFor("machine")}
                       </button>
-                    </th>
-                    <th className="px-3 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                    <TableHead className="px-3">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {sortedMachines.map((m: StudioMachine) => {
                     const { runtimeUrl, compatibilityUrl } =
                       readStudioRuntimeOrigins(m);
 
                     return (
-                      <tr key={m.id} className="border-t align-top">
-                        <td className="px-3 py-2">
+                      <TableRow key={m.id}>
+                        <TableCell className="px-3 py-2">
                           <div className="font-mono text-xs break-all">
                             {m.organizationId}
                           </div>
@@ -644,19 +680,19 @@ export function MachinesTab() {
                               Compatibility: {compatibilityUrl || m.routePath}
                             </div>
                           ) : null}
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <Badge variant={badgeVariantForState(m.state)}>
                             {m.state || "unknown"}
                           </Badge>
-                        </td>
-                      <td className="px-3 py-2">
+                        </TableCell>
+                      <TableCell className="px-3 py-2">
                         <div>{formatAge(m.createdAt)}</div>
                         <div className="text-[11px] text-muted-foreground">
                           {formatDate(m.createdAt)}
                         </div>
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="font-mono text-xs">
                           {m.region || (m.routePath ? "single-host" : "unknown")}
                         </div>
@@ -668,8 +704,8 @@ export function MachinesTab() {
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {formatMachineSizing(m)}
                         </div>
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge
                           variant={
                             imageStatusFor(m) === "outdated"
@@ -709,8 +745,8 @@ export function MachinesTab() {
                             })}
                           </div>
                         ) : null}
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="font-mono text-xs break-all">{m.id}</div>
                         {m.name ? (
                           <div className="text-[11px] text-muted-foreground break-all mt-1">
@@ -722,8 +758,8 @@ export function MachinesTab() {
                             port {m.externalPort}
                           </div>
                         ) : null}
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="flex flex-col gap-2">
                           <Button
                             variant="secondary"
@@ -779,16 +815,16 @@ export function MachinesTab() {
                             Destroy
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Panel>
           )}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
 
       <AlertDialog open={confirmReconcileOpen} onOpenChange={setConfirmReconcileOpen}>
         <AlertDialogContent>

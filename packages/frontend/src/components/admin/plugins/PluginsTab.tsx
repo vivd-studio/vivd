@@ -5,7 +5,35 @@ import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { isExperimentalSoloInstall } from "@/lib/featureFlags";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Input,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  StatusPill,
+} from "@vivd/ui";
 
 
 type AccessStateFilter = "all" | "enabled" | "disabled" | "suspended";
@@ -138,25 +166,25 @@ export function PluginsTab() {
   const isExperimentalSolo = isExperimentalSoloInstall(config);
 
   return (
-    <Card>
-      <CardHeader className="space-y-3">
-        <CardTitle className="flex items-center gap-2">
+    <Panel>
+      <PanelHeader className="space-y-3">
+        <PanelTitle className="flex items-center gap-2">
           <Plug className="h-4 w-4" />
           Plugin Access
-        </CardTitle>
-        <CardDescription>
+        </PanelTitle>
+        <PanelDescription>
           Set default plugin access for this instance. Project-specific configuration
           still lives on each project.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </PanelDescription>
+      </PanelHeader>
+      <PanelContent>
         {isExperimentalSolo ? (
           <InstancePluginDefaultsPanel />
         ) : (
           <ProjectsPluginAccessPanel />
         )}
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }
 
@@ -196,10 +224,12 @@ function InstancePluginDefaultsPanel() {
         const enabled =
           settingsQuery.data?.pluginDefaults[plugin.pluginId]?.enabled ?? false;
         return (
-          <div
+          <Panel
+            tone="sunken"
             key={plugin.pluginId}
-            className="rounded-lg border bg-muted/15 p-4 space-y-3"
+            className="space-y-3"
           >
+            <PanelContent className="space-y-3 pt-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-medium">{plugin.name}</div>
@@ -207,9 +237,9 @@ function InstancePluginDefaultsPanel() {
                   {plugin.description}
                 </div>
               </div>
-              <Badge variant={enabled ? "success" : "secondary"}>
+              <StatusPill tone={enabled ? "success" : "neutral"}>
                 {enabled ? "Enabled" : "Disabled"}
-              </Badge>
+              </StatusPill>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -266,7 +296,8 @@ function InstancePluginDefaultsPanel() {
                 Disable
               </Button>
             </div>
-          </div>
+            </PanelContent>
+          </Panel>
         );
       })}
     </div>
@@ -528,13 +559,16 @@ function ProjectsPluginAccessPanel() {
       </div>
 
       {listAccessQuery.error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          Failed to load plugin access: {listAccessQuery.error.message}
-        </div>
+        <Callout tone="danger">
+          <CalloutTitle>Failed to load plugin access</CalloutTitle>
+          <CalloutDescription>
+            {listAccessQuery.error.message}
+          </CalloutDescription>
+        </Callout>
       ) : null}
 
-      <div className="overflow-hidden rounded-md border bg-background">
-        <div className="flex items-center justify-between border-b bg-muted/10 px-4 py-2.5">
+      <Panel tone="sunken" className="overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b bg-surface-panel px-4 py-2.5">
           <div>
             <div className="text-sm font-medium">Projects</div>
             <div className="text-xs text-muted-foreground">
@@ -555,7 +589,7 @@ function ProjectsPluginAccessPanel() {
           </div>
         ) : (
           <>
-            <div className="hidden border-b bg-muted/5 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid lg:grid-cols-[minmax(220px,1.2fr)_minmax(170px,0.9fr)_minmax(130px,0.7fr)_minmax(260px,1fr)_minmax(220px,0.9fr)_auto] lg:gap-4">
+            <div className="vivd-table-header hidden border-b px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/70 lg:grid lg:grid-cols-[minmax(220px,1.2fr)_minmax(170px,0.9fr)_minmax(130px,0.7fr)_minmax(260px,1fr)_minmax(220px,0.9fr)_auto] lg:gap-4">
               <span>Project</span>
               <span>Organization</span>
               <span>Deployment</span>
@@ -570,7 +604,7 @@ function ProjectsPluginAccessPanel() {
                 return (
                   <div
                     key={projectRowKey(project)}
-                    className="group flex items-center gap-2 px-3 py-1.5 hover:bg-muted/10"
+                    className="group flex items-center gap-2 px-3 py-1.5 hover:bg-surface-panel"
                   >
                     <button
                       type="button"
@@ -592,9 +626,9 @@ function ProjectsPluginAccessPanel() {
                         </div>
                         <div>
                           {project.isDeployed ? (
-                            <Badge variant="success">Deployed</Badge>
+                            <StatusPill tone="success">Deployed</StatusPill>
                           ) : (
-                            <Badge variant="outline">Not deployed</Badge>
+                            <StatusPill tone="neutral">Not deployed</StatusPill>
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -658,13 +692,13 @@ function ProjectsPluginAccessPanel() {
             </div>
           </>
         )}
-      </div>
+      </Panel>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-h-[85vh] max-w-5xl overflow-hidden p-0">
           {selectedProject ? (
             <>
-              <DialogHeader className="border-b bg-muted/10 px-5 py-4 text-left">
+              <DialogHeader className="border-b bg-surface-sunken px-5 py-4 text-left">
                 <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
                   <span>{selectedProject.projectSlug}</span>
                   <span className="font-normal text-muted-foreground">
@@ -886,7 +920,8 @@ function ProjectsPluginAccessPanel() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-col gap-2 border rounded-md px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <Panel tone="sunken">
+        <PanelContent className="flex flex-col gap-2 px-3 py-2 pt-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
           {totalProjects === 0
             ? "Showing 0 projects"
@@ -915,7 +950,8 @@ function ProjectsPluginAccessPanel() {
             Next
           </Button>
         </div>
-      </div>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

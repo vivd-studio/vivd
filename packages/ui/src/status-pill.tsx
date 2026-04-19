@@ -1,30 +1,35 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { darkSemanticBadgeTones } from "./semanticTones";
 import { cn } from "./utils";
 
 /**
- * StatusPill — small rounded-full chip for binary/enum statuses.
+ * StatusPill — small badge-like chip for binary/enum statuses.
  *
- * Replaces the hand-rolled "rounded-full border bg-background px-2 py-1"
- * and "rounded-full border bg-emerald-500/10 ..." chips scattered across
+ * Replaces the hand-rolled "rounded-md border bg-background px-2 py-1"
+ * and "rounded-md border bg-emerald-500/10 ..." chips scattered across
  * admin surfaces.
  *
  * Use for status indicators (Active / Deployed / Not installed / Blocked).
  * Badge remains the right choice for non-status count/label chips.
+ * The optional dot is a special-case accent, not the default status treatment.
  */
 
 const statusPillVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize leading-none",
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-0.5 text-xs font-semibold capitalize transition-colors",
   {
     variants: {
       tone: {
-        neutral: "border-border bg-surface-sunken text-muted-foreground",
-        info: "border-primary/30 bg-primary/10 text-primary",
+        neutral: "border-transparent bg-secondary text-secondary-foreground",
+        info:
+          `border-transparent bg-primary text-primary-foreground shadow-sm ${darkSemanticBadgeTones.default}`,
         success:
-          "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-        danger: "border-destructive/40 bg-destructive/10 text-destructive",
+          `border-transparent bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] shadow-sm hover:bg-[hsl(var(--success-hover))] ${darkSemanticBadgeTones.success}`,
+        warn:
+          "border-transparent bg-amber-500 text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300 dark:shadow-none",
+        danger:
+          `border-transparent bg-destructive text-destructive-foreground shadow-sm ${darkSemanticBadgeTones.destructive}`,
       },
     },
     defaultVariants: {
@@ -32,17 +37,6 @@ const statusPillVariants = cva(
     },
   },
 );
-
-const dotToneClass: Record<
-  NonNullable<VariantProps<typeof statusPillVariants>["tone"]>,
-  string
-> = {
-  neutral: "bg-muted-foreground/60",
-  info: "bg-primary",
-  success: "bg-emerald-500",
-  warn: "bg-amber-500",
-  danger: "bg-destructive",
-};
 
 export interface StatusPillProps
   extends React.HTMLAttributes<HTMLSpanElement>,
@@ -62,7 +56,10 @@ const StatusPill = React.forwardRef<HTMLSpanElement, StatusPillProps>(
         {dot ? (
           <span
             aria-hidden="true"
-            className={cn("size-1.5 shrink-0 rounded-full", dotToneClass[toneKey])}
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              toneKey === "neutral" ? "bg-current/55" : "bg-current",
+            )}
           />
         ) : null}
         {children}

@@ -1,6 +1,24 @@
 import { useState } from "react";
 import { Wrench, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+  Callout,
+  CalloutTitle,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -122,14 +140,17 @@ export function MaintenanceTab() {
   return (
     <>
       <FormContent className="max-w-3xl">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <Panel>
+        <PanelHeader>
+          <PanelTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5 text-blue-600" />
             System Maintenance
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          </PanelTitle>
+          <PanelDescription>
+            Run repair and migration tasks for the hosted control plane.
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-3">
           {config ? (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>Tenant:</span>
@@ -175,9 +196,10 @@ export function MaintenanceTab() {
             ) : null}
           </div>
           {migrateMutation.data?.errors.length ? (
-            <div className="rounded-md border p-3 text-sm">
-              <div className="font-medium mb-2">Errors</div>
-              <ul className="space-y-1 text-muted-foreground">
+            <Callout tone="danger">
+              <CalloutTitle>Migration errors</CalloutTitle>
+              <div className="text-sm leading-snug text-muted-foreground">
+              <ul className="space-y-1">
                 {migrateMutation.data.errors.slice(0, 5).map((e, idx) => (
                   <li key={idx}>
                     {e.slug}: {e.error}
@@ -185,11 +207,12 @@ export function MaintenanceTab() {
                 ))}
               </ul>
               {migrateMutation.data.errors.length > 5 ? (
-                <div className="text-muted-foreground mt-2">
-                  …and {migrateMutation.data.errors.length - 5} more
-                </div>
-              ) : null}
-            </div>
+                  <div className="text-muted-foreground mt-2">
+                    …and {migrateMutation.data.errors.length - 5} more
+                  </div>
+                ) : null}
+              </div>
+            </Callout>
           ) : null}
 
           <div className="border-t pt-3 space-y-3">
@@ -224,9 +247,10 @@ export function MaintenanceTab() {
               ) : null}
             </div>
             {migrateProjectMetadataMutation.data?.errors.length ? (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium mb-2">Errors</div>
-                <ul className="space-y-1 text-muted-foreground">
+              <Callout tone="danger">
+                <CalloutTitle>Metadata migration errors</CalloutTitle>
+                <div className="text-sm leading-snug text-muted-foreground">
+                <ul className="space-y-1">
                   {migrateProjectMetadataMutation.data.errors
                     .slice(0, 5)
                     .map((e, idx) => (
@@ -240,7 +264,8 @@ export function MaintenanceTab() {
                     …and {migrateProjectMetadataMutation.data.errors.length - 5} more
                   </div>
                 ) : null}
-              </div>
+                </div>
+              </Callout>
             ) : null}
           </div>
 
@@ -279,11 +304,12 @@ export function MaintenanceTab() {
                 </span>
               ) : null}
             </div>
-            {exportMutation.data?.errors.length ||
-            exportMutation.data?.fileErrors.length ? (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium mb-2">Errors</div>
-                <ul className="space-y-1 text-muted-foreground">
+          {exportMutation.data?.errors.length ||
+          exportMutation.data?.fileErrors.length ? (
+              <Callout tone="danger">
+                <CalloutTitle>Export errors</CalloutTitle>
+                <div className="text-sm leading-snug text-muted-foreground">
+                <ul className="space-y-1">
                   {(exportMutation.data?.errors ?? [])
                     .slice(0, 3)
                     .map((e, idx) => (
@@ -299,7 +325,8 @@ export function MaintenanceTab() {
                       </li>
                     ))}
                 </ul>
-              </div>
+                </div>
+              </Callout>
             ) : null}
           </div>
 
@@ -331,9 +358,10 @@ export function MaintenanceTab() {
               ) : null}
             </div>
             {thumbnailsMutation.data?.errors.length ? (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium mb-2">Errors</div>
-                <ul className="space-y-1 text-muted-foreground">
+              <Callout tone="danger">
+                <CalloutTitle>Thumbnail errors</CalloutTitle>
+                <div className="text-sm leading-snug text-muted-foreground">
+                <ul className="space-y-1">
                   {thumbnailsMutation.data.errors.slice(0, 5).map((e, idx) => (
                     <li key={idx}>
                       {e.slug}/v{e.version}: {e.error}
@@ -345,11 +373,12 @@ export function MaintenanceTab() {
                     …and {thumbnailsMutation.data.errors.length - 5} more
                   </div>
                 ) : null}
-              </div>
+                </div>
+              </Callout>
             ) : null}
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
       </FormContent>
 
       <AlertDialog

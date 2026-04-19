@@ -34,6 +34,7 @@
     "./sonner": "./src/sonner.tsx",
     "./stat-tile": "./src/stat-tile.tsx",
     "./status-pill": "./src/status-pill.tsx",
+    "./table": "./src/table.tsx",
     "./tabs": "./src/tabs.tsx",
     "./textarea": "./src/textarea.tsx",
     "./toggle": "./src/toggle.tsx",
