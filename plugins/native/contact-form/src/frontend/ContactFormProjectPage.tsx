@@ -2,24 +2,27 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ChevronDown, Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
   Checkbox,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
   Input,
   Label,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  StatusPill,
   Textarea,
 } from "@vivd/ui";
 import { FormContent, SettingsPageShell } from "@/plugins/host";
@@ -140,18 +143,20 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border bg-card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
+    <Panel tone="sunken">
+      <PanelHeader className="flex-row items-start justify-between gap-3 p-4">
         <div>
-          <h3 className="text-sm font-medium">{title}</h3>
+          <PanelTitle className="text-sm">{title}</PanelTitle>
           {description ? (
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            <PanelDescription className="mt-1 text-xs">
+              {description}
+            </PanelDescription>
           ) : null}
         </div>
         {action}
-      </div>
-      {children}
-    </section>
+      </PanelHeader>
+      <PanelContent className="space-y-3 p-4 pt-0">{children}</PanelContent>
+    </Panel>
   );
 }
 
@@ -167,22 +172,23 @@ function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <Collapsible
-      defaultOpen={defaultOpen}
-      className="rounded-lg border bg-card"
-    >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 text-left group">
-        <div>
-          <h3 className="text-sm font-medium">{title}</h3>
-          {description ? (
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=closed]:-rotate-90" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-        <div className="border-t px-4 pb-4 pt-3 space-y-4">{children}</div>
-      </CollapsibleContent>
+    <Collapsible defaultOpen={defaultOpen} className="overflow-hidden">
+      <Panel tone="sunken">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left">
+          <div>
+            <h3 className="text-sm font-medium">{title}</h3>
+            {description ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=closed]:-rotate-90" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+          <div className="space-y-4 border-t px-4 pb-4 pt-3">{children}</div>
+        </CollapsibleContent>
+      </Panel>
     </Collapsible>
   );
 }
@@ -205,9 +211,9 @@ function SnippetCard({
           Copy
         </Button>
       </div>
-      <pre className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
-        {snippet}
-      </pre>
+      <Panel tone="sunken" className="max-h-64 overflow-auto p-3">
+        <pre className="text-xs whitespace-pre-wrap break-words">{snippet}</pre>
+      </Panel>
     </div>
   );
 }
@@ -528,22 +534,22 @@ export default function ContactFormProjectPage({
       }
     >
       <FormContent className={isEmbedded ? "mx-auto max-w-3xl" : "max-w-3xl"}>
-        <Card>
-          <CardHeader>
+        <Panel>
+          <PanelHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                <PanelTitle className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-surface-sunken text-muted-foreground">
                     <PluginIcon className="h-4 w-4" />
                   </span>
                   <span>
                     {pluginInfo?.catalog.name || pluginPresentation.title}
                   </span>
-                </CardTitle>
-                <CardDescription>
+                </PanelTitle>
+                <PanelDescription>
                   {pluginInfo?.catalog.description ||
                     "Collect visitor inquiries and store submissions in Vivd."}
-                </CardDescription>
+                </PanelDescription>
               </div>
               <div className="flex items-center gap-2">
                 {!pluginEnabled ? (
@@ -573,29 +579,41 @@ export default function ContactFormProjectPage({
                     }
                   />
                 ) : null}
-                <Badge variant={pluginEnabled ? "default" : "secondary"}>
+                <StatusPill
+                  tone={
+                    pluginEnabled
+                      ? "success"
+                      : contactNeedsProjectEnable
+                        ? "neutral"
+                        : "warn"
+                  }
+                >
                   {pluginEnabled
                     ? "Enabled"
                     : contactNeedsProjectEnable
                       ? "Available"
                       : "Disabled"}
-                </Badge>
+                </StatusPill>
               </div>
             </div>
-          </CardHeader>
+          </PanelHeader>
 
-          <CardContent className="space-y-5">
+          <PanelContent className="space-y-5">
             {infoQuery.error ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Failed to load Contact Form plugin info:{" "}
-                {infoQuery.error.message}
-              </div>
+              <Callout tone="danger">
+                <CalloutTitle>
+                  Failed to load Contact Form plugin info
+                </CalloutTitle>
+                <CalloutDescription>
+                  {infoQuery.error.message}
+                </CalloutDescription>
+              </Callout>
             ) : null}
 
             {!pluginEnabled ? (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                {disabledCopy}
-              </div>
+              <Callout tone="warn">
+                <CalloutDescription>{disabledCopy}</CalloutDescription>
+              </Callout>
             ) : null}
 
             {pluginEnabled ? (
@@ -608,18 +626,19 @@ export default function ContactFormProjectPage({
                     {recipientEmails.length > 0 ? (
                       <div className="space-y-2">
                         {recipientEmails.map((email) => (
-                          <div
+                          <Panel
                             key={email}
-                            className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
+                            tone="sunken"
+                            className="flex items-center justify-between gap-3 p-3"
                           >
                             <div className="flex items-center gap-2 text-sm">
                               <span>{email}</span>
-                              <Badge
-                                variant="default"
-                                className="text-[10px] px-1.5 py-0"
+                              <StatusPill
+                                tone="success"
+                                className="text-[10px]"
                               >
                                 Verified
-                              </Badge>
+                              </StatusPill>
                             </div>
                             <Button
                               type="button"
@@ -629,14 +648,16 @@ export default function ContactFormProjectPage({
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </div>
+                          </Panel>
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
-                        Add an email address to start receiving form
-                        submissions.
-                      </div>
+                      <Callout tone="warn">
+                        <CalloutDescription>
+                          Add an email address to start receiving form
+                          submissions.
+                        </CalloutDescription>
+                      </Callout>
                     )}
 
                     {pendingRecipients.length > 0 ? (
@@ -645,18 +666,16 @@ export default function ContactFormProjectPage({
                           (
                             entry: ContactRecipientDirectory["pending"][number],
                           ) => (
-                            <div
+                            <Panel
                               key={entry.email}
-                              className="flex items-center justify-between rounded-md border border-dashed px-3 py-2"
+                              tone="dashed"
+                              className="flex items-center justify-between gap-3 px-3 py-2"
                             >
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <span>{entry.email}</span>
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] px-1.5 py-0"
-                                >
+                                <StatusPill tone="warn" className="text-[10px]">
                                   Pending
-                                </Badge>
+                                </StatusPill>
                               </div>
                               <Button
                                 type="button"
@@ -672,13 +691,13 @@ export default function ContactFormProjectPage({
                               >
                                 Resend
                               </Button>
-                            </div>
+                            </Panel>
                           ),
                         )}
                       </div>
                     ) : null}
 
-                    <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                    <Panel tone="sunken" className="space-y-3 p-3">
                       <Label className="text-xs font-medium text-muted-foreground">
                         Add recipient
                       </Label>
@@ -748,7 +767,7 @@ export default function ContactFormProjectPage({
                           )}
                         </Button>
                       </div>
-                    </div>
+                    </Panel>
                   </div>
                 </SectionCard>
 
@@ -758,9 +777,10 @@ export default function ContactFormProjectPage({
                 >
                   <div className="space-y-3">
                     {formFieldsInput.map((field, index) => (
-                      <div
+                      <Panel
                         key={`form-field-${index}`}
-                        className="rounded-lg border bg-card p-3 space-y-3"
+                        tone="sunken"
+                        className="space-y-3 p-3"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-sm font-medium">
@@ -901,7 +921,7 @@ export default function ContactFormProjectPage({
                             Required
                           </Label>
                         </div>
-                      </div>
+                      </Panel>
                     ))}
                     <Button variant="outline" size="sm" onClick={addFormField}>
                       <Plus className="mr-1 h-4 w-4" />
@@ -1027,8 +1047,8 @@ export default function ContactFormProjectPage({
                 </div>
               </>
             ) : null}
-          </CardContent>
-        </Card>
+          </PanelContent>
+        </Panel>
       </FormContent>
     </SettingsPageShell>
   );

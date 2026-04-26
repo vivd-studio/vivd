@@ -267,7 +267,11 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   }
 
   private get runtimeRoutesDir(): string {
-    return process.env.CADDY_RUNTIME_ROUTES_DIR?.trim() || soloSelfHostDefaults.caddyRuntimeRoutesDir;
+    return (
+      process.env.CADDY_PLATFORM_RUNTIME_ROUTES_DIR?.trim() ||
+      process.env.CADDY_RUNTIME_ROUTES_DIR?.trim() ||
+      soloSelfHostDefaults.caddyRuntimeRoutesDir
+    );
   }
 
   private get routePrefix(): string {
@@ -283,12 +287,17 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
   private getCompatibilityRouteTargetBaseUrl(port: number): string {
     try {
-      const rawCaddyAdminUrl = process.env.CADDY_ADMIN_URL?.trim();
+      const rawCaddyAdminUrl =
+        process.env.CADDY_PLATFORM_ADMIN_URL?.trim() ||
+        process.env.CADDY_ADMIN_URL?.trim();
       if (!rawCaddyAdminUrl) {
         return this.getInternalUrl(port);
       }
       const caddyAdminUrl = new URL(rawCaddyAdminUrl);
-      if (caddyAdminUrl.hostname === "caddy") {
+      if (
+        caddyAdminUrl.hostname === "caddy" ||
+        caddyAdminUrl.hostname === "caddy-platform"
+      ) {
         return `http://backend:${port}`;
       }
     } catch {

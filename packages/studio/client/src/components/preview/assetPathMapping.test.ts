@@ -17,9 +17,7 @@ describe("toAstroRuntimeAssetPath", () => {
     ).toBe("/images/legacy-logo.png");
   });
 
-  it("leaves non-managed paths unchanged", () => {
-    expect(toAstroRuntimeAssetPath("images/manual.png", "/images/old.png")).toBe(
-      "/images/manual.png",
-    );
+  it("refuses to invent Astro runtime URLs for non-public asset paths", () => {
+    expect(toAstroRuntimeAssetPath("images/manual.png", "/images/old.png")).toBeNull();
   });
 });

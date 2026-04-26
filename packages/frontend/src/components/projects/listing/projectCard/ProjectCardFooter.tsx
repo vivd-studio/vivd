@@ -1,5 +1,12 @@
 import { Plug } from "lucide-react";
-import { Button, CardFooter, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
+import {
+  Button,
+  PanelFooter,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@vivd/ui";
 
 import { getProjectPluginPresentation } from "@/plugins/presentation";
 
@@ -21,7 +28,7 @@ export function ProjectCardFooter({
   onOpenPlugin,
 }: ProjectCardFooterProps) {
   return (
-    <CardFooter className="pt-2.5 pb-3 px-4 flex items-center justify-end gap-1 border-t border-border/30 mt-auto">
+    <PanelFooter separated className="mt-auto justify-end gap-1 px-4 pb-3 pt-3">
       <TooltipProvider delayDuration={100}>
         {enabledPluginEntries.map((plugin) => {
           const PluginIcon = plugin.icon;
@@ -71,6 +78,6 @@ export function ProjectCardFooter({
           <TooltipContent side="top">Plugins</TooltipContent>
         </Tooltip>
       </TooltipProvider>
-    </CardFooter>
+    </PanelFooter>
   );
 }

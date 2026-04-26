@@ -1,12 +1,17 @@
 import { useEffect, useCallback, type RefObject } from "react";
 import { toast } from "sonner";
 import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
+import { getPreviewImageBaselineSource } from "./imageDropHeuristics";
 
 interface UseImageDropZoneOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   projectSlug?: string;
   version?: number;
   enabled?: boolean;
+  getDropSupport?: (
+    targetImg: HTMLImageElement,
+    assetPath?: string | null,
+  ) => { canDrop: boolean; reason?: string };
   onImageDropped?: (
     imagePath: string,
     targetImg: HTMLImageElement,
@@ -68,6 +73,7 @@ export function useImageDropZone({
   projectSlug,
   version,
   enabled = true,
+  getDropSupport,
   onImageDropped,
 }: UseImageDropZoneOptions) {
   // Build the image URL for preview display
@@ -86,7 +92,7 @@ export function useImageDropZone({
 
   // Set up drop zones on all images in the iframe
   const enableDropZones = useCallback(
-    (doc: Document) => {
+    (doc: Document, draggedAssetPath?: string | null) => {
       // Add drop zone styles if not already present
       if (!doc.getElementById("image-drop-zone-styles")) {
         const style = doc.createElement("style");
@@ -100,11 +106,24 @@ export function useImageDropZone({
 
       const images = doc.querySelectorAll("img");
       images.forEach((img) => {
+        const dropSupport = getDropSupport?.(img, draggedAssetPath) ?? {
+          canDrop: true,
+        };
+        if (!dropSupport.canDrop) {
+          return;
+        }
+
         // Mark as drop target
         img.setAttribute("data-drop-target", "true");
         // Store original src for potential revert
         if (!img.hasAttribute("data-original-src")) {
           img.setAttribute("data-original-src", img.src);
+        }
+        if (!img.hasAttribute("data-original-srcset")) {
+          const originalSrcset = img.getAttribute("srcset");
+          if (originalSrcset) {
+            img.setAttribute("data-original-srcset", originalSrcset);
+          }
         }
 
         // Prevent default image dragging
@@ -133,10 +152,38 @@ export function useImageDropZone({
           const assetPath = e.dataTransfer?.getData("application/x-asset-path");
 
           if (assetPath) {
+            const currentDropSupport = getDropSupport?.(img, assetPath) ?? {
+              canDrop: true,
+            };
+            if (!currentDropSupport.canDrop) {
+              toast.error(
+                currentDropSupport.reason ??
+                  "Vivd can't save this preview image drop safely yet.",
+              );
+              return;
+            }
+
             // Update the image source to the new asset for preview display
             const previewUrl = buildImagePreviewUrl(assetPath);
-            const previousSrcAttr = img.getAttribute("src");
+            const previousSrcAttr = getPreviewImageBaselineSource(img);
             img.setAttribute("src", previewUrl);
+            if (img.hasAttribute("srcset")) {
+              img.setAttribute("srcset", previewUrl);
+            }
+            const picture = img.closest("picture");
+            if (picture) {
+              picture.querySelectorAll("source").forEach((source) => {
+                if (!source.hasAttribute("data-original-srcset")) {
+                  const originalSrcset = source.getAttribute("srcset");
+                  if (originalSrcset) {
+                    source.setAttribute("data-original-srcset", originalSrcset);
+                  }
+                }
+                if (source.hasAttribute("srcset")) {
+                  source.setAttribute("srcset", previewUrl);
+                }
+              });
+            }
 
             toast.success(`Image replaced with ${assetPath.split("/").pop()}`);
 
@@ -159,7 +206,7 @@ export function useImageDropZone({
         img.addEventListener("drop", handleDrop);
       });
     },
-    [buildImagePreviewUrl, onImageDropped]
+    [buildImagePreviewUrl, getDropSupport, onImageDropped],
   );
 
   // Remove drop zones from all images
@@ -192,6 +239,16 @@ export function useImageDropZone({
     if (!enabled || !projectSlug) return;
 
     let isDragging = false;
+    let draggedAssetPath: string | null = null;
+
+    const readDraggedAssetPath = (e: DragEvent) => {
+      const assetPath =
+        e.dataTransfer?.getData("application/x-asset-path") ??
+        e.dataTransfer?.getData("text/plain") ??
+        "";
+      const normalized = assetPath.trim();
+      return normalized.length > 0 ? normalized : null;
+    };
 
     const handleDragStart = (e: DragEvent) => {
       // Check if this drag contains our asset data (from Asset Explorer)
@@ -203,17 +260,19 @@ export function useImageDropZone({
       if (!hasData) return;
 
       isDragging = true;
+      draggedAssetPath = readDraggedAssetPath(e);
 
       // Enable drop zones in the iframe
       const iframe = iframeRef.current;
       if (iframe?.contentDocument) {
-        enableDropZones(iframe.contentDocument);
+        enableDropZones(iframe.contentDocument, draggedAssetPath);
       }
     };
 
     const handleDragEnd = () => {
       if (!isDragging) return;
       isDragging = false;
+      draggedAssetPath = null;
 
       // Disable drop zones in the iframe
       const iframe = iframeRef.current;
@@ -233,9 +292,10 @@ export function useImageDropZone({
       if (!hasAssetData) return;
 
       isDragging = true;
+      draggedAssetPath = readDraggedAssetPath(e);
       const iframe = iframeRef.current;
       if (iframe?.contentDocument) {
-        enableDropZones(iframe.contentDocument);
+        enableDropZones(iframe.contentDocument, draggedAssetPath);
       }
     };
 

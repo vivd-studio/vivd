@@ -1,7 +1,7 @@
 # Public vs Platform Surface Split Plan
 
-Status: Proposed  
-Last updated: 2026-04-16
+Status: In Progress  
+Last updated: 2026-04-23
 
 ## Goal
 
@@ -196,6 +196,12 @@ Use the new surface classifier to enforce stricter limits on:
 - public ingest endpoints.
 
 ## Phase 2: Promote to Two Caddy Services if Needed
+
+Implementation note:
+
+- the default hosted/platform Docker stack stays on one `caddy` service while Dokploy/Traefik still routes everything through one upstream,
+- backend publish/runtime code can already route reloads to public or platform Caddy targets when separate admin/config envs are provided,
+- two Caddy services should be introduced later through explicit deployment wiring rather than as the default Compose shape.
 
 Only do this after phase 1 proves that:
 

@@ -3,8 +3,25 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
-import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@vivd/ui";
+import {
+  SettingsPageShell,
+  FormContent,
+} from "@/components/settings/SettingsPageShell";
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+  StatTileLabel,
+  StatTileValue,
+  StatusPill,
+} from "@vivd/ui";
 
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
@@ -16,14 +33,15 @@ import {
   isPluginAccessRequestPending,
 } from "@/plugins/presentation";
 
-type ProjectPluginCatalogItem = RouterOutputs["plugins"]["catalog"]["plugins"][number];
+type ProjectPluginCatalogItem =
+  RouterOutputs["plugins"]["catalog"]["plugins"][number];
 
-function getPluginInstallBadgeVariant(
+function getPluginInstallTone(
   state: ProjectPluginCatalogItem["installState"],
-): "success" | "secondary" | "outline" {
+): "success" | "warn" | "neutral" {
   if (state === "enabled") return "success";
-  if (state === "available") return "outline";
-  return "secondary";
+  if (state === "suspended") return "warn";
+  return "neutral";
 }
 
 function getPluginInstallBadgeLabel(
@@ -85,7 +103,8 @@ export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const utils = trpc.useUtils();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } =
+    authClient.useSession();
   const isEmbedded = useMemo(
     () => new URLSearchParams(location.search).get("embedded") === "1",
     [location.search],
@@ -126,13 +145,20 @@ export default function ProjectPlugins() {
   });
 
   const projectTitle =
-    projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
+    projectListQuery.data?.projects?.find((project) => project.slug === slug)
+      ?.title ?? slug;
   const canManageProjectPlugins = session?.user?.role === "super_admin";
   const canRequestPluginAccess =
-    !isSessionPending && !canManageProjectPlugins && Boolean(config.supportEmail);
+    !isSessionPending &&
+    !canManageProjectPlugins &&
+    Boolean(config.supportEmail);
   const plugins = catalogQuery.data?.plugins ?? [];
-  const enabledCount = plugins.filter((plugin) => plugin.installState === "enabled").length;
-  const availableCount = plugins.filter((plugin) => plugin.installState === "available").length;
+  const enabledCount = plugins.filter(
+    (plugin) => plugin.installState === "enabled",
+  ).length;
+  const availableCount = plugins.filter(
+    (plugin) => plugin.installState === "available",
+  ).length;
   const attentionCount = plugins.filter(
     (plugin) =>
       plugin.installState === "disabled" || plugin.installState === "suspended",
@@ -141,7 +167,9 @@ export default function ProjectPlugins() {
     () =>
       plugins
         .filter((plugin) => plugin.installState === "enabled")
-        .map((plugin) => getProjectPluginPresentation(plugin.pluginId, projectSlug)),
+        .map((plugin) =>
+          getProjectPluginPresentation(plugin.pluginId, projectSlug),
+        ),
     [plugins, projectSlug],
   );
   const latestPluginUpdate = useMemo(() => {
@@ -161,7 +189,9 @@ export default function ProjectPlugins() {
           key: "enabled",
           title: "Enabled",
           description: "Ready to open for this project.",
-          plugins: plugins.filter((plugin) => plugin.installState === "enabled"),
+          plugins: plugins.filter(
+            (plugin) => plugin.installState === "enabled",
+          ),
         },
         {
           key: "available",
@@ -171,7 +201,9 @@ export default function ProjectPlugins() {
             : canManageProjectPlugins
               ? "Available in this instance and waiting for project activation."
               : "Available in this instance. A super-admin can enable them for this project.",
-          plugins: plugins.filter((plugin) => plugin.installState === "available"),
+          plugins: plugins.filter(
+            (plugin) => plugin.installState === "available",
+          ),
         },
         {
           key: "attention",
@@ -179,7 +211,8 @@ export default function ProjectPlugins() {
           description: "Disabled or suspended plugins for this project.",
           plugins: plugins.filter(
             (plugin) =>
-              plugin.installState === "disabled" || plugin.installState === "suspended",
+              plugin.installState === "disabled" ||
+              plugin.installState === "suspended",
           ),
         },
       ].filter((section) => section.plugins.length > 0),
@@ -195,7 +228,9 @@ export default function ProjectPlugins() {
   }, [projectSlug, projectTitle]);
 
   if (!projectSlug) {
-    return <div className="text-sm text-muted-foreground">Missing project slug.</div>;
+    return (
+      <div className="text-sm text-muted-foreground">Missing project slug.</div>
+    );
   }
 
   return (
@@ -203,9 +238,7 @@ export default function ProjectPlugins() {
       title="Plugins"
       description={`Configure runtime plugins for ${projectSlug}.`}
       className={
-        isEmbedded
-          ? "w-full max-w-4xl px-4 py-4 sm:px-6"
-          : "w-full max-w-4xl"
+        isEmbedded ? "w-full max-w-4xl px-4 py-4 sm:px-6" : "w-full max-w-4xl"
       }
       actions={
         <div className="flex items-center gap-2">
@@ -217,7 +250,10 @@ export default function ProjectPlugins() {
           <Button
             variant="outline"
             onClick={() => {
-              void Promise.all([catalogQuery.refetch(), projectListQuery.refetch()]);
+              void Promise.all([
+                catalogQuery.refetch(),
+                projectListQuery.refetch(),
+              ]);
             }}
             disabled={catalogQuery.isLoading}
           >
@@ -230,63 +266,85 @@ export default function ProjectPlugins() {
       <FormContent className="max-w-none">
         <div className="space-y-6">
           {catalogQuery.error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load plugin catalog: {catalogQuery.error.message}
-            </div>
+            <Callout tone="danger">
+              <CalloutTitle>Failed to load plugin catalog</CalloutTitle>
+              <CalloutDescription>
+                {catalogQuery.error.message}
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
-          <Card className="shadow-none">
-            <CardHeader className="pb-4">
-              <CardTitle>Overview</CardTitle>
-              <CardDescription>
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Overview</PanelTitle>
+              <PanelDescription>
                 Plugins are managed per project. Open any row to review
                 configuration, snippets, and plugin-specific activity.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border px-4 py-3">
-                <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              </PanelDescription>
+            </PanelHeader>
+            <PanelContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[
+                  { label: "Enabled", value: enabledCount },
+                  { label: "Ready to enable", value: availableCount },
+                  { label: "Not active", value: attentionCount },
+                ].map((stat) => (
+                  <StatTile key={stat.label}>
+                    <StatTileLabel>{stat.label}</StatTileLabel>
+                    <StatTileValue>{stat.value}</StatTileValue>
+                  </StatTile>
+                ))}
+              </div>
+              <Panel tone="sunken" className="p-4">
+                <dl className="grid gap-4 text-sm sm:grid-cols-3">
                   {[
-                    { label: "Enabled", value: enabledCount },
-                    { label: "Ready to enable", value: availableCount },
-                    { label: "Not active", value: attentionCount },
-                  ].map((stat) => (
-                    <div key={stat.label} className="flex items-baseline gap-2">
-                      <dt className="text-muted-foreground">{stat.label}</dt>
-                      <dd className="font-medium text-foreground">{stat.value}</dd>
+                    { label: "Project", value: projectTitle },
+                    {
+                      label: "Latest change",
+                      value: latestPluginUpdate
+                        ? formatPluginTimestamp(latestPluginUpdate)
+                        : "No runtime plugin changes recorded yet.",
+                    },
+                    {
+                      label: "Scope",
+                      value: "Plugin activation is scoped to this project.",
+                    },
+                  ].map((item) => (
+                    <div key={item.label} className="space-y-1">
+                      <dt className="text-xs text-muted-foreground">
+                        {item.label}
+                      </dt>
+                      <dd className="font-medium text-foreground">
+                        {item.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
-              </div>
-              <dl className="grid gap-4 rounded-lg border px-4 py-4 text-sm sm:grid-cols-3">
-                {[
-                  { label: "Project", value: projectTitle },
-                  {
-                    label: "Latest change",
-                    value: latestPluginUpdate
-                      ? formatPluginTimestamp(latestPluginUpdate)
-                      : "No runtime plugin changes recorded yet.",
-                  },
-                  {
-                    label: "Scope",
-                    value: "Plugin activation is scoped to this project.",
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="space-y-1">
-                    <dt className="text-xs text-muted-foreground">{item.label}</dt>
-                    <dd className="font-medium text-foreground">{item.value}</dd>
-                  </div>
-                ))}
-              </dl>
+              </Panel>
               {enabledPluginEntries.length > 0 ? (
-                <div className="rounded-lg border px-4 py-4">
+                <Panel tone="sunken" className="p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Enabled plugins</span>
+                    <span className="text-sm text-muted-foreground">
+                      Enabled plugins
+                    </span>
                     {enabledPluginEntries.map((plugin) => {
                       const PluginIcon = plugin.icon;
                       return (
-                        <Button key={plugin.pluginId} variant="outline" size="sm" asChild>
-                          <Link to={plugin.path ?? ROUTES.PROJECT_PLUGIN(projectSlug, plugin.pluginId)}>
+                        <Button
+                          key={plugin.pluginId}
+                          variant="outline"
+                          size="sm"
+                          asChild
+                        >
+                          <Link
+                            to={
+                              plugin.path ??
+                              ROUTES.PROJECT_PLUGIN(
+                                projectSlug,
+                                plugin.pluginId,
+                              )
+                            }
+                          >
                             <PluginIcon className="mr-1.5 h-4 w-4" />
                             {plugin.title}
                           </Link>
@@ -294,17 +352,17 @@ export default function ProjectPlugins() {
                       );
                     })}
                   </div>
-                </div>
+                </Panel>
               ) : null}
-            </CardContent>
-          </Card>
+            </PanelContent>
+          </Panel>
 
           {plugins.length === 0 ? (
-            <Card className="border-dashed border-border/60 bg-card/45 shadow-none">
-              <CardContent className="p-8 text-sm text-muted-foreground">
+            <Panel tone="dashed">
+              <PanelContent className="p-8 text-sm text-muted-foreground">
                 No runtime plugins are available for this project yet.
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
           ) : null}
 
           {pluginSections.map((section) => (
@@ -315,10 +373,15 @@ export default function ProjectPlugins() {
             >
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">
-                  <h2 id={`${section.key}-plugins-heading`} className="text-base font-semibold">
+                  <h2
+                    id={`${section.key}-plugins-heading`}
+                    className="text-base font-semibold"
+                  >
                     {section.title}
                   </h2>
-                  <p className="text-sm text-muted-foreground">{section.description}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {section.description}
+                  </p>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {formatPluginCount(section.plugins.length)}
@@ -334,54 +397,69 @@ export default function ProjectPlugins() {
                   const routePath =
                     pluginPresentation.path ??
                     ROUTES.PROJECT_PLUGIN(projectSlug, plugin.pluginId);
-                  const detailLink = isEmbedded ? `${routePath}?embedded=1` : routePath;
+                  const detailLink = isEmbedded
+                    ? `${routePath}?embedded=1`
+                    : routePath;
                   const isEnablePending =
                     genericEnsureMutation.isPending &&
-                    genericEnsureMutation.variables?.pluginId === plugin.pluginId;
-                  const isRequestPending = isPluginAccessRequestPending(plugin.accessRequest);
+                    genericEnsureMutation.variables?.pluginId ===
+                      plugin.pluginId;
+                  const isRequestPending = isPluginAccessRequestPending(
+                    plugin.accessRequest,
+                  );
                   const isRequestSending =
                     requestAccessMutation.isPending &&
-                    requestAccessMutation.variables?.pluginId === plugin.pluginId;
-                  const formattedUpdatedAt = formatPluginTimestamp(plugin.updatedAt);
+                    requestAccessMutation.variables?.pluginId ===
+                      plugin.pluginId;
+                  const formattedUpdatedAt = formatPluginTimestamp(
+                    plugin.updatedAt,
+                  );
                   const PluginIcon = pluginPresentation.icon;
 
                   return (
-                    <Card
+                    <Panel
                       key={plugin.pluginId}
-                      className="relative overflow-hidden border-border/80 shadow-none transition-colors hover:bg-accent/20"
+                      className="relative overflow-hidden border-border/80 transition-colors hover:bg-surface-sunken"
                     >
                       <Link
                         to={detailLink}
                         aria-label={`${plugin.catalog.name} details`}
                         className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       />
-                      <CardContent className="pointer-events-none relative z-10 grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <PanelContent className="pointer-events-none relative z-10 grid gap-4 pt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div className="min-w-0 space-y-3">
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="flex items-center gap-2 font-medium">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-md border bg-surface-sunken text-muted-foreground">
                                   <PluginIcon className="h-4 w-4" />
                                 </span>
                                 <span>{plugin.catalog.name}</span>
                               </div>
-                              <Badge
-                                variant={getPluginInstallBadgeVariant(plugin.installState)}
+                              <StatusPill
+                                tone={getPluginInstallTone(plugin.installState)}
                                 className="shrink-0"
                               >
-                                {getPluginInstallBadgeLabel(plugin.installState)}
-                              </Badge>
+                                {getPluginInstallBadgeLabel(
+                                  plugin.installState,
+                                )}
+                              </StatusPill>
                             </div>
                             <p className="text-sm text-muted-foreground">
                               {plugin.catalog.description}
                             </p>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {getPluginStatusCopy(plugin, canManageProjectPlugins)}
+                            {getPluginStatusCopy(
+                              plugin,
+                              canManageProjectPlugins,
+                            )}
                           </p>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             {plugin.instanceId ? (
-                              <span>Instance {plugin.instanceStatus ?? "unknown"}</span>
+                              <span>
+                                Instance {plugin.instanceStatus ?? "unknown"}
+                              </span>
                             ) : null}
                             {formattedUpdatedAt ? (
                               <span>Updated {formattedUpdatedAt}</span>
@@ -393,7 +471,8 @@ export default function ProjectPlugins() {
                         </div>
 
                         <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end sm:justify-start">
-                          {plugin.installState !== "enabled" && canManageProjectPlugins ? (
+                          {plugin.installState !== "enabled" &&
+                          canManageProjectPlugins ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -416,7 +495,8 @@ export default function ProjectPlugins() {
                               )}
                             </Button>
                           ) : null}
-                          {plugin.installState !== "enabled" && canRequestPluginAccess ? (
+                          {plugin.installState !== "enabled" &&
+                          canRequestPluginAccess ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -435,18 +515,25 @@ export default function ProjectPlugins() {
                                   Sending...
                                 </>
                               ) : (
-                                getPluginAccessRequestLabel(plugin.accessRequest)
+                                getPluginAccessRequestLabel(
+                                  plugin.accessRequest,
+                                )
                               )}
                             </Button>
                           ) : null}
 
                           <div className="hidden items-center gap-1 text-sm text-muted-foreground sm:flex">
-                            <span>{getPluginCardLinkLabel(plugin, pluginPresentation.openLabel)}</span>
+                            <span>
+                              {getPluginCardLinkLabel(
+                                plugin,
+                                pluginPresentation.openLabel,
+                              )}
+                            </span>
                             <ChevronRight className="h-4 w-4" />
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </PanelContent>
+                    </Panel>
                   );
                 })}
               </div>

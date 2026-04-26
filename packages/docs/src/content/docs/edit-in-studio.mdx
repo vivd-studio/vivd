@@ -31,6 +31,12 @@ dev server from the isolated runtime. For static projects, it serves the workspa
 directly. In both cases, the Studio preview is the current project state, not a separate
 render-only mock view.
 
+Preview image replacement stays intentionally conservative: plain static images work best,
+while dev-server projects currently support CMS-bound or source-backed Astro images plus
+local image assets under `src/content/**` or `public/` paths; `src/content/media/` remains
+the preferred managed root, and more complex responsive image markup is still better handled
+through the agent or direct source edits when Studio cannot resolve it safely.
+
 ## Choose the right editing mode
 
 <CardGrid>

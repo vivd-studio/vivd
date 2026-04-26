@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@vivd/ui";
+import { Panel, PanelContent, PanelHeader, PanelTitle } from "@vivd/ui";
 import type { NewsletterPluginInfo } from "./types";
 
 export function NewsletterInstallCard({
@@ -7,25 +7,29 @@ export function NewsletterInstallCard({
   pluginInfo: NewsletterPluginInfo;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Install</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Panel>
+      <PanelHeader>
+        <PanelTitle>Install</PanelTitle>
+      </PanelHeader>
+      <PanelContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <p className="mb-2 text-sm font-medium">HTML</p>
-            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-              {pluginInfo?.snippets?.html ||
-                "Enable the plugin to generate a snippet."}
-            </pre>
+            <Panel tone="sunken" className="overflow-auto p-3">
+              <pre className="text-xs whitespace-pre-wrap">
+                {pluginInfo?.snippets?.html ||
+                  "Enable the plugin to generate a snippet."}
+              </pre>
+            </Panel>
           </div>
           <div>
             <p className="mb-2 text-sm font-medium">Astro</p>
-            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-              {pluginInfo?.snippets?.astro ||
-                "Enable the plugin to generate a snippet."}
-            </pre>
+            <Panel tone="sunken" className="overflow-auto p-3">
+              <pre className="text-xs whitespace-pre-wrap">
+                {pluginInfo?.snippets?.astro ||
+                  "Enable the plugin to generate a snippet."}
+              </pre>
+            </Panel>
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -48,7 +52,7 @@ export function NewsletterInstallCard({
             </p>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

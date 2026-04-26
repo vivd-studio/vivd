@@ -14,8 +14,44 @@ import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, Input, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
-
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Input,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  PasswordInput,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  StatusPill,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@vivd/ui";
 
 const inviteMemberSchema = z
   .object({
@@ -37,7 +73,9 @@ const inviteMemberSchema = z
 const resetMemberPasswordSchema = z
   .object({
     newPassword: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z
+      .string()
+      .min(8, "Password must be at least 8 characters"),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords don't match",
@@ -93,6 +131,21 @@ function formatInviteState(state: string): string {
   }
 }
 
+function getInviteStateTone(
+  state: string,
+): "info" | "success" | "warn" | "neutral" {
+  switch (state) {
+    case "pending":
+      return "info";
+    case "accepted":
+      return "success";
+    case "expired":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}
+
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -107,9 +160,9 @@ export function TeamSettings() {
   const { data: session } = authClient.useSession();
   const utils = trpc.useUtils();
   const [isAdding, setIsAdding] = useState(false);
-  const [memberEdits, setMemberEdits] = useState<Record<string, MemberEditState>>(
-    {},
-  );
+  const [memberEdits, setMemberEdits] = useState<
+    Record<string, MemberEditState>
+  >({});
   const [passwordResetTarget, setPasswordResetTarget] =
     useState<PasswordResetTarget | null>(null);
 
@@ -180,33 +233,39 @@ export function TeamSettings() {
     },
   });
 
-  const resendInvitationMutation = trpc.organization.resendInvitation.useMutation({
-    onSuccess: async (data) => {
-      toast.success(
-        data.deliveryAccepted ? "Invitation resent" : "Invitation refreshed",
-        data.deliveryAccepted
-          ? undefined
-          : {
-              description:
-                "The invite was refreshed, but email delivery was not confirmed. Try again after checking email configuration.",
-            },
-      );
-      await utils.organization.listInvitations.invalidate();
-    },
-    onError: (error) => {
-      toast.error("Failed to resend invitation", { description: error.message });
-    },
-  });
+  const resendInvitationMutation =
+    trpc.organization.resendInvitation.useMutation({
+      onSuccess: async (data) => {
+        toast.success(
+          data.deliveryAccepted ? "Invitation resent" : "Invitation refreshed",
+          data.deliveryAccepted
+            ? undefined
+            : {
+                description:
+                  "The invite was refreshed, but email delivery was not confirmed. Try again after checking email configuration.",
+              },
+        );
+        await utils.organization.listInvitations.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to resend invitation", {
+          description: error.message,
+        });
+      },
+    });
 
-  const cancelInvitationMutation = trpc.organization.cancelInvitation.useMutation({
-    onSuccess: async () => {
-      toast.success("Invitation canceled");
-      await utils.organization.listInvitations.invalidate();
-    },
-    onError: (error) => {
-      toast.error("Failed to cancel invitation", { description: error.message });
-    },
-  });
+  const cancelInvitationMutation =
+    trpc.organization.cancelInvitation.useMutation({
+      onSuccess: async () => {
+        toast.success("Invitation canceled");
+        await utils.organization.listInvitations.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to cancel invitation", {
+          description: error.message,
+        });
+      },
+    });
 
   const removeMemberMutation = trpc.organization.removeMember.useMutation({
     onSuccess: async () => {
@@ -218,26 +277,28 @@ export function TeamSettings() {
     },
   });
 
-  const updateMemberRoleMutation = trpc.organization.updateMemberRole.useMutation({
-    onSuccess: async () => {
-      toast.success("Member updated");
-      await utils.organization.listMembers.invalidate();
-    },
-    onError: (error) => {
-      toast.error("Failed to update member", { description: error.message });
-    },
-  });
+  const updateMemberRoleMutation =
+    trpc.organization.updateMemberRole.useMutation({
+      onSuccess: async () => {
+        toast.success("Member updated");
+        await utils.organization.listMembers.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to update member", { description: error.message });
+      },
+    });
 
-  const resetMemberPasswordMutation = trpc.organization.resetMemberPassword.useMutation({
-    onSuccess: () => {
-      toast.success("Password reset");
-      resetPasswordForm.reset();
-      setPasswordResetTarget(null);
-    },
-    onError: (error) => {
-      toast.error("Failed to reset password", { description: error.message });
-    },
-  });
+  const resetMemberPasswordMutation =
+    trpc.organization.resetMemberPassword.useMutation({
+      onSuccess: () => {
+        toast.success("Password reset");
+        resetPasswordForm.reset();
+        setPasswordResetTarget(null);
+      },
+      onError: (error) => {
+        toast.error("Failed to reset password", { description: error.message });
+      },
+    });
 
   const closePasswordResetDialog = () => {
     setPasswordResetTarget(null);
@@ -247,180 +308,217 @@ export function TeamSettings() {
   if (!isOrgAdmin) return null;
 
   return (
-    <Card>
-      <CardHeader>
+    <Panel>
+      <PanelHeader>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <CardTitle>Team</CardTitle>
-            <CardDescription>
+            <PanelTitle>Team</PanelTitle>
+            <PanelDescription>
               Invite members to your organization and track pending invites.
-            </CardDescription>
+            </PanelDescription>
           </div>
-          <Button onClick={() => setIsAdding((value) => !value)} className="gap-2">
+          <Button
+            onClick={() => setIsAdding((value) => !value)}
+            className="gap-2"
+          >
             <UserPlus className="h-4 w-4" />
             {isAdding ? "Close" : "Invite member"}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+      </PanelHeader>
+      <PanelContent className="space-y-6">
         {isAdding ? (
           <Form {...inviteForm}>
-            <form
-              onSubmit={inviteForm.handleSubmit((values) =>
-                inviteMemberMutation.mutate({
-                  email: values.email,
-                  name: values.name?.trim() || undefined,
-                  role: values.role,
-                  projectSlug:
-                    values.role === "client_editor" ? values.projectSlug : undefined,
-                }),
-              )}
-              className="space-y-4 rounded-lg border bg-card p-4"
-            >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <FormField
-                  control={inviteForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="jane@example.com" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The invite email lets them create an account or sign in with an
-                        existing one.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+            <Panel tone="sunken">
+              <PanelContent className="p-4">
+                <form
+                  onSubmit={inviteForm.handleSubmit((values) =>
+                    inviteMemberMutation.mutate({
+                      email: values.email,
+                      name: values.name?.trim() || undefined,
+                      role: values.role,
+                      projectSlug:
+                        values.role === "client_editor"
+                          ? values.projectSlug
+                          : undefined,
+                    }),
                   )}
-                />
-                <FormField
-                  control={inviteForm.control}
-                  name="role"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a role" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="member">User</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="client_editor">Client Editor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={inviteForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jane Doe" {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormDescription>
-                        Optional. Used as the greeting in the invite email.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {selectedRole === "client_editor" ? (
-                  <FormField
-                    control={inviteForm.control}
-                    name="projectSlug"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assigned Project</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a project" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {projects.map((project) => (
-                              <SelectItem key={project.slug} value={project.slug}>
-                                {project.title || project.slug}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                    Invitees will land in the organization workspace after they accept.
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setIsAdding(false)}
+                  className="space-y-4"
                 >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={inviteMemberMutation.isPending}>
-                  {inviteMemberMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Send invite
-                </Button>
-              </div>
-            </form>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <FormField
+                      control={inviteForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="email"
+                              placeholder="jane@example.com"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            The invite email lets them create an account or sign
+                            in with an existing one.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={inviteForm.control}
+                      name="role"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Role</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a role" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="member">User</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="client_editor">
+                                Client Editor
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={inviteForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Jane Doe"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Optional. Used as the greeting in the invite email.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {selectedRole === "client_editor" ? (
+                      <FormField
+                        control={inviteForm.control}
+                        name="projectSlug"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Assigned Project</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a project" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {projects.map((project) => (
+                                  <SelectItem
+                                    key={project.slug}
+                                    value={project.slug}
+                                  >
+                                    {project.title || project.slug}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : (
+                      <Panel
+                        tone="dashed"
+                        className="px-4 py-3 text-sm text-muted-foreground"
+                      >
+                        Invitees will land in the organization workspace after
+                        they accept.
+                      </Panel>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setIsAdding(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={inviteMemberMutation.isPending}
+                    >
+                      {inviteMemberMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Send invite
+                    </Button>
+                  </div>
+                </form>
+              </PanelContent>
+            </Panel>
           </Form>
         ) : null}
 
-        <section className="space-y-3">
-          <div className="space-y-1">
-            <h3 className="text-sm font-medium">Pending invites</h3>
-            <p className="text-sm text-muted-foreground">
+        <Panel tone="sunken" className="overflow-hidden">
+          <PanelHeader separated className="gap-1">
+            <PanelTitle className="text-sm">Pending invites</PanelTitle>
+            <PanelDescription>
               Invites stay here until the person accepts or you cancel them.
-            </p>
-          </div>
+            </PanelDescription>
+          </PanelHeader>
 
           {invitationsError ? (
-            <p className="text-sm text-destructive">
-              Failed to load invites: {invitationsError.message}
-            </p>
+            <div className="p-5 pt-0">
+              <Callout tone="danger" icon={<XCircle />}>
+                <CalloutTitle>Failed to load invites</CalloutTitle>
+                <CalloutDescription>
+                  {invitationsError.message}
+                </CalloutDescription>
+              </Callout>
+            </div>
           ) : isInvitationsLoading ? (
-            <LoadingSpinner message="Loading invites..." className="justify-start" />
+            <div className="p-5 pt-0">
+              <LoadingSpinner
+                message="Loading invites..."
+                className="justify-start"
+              />
+            </div>
           ) : (invitationsData?.invitations?.length ?? 0) > 0 ? (
-            <div className="rounded-lg border bg-card">
+            <div>
               {(invitationsData?.invitations ?? []).map((invitation, index) => (
                 <div
                   key={invitation.id}
                   className={`flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between ${
-                    index > 0 ? "border-t" : ""
+                    index > 0 ? "border-t border-border" : ""
                   }`}
                 >
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{invitation.email}</span>
-                      <Badge
-                        variant={
-                          invitation.state === "pending"
-                            ? "default"
-                            : invitation.state === "expired"
-                              ? "secondary"
-                              : "outline"
-                        }
-                      >
+                      <StatusPill tone={getInviteStateTone(invitation.state)}>
                         {formatInviteState(invitation.state)}
-                      </Badge>
+                      </StatusPill>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {formatRole(invitation.role)}
@@ -478,52 +576,54 @@ export function TeamSettings() {
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
-              No pending invites.
+            <div className="p-5 pt-0">
+              <Panel
+                tone="dashed"
+                className="px-4 py-6 text-sm text-muted-foreground"
+              >
+                No pending invites.
+              </Panel>
             </div>
           )}
-        </section>
+        </Panel>
 
-        <section className="space-y-3">
-          <div className="space-y-1">
-            <h3 className="text-sm font-medium">Members</h3>
-            <p className="text-sm text-muted-foreground">
-              Password reset stays available as a recovery path after someone joins.
-            </p>
-          </div>
+        <Panel tone="sunken" className="overflow-hidden">
+          <PanelHeader separated className="gap-1">
+            <PanelTitle className="text-sm">Members</PanelTitle>
+            <PanelDescription>
+              Password reset stays available as a recovery path after someone
+              joins.
+            </PanelDescription>
+          </PanelHeader>
 
           {membersError ? (
-            <p className="text-sm text-destructive">
-              Failed to load team: {membersError.message}
-            </p>
+            <div className="p-5 pt-0">
+              <Callout tone="danger" icon={<XCircle />}>
+                <CalloutTitle>Failed to load team</CalloutTitle>
+                <CalloutDescription>{membersError.message}</CalloutDescription>
+              </Callout>
+            </div>
           ) : isMembersLoading ? (
-            <LoadingSpinner message="Loading team..." className="justify-start" />
+            <div className="p-5 pt-0">
+              <LoadingSpinner
+                message="Loading team..."
+                className="justify-start"
+              />
+            </div>
           ) : (
-            <div className="relative w-full overflow-auto rounded-lg border bg-card">
-              <table className="w-full caption-bottom text-left text-sm">
-                <thead className="[&_tr]:border-b">
-                  <tr className="border-b">
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Email
-                    </th>
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Verified
-                    </th>
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Role
-                    </th>
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Assigned Project
-                    </th>
-                    <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:last-child]:border-0">
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Verified</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Assigned Project</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {(membersData?.members ?? []).map((member) => {
                     const isOwner = member.role === "owner";
                     const isSelf = member.userId === session?.user?.id;
@@ -539,36 +639,38 @@ export function TeamSettings() {
                           });
                     const hasRoleChanges = Boolean(
                       currentEdit &&
-                        (currentEdit.role !== member.role ||
-                          (currentEdit.role === "client_editor" &&
-                            currentEdit.projectSlug !==
-                              (member.assignedProjectSlug ?? ""))),
+                      (currentEdit.role !== member.role ||
+                        (currentEdit.role === "client_editor" &&
+                          currentEdit.projectSlug !==
+                            (member.assignedProjectSlug ?? ""))),
                     );
                     const canSaveRole = Boolean(
                       currentEdit &&
-                        !isOwner &&
-                        !isSelf &&
-                        hasRoleChanges &&
-                        (currentEdit.role !== "client_editor" ||
-                          Boolean(currentEdit.projectSlug)),
+                      !isOwner &&
+                      !isSelf &&
+                      hasRoleChanges &&
+                      (currentEdit.role !== "client_editor" ||
+                        Boolean(currentEdit.projectSlug)),
                     );
 
                     return (
-                      <tr key={member.id} className="border-b">
-                        <td className="p-4 align-middle font-medium">{member.user.name}</td>
-                        <td className="p-4 align-middle">{member.user.email}</td>
-                        <td className="p-4 align-middle">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                              member.user.emailVerified
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                            }`}
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">
+                          {member.user.name}
+                        </TableCell>
+                        <TableCell>{member.user.email}</TableCell>
+                        <TableCell>
+                          <StatusPill
+                            tone={
+                              member.user.emailVerified ? "success" : "warn"
+                            }
                           >
-                            {member.user.emailVerified ? "Verified" : "Unverified"}
-                          </span>
-                        </td>
-                        <td className="p-4 align-middle">
+                            {member.user.emailVerified
+                              ? "Verified"
+                              : "Unverified"}
+                          </StatusPill>
+                        </TableCell>
+                        <TableCell>
                           {isOwner || !currentEdit ? (
                             formatRole(member.role)
                           ) : (
@@ -590,12 +692,14 @@ export function TeamSettings() {
                               <SelectContent>
                                 <SelectItem value="member">User</SelectItem>
                                 <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="client_editor">Client Editor</SelectItem>
+                                <SelectItem value="client_editor">
+                                  Client Editor
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           )}
-                        </td>
-                        <td className="p-4 align-middle text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
                           {currentEdit?.role === "client_editor" ? (
                             <Select
                               value={currentEdit.projectSlug}
@@ -615,23 +719,29 @@ export function TeamSettings() {
                               </SelectTrigger>
                               <SelectContent>
                                 {projects.map((project) => (
-                                  <SelectItem key={project.slug} value={project.slug}>
+                                  <SelectItem
+                                    key={project.slug}
+                                    value={project.slug}
+                                  >
                                     {project.title || project.slug}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           ) : (
-                            member.assignedProjectSlug ?? "—"
+                            (member.assignedProjectSlug ?? "—")
                           )}
-                        </td>
-                        <td className="p-4 align-middle">
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              disabled={!canSaveRole || updateMemberRoleMutation.isPending}
+                              disabled={
+                                !canSaveRole ||
+                                updateMemberRoleMutation.isPending
+                              }
                               onClick={() => {
                                 if (!currentEdit) return;
                                 updateMemberRoleMutation.mutate({
@@ -670,7 +780,9 @@ export function TeamSettings() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              disabled={!canRemove || removeMemberMutation.isPending}
+                              disabled={
+                                !canRemove || removeMemberMutation.isPending
+                              }
                               aria-label={`Remove ${member.user.email}`}
                               onClick={() => {
                                 if (!canRemove) return;
@@ -681,21 +793,23 @@ export function TeamSettings() {
                                 ) {
                                   return;
                                 }
-                                removeMemberMutation.mutate({ userId: member.userId });
+                                removeMemberMutation.mutate({
+                                  userId: member.userId,
+                                });
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
-        </section>
+        </Panel>
 
         <Dialog
           open={!!passwordResetTarget}
@@ -707,7 +821,8 @@ export function TeamSettings() {
             <DialogHeader>
               <DialogTitle>Reset Password</DialogTitle>
               <DialogDescription>
-                Set a new password for {passwordResetTarget?.email ?? "this member"}.
+                Set a new password for{" "}
+                {passwordResetTarget?.email ?? "this member"}.
               </DialogDescription>
             </DialogHeader>
             <Form {...resetPasswordForm}>
@@ -770,7 +885,7 @@ export function TeamSettings() {
             </Form>
           </DialogContent>
         </Dialog>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

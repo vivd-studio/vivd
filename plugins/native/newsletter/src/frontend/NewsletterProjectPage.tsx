@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/plugins/host";
-import { Card, CardContent, CardHeader, CardTitle } from "@vivd/ui";
+import { Panel, PanelContent, PanelHeader, PanelTitle } from "@vivd/ui";
 import { trpc } from "@/plugins/host";
 import {
   ProjectPluginAccessActions,
@@ -720,13 +720,13 @@ function NewsletterAccessCard(props: {
   } = props;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Panel>
+      <PanelHeader>
+        <PanelTitle className="flex items-center gap-2">
           <span>Enable plugin</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </PanelTitle>
+      </PanelHeader>
+      <PanelContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Newsletter is entitled for this project but not enabled yet.
         </p>
@@ -746,7 +746,7 @@ function NewsletterAccessCard(props: {
             enableVariant="default"
           />
         </div>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

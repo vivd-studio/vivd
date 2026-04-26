@@ -156,4 +156,38 @@ const heroImage = "/images/hero-horse.webp";
       '<img src={vivdImageNewHero.src} alt="Legacy hero" />',
     );
   });
+
+  it("rewrites a plain img tag to use a nested src/content asset import", async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-astro-patch-"));
+    tempDirs.push(projectDir);
+    const filePath = path.join(projectDir, "src", "pages", "index.astro");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(
+      filePath,
+      `<section>
+  <img src="/images/legacy-hero.webp" alt="Legacy hero" />
+</section>
+`,
+      "utf8",
+    );
+
+    const result = applyAstroPatches(projectDir, [
+      {
+        type: "setAstroImage",
+        sourceFile: "src/pages/index.astro",
+        sourceLoc: "2:4",
+        assetPath: "src/content/posts/horse/hero.webp",
+        oldValue: "/images/legacy-hero.webp",
+      },
+    ]);
+
+    expect(result.applied).toBe(1);
+    expect(result.errors).toEqual([]);
+    await expect(fs.readFile(filePath, "utf8")).resolves.toContain(
+      'import vivdImageHero from "../content/posts/horse/hero.webp";',
+    );
+    await expect(fs.readFile(filePath, "utf8")).resolves.toContain(
+      '<img src={vivdImageHero.src} alt="Legacy hero" />',
+    );
+  });
 });

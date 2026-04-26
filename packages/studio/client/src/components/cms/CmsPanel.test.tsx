@@ -20,6 +20,7 @@ vi.mock("@/lib/trpc", () => ({
       scaffoldModel: { useMutation: () => mutationResult },
       createEntry: { useMutation: () => mutationResult },
       updateModel: { useMutation: () => mutationResult },
+      saveEntry: { useMutation: () => mutationResult },
       prepare: { useMutation: () => mutationResult },
     },
     assets: {

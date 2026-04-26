@@ -1,21 +1,43 @@
 import { RefreshCw } from "lucide-react";
 import {
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+  Field,
+  FieldLabel,
   Input,
-  Label,
+  Panel,
+  PanelContent,
+  PanelHeader,
+  PanelTitle,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  StatusPill,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@vivd/ui";
 import type { NewsletterSubscribers } from "./types";
 import { formatDate } from "./utils";
+
+function getSubscriberStatusTone(status: string) {
+  switch (status) {
+    case "confirmed":
+      return "success" as const;
+    case "pending":
+      return "warn" as const;
+    case "bounced":
+    case "complained":
+      return "danger" as const;
+    case "unsubscribed":
+    default:
+      return "neutral" as const;
+  }
+}
 
 export function NewsletterSubscribersCard(props: {
   projectSlug: string;
@@ -72,10 +94,10 @@ export function NewsletterSubscribersCard(props: {
   } = props;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4">
+    <Panel>
+      <PanelHeader className="flex flex-row items-center justify-between gap-4">
         <div>
-          <CardTitle>Subscribers</CardTitle>
+          <PanelTitle>Subscribers</PanelTitle>
           <p className="text-sm text-muted-foreground">
             Search, review, and export the current audience list.
           </p>
@@ -88,11 +110,11 @@ export function NewsletterSubscribersCard(props: {
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </PanelHeader>
+      <PanelContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-          <div className="space-y-2">
-            <Label>Status</Label>
+          <Field>
+            <FieldLabel>Status</FieldLabel>
             <Select
               value={subscriberStatus}
               onValueChange={(value) =>
@@ -119,33 +141,33 @@ export function NewsletterSubscribersCard(props: {
                 <SelectItem value="complained">Complained</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Search</Label>
+          </Field>
+          <Field>
+            <FieldLabel>Search</FieldLabel>
             <Input
               value={search}
               placeholder="Search email or name"
               onChange={(event) => onSearchChange(event.target.value)}
             />
-          </div>
+          </Field>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Subscriber</th>
-                <th className="px-3 py-2 text-left font-medium">Status</th>
-                <th className="px-3 py-2 text-left font-medium">Source</th>
-                <th className="px-3 py-2 text-left font-medium">Updated</th>
-                <th className="px-3 py-2 text-left font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Panel tone="sunken" className="overflow-x-auto p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Subscriber</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {subscribers?.rows.length ? (
                 subscribers.rows.map((row) => (
-                  <tr key={row.id} className="border-t">
-                    <td className="px-3 py-3 align-top">
+                  <TableRow key={row.id}>
+                    <TableCell className="align-top">
                       <div className="font-medium">{row.email}</div>
                       {row.name ? (
                         <div className="text-xs text-muted-foreground">
@@ -158,20 +180,22 @@ export function NewsletterSubscribersCard(props: {
                           {row.utmCampaign ? ` / ${row.utmCampaign}` : ""}
                         </div>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-3 align-top">
-                      <Badge variant="secondary">{row.status}</Badge>
-                    </td>
-                    <td className="px-3 py-3 align-top text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <StatusPill tone={getSubscriberStatusTone(row.status)}>
+                        {row.status}
+                      </StatusPill>
+                    </TableCell>
+                    <TableCell className="align-top text-muted-foreground">
                       <div>{row.sourceHost || "n/a"}</div>
                       {row.sourcePath ? (
                         <div className="text-xs">{row.sourcePath}</div>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-3 align-top text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="align-top text-muted-foreground">
                       {formatDate(row.updatedAt)}
-                    </td>
-                    <td className="px-3 py-3 align-top">
+                    </TableCell>
+                    <TableCell className="align-top">
                       <div className="flex flex-wrap gap-2">
                         {row.status === "pending" ? (
                           <>
@@ -204,24 +228,24 @@ export function NewsletterSubscribersCard(props: {
                           </Button>
                         ) : null}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={5}
-                    className="px-3 py-10 text-center text-sm text-muted-foreground"
+                    className="py-10 text-center text-sm text-muted-foreground"
                   >
                     {isLoading
                       ? "Loading subscribers..."
                       : "No subscribers found."}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Panel>
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
@@ -247,7 +271,7 @@ export function NewsletterSubscribersCard(props: {
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

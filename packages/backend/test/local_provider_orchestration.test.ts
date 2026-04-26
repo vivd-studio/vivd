@@ -24,6 +24,7 @@ const envSnapshot = {
   DOMAIN: process.env.DOMAIN,
   VIVD_INSTALL_PROFILE: process.env.VIVD_INSTALL_PROFILE,
   CADDY_ADMIN_URL: process.env.CADDY_ADMIN_URL,
+  CADDY_PLATFORM_ADMIN_URL: process.env.CADDY_PLATFORM_ADMIN_URL,
 };
 
 describe("LocalStudioMachineProvider orchestration", () => {
@@ -36,6 +37,7 @@ describe("LocalStudioMachineProvider orchestration", () => {
     delete process.env.DOMAIN;
     delete process.env.VIVD_INSTALL_PROFILE;
     delete process.env.CADDY_ADMIN_URL;
+    delete process.env.CADDY_PLATFORM_ADMIN_URL;
   });
 
   afterAll(() => {
@@ -47,6 +49,7 @@ describe("LocalStudioMachineProvider orchestration", () => {
     process.env.DOMAIN = envSnapshot.DOMAIN;
     process.env.VIVD_INSTALL_PROFILE = envSnapshot.VIVD_INSTALL_PROFILE;
     process.env.CADDY_ADMIN_URL = envSnapshot.CADDY_ADMIN_URL;
+    process.env.CADDY_PLATFORM_ADMIN_URL = envSnapshot.CADDY_PLATFORM_ADMIN_URL;
   });
 
   it("deduplicates concurrent ensureRunning calls for the same studio key", async () => {
@@ -184,7 +187,7 @@ describe("LocalStudioMachineProvider orchestration", () => {
 
   it("targets the backend service hostname for local compatibility routes inside the compose stack", async () => {
     process.env.VIVD_INSTALL_PROFILE = "solo";
-    process.env.CADDY_ADMIN_URL = "http://caddy:2019";
+    process.env.CADDY_PLATFORM_ADMIN_URL = "http://caddy-platform:2019";
 
     const provider = new LocalStudioMachineProvider();
     const routeService = (provider as any).routeService;

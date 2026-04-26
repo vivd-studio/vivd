@@ -44,7 +44,11 @@ function getPublishedDir(): string {
 }
 
 function getCaddySitesDir(): string {
-  return process.env.CADDY_SITES_DIR || soloSelfHostDefaults.caddySitesDir;
+  return (
+    process.env.CADDY_PUBLIC_SITES_DIR ||
+    process.env.CADDY_SITES_DIR ||
+    soloSelfHostDefaults.caddySitesDir
+  );
 }
 
 function getPrimaryHostInlineSiteDir(): string {
@@ -1229,7 +1233,7 @@ ${errorHandlerBlock}
   }
 
   private async reloadCaddy(): Promise<void> {
-    await reloadCaddyConfig();
+    await reloadCaddyConfig("public");
   }
 }
 

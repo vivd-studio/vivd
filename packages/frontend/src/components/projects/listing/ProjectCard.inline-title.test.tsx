@@ -23,9 +23,10 @@ const {
 }));
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => useNavigateMock,
@@ -41,16 +42,30 @@ vi.mock("@/lib/trpc", () => ({
       },
     },
     project: {
-      setStatus: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
-      setCurrentVersion: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
+      setStatus: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+      setCurrentVersion: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
       regenerateThumbnail: {
         useMutation: () => ({ mutate: mutateMock, isPending: false }),
       },
-      updateTags: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
-      deleteTag: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
-      renameTag: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
-      setTagColor: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
-      renameSlug: { useMutation: () => ({ mutate: mutateMock, isPending: false }) },
+      updateTags: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+      deleteTag: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+      renameTag: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+      setTagColor: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+      renameSlug: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
       updateTitle: { useMutation: updateTitleUseMutationMock },
       setPublicPreviewEnabled: {
         useMutation: () => ({ mutate: mutateMock, isPending: false }),
@@ -85,6 +100,7 @@ vi.mock("@/plugins/presentation", () => ({
     path: "/plugins/contact_form",
     icon: () => null,
   }),
+  listEnabledNativeProjectPluginPresentations: () => [],
 }));
 
 vi.mock("../versioning/VersionSelector", () => ({
@@ -102,7 +118,9 @@ vi.mock("../publish/PublishSiteDialog", () => ({
 }));
 
 vi.mock("./ProjectTagsPopover", () => ({
-  ProjectTagsPopover: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ProjectTagsPopover: ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  ),
   TagChip: ({ tag }: { tag: string }) => <span>{tag}</span>,
 }));
 
@@ -174,7 +192,9 @@ describe("ProjectCard inline title editing", () => {
         list: { invalidate: vi.fn().mockResolvedValue(undefined) },
         status: { invalidate: vi.fn().mockResolvedValue(undefined) },
         listTags: { invalidate: vi.fn().mockResolvedValue(undefined) },
-        getExternalPreviewStatus: { invalidate: vi.fn().mockResolvedValue(undefined) },
+        getExternalPreviewStatus: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
       },
     });
   });

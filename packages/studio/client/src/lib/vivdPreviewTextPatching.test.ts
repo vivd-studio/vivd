@@ -89,4 +89,53 @@ describe("collectVivdTextPatchesFromDocument", () => {
     window.localStorage.clear();
     document.documentElement.removeAttribute("lang");
   });
+
+  it("keeps distinct Astro text edits when they share the same baseline text", () => {
+    const firstWrapper = document.createElement("div");
+    firstWrapper.setAttribute("data-vivd-selector", "/html/body/div[1]");
+
+    const firstEditable = document.createElement("span");
+    firstEditable.setAttribute("data-vivd-text-parent-selector", "/html/body/div[1]");
+    firstEditable.setAttribute("data-vivd-text-node-index", "1");
+    firstEditable.setAttribute("data-vivd-text-baseline", "Shared Title");
+    firstEditable.setAttribute("data-vivd-source-file", "src/pages/index.astro");
+    firstEditable.setAttribute("data-vivd-source-loc", "2:6");
+    firstEditable.textContent = "First Title";
+    firstWrapper.appendChild(firstEditable);
+
+    const secondWrapper = document.createElement("div");
+    secondWrapper.setAttribute("data-vivd-selector", "/html/body/div[2]");
+
+    const secondEditable = document.createElement("span");
+    secondEditable.setAttribute("data-vivd-text-parent-selector", "/html/body/div[2]");
+    secondEditable.setAttribute("data-vivd-text-node-index", "1");
+    secondEditable.setAttribute("data-vivd-text-baseline", "Shared Title");
+    secondEditable.setAttribute("data-vivd-source-file", "src/pages/index.astro");
+    secondEditable.setAttribute("data-vivd-source-loc", "5:6");
+    secondEditable.textContent = "Second Title";
+    secondWrapper.appendChild(secondEditable);
+
+    document.body.appendChild(firstWrapper);
+    document.body.appendChild(secondWrapper);
+
+    expect(collectVivdTextPatchesFromDocument(document)).toEqual([
+      {
+        type: "setAstroText",
+        sourceFile: "src/pages/index.astro",
+        sourceLoc: "2:6",
+        oldValue: "Shared Title",
+        newValue: "First Title",
+      },
+      {
+        type: "setAstroText",
+        sourceFile: "src/pages/index.astro",
+        sourceLoc: "5:6",
+        oldValue: "Shared Title",
+        newValue: "Second Title",
+      },
+    ]);
+
+    firstWrapper.remove();
+    secondWrapper.remove();
+  });
 });

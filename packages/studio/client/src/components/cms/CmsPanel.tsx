@@ -99,6 +99,7 @@ export function CmsPanel({
   const scaffoldModelMutation = trpc.cms.scaffoldModel.useMutation();
   const createEntryMutation = trpc.cms.createEntry.useMutation();
   const updateModelMutation = trpc.cms.updateModel.useMutation();
+  const saveEntryMutation = trpc.cms.saveEntry.useMutation();
   const prepareMutation = trpc.cms.prepare.useMutation();
   const saveTextFileMutation = trpc.assets.saveTextFile.useMutation();
   const deleteAssetMutation = trpc.assets.deleteAsset.useMutation();
@@ -440,7 +441,17 @@ export function CmsPanel({
 
     setIsSaving(true);
     try {
-      await saveTextFileMutation.mutateAsync({
+      const sidecars = collectRichTextSidecars(
+        selectedModel.fields,
+        draftValues,
+        selectedEntry.relativePath,
+      );
+      const sidecarsByPath = new Map<string, string>();
+      for (const sidecar of sidecars) {
+        sidecarsByPath.set(sidecar.filePath, sidecarDrafts[sidecar.filePath] ?? "");
+      }
+
+      const result = await saveEntryMutation.mutateAsync({
         slug: projectSlug,
         version,
         relativePath: selectedEntry.relativePath,
@@ -449,27 +460,10 @@ export function CmsPanel({
           draftValues,
           selectedEntryFormat === "markdown" ? (markdownBodyDraft ?? "") : undefined,
         ),
-      });
-
-      const sidecars = collectRichTextSidecars(
-        selectedModel.fields,
-        draftValues,
-        selectedEntry.relativePath,
-      );
-      await Promise.all(
-        sidecars.map((sidecar) =>
-          saveTextFileMutation.mutateAsync({
-            slug: projectSlug,
-            version,
-            relativePath: sidecar.filePath,
-            content: sidecarDrafts[sidecar.filePath] ?? "",
-          }),
-        ),
-      );
-
-      const result = await prepareMutation.mutateAsync({
-        slug: projectSlug,
-        version,
+        sidecars: [...sidecarsByPath.entries()].map(([relativePath, content]) => ({
+          relativePath,
+          content,
+        })),
       });
       await refreshCms();
       if (result.built) {
@@ -494,10 +488,9 @@ export function CmsPanel({
   }, [
     draftValues,
     handleRefresh,
-    prepareMutation,
     projectSlug,
     refreshCms,
-    saveTextFileMutation,
+    saveEntryMutation,
     serializeEntryContent,
     isSelectedEntryWritable,
     selectedEntry,
@@ -758,6 +751,7 @@ export function CmsPanel({
     createEntryMutation.isPending ||
     updateModelMutation.isPending ||
     prepareMutation.isPending ||
+    saveEntryMutation.isPending ||
     saveTextFileMutation.isPending ||
     deleteAssetMutation.isPending;
   const description = isAstroCollectionsSource

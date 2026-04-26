@@ -552,4 +552,108 @@ heroImage: ../media/blog/original.webp
       version: 1,
     });
   });
+
+  it("saves CMS entries and sidecars through one server mutation", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "blog", "welcome.md"),
+      `---
+title: Welcome
+---
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "blog", "welcome.body.en.md"),
+      "Old body\n",
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.saveEntry({
+      slug: "demo-site",
+      version: 1,
+      relativePath: "src/content/blog/welcome.md",
+      content: `---
+title: Updated Welcome
+---
+
+Updated markdown body.
+`,
+      sidecars: [
+        {
+          relativePath: "src/content/blog/welcome.body.en.md",
+          content: "Updated sidecar body\n",
+        },
+      ],
+    });
+
+    expect(result.validationOnly).toBe(true);
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "welcome.md"), "utf8"),
+    ).resolves.toContain("Updated Welcome");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "welcome.body.en.md"), "utf8"),
+    ).resolves.toContain("Updated sidecar body");
+    expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-entry-saved", {
+      slug: "demo-site",
+      version: 1,
+    });
+  });
+
+  it("rolls back the main CMS entry file if a later batched write fails", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+    const entryPath = path.join(projectDir, "src", "content", "blog", "welcome.yaml");
+    await fs.writeFile(entryPath, "title: Welcome\n", "utf8");
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog", "broken.md"), {
+      recursive: true,
+    });
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+
+    await expect(
+      caller.saveEntry({
+        slug: "demo-site",
+        version: 1,
+        relativePath: "src/content/blog/welcome.yaml",
+        content: "title: Updated Welcome\n",
+        sidecars: [
+          {
+            relativePath: "src/content/blog/broken.md",
+            content: "This should fail\n",
+          },
+        ],
+      }),
+    ).rejects.toThrow();
+
+    await expect(fs.readFile(entryPath, "utf8")).resolves.toBe("title: Welcome\n");
+  });
 });

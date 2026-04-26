@@ -69,7 +69,7 @@ ${forwardedProtoDirective}${forwardedPortDirective}    }
     }
 
     fs.writeFileSync(filePath, content, "utf-8");
-    await reloadCaddyConfig();
+    await reloadCaddyConfig("platform");
     return routePath;
   }
 
@@ -77,6 +77,6 @@ ${forwardedProtoDirective}${forwardedPortDirective}    }
     const filePath = this.routeFilePath(routeId);
     if (!fs.existsSync(filePath)) return;
     fs.unlinkSync(filePath);
-    await reloadCaddyConfig();
+    await reloadCaddyConfig("platform");
   }
 }

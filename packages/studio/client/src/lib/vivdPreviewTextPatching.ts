@@ -259,7 +259,7 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
 
     // PRIORITY 4: Astro source file patching (only if no i18n key found)
     if (sourceFile) {
-      const key = `${sourceFile}:${baseline}`;
+      const key = `${sourceFile}:${sourceLoc ?? "no-loc"}:${baseline}`;
       astroEdits.set(key, {
         sourceFile,
         sourceLoc: sourceLoc ?? undefined,

@@ -2,17 +2,23 @@ import { Loader2 } from "lucide-react";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Field,
+  FieldDescription,
+  FieldLabel,
   Input,
-  Label,
+  Panel,
+  PanelContent,
+  PanelHeader,
+  PanelTitle,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  StatusPill,
   Textarea,
 } from "@vivd/ui";
 import type {
@@ -21,6 +27,23 @@ import type {
   NewsletterCampaigns,
 } from "./types";
 import { formatDate, formatDateTime, getCampaignAudienceLabel } from "./utils";
+
+function getCampaignStatusTone(status: NewsletterCampaignRecord["status"]) {
+  switch (status) {
+    case "queued":
+    case "sending":
+      return "info" as const;
+    case "sent":
+      return "success" as const;
+    case "failed":
+      return "danger" as const;
+    case "canceled":
+      return "warn" as const;
+    case "draft":
+    default:
+      return "neutral" as const;
+  }
+}
 
 export function NewsletterCampaignsCard(props: {
   campaigns: NewsletterCampaigns;
@@ -86,10 +109,10 @@ export function NewsletterCampaignsCard(props: {
   } = props;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4">
+    <Panel>
+      <PanelHeader className="flex flex-row items-center justify-between gap-4">
         <div>
-          <CardTitle>Campaigns</CardTitle>
+          <PanelTitle>Campaigns</PanelTitle>
           <p className="text-sm text-muted-foreground">
             Prepare broadcast drafts for confirmed subscribers.
           </p>
@@ -97,14 +120,14 @@ export function NewsletterCampaignsCard(props: {
         <Button variant="outline" onClick={onNewDraft}>
           New draft
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </PanelHeader>
+      <PanelContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           Drafts can now be test-sent and queued for background delivery. Start
           with a test send before queueing a live broadcast.
         </p>
         <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-3 rounded-lg border p-3">
+          <Panel tone="sunken" className="space-y-3 p-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">Campaigns</p>
               <Badge variant="secondary">{campaigns?.total ?? 0}</Badge>
@@ -115,16 +138,18 @@ export function NewsletterCampaignsCard(props: {
                   <button
                     key={row.id}
                     type="button"
-                    className={`w-full rounded-lg border p-3 text-left transition ${
+                    className={`w-full rounded-md border bg-surface-panel p-3 text-left transition ${
                       row.id === selectedCampaignId && !editingNewCampaign
-                        ? "border-primary bg-muted/40"
-                        : "hover:bg-muted/30"
+                        ? "border-primary/40 ring-1 ring-primary/15"
+                        : "hover:border-border/90"
                     }`}
                     onClick={() => onOpenCampaign(row.id)}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate font-medium">{row.subject}</p>
-                      <Badge variant="outline">{row.status}</Badge>
+                      <StatusPill tone={getCampaignStatusTone(row.status)}>
+                        {row.status}
+                      </StatusPill>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {getCampaignAudienceLabel(row.audience, row.mode)}
@@ -143,9 +168,12 @@ export function NewsletterCampaignsCard(props: {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              <Panel
+                tone="dashed"
+                className="p-4 text-sm text-muted-foreground"
+              >
                 No campaigns yet.
-              </div>
+              </Panel>
             )}
             <div className="flex items-center justify-between gap-2 border-t pt-3">
               <p className="text-xs text-muted-foreground">
@@ -176,12 +204,19 @@ export function NewsletterCampaignsCard(props: {
                 </Button>
               </div>
             </div>
-          </div>
+          </Panel>
 
-          <div className="space-y-4 rounded-lg border p-4">
+          <Panel tone="sunken" className="space-y-4 p-4">
             {selectedCampaign && !editingNewCampaign ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                <Badge variant="outline">{selectedCampaign.status}</Badge>
+              <Panel
+                tone="default"
+                className="flex flex-wrap items-center gap-2 rounded-md p-3 text-xs text-muted-foreground"
+              >
+                <StatusPill
+                  tone={getCampaignStatusTone(selectedCampaign.status)}
+                >
+                  {selectedCampaign.status}
+                </StatusPill>
                 <span>
                   {selectedCampaign.recipientCount ||
                     selectedCampaign.estimatedRecipientCount}{" "}
@@ -204,26 +239,29 @@ export function NewsletterCampaignsCard(props: {
                     Queued {formatDateTime(selectedCampaign.queuedAt)}
                   </span>
                 ) : null}
-              </div>
+              </Panel>
             ) : null}
             {selectedCampaign && !editingNewCampaign && !campaignIsEditable ? (
-              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                This campaign is {selectedCampaign.status}. Create a new draft
-                to make content edits.
-              </div>
+              <Callout tone="info">
+                <CalloutTitle>Campaign locked</CalloutTitle>
+                <CalloutDescription>
+                  This campaign is {selectedCampaign.status}. Create a new draft
+                  to make content edits.
+                </CalloutDescription>
+              </Callout>
             ) : null}
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="space-y-2">
-                <Label>Subject</Label>
+              <Field>
+                <FieldLabel>Subject</FieldLabel>
                 <Input
                   value={campaignSubject}
                   placeholder="April launch update"
                   disabled={!campaignIsEditable}
                   onChange={(event) => onSubjectChange(event.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Audience</Label>
+              </Field>
+              <Field>
+                <FieldLabel>Audience</FieldLabel>
                 <Select
                   value={campaignAudience}
                   onValueChange={(value) =>
@@ -240,11 +278,11 @@ export function NewsletterCampaignsCard(props: {
                     </SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             </div>
 
-            <div className="space-y-2">
-              <Label>Body</Label>
+            <Field>
+              <FieldLabel>Body</FieldLabel>
               <Textarea
                 value={campaignBody}
                 disabled={!campaignIsEditable}
@@ -265,18 +303,24 @@ export function NewsletterCampaignsCard(props: {
                   currently match this audience
                 </span>
               </div>
-            </div>
+            </Field>
 
             {selectedCampaign?.lastError ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Last delivery error: {selectedCampaign.lastError}
-              </div>
+              <Callout tone="warn">
+                <CalloutTitle>Last delivery error</CalloutTitle>
+                <CalloutDescription>
+                  {selectedCampaign.lastError}
+                </CalloutDescription>
+              </Callout>
             ) : null}
             {campaignHasUnsavedEdits ? (
-              <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                Save this draft before sending a test or queueing delivery so
-                the saved campaign matches what will be sent.
-              </div>
+              <Callout tone="warn">
+                <CalloutTitle>Save draft before sending</CalloutTitle>
+                <CalloutDescription>
+                  Save this draft before sending a test or queueing delivery so
+                  the saved campaign matches what will be sent.
+                </CalloutDescription>
+              </Callout>
             ) : null}
 
             <div className="flex flex-wrap gap-2">
@@ -312,9 +356,12 @@ export function NewsletterCampaignsCard(props: {
               ) : null}
             </div>
 
-            <div className="grid gap-3 rounded-lg border border-dashed p-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <div className="space-y-2">
-                <Label>Test send email</Label>
+            <Panel
+              tone="dashed"
+              className="grid gap-3 p-3 md:grid-cols-[minmax(0,1fr)_auto_auto]"
+            >
+              <Field>
+                <FieldLabel>Test send email</FieldLabel>
                 <Input
                   value={testSendEmail}
                   placeholder="you@example.com"
@@ -322,7 +369,11 @@ export function NewsletterCampaignsCard(props: {
                     onTestSendEmailChange(event.target.value)
                   }
                 />
-              </div>
+                <FieldDescription>
+                  Send the current draft to a single inbox before queueing the
+                  live broadcast.
+                </FieldDescription>
+              </Field>
               <Button
                 variant="outline"
                 className="self-end"
@@ -360,10 +411,10 @@ export function NewsletterCampaignsCard(props: {
                   Save a draft to send it.
                 </div>
               )}
-            </div>
-          </div>
+            </Panel>
+          </Panel>
         </div>
-      </CardContent>
-    </Card>
+      </PanelContent>
+    </Panel>
   );
 }

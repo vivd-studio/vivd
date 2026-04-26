@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Globe } from "lucide-react";
-import { Badge, CardHeader, CardTitle, Input } from "@vivd/ui";
+import { Badge, Input, PanelHeader, PanelTitle, StatusPill } from "@vivd/ui";
 
 import type { TagColor } from "@/lib/tagColors";
 import { VersionSelector } from "../../versioning/VersionSelector";
@@ -22,7 +22,7 @@ interface ProjectCardHeaderProps {
   publishedUrl: string | null;
   projectTags: string[];
   statusLabel: string;
-  statusColor: ProjectStatusBadgeVariant;
+  statusTone: ProjectStatusBadgeVariant;
   isCompleted: boolean;
   canManageTags: boolean;
   canRenameProject: boolean;
@@ -65,7 +65,7 @@ export function ProjectCardHeader({
   publishedUrl,
   projectTags,
   statusLabel,
-  statusColor,
+  statusTone,
   isCompleted,
   canManageTags,
   canRenameProject,
@@ -95,7 +95,7 @@ export function ProjectCardHeader({
   onSetTagColor,
 }: ProjectCardHeaderProps) {
   return (
-    <CardHeader className="pl-4 pr-10 pb-3 pt-4">
+    <PanelHeader className="pl-4 pr-10 pb-3 pt-4">
       <div className="flex min-h-[44px] items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {isInlineTitleEditing ? (
@@ -122,7 +122,7 @@ export function ProjectCardHeader({
               aria-label={`Edit title for ${project.slug}`}
             />
           ) : (
-            <CardTitle
+            <PanelTitle
               className={`truncate text-base font-semibold ${
                 canRenameProject ? "cursor-text" : ""
               }`}
@@ -134,7 +134,7 @@ export function ProjectCardHeader({
               }}
             >
               {displayTitle}
-            </CardTitle>
+            </PanelTitle>
           )}
           {totalVersions > 0 ? (
             hasMultipleVersions ? (
@@ -205,9 +205,12 @@ export function ProjectCardHeader({
                     />
                   ))}
                   {projectTags.length > 4 ? (
-                    <span className="inline-flex shrink-0 items-center rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    <Badge
+                      variant="secondary"
+                      className="h-5 shrink-0 px-2 py-0 text-[10px]"
+                    >
                       +{projectTags.length - 4}
-                    </span>
+                    </Badge>
                   ) : null}
                 </>
               ) : null}
@@ -215,9 +218,9 @@ export function ProjectCardHeader({
           </ProjectTagsPopover>
           <div className="flex min-h-5 items-center justify-end">
             {!isCompleted ? (
-              <Badge variant={statusColor} className="shrink-0">
+              <StatusPill tone={statusTone} className="shrink-0">
                 {statusLabel}
-              </Badge>
+              </StatusPill>
             ) : null}
           </div>
         </div>
@@ -234,12 +237,12 @@ export function ProjectCardHeader({
         <div className="flex min-h-[18px] items-center gap-1.5">
           {project.publishedDomain ? (
             <>
-              <Globe className="h-3 w-3 shrink-0 text-green-600" />
+              <Globe className="h-3 w-3 shrink-0 text-[hsl(var(--success))]" />
               <a
                 href={publishedUrl ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="truncate text-xs text-green-600 hover:text-green-700 hover:underline"
+                className="truncate text-xs text-[hsl(var(--success))] hover:text-[hsl(var(--success-hover))] hover:underline"
                 title={`Published at ${project.publishedDomain}${
                   project.publishedVersion
                     ? ` (v${project.publishedVersion})`
@@ -258,6 +261,6 @@ export function ProjectCardHeader({
           ) : null}
         </div>
       </div>
-    </CardHeader>
+    </PanelHeader>
   );
 }

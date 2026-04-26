@@ -5,10 +5,11 @@ import {
 import type { ProjectSource } from "../ProjectCard.types";
 
 export type ProjectStatusBadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "outline";
+  | "neutral"
+  | "info"
+  | "success"
+  | "warn"
+  | "danger";
 
 export interface ManualProjectStatusOption {
   value: ProjectVersionManualStatus;
@@ -89,7 +90,7 @@ export function getProjectStatusPresentation(status: string): {
   color: ProjectStatusBadgeVariant;
 } {
   let label = "Pending";
-  let color: ProjectStatusBadgeVariant = "secondary";
+  let color: ProjectStatusBadgeVariant = "neutral";
 
   switch (status) {
     case "pending":
@@ -97,43 +98,43 @@ export function getProjectStatusPresentation(status: string): {
       break;
     case "capturing_references":
       label = "Capturing References";
-      color = "default";
+      color = "info";
       break;
     case "scraping":
       label = "Scraping Website";
-      color = "default";
+      color = "info";
       break;
     case "analyzing_images":
       label = "Analyzing Images";
-      color = "default";
+      color = "info";
       break;
     case "starting_studio":
       label = "Starting Studio";
-      color = "default";
+      color = "info";
       break;
     case "generating_initial_site":
       label = "Generating Initial Site";
-      color = "default";
+      color = "info";
       break;
     case "initial_generation_paused":
       label = "Initial Generation Paused";
-      color = "secondary";
+      color = "warn";
       break;
     case "creating_hero":
       label = "Creating Hero Image";
-      color = "default";
+      color = "info";
       break;
     case "generating_html":
       label = "Generating HTML";
-      color = "default";
+      color = "info";
       break;
     case "completed":
       label = "Completed";
-      color = "outline";
+      color = "success";
       break;
     case "failed":
       label = "Failed";
-      color = "destructive";
+      color = "danger";
       break;
     default:
       label = status;

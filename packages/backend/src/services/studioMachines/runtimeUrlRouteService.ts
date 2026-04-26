@@ -76,7 +76,7 @@ handle @${matcher} {
     }
 
     fs.writeFileSync(filePath, content, "utf-8");
-    await reloadCaddyConfig();
+    await reloadCaddyConfig("platform");
     return routePath;
   }
 
@@ -84,6 +84,6 @@ handle @${matcher} {
     const filePath = this.routeFilePath(routeId);
     if (!fs.existsSync(filePath)) return;
     fs.unlinkSync(filePath);
-    await reloadCaddyConfig();
+    await reloadCaddyConfig("platform");
   }
 }

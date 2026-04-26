@@ -11,6 +11,9 @@ import { useImageDropZone } from "./useImageDropZone";
 import { type PreviewMode } from "./types";
 import { toAstroRuntimeAssetPath } from "./assetPathMapping";
 import {
+  getPreviewImageDropSupport,
+} from "./imageDropHeuristics";
+import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
   type VivdPatch,
@@ -18,7 +21,6 @@ import {
 import {
   CMS_BINDING_SELECTOR,
   copyCmsBindingAttributes,
-  readCmsBindingFromElement,
   type CmsPreviewFieldUpdate,
 } from "@/lib/cmsPreviewBindings";
 
@@ -151,14 +153,6 @@ export function usePreviewInlineEditing({
     return srcMatch ? srcMatch[1] : astroSourceFile;
   }, []);
 
-  const isAstroManagedMediaAssetPath = useCallback((assetPath: string) => {
-    const normalizedPath = assetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-    return (
-      normalizedPath === "src/content/media" ||
-      normalizedPath.startsWith("src/content/media/")
-    );
-  }, []);
-
   const getOriginalAssetUrlFromPreviewUrl = useCallback(
     (src: string | null) => {
       if (!src) return null;
@@ -207,19 +201,40 @@ export function usePreviewInlineEditing({
     [],
   );
 
+  const getImageDropSupport = useCallback(
+    (targetImg: HTMLImageElement, assetPath?: string | null) =>
+      getPreviewImageDropSupport({
+        targetImg,
+        previewMode,
+        assetPath,
+      }),
+    [previewMode],
+  );
+
   useImageDropZone({
     iframeRef,
     projectSlug,
     version: selectedVersion,
     enabled: !!projectSlug && !editMode,
+    getDropSupport: getImageDropSupport,
     onImageDropped: (assetPath, targetImg, previousSrcAttr) => {
       if (!iframeRef.current?.contentDocument) return;
-      const doc = iframeRef.current.contentDocument;
-      const selector = getElementSelector(targetImg, doc);
-      if (!selector) return;
+      const dropSupport = getImageDropSupport(targetImg, assetPath);
+      if (!dropSupport.canDrop || !dropSupport.strategy) {
+        if (previousSrcAttr) {
+          targetImg.setAttribute("src", previousSrcAttr);
+        } else {
+          targetImg.removeAttribute("src");
+        }
+        toast.error(
+          dropSupport.reason ??
+            "Vivd can't save this preview image drop safely yet.",
+        );
+        return;
+      }
 
-      const cmsBinding = readCmsBindingFromElement(targetImg);
-      if (cmsBinding && (cmsBinding.kind === null || cmsBinding.kind === "asset")) {
+      if (dropSupport.strategy === "cms" && dropSupport.cmsBinding) {
+        const cmsBinding = dropSupport.cmsBinding;
         const key = `cms:${cmsBinding.modelKey}:${cmsBinding.entryKey}:${cmsBinding.fieldPath.join(".")}`;
         pendingImagePatchesRef.current.set(key, {
           type: "setCmsField",
@@ -232,30 +247,38 @@ export function usePreviewInlineEditing({
         return;
       }
 
+      const doc = iframeRef.current.contentDocument;
+      const selector = getElementSelector(targetImg, doc);
+      if (!selector) return;
+
       const key = `setAttr:${selector}:src`;
       if (!baselineSrcRef.current.has(key)) {
         baselineSrcRef.current.set(
           key,
-          getOriginalAssetUrlFromPreviewUrl(previousSrcAttr),
+          getOriginalAssetUrlFromPreviewUrl(
+            previousSrcAttr ?? dropSupport.baselineSrc,
+          ),
         );
       }
 
       const baseline = baselineSrcRef.current.get(key) ?? null;
-      const astroSourceEl = targetImg.closest(
-        "[data-astro-source-file]",
-      ) as HTMLElement | null;
-      const astroSourceFileRaw =
-        astroSourceEl?.getAttribute("data-astro-source-file") ?? null;
-      const astroSourceLoc =
-        astroSourceEl?.getAttribute("data-astro-source-loc") ?? null;
+      if (
+        dropSupport.strategy === "astro-import" ||
+        dropSupport.strategy === "astro-public"
+      ) {
+        if (!dropSupport.astroSourceFile) {
+          toast.error(
+            "Vivd couldn't resolve the Astro source file for this preview image drop.",
+          );
+          return;
+        }
 
-      if (astroSourceFileRaw) {
-        const sourceFile = normalizeAstroSourceFile(astroSourceFileRaw);
-        if (isAstroManagedMediaAssetPath(assetPath)) {
+        const sourceFile = normalizeAstroSourceFile(dropSupport.astroSourceFile);
+        if (dropSupport.strategy === "astro-import") {
           pendingImagePatchesRef.current.set(key, {
             type: "setAstroImage",
             sourceFile,
-            sourceLoc: astroSourceLoc ?? undefined,
+            sourceLoc: dropSupport.astroSourceLoc ?? undefined,
             assetPath: assetPath.replace(/\\/g, "/").replace(/^\/+/, ""),
             oldValue: baseline ?? undefined,
           });
@@ -288,7 +311,7 @@ export function usePreviewInlineEditing({
           pendingImagePatchesRef.current.set(key, {
             type: "setAstroText",
             sourceFile,
-            sourceLoc: astroSourceLoc ?? undefined,
+            sourceLoc: dropSupport.astroSourceLoc ?? undefined,
             oldValue: baseline,
             newValue,
           });
@@ -732,7 +755,6 @@ export function usePreviewInlineEditing({
     clearPendingPatches,
     collectTextPatchesFromDocument,
     iframeRef,
-    isAstroManagedMediaAssetPath,
     isCmsPreviewFieldUpdate,
     isSaving,
     previewMode,

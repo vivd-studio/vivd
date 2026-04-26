@@ -11,10 +11,10 @@ export function toAstroRuntimeAssetPath(
     return null;
   }
 
-  let runtimePath = normalizedPath;
-  if (normalizedPath.startsWith("public/")) {
-    runtimePath = normalizedPath.slice("public/".length);
+  if (normalizedPath !== "public" && !normalizedPath.startsWith("public/")) {
+    return null;
   }
 
+  const runtimePath = normalizedPath.slice("public/".length);
   return (baseline ?? "").startsWith("/") ? `/${runtimePath}` : runtimePath;
 }

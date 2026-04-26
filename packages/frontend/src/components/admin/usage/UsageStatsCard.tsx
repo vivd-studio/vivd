@@ -239,8 +239,7 @@ export function UsageStatsCard() {
         )}
 
         {/* Last 8 Days Chart */}
-        <Panel tone="sunken">
-          <PanelContent className="space-y-3 pt-5">
+        <div className="space-y-3">
           <h4 className="text-sm font-medium text-muted-foreground">
             Last 8 Days
           </h4>
@@ -263,7 +262,7 @@ export function UsageStatsCard() {
                   >
                     {formatDollarsAsCredits(cost)}
                   </div>
-                  <div className="w-full rounded-t bg-surface-panel flex-1 flex items-end">
+                  <div className="flex w-full flex-1 items-end rounded-t bg-surface-sunken">
                     <div
                       className={`w-full rounded-t transition-all ${
                         isToday ? "bg-primary" : "bg-primary/60"
@@ -305,8 +304,7 @@ export function UsageStatsCard() {
               );
             })}
           </div>
-          </PanelContent>
-        </Panel>
+        </div>
 
         {/* Session Usage (OpenCode) */}
         <div className="space-y-3">

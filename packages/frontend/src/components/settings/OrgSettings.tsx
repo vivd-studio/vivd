@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
-import { Button, Input } from "@vivd/ui";
+import {
+  Button,
+  Field,
+  FieldDescription,
+  FieldLabel,
+  Input,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { trpc } from "@/lib/trpc";
 import { FormContent } from "@/components/settings/SettingsPageShell";
 
 export function OrgSettings() {
   const utils = trpc.useUtils();
-  const { data: orgData, isLoading } = trpc.organization.getMyOrganization.useQuery();
+  const { data: orgData, isLoading } =
+    trpc.organization.getMyOrganization.useQuery();
   const org = orgData?.organization ?? null;
 
   const [name, setName] = useState("");
@@ -24,7 +36,9 @@ export function OrgSettings() {
       toast.success("Organization name updated");
     },
     onError: (err) => {
-      toast.error("Failed to rename organization", { description: err.message });
+      toast.error("Failed to rename organization", {
+        description: err.message,
+      });
     },
   });
 
@@ -38,29 +52,38 @@ export function OrgSettings() {
 
   return (
     <FormContent>
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <div>
-          <div className="text-sm font-medium">Organization name</div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            The display name for this organization.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Input
-              placeholder={org.slug}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Organization name</PanelTitle>
+          <PanelDescription>
+            Update the display name used across this organization workspace.
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="organization-name">Display name</FieldLabel>
+              <Input
+                id="organization-name"
+                placeholder={org.slug}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <FieldDescription>
+                Defaults to the slug until you set a clearer label here.
+              </FieldDescription>
+            </Field>
+            <Button
+              onClick={() => rename.mutate({ name: name.trim() })}
+              disabled={
+                rename.isPending || !name.trim() || name.trim() === org.name
+              }
+            >
+              {rename.isPending ? "Saving..." : "Save name"}
+            </Button>
           </div>
-          <Button
-            onClick={() => rename.mutate({ name: name.trim() })}
-            disabled={rename.isPending || !name.trim() || name.trim() === org.name}
-          >
-            {rename.isPending ? "Saving..." : "Save name"}
-          </Button>
-        </div>
-      </div>
+        </PanelContent>
+      </Panel>
     </FormContent>
   );
 }

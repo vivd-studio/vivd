@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "@vivd/ui";
+import { Panel } from "@vivd/ui";
 
 import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -272,16 +272,10 @@ export function ProjectCard({
 
   return (
     <>
-      <Card
-        className={`group relative flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
-          isProcessing
-            ? "border-primary/60 ring-1 ring-primary/20 animate-pulse duration-3000"
-            : ""
-        } ${
-          canOpenStudio
-            ? "cursor-pointer hover:border-primary/40 hover:bg-card"
-            : ""
-        }`}
+      <Panel
+        className={`group relative flex h-full min-h-[160px] flex-col overflow-hidden transition-[border-color,box-shadow,background-color] ${
+          isProcessing ? "border-primary/40 ring-1 ring-primary/15" : ""
+        } ${canOpenStudio ? "cursor-pointer hover:border-primary/30" : ""}`}
         onClick={() => {
           if (canOpenStudio && !isRenamePending) {
             openProjectStudio();
@@ -365,7 +359,7 @@ export function ProjectCard({
           publishedUrl={publishedUrl}
           projectTags={projectTags}
           statusLabel={statusLabel}
-          statusColor={statusColor}
+          statusTone={statusColor}
           isCompleted={isCompleted}
           canManageTags={canManageTags}
           canRenameProject={canRenameProject}
@@ -444,14 +438,17 @@ export function ProjectCard({
         />
 
         {isRenamePending ? (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium shadow-sm">
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface-page/80 backdrop-blur-sm">
+            <Panel
+              tone="sunken"
+              className="flex items-center gap-2 p-3 text-sm font-medium shadow-sm"
+            >
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               Renaming project slug...
-            </div>
+            </Panel>
           </div>
         ) : null}
-      </Card>
+      </Panel>
 
       <ProjectCardStatusDialog
         open={showStatusDialog}

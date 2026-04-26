@@ -322,7 +322,11 @@ export class DockerProviderConfig {
   }
 
   get runtimeRoutesDir(): string {
-    return process.env.CADDY_RUNTIME_ROUTES_DIR || soloSelfHostDefaults.caddyRuntimeRoutesDir;
+    return (
+      process.env.CADDY_PLATFORM_RUNTIME_ROUTES_DIR ||
+      process.env.CADDY_RUNTIME_ROUTES_DIR ||
+      soloSelfHostDefaults.caddyRuntimeRoutesDir
+    );
   }
 
   get startTimeoutMs(): number {

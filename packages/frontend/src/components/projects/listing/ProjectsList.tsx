@@ -5,7 +5,19 @@ import { ProjectCard } from "./ProjectCard";
 import { VersionDialog } from "../versioning/VersionDialog";
 import { DeleteProjectDialog } from "../dialogs/DeleteProjectDialog";
 import { toast } from "sonner";
-import { Input, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Input,
+  Panel,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@vivd/ui";
 
 import { Search, X } from "lucide-react";
 import { getTagColor } from "@/lib/tagColors";
@@ -91,9 +103,7 @@ export function ProjectsList() {
   const availableTags = useMemo(() => {
     if (!projectsData?.projects) return [];
     return Array.from(
-      new Set(
-        projectsData.projects.flatMap((project) => project.tags ?? []),
-      ),
+      new Set(projectsData.projects.flatMap((project) => project.tags ?? [])),
     ).sort((a, b) => a.localeCompare(b));
   }, [projectsData?.projects]);
 
@@ -231,10 +241,7 @@ export function ProjectsList() {
     return (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
         {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-44 rounded-lg border bg-card text-card-foreground shadow-sm animate-pulse"
-          />
+          <Panel key={i} className="h-44 animate-pulse" />
         ))}
       </div>
     );
@@ -242,9 +249,10 @@ export function ProjectsList() {
 
   if (error) {
     return (
-      <div className="text-destructive">
-        Error loading projects: {error.message}
-      </div>
+      <Callout tone="danger">
+        <CalloutTitle>Error loading projects</CalloutTitle>
+        <CalloutDescription>{error.message}</CalloutDescription>
+      </Callout>
     );
   }
 
@@ -283,7 +291,9 @@ export function ProjectsList() {
 
           {availableTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground mr-0.5">Filter:</span>
+              <span className="text-xs text-muted-foreground mr-0.5">
+                Filter:
+              </span>
               {availableTags.map((tag) => {
                 const active = selectedTag === tag;
                 const color = getTagColor(tag, tagColorMap);
@@ -291,7 +301,11 @@ export function ProjectsList() {
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => setSelectedTag((current) => (current === tag ? null : tag))}
+                    onClick={() =>
+                      setSelectedTag((current) =>
+                        current === tag ? null : tag,
+                      )
+                    }
                     aria-label={`Filter by tag ${tag}`}
                     aria-pressed={active}
                     className="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 active:scale-[0.97]"
@@ -322,17 +336,17 @@ export function ProjectsList() {
       )}
 
       {!hasProjects ? (
-        <div className="text-center py-16 border border-dashed rounded-lg bg-muted/30">
+        <Panel tone="dashed" className="py-16 text-center">
           <p className="text-muted-foreground">
             No projects yet. Click "New Project" to create one!
           </p>
-        </div>
+        </Panel>
       ) : filteredAndSortedProjects.length === 0 ? (
-        <div className="text-center py-16 border border-dashed rounded-lg bg-muted/30">
+        <Panel tone="dashed" className="py-16 text-center">
           <p className="text-muted-foreground">
             No projects match your current filters.
           </p>
-        </div>
+        </Panel>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
           {filteredAndSortedProjects.map((project) => (

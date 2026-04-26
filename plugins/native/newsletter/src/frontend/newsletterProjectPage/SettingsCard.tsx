@@ -1,11 +1,14 @@
 import { Loader2 } from "lucide-react";
 import {
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Label,
+  Field,
+  FieldDescription,
+  FieldLabel,
+  Panel,
+  PanelContent,
+  PanelFooter,
+  PanelHeader,
+  PanelTitle,
   Select,
   SelectContent,
   SelectItem,
@@ -40,14 +43,14 @@ export function NewsletterSettingsCard(props: {
   } = props;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Settings</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Panel>
+      <PanelHeader>
+        <PanelTitle>Settings</PanelTitle>
+      </PanelHeader>
+      <PanelContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Mode</Label>
+          <Field>
+            <FieldLabel>Mode</FieldLabel>
             <Select
               value={mode}
               onValueChange={(value) =>
@@ -62,9 +65,9 @@ export function NewsletterSettingsCard(props: {
                 <SelectItem value="waitlist">Waitlist</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Collect name</Label>
+          </Field>
+          <Field>
+            <FieldLabel>Collect name</FieldLabel>
             <Select
               value={collectName ? "yes" : "no"}
               onValueChange={(value) => onCollectNameChange(value === "yes")}
@@ -77,35 +80,37 @@ export function NewsletterSettingsCard(props: {
                 <SelectItem value="yes">Email + name</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Field>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Source hosts</Label>
+          <Field>
+            <FieldLabel>Source hosts</FieldLabel>
             <Textarea
               value={sourceHostsInput}
               onChange={(event) => onSourceHostsChange(event.target.value)}
               placeholder="example.com"
               rows={4}
             />
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               Comma- or newline-separated allowlist. Leave empty to use inferred
               project hosts.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Redirect allowlist</Label>
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel>Redirect allowlist</FieldLabel>
             <Textarea
               value={redirectHostsInput}
               onChange={(event) => onRedirectHostsChange(event.target.value)}
               placeholder="example.com"
               rows={4}
             />
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               Allowed hosts for `_redirect` and confirmation page redirects.
-            </p>
-          </div>
+            </FieldDescription>
+          </Field>
         </div>
+      </PanelContent>
+      <PanelFooter className="justify-start">
         <Button onClick={onSave} disabled={isPending}>
           {isPending ? (
             <>
@@ -116,7 +121,7 @@ export function NewsletterSettingsCard(props: {
             "Save settings"
           )}
         </Button>
-      </CardContent>
-    </Card>
+      </PanelFooter>
+    </Panel>
   );
 }
