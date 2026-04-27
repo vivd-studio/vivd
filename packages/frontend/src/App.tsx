@@ -34,7 +34,7 @@ export default function App() {
 
   if (isError) {
     return (
-      <div className="p-4 text-red-500">
+      <div className="p-4 text-destructive">
         Error checking system status. Please check console and backend logs.{" "}
         {String(error)}
       </div>

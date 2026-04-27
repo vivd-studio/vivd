@@ -1,3 +1,4 @@
+import { Panel } from "@vivd/ui";
 import { SectionCard, SnippetCard, SurfaceList } from "./shared";
 import type { TableBookingPluginInfo } from "./types";
 
@@ -19,28 +20,31 @@ export function TableBookingInstallTab({
         >
           {pluginInfo?.usage ? (
             <div className="space-y-3">
-              <div className="rounded-lg border bg-background px-3 py-3 text-xs">
-                <p className="font-medium text-muted-foreground">Availability</p>
+              <Panel tone="sunken" className="rounded-md px-3 py-3 text-xs">
+                <p className="font-medium text-muted-foreground">
+                  Availability
+                </p>
                 <p className="mt-1 break-all font-mono">
                   {pluginInfo.usage.availabilityEndpoint}
                 </p>
-              </div>
-              <div className="rounded-lg border bg-background px-3 py-3 text-xs">
+              </Panel>
+              <Panel tone="sunken" className="rounded-md px-3 py-3 text-xs">
                 <p className="font-medium text-muted-foreground">Book</p>
                 <p className="mt-1 break-all font-mono">
                   {pluginInfo.usage.bookEndpoint}
                 </p>
-              </div>
-              <div className="rounded-lg border bg-background px-3 py-3 text-xs">
+              </Panel>
+              <Panel tone="sunken" className="rounded-md px-3 py-3 text-xs">
                 <p className="font-medium text-muted-foreground">Cancel</p>
                 <p className="mt-1 break-all font-mono">
                   {pluginInfo.usage.cancelEndpoint}
                 </p>
-              </div>
+              </Panel>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Enable the plugin for this project to see the live widget endpoints.
+              Enable the plugin for this project to see the live widget
+              endpoints.
             </p>
           )}
         </SectionCard>

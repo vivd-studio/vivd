@@ -369,8 +369,8 @@ export default function TableBookingOperatorPage({
   const showDegradedBanner = hasReadError || freshness.tone === "stale";
 
   const isHc = mode === "hc-light" || mode === "hc-dark";
-  const surfaceClass = isHc ? "op-surface" : "border bg-card";
-  const raisedClass = isHc ? "op-surface-raised" : "border bg-muted/20";
+  const surfaceClass = isHc ? "op-surface" : "border bg-surface-panel";
+  const raisedClass = isHc ? "op-surface-raised" : "border bg-surface-sunken";
   const mutedClass = isHc ? "op-muted" : "text-muted-foreground";
   const subtleClass = isHc ? "op-subtle" : "text-muted-foreground";
 
@@ -651,7 +651,7 @@ function OperatorHeader({
     <header
       className={cn(
         "flex flex-wrap items-center gap-3 border-b px-3 py-3 md:px-5",
-        isHc ? "op-surface" : "bg-card/60",
+        isHc ? "op-surface" : "bg-surface-panel",
       )}
     >
       <button
@@ -911,7 +911,7 @@ function ArrivalRow({
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                isHc ? "op-pill" : "bg-muted",
+                isHc ? "op-pill" : "bg-surface-sunken",
               )}
             >
               {booking.partySize}p

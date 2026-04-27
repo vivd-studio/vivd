@@ -1,5 +1,21 @@
 import { authClient } from "@/lib/auth-client";
-import { Button, Input, Card, CardContent, CardHeader, CardTitle, Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@vivd/ui";
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  Input,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@vivd/ui";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,14 +68,14 @@ export default function ForgotPassword() {
 
   return (
     <div className="flex h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Forgot password</CardTitle>
-          <p className="text-sm text-gray-500">
+      <Panel className="w-full max-w-sm">
+        <PanelHeader>
+          <PanelTitle className="text-2xl">Forgot password</PanelTitle>
+          <PanelDescription>
             Enter your account email to receive a reset link.
-          </p>
-        </CardHeader>
-        <CardContent>
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent>
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(handleSubmit)}
@@ -72,7 +88,11 @@ export default function ForgotPassword() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="m@example.com" {...field} />
+                      <Input
+                        type="email"
+                        placeholder="m@example.com"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -80,15 +100,12 @@ export default function ForgotPassword() {
               />
 
               {statusMessage && (
-                <p
-                  className={`text-sm font-medium ${
-                    statusMessage.kind === "error"
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                  }`}
+                <Callout
+                  tone={statusMessage.kind === "error" ? "danger" : "info"}
+                  className="py-3"
                 >
-                  {statusMessage.text}
-                </p>
+                  <CalloutDescription>{statusMessage.text}</CalloutDescription>
+                </Callout>
               )}
 
               <Button
@@ -96,7 +113,9 @@ export default function ForgotPassword() {
                 className="w-full"
                 disabled={form.formState.isSubmitting}
               >
-                {form.formState.isSubmitting ? "Sending link..." : "Send reset link"}
+                {form.formState.isSubmitting
+                  ? "Sending link..."
+                  : "Send reset link"}
               </Button>
 
               <Link
@@ -107,8 +126,8 @@ export default function ForgotPassword() {
               </Link>
             </form>
           </Form>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

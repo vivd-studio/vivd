@@ -11,6 +11,11 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
+  Panel,
+  StatTile,
+  StatTileHelper,
+  StatTileLabel,
+  StatTileValue,
 } from "@vivd/ui";
 import {
   formatCapacityModeLabel,
@@ -41,7 +46,7 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-xl border bg-card p-5", className)}>
+    <Panel className={cn("p-5", className)}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-base font-semibold">{title}</h2>
@@ -52,7 +57,7 @@ export function SectionCard({
         {action}
       </div>
       <div className="mt-4 space-y-4">{children}</div>
-    </section>
+    </Panel>
   );
 }
 
@@ -68,20 +73,18 @@ export function MetricCard({
   icon: ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <StatTile>
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-3xl font-semibold tracking-tight">{value}</p>
+        <div>
+          <StatTileLabel>{label}</StatTileLabel>
+          <StatTileValue>{value}</StatTileValue>
         </div>
-        <div className="rounded-md border bg-background p-2 text-muted-foreground">
+        <div className="rounded-md border bg-surface-panel p-2 text-muted-foreground">
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      {note ? (
-        <p className="mt-2 text-xs text-muted-foreground">{note}</p>
-      ) : null}
-    </div>
+      {note ? <StatTileHelper>{note}</StatTileHelper> : null}
+    </StatTile>
   );
 }
 
@@ -102,7 +105,7 @@ export function StatInline({
     <div className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
       <span
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-surface-sunken",
           tone === "warning"
             ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
             : "text-muted-foreground",
@@ -151,7 +154,7 @@ export function SurfaceList({
             <Badge
               key={`${title}-${value}`}
               variant="outline"
-              className="max-w-full truncate bg-background"
+              className="max-w-full truncate"
               title={value}
             >
               {value}
@@ -184,9 +187,10 @@ export function SchedulePreview({
   return (
     <div className="space-y-2">
       {periods.map((period, index) => (
-        <div
+        <Panel
+          tone="sunken"
           key={`${period.startTime}-${period.endTime}-${index}`}
-          className="rounded-lg border bg-background px-3 py-2"
+          className="rounded-md px-3 py-2"
         >
           <p className="text-sm font-medium">
             {period.startTime} - {period.endTime}
@@ -194,7 +198,7 @@ export function SchedulePreview({
           <p className="mt-1 text-xs text-muted-foreground">
             {formatScheduleSummary(period, defaultDurationMinutes)}
           </p>
-        </div>
+        </Panel>
       ))}
     </div>
   );
@@ -212,7 +216,7 @@ export function PeriodEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="rounded-lg border bg-background p-3">
+    <Panel tone="sunken" className="p-3">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Start</Label>
@@ -316,7 +320,7 @@ export function PeriodEditor({
           Remove
         </Button>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -350,8 +354,8 @@ export function BookingRow({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card transition-colors",
-        expanded && "bg-muted/20",
+        "rounded-md border bg-surface-panel transition-colors",
+        expanded && "bg-surface-sunken",
       )}
     >
       <button
@@ -485,7 +489,7 @@ export function CapacityWindowCard({
       : 0;
 
   return (
-    <div className="rounded-lg border bg-background p-3">
+    <Panel tone="sunken" className="p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -505,7 +509,7 @@ export function CapacityWindowCard({
           Every {window.slotIntervalMinutes} min
         </div>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-panel">
         <div
           className={cn(
             "h-full rounded-full transition-[width]",
@@ -523,14 +527,14 @@ export function CapacityWindowCard({
       {window.adjustments.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {window.adjustments.map((adjustment) => (
-            <Badge key={adjustment.id} variant="outline" className="bg-card">
+            <Badge key={adjustment.id} variant="outline">
               {formatCapacityModeLabel(adjustment.mode)}
               {adjustment.capacityValue ? ` ${adjustment.capacityValue}` : ""}
             </Badge>
           ))}
         </div>
       ) : null}
-    </div>
+    </Panel>
   );
 }
 
@@ -552,9 +556,12 @@ export function SnippetCard({
           Copy
         </Button>
       </div>
-      <pre className="max-h-80 overflow-auto rounded-lg border bg-background p-3 text-xs whitespace-pre-wrap break-words">
+      <Panel
+        tone="sunken"
+        className="max-h-80 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap break-words"
+      >
         {snippet}
-      </pre>
+      </Panel>
     </div>
   );
 }

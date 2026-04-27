@@ -1,6 +1,14 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Badge, Button, Checkbox, Input, Label, Textarea } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Panel,
+  Textarea,
+} from "@vivd/ui";
 import { WEEKDAY_LABELS, WEEKDAY_ORDER } from "./constants";
 import { PeriodEditor, SectionCard, SurfaceList } from "./shared";
 import type { SettingsTab, TableBookingPluginInfo } from "./types";
@@ -35,10 +43,7 @@ export function TableBookingSetupTab({
               dayOfWeek,
             );
             return (
-              <div
-                key={dayOfWeek}
-                className="rounded-lg border bg-background p-4"
-              >
+              <Panel tone="sunken" key={dayOfWeek} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">
@@ -83,7 +88,7 @@ export function TableBookingSetupTab({
                     ))
                   )}
                 </div>
-              </div>
+              </Panel>
             );
           })}
         </div>
@@ -251,9 +256,10 @@ export function TableBookingSetupTab({
           ) : (
             <div className="space-y-2">
               {draft.dateOverrides.map((override) => (
-                <div
+                <Panel
+                  tone="sunken"
                   key={override.date}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-3"
+                  className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
                 >
                   <div className="space-y-1">
                     <button
@@ -286,7 +292,7 @@ export function TableBookingSetupTab({
                       Remove
                     </Button>
                   </div>
-                </div>
+                </Panel>
               ))}
             </div>
           )}

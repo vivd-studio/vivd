@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Button, Input } from "@vivd/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Button,
+  Input,
+  Panel,
+} from "@vivd/ui";
 
 import { cn } from "@/lib/utils";
 
@@ -51,10 +61,7 @@ export function ProjectTagsDialog({
   }, [initialTags, open]);
 
   const suggestions = useMemo(
-    () =>
-      availableTags
-        .filter((tag) => !tags.includes(tag))
-        .slice(0, 10),
+    () => availableTags.filter((tag) => !tags.includes(tag)).slice(0, 10),
     [availableTags, tags],
   );
 
@@ -118,12 +125,14 @@ export function ProjectTagsDialog({
         <DialogHeader>
           <DialogTitle>Edit project tags</DialogTitle>
           <DialogDescription>
-            Organize <span className="font-medium text-foreground">{projectName}</span> with up to {MAX_PROJECT_TAGS} tags.
+            Organize{" "}
+            <span className="font-medium text-foreground">{projectName}</span>{" "}
+            with up to {MAX_PROJECT_TAGS} tags.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="rounded-lg border bg-muted/20 p-3">
+          <Panel tone="sunken" className="p-3">
             {tags.length === 0 ? (
               <p className="text-sm text-muted-foreground">No tags yet.</p>
             ) : (
@@ -131,7 +140,7 @@ export function ProjectTagsDialog({
                 {tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs font-medium"
+                    className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-surface-panel px-2.5 py-1 text-xs font-medium"
                   >
                     #{tag}
                     <button
@@ -146,7 +155,7 @@ export function ProjectTagsDialog({
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
 
           <div className="space-y-2">
             <div className="flex gap-2">
@@ -163,7 +172,11 @@ export function ProjectTagsDialog({
                     return;
                   }
 
-                  if (event.key === "Backspace" && !draftTag.trim() && tags.length > 0) {
+                  if (
+                    event.key === "Backspace" &&
+                    !draftTag.trim() &&
+                    tags.length > 0
+                  ) {
                     event.preventDefault();
                     handleRemoveTag(tags[tags.length - 1] as string);
                   }
@@ -176,7 +189,11 @@ export function ProjectTagsDialog({
                 type="button"
                 variant="outline"
                 onClick={() => tryAddTag(draftTag)}
-                disabled={isSaving || !draftTag.trim() || tags.length >= MAX_PROJECT_TAGS}
+                disabled={
+                  isSaving ||
+                  !draftTag.trim() ||
+                  tags.length >= MAX_PROJECT_TAGS
+                }
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add
@@ -185,7 +202,9 @@ export function ProjectTagsDialog({
 
             {suggestions.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Suggestions:</span>
+                <span className="text-xs text-muted-foreground">
+                  Suggestions:
+                </span>
                 {suggestions.map((tag) => (
                   <button
                     key={tag}
@@ -223,7 +242,11 @@ export function ProjectTagsDialog({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving}
+          >
             {isSaving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

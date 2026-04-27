@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Panel } from "@vivd/ui";
 
 interface StudioRecoveryOverlayProps {
   className?: string;
@@ -23,13 +24,13 @@ export function StudioRecoveryOverlay({
       aria-label={title}
       data-testid="studio-recovery-overlay"
     >
-      <div className="flex max-w-sm flex-col items-center gap-3 rounded-lg border bg-background/95 px-6 py-5 text-center shadow-sm">
+      <Panel className="flex max-w-sm flex-col items-center gap-3 px-6 py-5 text-center">
         <Loader2 className="h-5 w-5 animate-spin text-primary" />
         <div className="space-y-1">
           <div className="text-sm font-medium">{title}</div>
           <div className="text-xs text-muted-foreground">{description}</div>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

@@ -1,5 +1,21 @@
 import { authClient } from "@/lib/auth-client";
-import { Button, PasswordInput, Card, CardContent, CardHeader, CardTitle, Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@vivd/ui";
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  PasswordInput,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@vivd/ui";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -66,17 +82,19 @@ export default function ResetPassword() {
 
   return (
     <div className="flex h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Set new password</CardTitle>
-          <p className="text-sm text-gray-500">
+      <Panel className="w-full max-w-sm">
+        <PanelHeader>
+          <PanelTitle className="text-2xl">Set new password</PanelTitle>
+          <PanelDescription>
             Choose a new password for your account.
-          </p>
-        </CardHeader>
-        <CardContent>
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent>
           {resetError ? (
             <div className="grid gap-4">
-              <p className="text-sm font-medium text-destructive">{resetError}</p>
+              <Callout tone="danger" className="py-3">
+                <CalloutDescription>{resetError}</CalloutDescription>
+              </Callout>
               <Link
                 to={ROUTES.FORGOT_PASSWORD}
                 className="text-sm text-muted-foreground hover:underline"
@@ -118,9 +136,11 @@ export default function ResetPassword() {
                 />
 
                 {form.formState.errors.root && (
-                  <p className="text-sm font-medium text-destructive">
-                    {form.formState.errors.root.message}
-                  </p>
+                  <Callout tone="danger" className="py-3">
+                    <CalloutDescription>
+                      {form.formState.errors.root.message}
+                    </CalloutDescription>
+                  </Callout>
                 )}
 
                 <Button
@@ -142,8 +162,8 @@ export default function ResetPassword() {
               </form>
             </Form>
           )}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

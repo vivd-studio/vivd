@@ -1,6 +1,31 @@
 import { type ReactNode, useEffect, useState, useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Button, Input, Label, Tooltip, TooltipContent, TooltipTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Input,
+  Label,
+  Panel,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@vivd/ui";
 
 import {
   Loader2,
@@ -78,22 +103,15 @@ function looksLikeCompleteDomain(input: string): boolean {
   const normalized = input.trim().toLowerCase();
   if (!normalized) return false;
   if (normalized === "localhost") return true;
-  if (normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
+  if (normalized.endsWith(".localhost") || normalized.endsWith(".local"))
+    return true;
 
   const firstDot = normalized.indexOf(".");
   return firstDot > 0 && firstDot < normalized.length - 1;
 }
 
-const publishWarningCardClassName =
-  "rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100";
-const publishWarningBodyClassName =
-  "mt-1 text-sm leading-6 text-amber-800/90 dark:text-amber-200/80";
-const publishWarningIconClassName =
-  "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/20";
-const publishWarningPrimaryActionClassName =
-  "w-full border-amber-300 bg-white/90 text-amber-900 shadow-sm hover:bg-amber-100 hover:text-amber-950 dark:border-amber-500/35 dark:bg-amber-500/12 dark:text-amber-100 dark:hover:bg-amber-500/18 dark:hover:text-amber-50 sm:w-auto";
-const publishWarningSecondaryActionClassName =
-  "w-full border-amber-200 bg-amber-100/70 text-amber-800 shadow-sm hover:bg-amber-100 hover:text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/6 dark:text-amber-200 dark:hover:bg-amber-500/12 dark:hover:text-amber-100 sm:w-auto";
+const publishWarningPrimaryActionClassName = "w-full sm:w-auto";
+const publishWarningSecondaryActionClassName = "w-full sm:w-auto";
 
 function PublishWarningNotice({
   title,
@@ -105,18 +123,11 @@ function PublishWarningNotice({
   actions?: ReactNode;
 }) {
   return (
-    <div className={publishWarningCardClassName}>
+    <Callout tone="warn" icon={<AlertTriangle />}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className={publishWarningIconClassName}>
-            <AlertTriangle className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold leading-5 text-amber-950 dark:text-amber-50">
-              {title}
-            </p>
-            <div className={publishWarningBodyClassName}>{children}</div>
-          </div>
+        <div className="min-w-0">
+          <CalloutTitle>{title}</CalloutTitle>
+          <CalloutDescription className="mt-1">{children}</CalloutDescription>
         </div>
         {actions ? (
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-fit">
@@ -124,7 +135,7 @@ function PublishWarningNotice({
           </div>
         ) : null}
       </div>
-    </div>
+    </Callout>
   );
 }
 
@@ -154,7 +165,7 @@ export function PublishDialog({
   const { data: hasChangesData, isLoading: isCheckingChanges } =
     trpc.project.gitHasChanges.useQuery(
       { slug: projectSlug, version },
-      { enabled: open && !!projectSlug }
+      { enabled: open && !!projectSlug },
     );
 
   const hasUnsavedChanges = hasChangesData?.hasChanges ?? false;
@@ -162,7 +173,7 @@ export function PublishDialog({
   // Get publish status (last tag)
   const { data: publishStatus } = trpc.project.publishStatus.useQuery(
     { slug: projectSlug },
-    { enabled: open && !!projectSlug }
+    { enabled: open && !!projectSlug },
   );
   const publishedVersion =
     publishStatus && "projectVersion" in publishStatus
@@ -175,14 +186,14 @@ export function PublishDialog({
     {
       enabled: open && !!projectSlug && connectedMode,
       refetchInterval: open && connectedMode ? 5_000 : false,
-    }
+    },
   );
   const publishChecklistQuery = trpc.project.publishChecklist.useQuery(
     { slug: projectSlug, version },
     {
       enabled: open && !!projectSlug && connectedMode,
       refetchInterval: open && connectedMode ? 10_000 : false,
-    }
+    },
   );
 
   useEffect(() => {
@@ -192,7 +203,10 @@ export function PublishDialog({
 
   useEffect(() => {
     if (!open || !connectedMode) return;
-    void Promise.all([publishStateQuery.refetch(), publishChecklistQuery.refetch()]);
+    void Promise.all([
+      publishStateQuery.refetch(),
+      publishChecklistQuery.refetch(),
+    ]);
   }, [open, connectedMode, projectSlug, version]);
 
   useEffect(() => {
@@ -228,15 +242,15 @@ export function PublishDialog({
     { domain: normalizedDebouncedDomain, slug: projectSlug },
     {
       enabled: shouldValidateDomain,
-    }
+    },
   );
 
   const domainValidationPending = Boolean(
     connectedMode &&
-      hasDomainInput &&
-      domainInputComplete &&
-      (normalizedDomain !== normalizedDebouncedDomain ||
-        (shouldValidateDomain && checkDomainQuery.isFetching)),
+    hasDomainInput &&
+    domainInputComplete &&
+    (normalizedDomain !== normalizedDebouncedDomain ||
+      (shouldValidateDomain && checkDomainQuery.isFetching)),
   );
   const domainError =
     connectedMode &&
@@ -248,10 +262,10 @@ export function PublishDialog({
       : undefined;
   const domainOk = Boolean(
     connectedMode &&
-      hasDomainInput &&
-      domainInputComplete &&
-      !domainValidationPending &&
-      (checkDomainQuery.data?.available ?? false),
+    hasDomainInput &&
+    domainInputComplete &&
+    !domainValidationPending &&
+    (checkDomainQuery.data?.available ?? false),
   );
 
   const publishMutation = trpc.project.publish.useMutation({
@@ -261,7 +275,10 @@ export function PublishDialog({
       void Promise.all([
         utils.project.publishStatus.invalidate({ slug: projectSlug }),
         utils.project.publishState.invalidate({ slug: projectSlug, version }),
-        utils.project.publishChecklist.invalidate({ slug: projectSlug, version }),
+        utils.project.publishChecklist.invalidate({
+          slug: projectSlug,
+          version,
+        }),
       ]);
       onPublished?.();
       onOpenChange(false);
@@ -275,7 +292,10 @@ export function PublishDialog({
         void Promise.all([
           utils.project.publishStatus.invalidate({ slug: projectSlug }),
           utils.project.publishState.invalidate({ slug: projectSlug, version }),
-          utils.project.publishChecklist.invalidate({ slug: projectSlug, version }),
+          utils.project.publishChecklist.invalidate({
+            slug: projectSlug,
+            version,
+          }),
         ]);
         return;
       }
@@ -283,7 +303,10 @@ export function PublishDialog({
       const message = error.message || "Failed to publish";
       setPublishError(message);
       toast.error(error.message || "Failed to publish");
-      void utils.project.publishState.invalidate({ slug: projectSlug, version });
+      void utils.project.publishState.invalidate({
+        slug: projectSlug,
+        version,
+      });
     },
   });
 
@@ -313,7 +336,7 @@ export function PublishDialog({
   // Suggest next version when dialog opens or lastTag changes
   const suggestedVersion = useMemo(
     () => suggestNextVersion(publishStatus?.lastTag ?? null),
-    [publishStatus?.lastTag]
+    [publishStatus?.lastTag],
   );
 
   useEffect(() => {
@@ -403,7 +426,7 @@ export function PublishDialog({
               message: message.trim() || undefined,
             });
           },
-        }
+        },
       );
     } else {
       // No unsaved changes, just create the tag
@@ -424,19 +447,21 @@ export function PublishDialog({
     const publishState = publishStateQuery.data;
     const publishChecklist = publishChecklistQuery.data;
     const studioStateUnknownWarning = Boolean(
-      publishState?.studioRunning && publishState?.studioStateAvailable === false,
+      publishState?.studioRunning &&
+      publishState?.studioStateAvailable === false,
     );
     const olderSnapshotInStudio = Boolean(
       publishState?.studioRunning &&
-        publishState?.studioStateAvailable &&
-        publishState?.studioWorkingCommitHash &&
-        publishState?.studioHeadCommitHash &&
-        publishState.studioWorkingCommitHash !== publishState.studioHeadCommitHash,
+      publishState?.studioStateAvailable &&
+      publishState?.studioWorkingCommitHash &&
+      publishState?.studioHeadCommitHash &&
+      publishState.studioWorkingCommitHash !==
+        publishState.studioHeadCommitHash,
     );
     const unsavedChangesInStudio = Boolean(
       publishState?.studioRunning &&
-        publishState?.studioStateAvailable &&
-        publishState?.studioHasUnsavedChanges,
+      publishState?.studioStateAvailable &&
+      publishState?.studioHasUnsavedChanges,
     );
 
     const publishTargetCommitHash =
@@ -444,34 +469,34 @@ export function PublishDialog({
       publishState?.studioStateAvailable &&
       publishState?.studioHeadCommitHash
         ? publishState.studioHeadCommitHash
-        : publishState?.publishableCommitHash ?? null;
+        : (publishState?.publishableCommitHash ?? null);
     const publishableCommitMatchesTarget = Boolean(
       publishTargetCommitHash &&
-        publishState?.publishableCommitHash &&
-        publishState.publishableCommitHash === publishTargetCommitHash,
+      publishState?.publishableCommitHash &&
+      publishState.publishableCommitHash === publishTargetCommitHash,
     );
     const preparingLatestSnapshotWarning = Boolean(
       publishState?.studioRunning &&
-        publishState?.studioStateAvailable &&
-        publishState?.studioHeadCommitHash &&
-        publishState?.publishableCommitHash &&
-        publishState.publishableCommitHash !== publishState.studioHeadCommitHash,
+      publishState?.studioStateAvailable &&
+      publishState?.studioHeadCommitHash &&
+      publishState?.publishableCommitHash &&
+      publishState.publishableCommitHash !== publishState.studioHeadCommitHash,
     );
     const missingPublishableSnapshot = Boolean(
       publishState?.readiness === "ready" &&
-        !publishState?.publishableCommitHash &&
-        !studioStateUnknownWarning &&
-        !olderSnapshotInStudio &&
-        !unsavedChangesInStudio,
+      !publishState?.publishableCommitHash &&
+      !studioStateUnknownWarning &&
+      !olderSnapshotInStudio &&
+      !unsavedChangesInStudio,
     );
     const canRequestPreparePublishArtifacts = Boolean(
       !olderSnapshotInStudio &&
-        !unsavedChangesInStudio &&
-        !studioStateUnknownWarning &&
-        (missingPublishableSnapshot ||
-          preparingLatestSnapshotWarning ||
-          publishState?.readiness === "artifact_not_ready" ||
-          publishState?.readiness === "not_found"),
+      !unsavedChangesInStudio &&
+      !studioStateUnknownWarning &&
+      (missingPublishableSnapshot ||
+        preparingLatestSnapshotWarning ||
+        publishState?.readiness === "artifact_not_ready" ||
+        publishState?.readiness === "not_found"),
     );
 
     const canPublishNow =
@@ -490,12 +515,14 @@ export function PublishDialog({
       !canPublishNow;
 
     const publishDisabledReason: string | null = (() => {
-      if (publishMutation.isPending) return "Publishing is already in progress.";
+      if (publishMutation.isPending)
+        return "Publishing is already in progress.";
       if (saveMutation.isPending) return "Saving your changes...";
       if (loadLatestMutation.isPending) return "Switching snapshots...";
 
       if (!publishState) return "Loading publish status...";
-      if (!publishState.storageEnabled) return "Publishing isn't available right now.";
+      if (!publishState.storageEnabled)
+        return "Publishing isn't available right now.";
 
       if (publishState.readiness !== "ready") {
         if (publishState.readiness === "build_in_progress") {
@@ -527,7 +554,8 @@ export function PublishDialog({
       }
 
       if (!hasDomainInput) return "Enter a domain.";
-      if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
+      if (!domainInputComplete)
+        return "Enter a complete domain (for example, example.com).";
       if (domainValidationPending) return "Checking domain...";
       if (!domainOk) return domainError || "Enter a valid domain.";
 
@@ -545,7 +573,9 @@ export function PublishDialog({
         await publishStateQuery.refetch();
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Failed to prepare publish artifacts";
+          err instanceof Error
+            ? err.message
+            : "Failed to prepare publish artifacts";
         toast.error(message);
       }
     };
@@ -574,7 +604,9 @@ export function PublishDialog({
         const latestStateResult = await publishStateQuery.refetch();
         const latestState = latestStateResult.data;
         if (!latestState) {
-          toast.error("Publishing status is still loading. Please wait a little while.");
+          toast.error(
+            "Publishing status is still loading. Please wait a little while.",
+          );
           return;
         }
 
@@ -584,7 +616,8 @@ export function PublishDialog({
         }
 
         const latestStudioStateUnknownWarning = Boolean(
-          latestState?.studioRunning && latestState?.studioStateAvailable === false,
+          latestState?.studioRunning &&
+          latestState?.studioStateAvailable === false,
         );
         if (latestStudioStateUnknownWarning) {
           toast.error("Studio is still loading. Please wait a little while.");
@@ -593,23 +626,28 @@ export function PublishDialog({
 
         const latestOlderSnapshotInStudio = Boolean(
           latestState?.studioRunning &&
-            latestState?.studioStateAvailable &&
-            latestState?.studioWorkingCommitHash &&
-            latestState?.studioHeadCommitHash &&
-            latestState.studioWorkingCommitHash !== latestState.studioHeadCommitHash,
+          latestState?.studioStateAvailable &&
+          latestState?.studioWorkingCommitHash &&
+          latestState?.studioHeadCommitHash &&
+          latestState.studioWorkingCommitHash !==
+            latestState.studioHeadCommitHash,
         );
         if (latestOlderSnapshotInStudio) {
-          toast.error("You're viewing an older snapshot. Restore it (or go back to latest) before publishing.");
+          toast.error(
+            "You're viewing an older snapshot. Restore it (or go back to latest) before publishing.",
+          );
           return;
         }
 
         const latestUnsavedChangesInStudio = Boolean(
           latestState?.studioRunning &&
-            latestState?.studioStateAvailable &&
-            latestState?.studioHasUnsavedChanges,
+          latestState?.studioStateAvailable &&
+          latestState?.studioHasUnsavedChanges,
         );
         if (latestUnsavedChangesInStudio) {
-          toast.error("You have unsaved changes. Save your changes before publishing.");
+          toast.error(
+            "You have unsaved changes. Save your changes before publishing.",
+          );
           return;
         }
 
@@ -618,7 +656,7 @@ export function PublishDialog({
           latestState?.studioStateAvailable &&
           latestState?.studioHeadCommitHash
             ? latestState.studioHeadCommitHash
-            : latestState?.publishableCommitHash ?? undefined;
+            : (latestState?.publishableCommitHash ?? undefined);
         if (!targetCommitHash) {
           toast.error("No publishable version found.");
           return;
@@ -628,7 +666,9 @@ export function PublishDialog({
           latestState?.readiness !== "ready" ||
           latestState?.publishableCommitHash !== targetCommitHash
         ) {
-          toast.error("Your latest changes are still being prepared for publishing. Please wait a little while.");
+          toast.error(
+            "Your latest changes are still being prepared for publishing. Please wait a little while.",
+          );
           return;
         }
 
@@ -644,7 +684,8 @@ export function PublishDialog({
           return;
         }
         // publishMutation already surfaces errors via its onError handler.
-        const message = err instanceof Error ? err.message : "Failed to publish";
+        const message =
+          err instanceof Error ? err.message : "Failed to publish";
         setPublishError(message);
       }
     };
@@ -664,9 +705,11 @@ export function PublishDialog({
             </DialogHeader>
 
             <div className="space-y-4 overflow-y-auto py-1">
-              <div className="rounded-md border p-3 text-sm">
+              <Panel tone="sunken" className="rounded-md p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Publishing content</span>
+                  <span className="text-muted-foreground">
+                    Publishing content
+                  </span>
                   <span className="text-foreground">
                     {publishState?.sourceKind === "preview"
                       ? "Latest preview build"
@@ -684,7 +727,7 @@ export function PublishDialog({
                     </span>
                   </div>
                 </div>
-              </div>
+              </Panel>
 
               {publishState?.readiness === "build_in_progress" ? (
                 <PublishWarningNotice title="Site build in progress">
@@ -693,18 +736,21 @@ export function PublishDialog({
               ) : null}
 
               {publishState?.readiness === "artifact_not_ready" ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  <div>We're still preparing your site for publishing. This can take a little while.</div>
+                <Callout tone="danger">
+                  <div>
+                    We're still preparing your site for publishing. This can
+                    take a little while.
+                  </div>
                   {import.meta.env.DEV && publishState.error ? (
-                    <div className="mt-1 text-xs text-muted-foreground">{publishState.error}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {publishState.error}
+                    </div>
                   ) : null}
-                </div>
+                </Callout>
               ) : null}
 
               {publishError ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {publishError}
-                </div>
+                <Callout tone="danger">{publishError}</Callout>
               ) : null}
 
               {olderSnapshotInStudio ? (
@@ -727,11 +773,17 @@ export function PublishDialog({
                             .then(() => {
                               void Promise.all([
                                 publishStateQuery.refetch(),
-                                utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+                                utils.project.gitHistory.invalidate({
+                                  slug: projectSlug,
+                                  version,
+                                }),
                               ]);
                             })
                             .catch((err) => {
-                              const message = err instanceof Error ? err.message : "Failed to restore snapshot";
+                              const message =
+                                err instanceof Error
+                                  ? err.message
+                                  : "Failed to restore snapshot";
                               toast.error(message);
                             });
                         }}
@@ -765,13 +817,25 @@ export function PublishDialog({
                               toast.success("Switched back to latest snapshot");
                               void Promise.all([
                                 publishStateQuery.refetch(),
-                                utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-                                utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
-                                utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+                                utils.project.gitHasChanges.invalidate({
+                                  slug: projectSlug,
+                                  version,
+                                }),
+                                utils.project.gitHistory.invalidate({
+                                  slug: projectSlug,
+                                  version,
+                                }),
+                                utils.project.gitWorkingCommit.invalidate({
+                                  slug: projectSlug,
+                                  version,
+                                }),
                               ]);
                             })
                             .catch((err) => {
-                              const message = err instanceof Error ? err.message : "Failed to switch snapshots";
+                              const message =
+                                err instanceof Error
+                                  ? err.message
+                                  : "Failed to switch snapshots";
                               toast.error(message);
                             });
                         }}
@@ -793,14 +857,15 @@ export function PublishDialog({
                     </>
                   }
                 >
-                  Restore it, or go back to the latest snapshot, before publishing so the live site
-                  matches what you're seeing.
+                  Restore it, or go back to the latest snapshot, before
+                  publishing so the live site matches what you're seeing.
                 </PublishWarningNotice>
               ) : null}
 
               {studioStateUnknownWarning ? (
                 <PublishWarningNotice title="Studio is still loading">
-                  Studio is active, but its current state is still syncing. This updates automatically.
+                  Studio is active, but its current state is still syncing. This
+                  updates automatically.
                 </PublishWarningNotice>
               ) : null}
 
@@ -824,7 +889,10 @@ export function PublishDialog({
                             void publishStateQuery.refetch();
                           })
                           .catch((err) => {
-                            const message = err instanceof Error ? err.message : "Failed to save changes";
+                            const message =
+                              err instanceof Error
+                                ? err.message
+                                : "Failed to save changes";
                             toast.error(message);
                           });
                       }}
@@ -848,7 +916,8 @@ export function PublishDialog({
                     </Button>
                   }
                 >
-                  Save your changes before publishing to include your latest edits.
+                  Save your changes before publishing to include your latest
+                  edits.
                 </PublishWarningNotice>
               ) : null}
 
@@ -922,9 +991,7 @@ export function PublishDialog({
                   }
                 />
                 {domainError ? (
-                  <p className="text-xs text-destructive">
-                    {domainError}
-                  </p>
+                  <p className="text-xs text-destructive">{domainError}</p>
                 ) : null}
               </div>
 
@@ -933,7 +1000,9 @@ export function PublishDialog({
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       Published at{" "}
-                      <span className="font-medium">{publishStatus.domain}</span>
+                      <span className="font-medium">
+                        {publishStatus.domain}
+                      </span>
                       {publishStatus.publishedAt
                         ? ` · ${formatTimeLabel(publishStatus.publishedAt)}`
                         : ""}
@@ -971,7 +1040,7 @@ export function PublishDialog({
                       "Unpublish site"
                     )}
                   </Button>
-              ) : null}
+                ) : null}
               </div>
               <div className="flex flex-col gap-2 sm:items-end">
                 {publishDisabled && publishDisabledReason ? (
@@ -980,11 +1049,17 @@ export function PublishDialog({
                   </div>
                 ) : null}
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {publishDisabled && (olderSnapshotInStudio || unsavedChangesInStudio || studioStateUnknownWarning) ? (
+                  {publishDisabled &&
+                  (olderSnapshotInStudio ||
+                    unsavedChangesInStudio ||
+                    studioStateUnknownWarning) ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex" tabIndex={0}>
-                          <Button onClick={() => void handleConnectedPublish()} disabled>
+                          <Button
+                            onClick={() => void handleConnectedPublish()}
+                            disabled
+                          >
                             <Globe className="h-4 w-4 mr-2" />
                             Publish site
                           </Button>
@@ -1001,7 +1076,10 @@ export function PublishDialog({
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button onClick={() => void handleConnectedPublish()} disabled={publishDisabled}>
+                    <Button
+                      onClick={() => void handleConnectedPublish()}
+                      disabled={publishDisabled}
+                    >
                       {publishMutation.isPending ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1086,9 +1164,8 @@ export function PublishDialog({
             <div className="grid gap-4 py-4">
               {/* Unsaved Changes Warning */}
               {!isCheckingChanges && hasUnsavedChanges && (
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+                <Callout tone="warn" icon={<AlertTriangle />}>
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
                     <span className="text-sm text-amber-700 dark:text-amber-400">
                       You have unsaved changes
                     </span>
@@ -1098,7 +1175,7 @@ export function PublishDialog({
                     size="sm"
                     onClick={handleSaveChanges}
                     disabled={saveMutation.isPending}
-                    className="border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                    className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
                   >
                     {saveMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -1107,17 +1184,16 @@ export function PublishDialog({
                     )}
                     Save Now
                   </Button>
-                </div>
+                </Callout>
               )}
 
               {/* No unsaved changes - show success state */}
               {!isCheckingChanges && !hasUnsavedChanges && (
-                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-500/35 dark:bg-green-500/10">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <Callout tone="success" icon={<CheckCircle2 />}>
                   <span className="text-sm text-green-700 dark:text-green-300">
                     All changes saved
                   </span>
-                </div>
+                </Callout>
               )}
 
               {/* Pre-publish Checklist */}
@@ -1158,7 +1234,9 @@ export function PublishDialog({
 
               {/* Message Input */}
               <div className="grid gap-2">
-                <Label htmlFor="version-message">Release Notes (optional)</Label>
+                <Label htmlFor="version-message">
+                  Release Notes (optional)
+                </Label>
                 <Input
                   id="version-message"
                   placeholder="What's new in this version..."
@@ -1214,7 +1292,7 @@ export function PublishDialog({
                 <>
                   Your pre-publish checklist has{" "}
                   {checklist.summary.failed > 0 && (
-                    <strong className="text-red-600">
+                    <strong className="text-destructive">
                       {checklist.summary.failed} failed check
                       {checklist.summary.failed !== 1 ? "s" : ""}
                     </strong>

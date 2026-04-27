@@ -10,14 +10,32 @@ import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router/paths";
 import { hardRedirect } from "@/lib/hardRedirect";
 import { buildHostOrigin } from "@/lib/localHostRouting";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, Input, PasswordInput } from "@vivd/ui";
-
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Input,
+  PasswordInput,
+} from "@vivd/ui";
 
 const inviteSignupSchema = z
   .object({
     name: z.string().min(2, "Name must be at least 2 characters"),
     password: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z
+      .string()
+      .min(8, "Password must be at least 8 characters"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
@@ -70,13 +88,16 @@ export default function InviteAccept() {
   );
   const acceptInviteForSignedInUser =
     trpc.organization.acceptInviteForSignedInUser.useMutation();
-  const acceptInviteWithSignup = trpc.organization.acceptInviteWithSignup.useMutation();
+  const acceptInviteWithSignup =
+    trpc.organization.acceptInviteWithSignup.useMutation();
 
   const invite = inviteQuery.data;
   const sessionEmail = session?.user.email.trim().toLowerCase() ?? null;
   const inviteEmail = invite?.email.trim().toLowerCase() ?? null;
   const isMatchingSignedInUser =
-    Boolean(sessionEmail) && Boolean(inviteEmail) && sessionEmail === inviteEmail;
+    Boolean(sessionEmail) &&
+    Boolean(inviteEmail) &&
+    sessionEmail === inviteEmail;
   const inviteReturnPath = useMemo(
     () => buildInviteReturnPath(location.pathname, location.search),
     [location.pathname, location.search],
@@ -85,7 +106,9 @@ export default function InviteAccept() {
 
   const redirectToApp = (tenantHost: string | null) => {
     if (tenantHost) {
-      hardRedirect(`${buildHostOrigin(tenantHost, window.location.host)}${ROUTES.DASHBOARD}`);
+      hardRedirect(
+        `${buildHostOrigin(tenantHost, window.location.host)}${ROUTES.DASHBOARD}`,
+      );
       return;
     }
     hardRedirect(ROUTES.DASHBOARD);
@@ -98,7 +121,9 @@ export default function InviteAccept() {
       const result = await acceptInviteForSignedInUser.mutateAsync({ token });
       redirectToApp(result.tenantHost);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Failed to accept invite");
+      setActionError(
+        error instanceof Error ? error.message : "Failed to accept invite",
+      );
     }
   };
 
@@ -126,7 +151,9 @@ export default function InviteAccept() {
         },
       );
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Failed to accept invite");
+      setActionError(
+        error instanceof Error ? error.message : "Failed to accept invite",
+      );
     }
   };
 
@@ -138,14 +165,14 @@ export default function InviteAccept() {
   if (!token) {
     return (
       <div className="flex h-screen items-center justify-center p-4">
-        <Card className="w-full max-w-lg">
-          <CardHeader>
-            <CardTitle>Invitation link missing</CardTitle>
-            <CardDescription>
+        <Panel className="w-full max-w-lg">
+          <PanelHeader>
+            <PanelTitle>Invitation link missing</PanelTitle>
+            <PanelDescription>
               Open the full invite email link to continue.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+            </PanelDescription>
+          </PanelHeader>
+        </Panel>
       </div>
     );
   }
@@ -157,50 +184,55 @@ export default function InviteAccept() {
   if (inviteQuery.error || !invite) {
     return (
       <div className="flex h-screen items-center justify-center p-4">
-        <Card className="w-full max-w-lg">
-          <CardHeader>
-            <CardTitle>Invitation unavailable</CardTitle>
-            <CardDescription>
-              {inviteQuery.error?.message ?? "This invitation is invalid or no longer available."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Panel className="w-full max-w-lg">
+          <PanelHeader>
+            <PanelTitle>Invitation unavailable</PanelTitle>
+            <PanelDescription>
+              {inviteQuery.error?.message ??
+                "This invitation is invalid or no longer available."}
+            </PanelDescription>
+          </PanelHeader>
+          <PanelContent>
             <Button asChild className="w-full">
               <Link to={ROUTES.LOGIN}>Go to login</Link>
             </Button>
-          </CardContent>
-        </Card>
+          </PanelContent>
+        </Panel>
       </div>
     );
   }
 
-  const isPending = invite.state === "pending" && invite.organizationStatus === "active";
+  const isPending =
+    invite.state === "pending" && invite.organizationStatus === "active";
   const showSignupForm = isPending && !invite.hasExistingAccount && !session;
-  const showExistingAccountPrompt = isPending && invite.hasExistingAccount && !session;
-  const showSignedInAccept = isPending && Boolean(session) && isMatchingSignedInUser;
-  const showMismatch =
-    isPending && Boolean(session) && !isMatchingSignedInUser;
+  const showExistingAccountPrompt =
+    isPending && invite.hasExistingAccount && !session;
+  const showSignedInAccept =
+    isPending && Boolean(session) && isMatchingSignedInUser;
+  const showMismatch = isPending && Boolean(session) && !isMatchingSignedInUser;
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-xl">
-        <CardHeader>
-          <CardTitle>Organization invite</CardTitle>
-          <CardDescription>
+      <Panel className="w-full max-w-xl">
+        <PanelHeader>
+          <PanelTitle>Organization invite</PanelTitle>
+          <PanelDescription>
             Join {invite.organizationName} as {formatRole(invite.role)}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2 rounded-lg border bg-muted/10 p-4 text-sm">
+          </PanelDescription>
+        </PanelHeader>
+        <PanelContent className="space-y-6">
+          <Panel tone="sunken" className="space-y-2 p-4 text-sm">
             <div>
               <span className="font-medium">Email:</span> {invite.email}
             </div>
             <div>
-              <span className="font-medium">Role:</span> {formatRole(invite.role)}
+              <span className="font-medium">Role:</span>{" "}
+              {formatRole(invite.role)}
             </div>
             {invite.projectTitle ? (
               <div>
-                <span className="font-medium">Assigned project:</span> {invite.projectTitle}
+                <span className="font-medium">Assigned project:</span>{" "}
+                {invite.projectTitle}
               </div>
             ) : null}
             {invite.inviterName || invite.inviterEmail ? (
@@ -209,32 +241,41 @@ export default function InviteAccept() {
                 {invite.inviterName || invite.inviterEmail}
               </div>
             ) : null}
-          </div>
+          </Panel>
 
           {invite.organizationStatus !== "active" ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              This organization is currently suspended, so the invite cannot be accepted.
-            </div>
+            <Callout tone="danger">
+              <CalloutDescription>
+                This organization is currently suspended, so the invite cannot
+                be accepted.
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           {invite.state === "expired" ? (
-            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-              This invitation has expired. Ask an admin to resend it.
-            </div>
+            <Callout tone="info">
+              <CalloutDescription>
+                This invitation has expired. Ask an admin to resend it.
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           {invite.state === "canceled" ? (
-            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-              This invitation was canceled. Ask an admin for a new invite if you still
-              need access.
-            </div>
+            <Callout tone="info">
+              <CalloutDescription>
+                This invitation was canceled. Ask an admin for a new invite if
+                you still need access.
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           {invite.state === "accepted" ? (
             <div className="space-y-3">
-              <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-                This invitation has already been accepted.
-              </div>
+              <Callout tone="info">
+                <CalloutDescription>
+                  This invitation has already been accepted.
+                </CalloutDescription>
+              </Callout>
               <Button asChild className="w-full">
                 <Link to={ROUTES.LOGIN}>Go to login</Link>
               </Button>
@@ -244,8 +285,8 @@ export default function InviteAccept() {
           {showExistingAccountPrompt ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                An account already exists for this email. Sign in first, then accept the
-                invite.
+                An account already exists for this email. Sign in first, then
+                accept the invite.
               </p>
               <Button asChild className="w-full">
                 <Link to={loginHref}>Sign in to accept invite</Link>
@@ -255,10 +296,13 @@ export default function InviteAccept() {
 
           {showMismatch ? (
             <div className="space-y-3">
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                You are signed in as {session?.user.email}, but this invite is for{" "}
-                {invite.email}. Sign out and continue with the invited email address.
-              </div>
+              <Callout tone="danger">
+                <CalloutDescription>
+                  You are signed in as {session?.user.email}, but this invite is
+                  for {invite.email}. Sign out and continue with the invited
+                  email address.
+                </CalloutDescription>
+              </Callout>
               <Button
                 variant="outline"
                 className="w-full"
@@ -272,8 +316,8 @@ export default function InviteAccept() {
           {showSignedInAccept ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                You are signed in with the invited email address and can accept this
-                invitation now.
+                You are signed in with the invited email address and can accept
+                this invitation now.
               </p>
               <Button
                 className="w-full"
@@ -348,10 +392,12 @@ export default function InviteAccept() {
           ) : null}
 
           {actionError ? (
-            <p className="text-sm font-medium text-destructive">{actionError}</p>
+            <Callout tone="danger">
+              <CalloutDescription>{actionError}</CalloutDescription>
+            </Callout>
           ) : null}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

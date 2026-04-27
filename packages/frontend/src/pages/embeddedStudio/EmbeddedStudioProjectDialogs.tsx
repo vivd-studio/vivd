@@ -1,4 +1,15 @@
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Input } from "@vivd/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Input,
+  Panel,
+} from "@vivd/ui";
 
 import { Loader2 } from "lucide-react";
 
@@ -113,13 +124,13 @@ export function EmbeddedStudioProjectDialogs({
 
       {isRenamePending ? (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm">
-          <div className="flex max-w-sm flex-col items-center gap-2 rounded-lg border bg-card px-4 py-3 text-center shadow-sm">
+          <Panel className="flex max-w-sm flex-col items-center gap-2 px-4 py-3 text-center">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div className="text-sm font-medium">Renaming project slug...</div>
             <div className="text-xs text-muted-foreground">
               This may take a while. Project actions are temporarily disabled.
             </div>
-          </div>
+          </Panel>
         </div>
       ) : null}
     </>

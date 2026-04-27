@@ -58,7 +58,7 @@ export function UsersTab() {
 
   if (fetchError) {
     return (
-      <div className="p-10 text-red-500 flex items-center gap-2">
+      <div className="p-10 text-destructive flex items-center gap-2">
         <AlertCircle /> Error loading users: {String(fetchError)}
       </div>
     );
@@ -75,7 +75,8 @@ export function UsersTab() {
                 Users ({users?.length})
               </PanelTitle>
               <PanelDescription>
-                Global roles are system-wide. Organization roles are managed per org.
+                Global roles are system-wide. Organization roles are managed per
+                org.
               </PanelDescription>
             </div>
             <Button
@@ -107,10 +108,7 @@ export function UsersTab() {
         </PanelContent>
       </Panel>
 
-      <EditUserDialog
-        user={editingUser}
-        onClose={() => setEditingUser(null)}
-      />
+      <EditUserDialog user={editingUser} onClose={() => setEditingUser(null)} />
 
       <DeleteUserDialog
         user={deleteConfirmUser}

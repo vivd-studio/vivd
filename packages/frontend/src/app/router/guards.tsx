@@ -12,7 +12,14 @@ import {
 } from "@/lib/localHostRouting";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
-import { Button } from "@vivd/ui";
+import {
+  Button,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from "@vivd/ui";
 
 import { EmailVerificationPrompt } from "@/components/auth/EmailVerificationPrompt";
 
@@ -81,8 +88,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const canonicalControlPlaneUrl = getCanonicalControlPlaneUrl({
     controlPlaneMode: config.controlPlaneMode,
     controlPlaneHost: config.controlPlaneHost,
-    currentHost:
-      typeof window === "undefined" ? null : window.location.host,
+    currentHost: typeof window === "undefined" ? null : window.location.host,
     pathname: location.pathname,
     search: location.search,
     hash: location.hash,
@@ -102,28 +108,31 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full rounded-lg border bg-card p-6 space-y-4">
-          <div>
-            <h1 className="text-lg font-semibold">Wrong tenant host</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              This domain is pinned to an organization your account cannot access.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild>
-              <a href={controlPlaneUrl}>Go to control plane</a>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                await authClient.signOut();
-                window.location.assign(ROUTES.LOGIN);
-              }}
-            >
-              Log out
-            </Button>
-          </div>
-        </div>
+        <Panel className="w-full max-w-md">
+          <PanelHeader>
+            <PanelTitle>Wrong tenant host</PanelTitle>
+            <PanelDescription>
+              This domain is pinned to an organization your account cannot
+              access.
+            </PanelDescription>
+          </PanelHeader>
+          <PanelContent>
+            <div className="flex gap-2">
+              <Button asChild>
+                <a href={controlPlaneUrl}>Go to control plane</a>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await authClient.signOut();
+                  window.location.assign(ROUTES.LOGIN);
+                }}
+              >
+                Log out
+              </Button>
+            </div>
+          </PanelContent>
+        </Panel>
       </div>
     );
   }
@@ -217,7 +226,10 @@ export function RequireAssignedProject({ children }: { children: ReactNode }) {
   // If accessing a specific project, must be their assigned one
   if (projectSlug && assignedProject.projectSlug !== projectSlug) {
     return (
-      <Navigate to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)} replace />
+      <Navigate
+        to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)}
+        replace
+      />
     );
   }
 
@@ -250,7 +262,9 @@ export function SingleProjectModeLayoutGuard({
   if (config.singleProjectMode) {
     const isAdminRoute = location.pathname.startsWith("/vivd-studio/admin");
     const isSettingsRoute = location.pathname.startsWith(ROUTES.SETTINGS);
-    const isSuperAdminRoute = location.pathname.startsWith(ROUTES.SUPERADMIN_BASE);
+    const isSuperAdminRoute = location.pathname.startsWith(
+      ROUTES.SUPERADMIN_BASE,
+    );
     const isOrgRoute = location.pathname.startsWith(ROUTES.ORG);
     const isScratchRoute = location.pathname === ROUTES.NEW_SCRATCH;
 
@@ -303,7 +317,10 @@ export function DashboardClientEditorGuard({
   // Auto-redirect client editors to their assigned project (fullscreen mode)
   if (isClientEditor && assignedProject?.projectSlug) {
     return (
-      <Navigate to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)} replace />
+      <Navigate
+        to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)}
+        replace
+      />
     );
   }
 
@@ -349,5 +366,10 @@ export function ScratchWizardClientEditorGuard({
   }
 
   // Always redirect client_editor to fullscreen mode
-  return <Navigate to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)} replace />;
+  return (
+    <Navigate
+      to={ROUTES.PROJECT_FULLSCREEN(assignedProject.projectSlug)}
+      replace
+    />
+  );
 }

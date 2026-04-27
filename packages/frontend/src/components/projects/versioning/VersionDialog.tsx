@@ -1,4 +1,12 @@
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Button } from "@vivd/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Button,
+} from "@vivd/ui";
 
 import { Plus, RefreshCw, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -50,7 +58,7 @@ export function VersionDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-600">
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
               <AlertTriangle className="h-5 w-5" />
               Confirm Overwrite
             </DialogTitle>
@@ -59,7 +67,7 @@ export function VersionDialog({
                 Are you sure you want to overwrite{" "}
                 <strong>v{currentVersion}</strong>?
               </span>
-              <span className="block text-orange-600">
+              <span className="block text-amber-600">
                 This will permanently delete all files in the current version
                 and regenerate it from scratch.
               </span>
@@ -118,7 +126,7 @@ export function VersionDialog({
           <Button
             variant="outline"
             onClick={handleOverwriteClick}
-            className="w-full justify-start gap-2 h-auto py-3 border-orange-300 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
+            className="w-full justify-start gap-2 h-auto py-3 border-amber-500/40 text-amber-700 hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
           >
             <RefreshCw className="h-4 w-4" />
             <div className="text-left">

@@ -1,6 +1,22 @@
 import type { ProjectVersionManualStatus } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@vivd/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Input,
+  Panel,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@vivd/ui";
 
 import type { ManualProjectStatusOption } from "./ProjectCard.helpers";
 
@@ -77,13 +93,16 @@ export function ProjectCardStatusDialog({
               ))}
             </SelectContent>
           </Select>
-          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <Panel
+            tone="sunken"
+            className="rounded-md px-3 py-2 text-xs text-muted-foreground"
+          >
             {
               manualProjectStatusOptions.find(
                 (option) => option.value === manualStatusInput,
               )?.description
             }
-          </div>
+          </Panel>
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>

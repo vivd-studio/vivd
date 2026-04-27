@@ -9,7 +9,33 @@ import {
 } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
-import { Button, Input, Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@vivd/ui";
+import {
+  Button,
+  Input,
+  Panel,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@vivd/ui";
 
 import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
@@ -119,23 +145,25 @@ export default function ProjectFullscreen() {
       refetchOnReconnect: "always",
     },
   );
-  const { data: externalPreview } = trpc.project.getExternalPreviewStatus.useQuery(
-    { slug: projectSlug!, version },
-    { enabled: !!projectSlug && !!project },
-  );
-  const regenerateThumbnailMutation = trpc.project.regenerateThumbnail.useMutation({
-    onSuccess: (_data, variables) => {
-      toast.success("Thumbnail regenerated", {
-        description: `${variables.slug} v${variables.version}`,
-      });
-      utils.project.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error("Failed to regenerate thumbnail", {
-        description: error.message,
-      });
-    },
-  });
+  const { data: externalPreview } =
+    trpc.project.getExternalPreviewStatus.useQuery(
+      { slug: projectSlug!, version },
+      { enabled: !!projectSlug && !!project },
+    );
+  const regenerateThumbnailMutation =
+    trpc.project.regenerateThumbnail.useMutation({
+      onSuccess: (_data, variables) => {
+        toast.success("Thumbnail regenerated", {
+          description: `${variables.slug} v${variables.version}`,
+        });
+        utils.project.list.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to regenerate thumbnail", {
+          description: error.message,
+        });
+      },
+    });
   const setPublicPreviewEnabledMutation =
     trpc.project.setPublicPreviewEnabled.useMutation({
       onSuccess: (data) => {
@@ -202,7 +230,7 @@ export default function ProjectFullscreen() {
   const preferredStudioRuntime = useMemo(
     () =>
       editRequested
-        ? startedStudioRuntime ?? queryStudioRuntime
+        ? (startedStudioRuntime ?? queryStudioRuntime)
         : queryStudioRuntime,
     [editRequested, queryStudioRuntime, startedStudioRuntime],
   );
@@ -349,7 +377,9 @@ export default function ProjectFullscreen() {
       navigate(ROUTES.DASHBOARD);
     },
     onFullscreen: () => {
-      navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${version}`);
+      navigate(
+        `${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${version}`,
+      );
     },
     onNavigate: (path) => {
       navigate(path);
@@ -363,20 +393,29 @@ export default function ProjectFullscreen() {
   const studioIframeSrc = useMemo(() => {
     const liveStudioBaseUrl = studioBaseUrl;
     if (!liveStudioBaseUrl) return null;
-    const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
+    const url = new URL(
+      resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"),
+    );
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));
-    url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
+    url.searchParams.set(
+      "publicPreviewEnabled",
+      publicPreviewEnabled ? "1" : "0",
+    );
     url.searchParams.set(
       "returnTo",
-      new URL(ROUTES.PROJECT_FULLSCREEN(projectSlug || ""), window.location.origin).toString(),
+      new URL(
+        ROUTES.PROJECT_FULLSCREEN(projectSlug || ""),
+        window.location.origin,
+      ).toString(),
     );
     return url.toString();
   }, [projectSlug, publicPreviewEnabled, studioBaseUrl, version]);
 
   const studioIframeTarget = useMemo(
-    () => `vivd-studio-project-fullscreen-${projectSlug || "project"}-v${version}`,
+    () =>
+      `vivd-studio-project-fullscreen-${projectSlug || "project"}-v${version}`,
     [projectSlug, version],
   );
 
@@ -415,7 +454,9 @@ export default function ProjectFullscreen() {
   };
 
   const thumbnailSrc = project?.thumbnailUrl ?? null;
-  const selectedVersionInfo = project?.versions?.find((v) => v.version === version);
+  const selectedVersionInfo = project?.versions?.find(
+    (v) => v.version === version,
+  );
   const isSelectedVersionCompleted =
     selectedVersionInfo?.status === "completed" ||
     (version === project?.currentVersion && project?.status === "completed");
@@ -745,9 +786,14 @@ export default function ProjectFullscreen() {
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex flex-col items-center justify-center gap-3">
             <div className="px-6 text-center text-destructive">
-              Failed to start studio: {startStudio.data.error || "Unknown error"}
+              Failed to start studio:{" "}
+              {startStudio.data.error || "Unknown error"}
             </div>
-            <Button onClick={handleEdit} size="sm" className="h-8 rounded-md px-3">
+            <Button
+              onClick={handleEdit}
+              size="sm"
+              className="h-8 rounded-md px-3"
+            >
               Retry
             </Button>
           </FramedViewport>
@@ -800,19 +846,25 @@ export default function ProjectFullscreen() {
                       Publish preview not ready yet
                       {externalPreview?.status
                         ? ` (${externalPreview.status})`
-                        : ""}. Click{" "}
-                      <span className="font-medium text-foreground">Start Studio</span>{" "}
+                        : ""}
+                      . Click{" "}
+                      <span className="font-medium text-foreground">
+                        Start Studio
+                      </span>{" "}
                       to start a studio machine.
                     </div>
                     {thumbnailSrc ? (
-                      <div className="overflow-hidden rounded-lg border bg-muted">
+                      <Panel
+                        tone="sunken"
+                        className="overflow-hidden rounded-md p-0"
+                      >
                         <img
                           src={thumbnailSrc}
                           alt={`Thumbnail - ${projectSlug}`}
                           className="h-auto w-full object-contain"
                           loading="lazy"
                         />
-                      </div>
+                      </Panel>
                     ) : null}
                   </div>
                 </div>
@@ -841,8 +893,8 @@ export default function ProjectFullscreen() {
               <AlertDialogTitle>Rename project slug?</AlertDialogTitle>
               <AlertDialogDescription>
                 Change <strong>{projectSlug}</strong> to a new URL slug. This
-                updates project references across the control plane. This can take
-                a while and project actions stay locked until it completes.
+                updates project references across the control plane. This can
+                take a while and project actions stay locked until it completes.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-2">
@@ -961,7 +1013,11 @@ export default function ProjectFullscreen() {
                   className="h-full min-h-0"
                   header={renderFullscreenHeader({
                     actionSlot: (
-                      <Button disabled size="sm" className="h-8 rounded-md px-3">
+                      <Button
+                        disabled
+                        size="sm"
+                        className="h-8 rounded-md px-3"
+                      >
                         <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
                         Booting studio…
                       </Button>
@@ -975,9 +1031,7 @@ export default function ProjectFullscreen() {
             </div>
           ) : null}
 
-          {isStudioRecovering && studioReady ? (
-            <StudioRecoveryOverlay />
-          ) : null}
+          {isStudioRecovering && studioReady ? <StudioRecoveryOverlay /> : null}
         </div>
       </div>
 
@@ -1021,7 +1075,8 @@ export default function ProjectFullscreen() {
                 renameSlugMutation.isPending ||
                 !projectSlug ||
                 !renameSlugInput.trim() ||
-                renameSlugInput.trim().toLowerCase() === projectSlug.toLowerCase()
+                renameSlugInput.trim().toLowerCase() ===
+                  projectSlug.toLowerCase()
               }
               onClick={() => {
                 if (!projectSlug) return;
@@ -1075,13 +1130,13 @@ export default function ProjectFullscreen() {
 
       {isRenamePending ? (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm">
-          <div className="flex max-w-sm flex-col items-center gap-2 rounded-lg border bg-card px-4 py-3 text-center shadow-sm">
+          <Panel className="flex max-w-sm flex-col items-center gap-2 px-4 py-3 text-center">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div className="text-sm font-medium">Renaming project slug...</div>
             <div className="text-xs text-muted-foreground">
               This may take a while. Project actions are temporarily disabled.
             </div>
-          </div>
+          </Panel>
         </div>
       ) : null}
     </div>

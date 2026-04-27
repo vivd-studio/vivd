@@ -15,7 +15,11 @@ import { SettingsPageShell } from "@/plugins/host";
 import {
   Badge,
   Button,
+  Callout,
+  CalloutDescription,
+  Panel,
   Separator,
+  StatusPill,
   Tabs,
   TabsContent,
   TabsList,
@@ -583,23 +587,23 @@ export default function TableBookingProjectPage({
       }
     >
       <div className={isEmbedded ? "mx-auto max-w-7xl space-y-5" : "space-y-5"}>
-        <section className="rounded-xl border bg-card p-5">
+        <Panel className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md border bg-surface-sunken text-muted-foreground">
                   <PluginIcon className="h-4 w-4" />
                 </span>
                 <h2 className="text-lg font-semibold">
                   Project: {projectTitle}
                 </h2>
-                <Badge variant={pluginEnabled ? "success" : "outline"}>
+                <StatusPill tone={pluginEnabled ? "success" : "neutral"}>
                   {pluginEnabled
                     ? "Enabled"
                     : pluginInfo?.entitled
                       ? "Available"
                       : "Disabled"}
-                </Badge>
+                </StatusPill>
               </div>
               <p className="max-w-3xl text-sm text-muted-foreground">
                 {pluginEnabled
@@ -640,21 +644,25 @@ export default function TableBookingProjectPage({
             ) : null}
           </div>
           {pluginInfoQuery.error ? (
-            <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load plugin info: {pluginInfoQuery.error.message}
-            </div>
+            <Callout tone="danger" className="mt-4">
+              <CalloutDescription>
+                Failed to load plugin info: {pluginInfoQuery.error.message}
+              </CalloutDescription>
+            </Callout>
           ) : null}
-        </section>
+        </Panel>
 
         {pluginEnabled ? (
           <>
             {readErrors.length > 0 ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Some booking data could not load. {readErrors.join(" ")}
-              </div>
+              <Callout tone="danger">
+                <CalloutDescription>
+                  Some booking data could not load. {readErrors.join(" ")}
+                </CalloutDescription>
+              </Callout>
             ) : null}
 
-            <section className="flex flex-wrap items-stretch gap-x-6 gap-y-3 rounded-xl border bg-card px-4 py-3">
+            <Panel className="flex flex-wrap items-stretch gap-x-6 gap-y-3 px-4 py-3">
               <StatInline
                 icon={CalendarDays}
                 label="Today"
@@ -691,13 +699,13 @@ export default function TableBookingProjectPage({
                     : "default"
                 }
               />
-            </section>
+            </Panel>
 
             <Tabs
               value={activeTab}
               onValueChange={(value) => setActiveTab(value as SettingsTab)}
             >
-              <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-muted p-1 md:grid-cols-4">
+              <TabsList className="grid h-auto w-full grid-cols-2 rounded-md bg-surface-sunken p-1 md:grid-cols-4">
                 <TabsTrigger value="calendar" className="px-3 py-2">
                   Calendar
                 </TabsTrigger>

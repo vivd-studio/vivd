@@ -16,28 +16,28 @@ export const CHECKLIST_STATUS_CONFIG: Record<
 > = {
   pass: {
     icon: CheckCircle2,
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-50 dark:bg-green-900/20",
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "border-emerald-500/30 bg-emerald-500/10",
   },
   fail: {
     icon: XCircle,
-    color: "text-red-600 dark:text-red-400",
-    bgColor: "bg-red-50 dark:bg-red-900/20",
+    color: "text-destructive",
+    bgColor: "border-destructive/30 bg-destructive/10",
   },
   warning: {
     icon: AlertTriangle,
     color: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-50 dark:bg-amber-900/20",
+    bgColor: "border-amber-500/30 bg-amber-500/10",
   },
   skip: {
     icon: SkipForward,
-    color: "text-gray-500 dark:text-gray-400",
-    bgColor: "bg-gray-50 dark:bg-gray-800/50",
+    color: "text-muted-foreground",
+    bgColor: "border-border bg-surface-sunken",
   },
   fixed: {
     icon: CheckCircle2,
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-50 dark:bg-blue-900/20",
+    color: "text-primary",
+    bgColor: "border-primary/30 bg-primary/10",
   },
 };
 

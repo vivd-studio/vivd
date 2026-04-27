@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle, Button } from "@vivd/ui";
+import { Button, Panel, PanelContent, PanelHeader, PanelTitle } from "@vivd/ui";
 
 import { CenteredLoading } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
@@ -47,11 +47,11 @@ export default function NoProjectAssigned() {
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center p-6">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle>No Project Assigned</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Panel className="w-full max-w-lg">
+        <PanelHeader>
+          <PanelTitle>No Project Assigned</PanelTitle>
+        </PanelHeader>
+        <PanelContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Your account is not assigned to a project yet. Please contact an
             admin to assign you to a project.
@@ -61,8 +61,8 @@ export default function NoProjectAssigned() {
               Sign out
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

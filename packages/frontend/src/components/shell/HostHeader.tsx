@@ -38,7 +38,9 @@ export function HostHeader({
   return (
     <div className={cn("flex min-h-8 items-center gap-2", className)}>
       {leadingAccessory ? (
-        <div className="flex shrink-0 items-center gap-2">{leadingAccessory}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          {leadingAccessory}
+        </div>
       ) : null}
 
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -94,7 +96,7 @@ function HeaderSearchTrigger() {
       type="button"
       aria-label="Open search"
       onClick={openSearch}
-      className="flex h-8 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      className="flex h-8 items-center gap-2 rounded-md border border-border/70 bg-surface-sunken px-3 text-sm text-muted-foreground transition-colors hover:bg-surface-panel hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <Search className="size-4" />
       <span className="hidden sm:inline">Search</span>

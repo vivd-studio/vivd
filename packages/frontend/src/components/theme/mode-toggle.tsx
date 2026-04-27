@@ -1,6 +1,14 @@
 import { Moon, Sun, Palette } from "lucide-react";
 import type { ColorTheme } from "@vivd/shared/types";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@vivd/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@vivd/ui";
 
 import { useTheme } from "./theme-provider";
 
@@ -62,7 +70,7 @@ export function ModeToggle() {
           <DropdownMenuItem
             key={option.value}
             onClick={() => setColorTheme(option.value)}
-            className={colorTheme === option.value ? "bg-accent" : ""}
+            className={colorTheme === option.value ? "bg-surface-sunken" : ""}
           >
             <ThemeIndicator preview={option.preview} />
             <span>{option.label}</span>

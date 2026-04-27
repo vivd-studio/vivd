@@ -1,4 +1,23 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle, Button, Badge, ScrollArea, Input, Label, InteractiveSurface, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  Button,
+  Badge,
+  ScrollArea,
+  Input,
+  Label,
+  InteractiveSurface,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@vivd/ui";
 
 import { useState } from "react";
 import { Settings2, Trash2, Loader2, Globe, AlertTriangle } from "lucide-react";
@@ -83,9 +102,7 @@ export function VersionManagementPanel({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-        return (
-          <Badge variant="success">Completed</Badge>
-        );
+        return <Badge variant="success">Completed</Badge>;
       case "failed":
         return <Badge variant="destructive">Failed</Badge>;
       default:
@@ -147,7 +164,7 @@ export function VersionManagementPanel({
                       <InteractiveSurface
                         variant="choice"
                         key={version.version}
-                        className="rounded-lg p-4 hover:bg-accent/30"
+                        className="rounded-md p-4 hover:bg-surface-sunken"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -220,7 +237,7 @@ export function VersionManagementPanel({
           <div className="py-2">
             <Label htmlFor="confirm-delete" className="text-sm font-medium">
               Type{" "}
-              <span className="font-mono bg-muted px-1 rounded">
+              <span className="font-mono rounded bg-surface-sunken px-1">
                 {expectedConfirmation}
               </span>{" "}
               to confirm

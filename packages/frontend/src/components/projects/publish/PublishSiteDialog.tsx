@@ -1,10 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Rocket, Loader2, ExternalLink, AlertTriangle, Globe, RefreshCw } from "lucide-react";
+import {
+  Rocket,
+  Loader2,
+  ExternalLink,
+  AlertTriangle,
+  Globe,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Tooltip, TooltipContent, TooltipTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
-
+import {
+  Button,
+  Callout,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  Panel,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@vivd/ui";
 
 interface PublishSiteDialogProps {
   open: boolean;
@@ -25,7 +54,8 @@ function looksLikeCompleteDomain(input: string): boolean {
   const normalized = input.trim().toLowerCase();
   if (!normalized) return false;
   if (normalized === "localhost") return true;
-  if (normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
+  if (normalized.endsWith(".localhost") || normalized.endsWith(".local"))
+    return true;
 
   const firstDot = normalized.indexOf(".");
   return firstDot > 0 && firstDot < normalized.length - 1;
@@ -157,34 +187,36 @@ export function PublishSiteDialog({
 
   const olderSnapshotWarning = Boolean(
     state?.studioRunning &&
-      state?.studioStateAvailable &&
-      state?.studioWorkingCommitHash &&
-      state?.studioHeadCommitHash &&
-      state.studioWorkingCommitHash !== state.studioHeadCommitHash,
+    state?.studioStateAvailable &&
+    state?.studioWorkingCommitHash &&
+    state?.studioHeadCommitHash &&
+    state.studioWorkingCommitHash !== state.studioHeadCommitHash,
   );
 
   const publishTargetCommitHash =
-    state?.studioRunning && state?.studioStateAvailable && state?.studioHeadCommitHash
+    state?.studioRunning &&
+    state?.studioStateAvailable &&
+    state?.studioHeadCommitHash
       ? state.studioHeadCommitHash
-      : state?.publishableCommitHash ?? null;
+      : (state?.publishableCommitHash ?? null);
   const publishableCommitMatchesTarget = Boolean(
     publishTargetCommitHash &&
-      state?.publishableCommitHash &&
-      state.publishableCommitHash === publishTargetCommitHash,
+    state?.publishableCommitHash &&
+    state.publishableCommitHash === publishTargetCommitHash,
   );
   const preparingLatestSnapshotWarning = Boolean(
     state?.studioRunning &&
-      state?.studioStateAvailable &&
-      state?.studioHeadCommitHash &&
-      state?.publishableCommitHash &&
-      state.publishableCommitHash !== state.studioHeadCommitHash,
+    state?.studioStateAvailable &&
+    state?.studioHeadCommitHash &&
+    state?.publishableCommitHash &&
+    state.publishableCommitHash !== state.studioHeadCommitHash,
   );
 
   const domainValidationPending = Boolean(
     hasDomainInput &&
-      domainInputComplete &&
-      (normalizedInput !== normalizedDebouncedInput ||
-        (shouldValidateDomain && checkDomainQuery.isFetching)),
+    domainInputComplete &&
+    (normalizedInput !== normalizedDebouncedInput ||
+      (shouldValidateDomain && checkDomainQuery.isFetching)),
   );
   const domainError =
     hasDomainInput &&
@@ -195,12 +227,14 @@ export function PublishSiteDialog({
       : undefined;
   const domainOk = Boolean(
     hasDomainInput &&
-      domainInputComplete &&
-      !domainValidationPending &&
-      (checkDomainQuery.data?.available ?? false),
+    domainInputComplete &&
+    !domainValidationPending &&
+    (checkDomainQuery.data?.available ?? false),
   );
   const readyForPublish = state?.readiness === "ready";
-  const missingCommitMetadataWarning = Boolean(readyForPublish && !state?.publishableCommitHash);
+  const missingCommitMetadataWarning = Boolean(
+    readyForPublish && !state?.publishableCommitHash,
+  );
   const publishDisabled =
     publishMutation.isPending ||
     !readyForPublish ||
@@ -240,7 +274,8 @@ export function PublishSiteDialog({
       return "Open Studio and prepare the latest saved snapshot before publishing.";
     }
     if (!hasDomainInput) return "Enter a domain.";
-    if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
+    if (!domainInputComplete)
+      return "Enter a complete domain (for example, example.com).";
     if (domainValidationPending) return "Validating domain availability...";
     if (!domainOk) {
       return domainError || "Domain is not available for publishing.";
@@ -301,109 +336,128 @@ export function PublishSiteDialog({
               Publish Site
             </DialogTitle>
             <DialogDescription>
-              Make <span className="font-medium">{slug}</span> live at your domain.
+              Make <span className="font-medium">{slug}</span> live at your
+              domain.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-md border p-3 text-sm">
+            <Panel tone="sunken" className="rounded-md p-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Publishing content</span>
+                <span className="text-muted-foreground">
+                  Publishing content
+                </span>
                 <span className="text-foreground">
-                  {state?.sourceKind === "preview" ? "Latest preview build" : "Latest saved files"}
+                  {state?.sourceKind === "preview"
+                    ? "Latest preview build"
+                    : "Latest saved files"}
                 </span>
               </div>
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                <div>Version: <span className="text-foreground">v{version}</span></div>
-                <div>Prepared: <span className="text-foreground">{formatTimeLabel(state?.builtAt)}</span></div>
+                <div>
+                  Version: <span className="text-foreground">v{version}</span>
+                </div>
+                <div>
+                  Prepared:{" "}
+                  <span className="text-foreground">
+                    {formatTimeLabel(state?.builtAt)}
+                  </span>
+                </div>
               </div>
-            </div>
+            </Panel>
 
             {state?.readiness === "build_in_progress" ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <Callout tone="warn">
                 Site build in progress. You can publish once it is ready.
-              </div>
+              </Callout>
             ) : null}
 
             {state?.readiness === "artifact_not_ready" ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                <div>We're still preparing your site for publishing. This can take a little while.</div>
+              <Callout tone="danger">
+                <div>
+                  We're still preparing your site for publishing. This can take
+                  a little while.
+                </div>
                 {import.meta.env.DEV && state.error ? (
-                  <div className="mt-1 text-xs text-muted-foreground">{state.error}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {state.error}
+                  </div>
                 ) : null}
-              </div>
+              </Callout>
             ) : null}
 
-            {preparingLatestSnapshotWarning && !olderSnapshotWarning && !unsavedChangesWarning ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Your latest saved snapshot is newer than the currently prepared publish artifact.
-                Open Studio and prepare it once before publishing.
-              </div>
+            {preparingLatestSnapshotWarning &&
+            !olderSnapshotWarning &&
+            !unsavedChangesWarning ? (
+              <Callout tone="warn">
+                Your latest saved snapshot is newer than the currently prepared
+                publish artifact. Open Studio and prepare it once before
+                publishing.
+              </Callout>
             ) : null}
 
             {publishError ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {publishError}
-              </div>
+              <Callout tone="danger">{publishError}</Callout>
             ) : null}
 
             {olderSnapshotWarning ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
-                  <div className="space-y-2">
-                    <div>
-                      Studio is currently viewing an older snapshot. Restore it (or switch back to
-                      the latest snapshot) before publishing so you publish what you're seeing.
-                    </div>
-                    {onOpenStudio ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-amber-400 bg-transparent"
-                        onClick={onOpenStudio}
-                      >
-                        Open Studio to restore snapshot
-                      </Button>
-                    ) : null}
+              <Callout tone="warn" icon={<AlertTriangle />}>
+                <div className="space-y-2">
+                  <div>
+                    Studio is currently viewing an older snapshot. Restore it
+                    (or switch back to the latest snapshot) before publishing so
+                    you publish what you're seeing.
                   </div>
+                  {onOpenStudio ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-400 bg-transparent"
+                      onClick={onOpenStudio}
+                    >
+                      Open Studio to restore snapshot
+                    </Button>
+                  ) : null}
                 </div>
-              </div>
+              </Callout>
             ) : null}
 
             {unsavedChangesWarning ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
-                  <div className="space-y-2">
-                    <div>
-                      {studioStateUnknownWarning
-                        ? "Studio is active. Open Studio and save before publishing."
-                        : "You have unsaved changes in Studio."}
-                    </div>
-                    {onOpenStudio ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-amber-400 bg-transparent"
-                        onClick={onOpenStudio}
-                      >
-                        Open Studio to save changes
-                      </Button>
-                    ) : null}
+              <Callout tone="warn" icon={<AlertTriangle />}>
+                <div className="space-y-2">
+                  <div>
+                    {studioStateUnknownWarning
+                      ? "Studio is active. Open Studio and save before publishing."
+                      : "You have unsaved changes in Studio."}
                   </div>
+                  {onOpenStudio ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-400 bg-transparent"
+                      onClick={onOpenStudio}
+                    >
+                      Open Studio to save changes
+                    </Button>
+                  ) : null}
                 </div>
-              </div>
+              </Callout>
             ) : null}
 
             {checklist?.checklist ? (
-              <div className="rounded-md border p-3 text-xs text-muted-foreground">
-                <div className="font-medium text-foreground mb-1">Checklist</div>
+              <Panel
+                tone="sunken"
+                className="rounded-md p-3 text-xs text-muted-foreground"
+              >
+                <div className="font-medium text-foreground mb-1">
+                  Checklist
+                </div>
                 <div>
-                  Passed {checklist.checklist.summary.passed} / {checklist.checklist.items.length}
+                  Passed {checklist.checklist.summary.passed} /{" "}
+                  {checklist.checklist.items.length}
                   {checklist.stale ? " (stale)" : " (fresh)"}
                 </div>
-              </div>
+              </Panel>
             ) : null}
 
             <div className="space-y-2">
@@ -421,12 +475,14 @@ export function PublishSiteDialog({
             </div>
 
             {publishStatus?.isPublished ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <Callout tone="success" className="text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     Published at{" "}
                     <span className="font-medium">{publishStatus.domain}</span>
-                    {publishStatus.publishedAt ? ` · ${formatTimeLabel(publishStatus.publishedAt)}` : ""}
+                    {publishStatus.publishedAt
+                      ? ` · ${formatTimeLabel(publishStatus.publishedAt)}`
+                      : ""}
                   </div>
                   {publishStatus.url ? (
                     <a
@@ -440,7 +496,7 @@ export function PublishSiteDialog({
                     </a>
                   ) : null}
                 </div>
-              </div>
+              </Callout>
             ) : null}
           </div>
 
@@ -484,11 +540,11 @@ export function PublishSiteDialog({
                       ? "Restore in Studio"
                       : preparingLatestSnapshotWarning
                         ? "Prepare in Studio"
-                      : missingCommitMetadataWarning
-                        ? "Open Studio to save"
-                      : studioStateUnknownWarning
-                        ? "Open Studio"
-                        : "Save in Studio"}
+                        : missingCommitMetadataWarning
+                          ? "Open Studio to save"
+                          : studioStateUnknownWarning
+                            ? "Open Studio"
+                            : "Save in Studio"}
                   </Button>
                 ) : null}
                 <Button
@@ -505,7 +561,8 @@ export function PublishSiteDialog({
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh status
                 </Button>
-                {publishDisabled && (olderSnapshotWarning || unsavedChangesWarning) ? (
+                {publishDisabled &&
+                (olderSnapshotWarning || unsavedChangesWarning) ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex" tabIndex={0}>
@@ -546,12 +603,18 @@ export function PublishSiteDialog({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmUnpublishOpen} onOpenChange={setConfirmUnpublishOpen}>
+      <AlertDialog
+        open={confirmUnpublishOpen}
+        onOpenChange={setConfirmUnpublishOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unpublish site?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove domain routing for <span className="font-medium">{publishStatus?.domain || slug}</span>
+              This will remove domain routing for{" "}
+              <span className="font-medium">
+                {publishStatus?.domain || slug}
+              </span>
               {publishedVersion ? ` (v${publishedVersion})` : ""}.
             </AlertDialogDescription>
           </AlertDialogHeader>

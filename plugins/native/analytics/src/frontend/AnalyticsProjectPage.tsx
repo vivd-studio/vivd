@@ -4,17 +4,29 @@ import { BarChart3 } from "lucide-react";
 import { trpc } from "@/plugins/host";
 import { LoadingSpinner } from "@/plugins/host";
 import {
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+  Callout,
+  CalloutDescription,
+  Panel,
+  PanelContent,
+  PanelHeader,
+  PanelTitle,
   Progress,
+  StatTile,
+  StatTileHelper,
+  StatTileLabel,
+  StatTileValue,
+  StatusPill,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@vivd/ui";
 import { SettingsPageShell } from "@/plugins/host";
 import {
@@ -139,13 +151,11 @@ function MetricCard({
   caption?: string;
 }) {
   return (
-    <section className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-      {caption ? (
-        <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
-      ) : null}
-    </section>
+    <StatTile>
+      <StatTileLabel>{label}</StatTileLabel>
+      <StatTileValue>{value}</StatTileValue>
+      {caption ? <StatTileHelper>{caption}</StatTileHelper> : null}
+    </StatTile>
   );
 }
 
@@ -159,7 +169,7 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border bg-card p-4 space-y-3">
+    <Panel className="space-y-3 p-4">
       <div>
         <h3 className="text-sm font-medium">{title}</h3>
         {description ? (
@@ -167,7 +177,16 @@ function SectionCard({
         ) : null}
       </div>
       {children}
-    </section>
+    </Panel>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <StatTile>
+      <StatTileLabel>{label}</StatTileLabel>
+      <StatTileValue className="text-lg">{value}</StatTileValue>
+    </StatTile>
   );
 }
 
@@ -321,23 +340,26 @@ export default function AnalyticsProjectPage() {
         />
       }
     >
-      <Card>
-        <CardHeader className="space-y-4">
+      <Panel>
+        <PanelHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Website + Lead Analytics</CardTitle>
+              <PanelTitle>Website + Lead Analytics</PanelTitle>
             </div>
-            <Badge variant={analyticsEnabled ? "default" : "secondary"}>
+            <StatusPill tone={analyticsEnabled ? "success" : "neutral"}>
               {analyticsEnabled
                 ? "Enabled"
                 : analyticsNeedsProjectEnable
                   ? "Available"
                   : "Disabled"}
-            </Badge>
+            </StatusPill>
           </div>
           {analyticsEnabled ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 p-3">
+            <Panel
+              tone="sunken"
+              className="flex flex-wrap items-center justify-between gap-3 p-3"
+            >
               <div>
                 <p className="text-xs text-muted-foreground">
                   {analyticsRangeLabel}
@@ -366,19 +388,21 @@ export default function AnalyticsProjectPage() {
                   30 days
                 </Button>
               </div>
-            </div>
+            </Panel>
           ) : null}
-        </CardHeader>
-        <CardContent className="space-y-5">
+        </PanelHeader>
+        <PanelContent className="space-y-5">
           {analyticsInfoQuery.error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load analytics settings:{" "}
-              {analyticsInfoQuery.error.message}
-            </div>
+            <Callout tone="danger">
+              <CalloutDescription>
+                Failed to load analytics settings:{" "}
+                {analyticsInfoQuery.error.message}
+              </CalloutDescription>
+            </Callout>
           ) : null}
 
           {!analyticsEnabled ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+            <Callout tone="warn">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>{disabledCopy}</span>
                 {analyticsNeedsProjectEnable || canRequestAnalyticsAccess ? (
@@ -410,22 +434,24 @@ export default function AnalyticsProjectPage() {
                   />
                 ) : null}
               </div>
-            </div>
+            </Callout>
           ) : null}
 
           {analyticsEnabled ? (
             <>
               {analyticsSummaryQuery.error ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  Failed to load analytics data:{" "}
-                  {analyticsSummaryQuery.error.message}
-                </div>
+                <Callout tone="danger">
+                  <CalloutDescription>
+                    Failed to load analytics data:{" "}
+                    {analyticsSummaryQuery.error.message}
+                  </CalloutDescription>
+                </Callout>
               ) : null}
 
               {analyticsSummaryQuery.isLoading ? (
-                <div className="rounded-md border bg-muted/20 px-3 py-8">
+                <Panel tone="sunken" className="px-3 py-8">
                   <LoadingSpinner message="Loading dashboard..." />
-                </div>
+                </Panel>
               ) : analyticsSummary ? (
                 <Tabs defaultValue="overview" className="w-full">
                   <div className="overflow-x-auto pb-1">
@@ -490,7 +516,7 @@ export default function AnalyticsProjectPage() {
                           />
                         </div>
 
-                        <section className="rounded-lg border bg-muted/20 p-4">
+                        <Panel tone="sunken" className="p-4">
                           <h4 className="text-sm font-medium">At a glance</h4>
                           <div className="mt-3 space-y-2">
                             <InsightRow
@@ -530,7 +556,7 @@ export default function AnalyticsProjectPage() {
                               }
                             />
                           </div>
-                        </section>
+                        </Panel>
                       </div>
                     </SectionCard>
 
@@ -539,124 +565,140 @@ export default function AnalyticsProjectPage() {
                       description={`Compared with the previous ${analyticsSummary.rangeDays}-day window (${analyticsSummary.comparison.previousRangeStart} to ${analyticsSummary.comparison.previousRangeEnd}).`}
                     >
                       <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium">Metric</th>
-                              <th className="px-3 py-2 font-medium">Current</th>
-                              <th className="px-3 py-2 font-medium">
+                        <Table className="w-full text-sm">
+                          <TableHeader>
+                            <TableRow className="text-left">
+                              <TableHead className="px-3 py-2 font-medium">
+                                Metric
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                Current
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Previous
-                              </th>
-                              <th className="px-3 py-2 font-medium">Change</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr className="border-t">
-                              <td className="px-3 py-2">Pageviews</td>
-                              <td className="px-3 py-2">
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                Change
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <TableRow className="border-t">
+                              <TableCell className="px-3 py-2">
+                                Pageviews
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals.pageviews
                                     .current,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals.pageviews
                                     .previous,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatDeltaSummary(
                                   analyticsSummary.comparison.totals.pageviews,
                                 )}
-                              </td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="px-3 py-2">Unique visitors</td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                            </TableRow>
+                            <TableRow className="border-t">
+                              <TableCell className="px-3 py-2">
+                                Unique visitors
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals
                                     .uniqueVisitors.current,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals
                                     .uniqueVisitors.previous,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatDeltaSummary(
                                   analyticsSummary.comparison.totals
                                     .uniqueVisitors,
                                 )}
-                              </td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="px-3 py-2">Sessions</td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                            </TableRow>
+                            <TableRow className="border-t">
+                              <TableCell className="px-3 py-2">
+                                Sessions
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals
                                     .uniqueSessions.current,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals
                                     .uniqueSessions.previous,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatDeltaSummary(
                                   analyticsSummary.comparison.totals
                                     .uniqueSessions,
                                 )}
-                              </td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="px-3 py-2">Contact submissions</td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                            </TableRow>
+                            <TableRow className="border-t">
+                              <TableCell className="px-3 py-2">
+                                Contact submissions
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals.submissions
                                     .current,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatInteger(
                                   analyticsSummary.comparison.totals.submissions
                                     .previous,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatDeltaSummary(
                                   analyticsSummary.comparison.totals
                                     .submissions,
                                 )}
-                              </td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="px-3 py-2">Submit rate</td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                            </TableRow>
+                            <TableRow className="border-t">
+                              <TableCell className="px-3 py-2">
+                                Submit rate
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatPercent(
                                   analyticsSummary.comparison.totals
                                     .conversionRatePct.current,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatPercent(
                                   analyticsSummary.comparison.totals
                                     .conversionRatePct.previous,
                                 )}
-                              </td>
-                              <td className="px-3 py-2">
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
                                 {formatDeltaSummary(
                                   analyticsSummary.comparison.totals
                                     .conversionRatePct,
                                 )}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
                       </div>
                     </SectionCard>
 
@@ -665,38 +707,44 @@ export default function AnalyticsProjectPage() {
                       description="Progression from pageview to contact submission."
                     >
                       <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium">Step</th>
-                              <th className="px-3 py-2 font-medium">Count</th>
-                              <th className="px-3 py-2 font-medium">
+                        <Table className="w-full text-sm">
+                          <TableHeader>
+                            <TableRow className="text-left">
+                              <TableHead className="px-3 py-2 font-medium">
+                                Step
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                Count
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 From previous
-                              </th>
-                              <th className="px-3 py-2 font-medium">
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 From pageviews
-                              </th>
-                              <th className="px-3 py-2 font-medium">
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Progress
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
                             {analyticsSummary.funnel.steps.map((step) => (
-                              <tr key={step.key} className="border-t">
-                                <td className="px-3 py-2">{step.label}</td>
-                                <td className="px-3 py-2">
+                              <TableRow key={step.key} className="border-t">
+                                <TableCell className="px-3 py-2">
+                                  {step.label}
+                                </TableCell>
+                                <TableCell className="px-3 py-2">
                                   {formatInteger(step.count)}
-                                </td>
-                                <td className="px-3 py-2">
+                                </TableCell>
+                                <TableCell className="px-3 py-2">
                                   {formatPercent(
                                     step.conversionFromPreviousPct,
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
+                                </TableCell>
+                                <TableCell className="px-3 py-2">
                                   {formatPercent(step.conversionFromFirstPct)}
-                                </td>
-                                <td className="px-3 py-2">
+                                </TableCell>
+                                <TableCell className="px-3 py-2">
                                   <div className="min-w-[140px]">
                                     <Progress
                                       value={Math.min(
@@ -708,11 +756,11 @@ export default function AnalyticsProjectPage() {
                                       )}
                                     />
                                   </div>
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
                             ))}
-                          </tbody>
-                        </table>
+                          </TableBody>
+                        </Table>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Form views and starts come from custom analytics events
@@ -728,31 +776,33 @@ export default function AnalyticsProjectPage() {
                     >
                       <div className="overflow-x-auto rounded-md border">
                         <div className="max-h-[420px] min-w-[860px] overflow-y-auto">
-                          <table className="w-full text-sm">
-                            <thead className="sticky top-0 bg-muted/40">
-                              <tr className="text-left">
-                                <th className="px-3 py-2 font-medium">Date</th>
-                                <th className="px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader className="sticky top-0">
+                              <TableRow className="text-left">
+                                <TableHead className="px-3 py-2 font-medium">
+                                  Date
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Pageviews
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Visitors
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Sessions
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submissions
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submit rate
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Traffic vs peak
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {dailyRows.length > 0 ? (
                                 dailyRows.map((row) => {
                                   const peakTrafficShare = Math.round(
@@ -760,29 +810,29 @@ export default function AnalyticsProjectPage() {
                                   );
 
                                   return (
-                                    <tr
+                                    <TableRow
                                       key={row.date}
                                       className="border-t align-top"
                                     >
-                                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                                      <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                                         {formatDateLabel(row.date)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.pageviews)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.visitors)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.sessions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.submissions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatPercent(row.submitRatePct)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         <div className="min-w-[140px] space-y-1">
                                           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                                             <span>vs peak</span>
@@ -792,22 +842,22 @@ export default function AnalyticsProjectPage() {
                                           </div>
                                           <Progress value={peakTrafficShare} />
                                         </div>
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   );
                                 })
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={7}
                                   >
                                     No daily traffic data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </div>
                     </SectionCard>
@@ -818,51 +868,53 @@ export default function AnalyticsProjectPage() {
                         description="Most visited paths in the selected range."
                       >
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="w-12 px-3 py-2 font-medium">
                                   #
-                                </th>
-                                <th className="px-3 py-2 font-medium">Path</th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
+                                  Path
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Pageviews
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Visitors
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.topPages.length > 0 ? (
                                 analyticsSummary.topPages.map((row, index) => (
-                                  <tr key={row.path} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
+                                  <TableRow key={row.path} className="border-t">
+                                    <TableCell className="px-3 py-2 text-muted-foreground">
                                       {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2 text-xs break-all">
                                       {row.path}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatInteger(row.pageviews)}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatInteger(row.uniqueVisitors)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 ))
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={4}
                                   >
                                     No pageview data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </SectionCard>
 
@@ -871,52 +923,52 @@ export default function AnalyticsProjectPage() {
                         description="External hosts sending visitors to your website."
                       >
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="w-12 px-3 py-2 font-medium">
                                   #
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Referrer host
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Events
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.topReferrers.length > 0 ? (
                                 analyticsSummary.topReferrers.map(
                                   (row, index) => (
-                                    <tr
+                                    <TableRow
                                       key={row.referrerHost}
                                       className="border-t"
                                     >
-                                      <td className="px-3 py-2 text-muted-foreground">
+                                      <TableCell className="px-3 py-2 text-muted-foreground">
                                         {index + 1}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs break-all">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 text-xs break-all">
                                         {row.referrerHost}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.events)}
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   ),
                                 )
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={3}
                                   >
                                     No referrer data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </SectionCard>
                     </div>
@@ -928,41 +980,41 @@ export default function AnalyticsProjectPage() {
                       >
                         <div className="space-y-3">
                           <div className="overflow-x-auto rounded-md border">
-                            <table className="w-full text-sm">
-                              <thead className="bg-muted/30">
-                                <tr className="text-left">
-                                  <th className="w-12 px-3 py-2 font-medium">
+                            <Table className="w-full text-sm">
+                              <TableHeader>
+                                <TableRow className="text-left">
+                                  <TableHead className="w-12 px-3 py-2 font-medium">
                                     #
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </TableHead>
+                                  <TableHead className="px-3 py-2 font-medium">
                                     Country
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </TableHead>
+                                  <TableHead className="px-3 py-2 font-medium">
                                     Pageviews
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </TableHead>
+                                  <TableHead className="px-3 py-2 font-medium">
                                     Visitors
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </TableHead>
+                                  <TableHead className="px-3 py-2 font-medium">
                                     Sessions
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </TableHead>
+                                  <TableHead className="px-3 py-2 font-medium">
                                     Share
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
                                 {analyticsSummary.countries.length > 0 ? (
                                   analyticsSummary.countries.map(
                                     (row, index) => (
-                                      <tr
+                                      <TableRow
                                         key={row.countryCode}
                                         className="border-t"
                                       >
-                                        <td className="px-3 py-2 text-muted-foreground">
+                                        <TableCell className="px-3 py-2 text-muted-foreground">
                                           {index + 1}
-                                        </td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
                                           <div className="flex items-center gap-2">
                                             <span
                                               aria-hidden="true"
@@ -985,34 +1037,34 @@ export default function AnalyticsProjectPage() {
                                               </div>
                                             </div>
                                           </div>
-                                        </td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
                                           {formatInteger(row.pageviews)}
-                                        </td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
                                           {formatInteger(row.uniqueVisitors)}
-                                        </td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
                                           {formatInteger(row.uniqueSessions)}
-                                        </td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
                                           {formatPercent(row.share)}
-                                        </td>
-                                      </tr>
+                                        </TableCell>
+                                      </TableRow>
                                     ),
                                   )
                                 ) : (
-                                  <tr className="border-t">
-                                    <td
+                                  <TableRow className="border-t">
+                                    <TableCell
                                       className="px-3 py-3 text-muted-foreground"
                                       colSpan={6}
                                     >
                                       No country data in this range.
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 )}
-                              </tbody>
-                            </table>
+                              </TableBody>
+                            </Table>
                           </div>
                           <p className="text-xs text-muted-foreground">
                             Free DB-IP Lite self-host installs require
@@ -1068,207 +1120,211 @@ export default function AnalyticsProjectPage() {
                       description="How tracked sessions enter, move through, and leave the site."
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Sessions with pageviews
-                          </p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(
-                              analyticsSummary.pathAnalysis
-                                .sessionsWithPageviews,
-                            )}
-                          </p>
-                        </div>
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Tracked transitions
-                          </p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(
-                              analyticsSummary.pathAnalysis.totalTransitions,
-                            )}
-                          </p>
-                        </div>
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Avg transitions / session
-                          </p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatRatio(
-                              analyticsSummary.pathAnalysis
-                                .sessionsWithPageviews > 0
-                                ? analyticsSummary.pathAnalysis
-                                    .totalTransitions /
-                                    analyticsSummary.pathAnalysis
-                                      .sessionsWithPageviews
-                                : 0,
-                            )}
-                          </p>
-                        </div>
+                        <MiniMetric
+                          label="Sessions with pageviews"
+                          value={formatInteger(
+                            analyticsSummary.pathAnalysis.sessionsWithPageviews,
+                          )}
+                        />
+                        <MiniMetric
+                          label="Tracked transitions"
+                          value={formatInteger(
+                            analyticsSummary.pathAnalysis.totalTransitions,
+                          )}
+                        />
+                        <MiniMetric
+                          label="Avg transitions / session"
+                          value={formatRatio(
+                            analyticsSummary.pathAnalysis
+                              .sessionsWithPageviews > 0
+                              ? analyticsSummary.pathAnalysis.totalTransitions /
+                                  analyticsSummary.pathAnalysis
+                                    .sessionsWithPageviews
+                              : 0,
+                          )}
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="w-12 px-3 py-2 font-medium">
                                   #
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Top entry pages
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Sessions
-                                </th>
-                                <th className="px-3 py-2 font-medium">Share</th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
+                                  Share
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.pathAnalysis.topEntryPages
                                 .length > 0 ? (
                                 analyticsSummary.pathAnalysis.topEntryPages.map(
                                   (row, index) => (
-                                    <tr key={row.path} className="border-t">
-                                      <td className="px-3 py-2 text-muted-foreground">
+                                    <TableRow
+                                      key={row.path}
+                                      className="border-t"
+                                    >
+                                      <TableCell className="px-3 py-2 text-muted-foreground">
                                         {index + 1}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs break-all">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 text-xs break-all">
                                         {row.path}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.sessions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatPercent(row.share)}
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   ),
                                 )
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={4}
                                   >
                                     No entry-page data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
 
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="w-12 px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="w-12 px-3 py-2 font-medium">
                                   #
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Top exit pages
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Sessions
-                                </th>
-                                <th className="px-3 py-2 font-medium">Share</th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
+                                  Share
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.pathAnalysis.topExitPages
                                 .length > 0 ? (
                                 analyticsSummary.pathAnalysis.topExitPages.map(
                                   (row, index) => (
-                                    <tr key={row.path} className="border-t">
-                                      <td className="px-3 py-2 text-muted-foreground">
+                                    <TableRow
+                                      key={row.path}
+                                      className="border-t"
+                                    >
+                                      <TableCell className="px-3 py-2 text-muted-foreground">
                                         {index + 1}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs break-all">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 text-xs break-all">
                                         {row.path}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.sessions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatPercent(row.share)}
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   ),
                                 )
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={4}
                                   >
                                     No exit-page data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </div>
 
                       <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="w-12 px-3 py-2 font-medium">#</th>
-                              <th className="px-3 py-2 font-medium">From</th>
-                              <th className="px-3 py-2 font-medium">To</th>
-                              <th className="px-3 py-2 font-medium">
+                        <Table className="w-full text-sm">
+                          <TableHeader>
+                            <TableRow className="text-left">
+                              <TableHead className="w-12 px-3 py-2 font-medium">
+                                #
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                From
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                To
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Transitions
-                              </th>
-                              <th className="px-3 py-2 font-medium">
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Sessions
-                              </th>
-                              <th className="px-3 py-2 font-medium">Share</th>
-                            </tr>
-                          </thead>
-                          <tbody>
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
+                                Share
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
                             {analyticsSummary.pathAnalysis.topTransitions
                               .length > 0 ? (
                               analyticsSummary.pathAnalysis.topTransitions.map(
                                 (row, index) => (
-                                  <tr
+                                  <TableRow
                                     key={`${row.fromPath}-${row.toPath}`}
                                     className="border-t"
                                   >
-                                    <td className="px-3 py-2 text-muted-foreground">
+                                    <TableCell className="px-3 py-2 text-muted-foreground">
                                       {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2 text-xs break-all">
                                       {row.fromPath}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2 text-xs break-all">
                                       {row.toPath}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatInteger(row.transitions)}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatInteger(row.uniqueSessions)}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatPercent(row.share)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 ),
                               )
                             ) : (
-                              <tr className="border-t">
-                                <td
+                              <TableRow className="border-t">
+                                <TableCell
                                   className="px-3 py-3 text-muted-foreground"
                                   colSpan={6}
                                 >
                                   No path-transition data in this range.
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </tbody>
-                        </table>
+                          </TableBody>
+                        </Table>
                       </div>
                     </SectionCard>
                   </TabsContent>
@@ -1280,71 +1336,71 @@ export default function AnalyticsProjectPage() {
                         description="Traffic and submissions grouped by source/medium/campaign."
                       >
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="px-3 py-2 font-medium">
                                   Source
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Medium
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Campaign
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Pageviews
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submissions
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submit rate
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.attribution.campaigns.length >
                               0 ? (
                                 analyticsSummary.attribution.campaigns.map(
                                   (row) => (
-                                    <tr
+                                    <TableRow
                                       key={`${row.utmSource}-${row.utmMedium}-${row.utmCampaign}`}
                                       className="border-t"
                                     >
-                                      <td className="px-3 py-2 text-xs">
+                                      <TableCell className="px-3 py-2 text-xs">
                                         {row.utmSource}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 text-xs">
                                         {row.utmMedium}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 text-xs">
                                         {row.utmCampaign}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.pageviews)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.submissions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatPercent(row.submissionRatePct)}
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   ),
                                 )
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={6}
                                   >
                                     No UTM campaign data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </SectionCard>
 
@@ -1353,59 +1409,59 @@ export default function AnalyticsProjectPage() {
                         description="Performance rolled up at source level."
                       >
                         <div className="overflow-x-auto rounded-md border">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/30">
-                              <tr className="text-left">
-                                <th className="px-3 py-2 font-medium">
+                          <Table className="w-full text-sm">
+                            <TableHeader>
+                              <TableRow className="text-left">
+                                <TableHead className="px-3 py-2 font-medium">
                                   Source
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Pageviews
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submissions
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </TableHead>
+                                <TableHead className="px-3 py-2 font-medium">
                                   Submit rate
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {analyticsSummary.attribution.sources.length >
                               0 ? (
                                 analyticsSummary.attribution.sources.map(
                                   (row) => (
-                                    <tr
+                                    <TableRow
                                       key={row.utmSource}
                                       className="border-t"
                                     >
-                                      <td className="px-3 py-2 text-xs">
+                                      <TableCell className="px-3 py-2 text-xs">
                                         {row.utmSource}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.pageviews)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatInteger(row.submissions)}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2">
                                         {formatPercent(row.submissionRatePct)}
-                                      </td>
-                                    </tr>
+                                      </TableCell>
+                                    </TableRow>
                                   ),
                                 )
                               ) : (
-                                <tr className="border-t">
-                                  <td
+                                <TableRow className="border-t">
+                                  <TableCell
                                     className="px-3 py-3 text-muted-foreground"
                                     colSpan={4}
                                   >
                                     No attributed source data in this range.
-                                  </td>
-                                </tr>
+                                  </TableCell>
+                                </TableRow>
                               )}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </div>
                       </SectionCard>
                     </div>
@@ -1417,68 +1473,67 @@ export default function AnalyticsProjectPage() {
                       description={`Unique source hosts: ${formatInteger(analyticsSummary.contactForm.uniqueSourceHosts)}`}
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Total submissions
-                          </p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(
-                              analyticsSummary.contactForm.submissions,
-                            )}
-                          </p>
-                        </div>
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Avg submissions / day
-                          </p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatRatio(summaryInsights.avgDailySubmissions)}
-                          </p>
-                        </div>
+                        <MiniMetric
+                          label="Total submissions"
+                          value={formatInteger(
+                            analyticsSummary.contactForm.submissions,
+                          )}
+                        />
+                        <MiniMetric
+                          label="Avg submissions / day"
+                          value={formatRatio(
+                            summaryInsights.avgDailySubmissions,
+                          )}
+                        />
                       </div>
                       <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="w-12 px-3 py-2 font-medium">#</th>
-                              <th className="px-3 py-2 font-medium">
+                        <Table className="w-full text-sm">
+                          <TableHeader>
+                            <TableRow className="text-left">
+                              <TableHead className="w-12 px-3 py-2 font-medium">
+                                #
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Source host
-                              </th>
-                              <th className="px-3 py-2 font-medium">
+                              </TableHead>
+                              <TableHead className="px-3 py-2 font-medium">
                                 Submissions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
                             {analyticsSummary.contactForm.topSourceHosts
                               .length > 0 ? (
                               analyticsSummary.contactForm.topSourceHosts.map(
                                 (row, index) => (
-                                  <tr key={row.sourceHost} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
+                                  <TableRow
+                                    key={row.sourceHost}
+                                    className="border-t"
+                                  >
+                                    <TableCell className="px-3 py-2 text-muted-foreground">
                                       {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2 text-xs break-all">
                                       {row.sourceHost}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2">
                                       {formatInteger(row.submissions)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 ),
                               )
                             ) : (
-                              <tr className="border-t">
-                                <td
+                              <TableRow className="border-t">
+                                <TableCell
                                   className="px-3 py-3 text-muted-foreground"
                                   colSpan={3}
                                 >
                                   No contact submissions in this range.
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </tbody>
-                        </table>
+                          </TableBody>
+                        </Table>
                       </div>
                     </SectionCard>
                   </TabsContent>
@@ -1486,8 +1541,8 @@ export default function AnalyticsProjectPage() {
               ) : null}
             </>
           ) : null}
-        </CardContent>
-      </Card>
+        </PanelContent>
+      </Panel>
     </SettingsPageShell>
   );
 }

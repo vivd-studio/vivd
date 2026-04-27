@@ -68,11 +68,16 @@ export function OrganizationsSelectorCard({
 
         {selectedOrg && (
           <div className="flex items-center gap-2">
-            <Badge variant={selectedOrg.status === "active" ? "default" : "destructive"}>
+            <Badge
+              variant={
+                selectedOrg.status === "active" ? "default" : "destructive"
+              }
+            >
               {selectedOrg.status}
             </Badge>
             <span className="text-sm text-muted-foreground">
-              {selectedOrg.memberCount} member{selectedOrg.memberCount === 1 ? "" : "s"}
+              {selectedOrg.memberCount} member
+              {selectedOrg.memberCount === 1 ? "" : "s"}
             </span>
           </div>
         )}
@@ -90,45 +95,51 @@ export function OrganizationsSelectorCard({
         <CollapsibleContent>
           <Panel tone="sunken" className="mt-2">
             <PanelContent className="space-y-3 pt-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="space-y-1.5 flex-1">
-                <Label htmlFor="org-slug">Slug</Label>
-                <Input
-                  id="org-slug"
-                  placeholder="e.g. acme"
-                  value={orgForm.slug}
-                  onChange={(e) =>
-                    onOrgFormChange({
-                      ...orgForm,
-                      slug: e.target.value,
-                    })
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="space-y-1.5 flex-1">
+                  <Label htmlFor="org-slug">Slug</Label>
+                  <Input
+                    id="org-slug"
+                    placeholder="e.g. acme"
+                    value={orgForm.slug}
+                    onChange={(e) =>
+                      onOrgFormChange({
+                        ...orgForm,
+                        slug: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5 flex-1">
+                  <Label htmlFor="org-name">Display name</Label>
+                  <Input
+                    id="org-name"
+                    placeholder="e.g. Acme Inc."
+                    value={orgForm.name}
+                    onChange={(e) =>
+                      onOrgFormChange({
+                        ...orgForm,
+                        name: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <Button
+                  onClick={onCreateOrg}
+                  disabled={
+                    createOrgPending ||
+                    !orgForm.slug.trim() ||
+                    !orgForm.name.trim()
                   }
-                />
+                >
+                  {createOrgPending ? "Creating..." : "Create"}
+                </Button>
               </div>
-              <div className="space-y-1.5 flex-1">
-                <Label htmlFor="org-name">Display name</Label>
-                <Input
-                  id="org-name"
-                  placeholder="e.g. Acme Inc."
-                  value={orgForm.name}
-                  onChange={(e) =>
-                    onOrgFormChange({
-                      ...orgForm,
-                      name: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <Button
-                onClick={onCreateOrg}
-                disabled={createOrgPending || !orgForm.slug.trim() || !orgForm.name.trim()}
-              >
-                {createOrgPending ? "Creating..." : "Create"}
-              </Button>
-            </div>
-            {Boolean(createOrgError) && (
-              <div className="text-sm text-red-500">{String(createOrgError)}</div>
-            )}
+              {Boolean(createOrgError) && (
+                <div className="text-sm text-destructive">
+                  {String(createOrgError)}
+                </div>
+              )}
             </PanelContent>
           </Panel>
         </CollapsibleContent>

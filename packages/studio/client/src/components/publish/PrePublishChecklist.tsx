@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, InteractiveSurfaceButton, Collapsible, CollapsibleContent, CollapsibleTrigger, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  InteractiveSurfaceButton,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  StatusPill,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@vivd/ui";
 
 import {
   AlertTriangle,
@@ -52,7 +66,7 @@ export function PrePublishChecklist({
     if (!checklist) return null;
     const total = checklist.items.length;
     const completed = checklist.items.filter(
-      (item) => item.note !== CHECKLIST_PENDING_NOTE_MARKER
+      (item) => item.note !== CHECKLIST_PENDING_NOTE_MARKER,
     ).length;
     return { completed, total };
   }, [checklist]);
@@ -104,7 +118,7 @@ export function PrePublishChecklist({
           className={cn(
             "flex w-full items-center justify-between rounded-lg p-3 text-left",
             !checklist &&
-              "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:bg-amber-100/50 dark:hover:bg-amber-900/30",
+              "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15",
           )}
         >
           <div className="flex items-center gap-2">
@@ -119,12 +133,7 @@ export function PrePublishChecklist({
                 {checklistBadge.text}
               </Badge>
             ) : (
-              <Badge
-                variant="secondary"
-                className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-              >
-                Not run
-              </Badge>
+              <StatusPill tone="warn">Not run</StatusPill>
             )}
           </div>
           <ChevronDown
@@ -140,7 +149,9 @@ export function PrePublishChecklist({
           <div className="flex flex-col items-center justify-center py-6 gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <div className="text-center">
-              <p className="text-sm font-medium">Running production checks...</p>
+              <p className="text-sm font-medium">
+                Running production checks...
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {checklistProgress
                   ? `${checklistProgress.completed}/${checklistProgress.total} checks updated live`
@@ -155,21 +166,21 @@ export function PrePublishChecklist({
             <p className="text-xs text-muted-foreground px-1">
               Last run {formatDistanceToNow(new Date(checklist.runAt))} ago
             </p>
-            <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
+            <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-surface-sunken [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
               {checklist.items.map((item) => {
                 const isPending = item.note === CHECKLIST_PENDING_NOTE_MARKER;
                 const isActivelyChecking = isPending && isRunning;
                 const config = isActivelyChecking
                   ? {
                       color: "text-sky-600 dark:text-sky-400",
-                      bgColor: "bg-sky-50 dark:bg-sky-900/20",
+                      bgColor: "border-primary/30 bg-primary/10",
                     }
                   : isPending
                     ? {
                         color: "text-amber-600 dark:text-amber-400",
-                        bgColor: "bg-amber-50 dark:bg-amber-900/20",
+                        bgColor: "border-amber-500/30 bg-amber-500/10",
                       }
-                  : CHECKLIST_STATUS_CONFIG[item.status];
+                    : CHECKLIST_STATUS_CONFIG[item.status];
                 const Icon = isActivelyChecking
                   ? Loader2
                   : isPending
@@ -189,19 +200,19 @@ export function PrePublishChecklist({
                       <p className="font-medium text-xs flex items-center gap-1.5">
                         {item.label}
                         {isActivelyChecking && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">
+                          <StatusPill tone="info" className="text-[10px]">
                             Checking
-                          </span>
+                          </StatusPill>
                         )}
                         {isPending && !isActivelyChecking && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                          <StatusPill tone="warn" className="text-[10px]">
                             Pending
-                          </span>
+                          </StatusPill>
                         )}
                         {item.status === "fixed" && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                          <StatusPill tone="info" className="text-[10px]">
                             Fixed
-                          </span>
+                          </StatusPill>
                         )}
                       </p>
                       {isPending ? (
@@ -218,20 +229,20 @@ export function PrePublishChecklist({
                     </div>
                     {!isRunning &&
                       (item.status === "fail" || item.status === "warning") && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleFixItem(item)}
-                        disabled={fixingItemId !== null}
-                        className="shrink-0 h-6 px-2 text-xs hover:bg-primary/10"
-                      >
-                        {fixingItemId === item.id ? (
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        ) : (
-                          <Wrench className="w-3 h-3 mr-1" />
-                        )}
-                        {fixingItemId === item.id ? "Fixing..." : "Fix"}
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleFixItem(item)}
+                          disabled={fixingItemId !== null}
+                          className="shrink-0 h-6 px-2 text-xs hover:bg-primary/10"
+                        >
+                          {fixingItemId === item.id ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <Wrench className="w-3 h-3 mr-1" />
+                          )}
+                          {fixingItemId === item.id ? "Fixing..." : "Fix"}
+                        </Button>
                       )}
                   </div>
                 );
@@ -254,9 +265,9 @@ export function PrePublishChecklist({
                         !hasChangesSinceCheck
                           ? "opacity-50 cursor-not-allowed"
                           : checklist.summary.failed > 0 ||
-                            checklist.summary.warnings > 0
-                          ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                          : ""
+                              checklist.summary.warnings > 0
+                            ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                            : ""
                       }`}
                     >
                       <RefreshCw className="w-3 h-3 mr-2" />
@@ -273,11 +284,11 @@ export function PrePublishChecklist({
             </div>
           </>
         ) : isRunning ? (
-          <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
+          <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-surface-sunken [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
             {PREVIEW_CHECKLIST_ITEMS.map((item) => (
               <div
                 key={item.id}
-                className="flex items-start gap-2 p-2 rounded-md border text-sm bg-sky-50 dark:bg-sky-900/20"
+                className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/10 p-2 text-sm"
               >
                 <Loader2 className="w-4 h-4 mt-0.5 shrink-0 text-sky-600 dark:text-sky-400 animate-spin" />
                 <div className="flex-1 min-w-0">
@@ -290,19 +301,18 @@ export function PrePublishChecklist({
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3 space-y-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                  Verify production readiness
-                </p>
-                <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-                  Run automated checks before publishing to catch common issues
-                </p>
-              </div>
+          <Callout
+            tone="warn"
+            icon={<AlertTriangle />}
+            className="[&>div]:gap-3"
+          >
+            <div>
+              <CalloutTitle>Verify production readiness</CalloutTitle>
+              <CalloutDescription className="mt-0.5">
+                Run automated checks before publishing to catch common issues
+              </CalloutDescription>
             </div>
-            <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
+            <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-surface-sunken [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
               {PREVIEW_CHECKLIST_ITEMS.map((item) => (
                 <div
                   key={item.id}
@@ -322,7 +332,7 @@ export function PrePublishChecklist({
               <ClipboardCheck className="w-4 h-4 mr-2" />
               Run Pre-Publish Checks
             </Button>
-          </div>
+          </Callout>
         )}
       </CollapsibleContent>
     </Collapsible>

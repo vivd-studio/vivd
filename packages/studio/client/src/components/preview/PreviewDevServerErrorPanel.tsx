@@ -1,7 +1,13 @@
 import { useCallback, useState } from "react";
 import { AlertCircle, Bot, ChevronDown, Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger } from "@vivd/ui";
+import {
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Panel,
+} from "@vivd/ui";
 
 import { copyTextWithFallback } from "@/lib/browserActions";
 import { cn } from "@/lib/utils";
@@ -68,7 +74,8 @@ export function PreviewDevServerErrorPanel({
 
   const handleCopyPrompt = useCallback(
     async (options?: { successMessage?: string }) => {
-      const successMessage = options?.successMessage ?? "Copied prompt for agent";
+      const successMessage =
+        options?.successMessage ?? "Copied prompt for agent";
 
       try {
         await copyTextWithFallback(repairPrompt);
@@ -78,7 +85,9 @@ export function PreviewDevServerErrorPanel({
         return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        toast.error("Failed to copy prompt for agent", { description: message });
+        toast.error("Failed to copy prompt for agent", {
+          description: message,
+        });
         return false;
       }
     },
@@ -109,8 +118,8 @@ export function PreviewDevServerErrorPanel({
   }, [chatContext, handleCopyPrompt, repairPrompt, setChatOpen]);
 
   return (
-    <div className="flex max-w-xl flex-col gap-4 rounded-xl border border-border/60 bg-background/95 p-5 text-center shadow-sm">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/12 text-amber-700 dark:bg-amber-400/12 dark:text-amber-300">
+    <Panel className="flex max-w-xl flex-col gap-4 p-5 text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300">
         <AlertCircle className="h-6 w-6" />
       </div>
       <div className="space-y-2">
@@ -118,8 +127,8 @@ export function PreviewDevServerErrorPanel({
           We couldn&apos;t open this preview yet
         </p>
         <p className="text-sm leading-6 text-muted-foreground">
-          This project likely needs a quick fix before the preview can load.
-          The easiest next step is to ask the built-in agent to fix it for you.
+          This project likely needs a quick fix before the preview can load. The
+          easiest next step is to ask the built-in agent to fix it for you.
         </p>
       </div>
 
@@ -147,12 +156,12 @@ export function PreviewDevServerErrorPanel({
       <Collapsible
         open={technicalDetailsOpen}
         onOpenChange={setTechnicalDetailsOpen}
-        className="rounded-lg border border-border/50 bg-muted/15 text-left"
+        className="rounded-md border border-border bg-surface-sunken text-left"
       >
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground/85"
+            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-panel hover:text-foreground/85"
             aria-label={
               technicalDetailsOpen
                 ? "Hide technical details"
@@ -197,17 +206,18 @@ export function PreviewDevServerErrorPanel({
                 Clean reinstall
               </Button>
             </div>
-            <div className="rounded-md border border-border/60 bg-background/80 p-3">
+            <Panel tone="sunken" className="rounded-md p-3">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Runtime error
               </p>
               <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
-                {devServerError?.trim() || "No runtime error details were available."}
+                {devServerError?.trim() ||
+                  "No runtime error details were available."}
               </pre>
-            </div>
+            </Panel>
           </div>
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </Panel>
   );
 }

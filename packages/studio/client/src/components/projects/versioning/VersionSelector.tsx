@@ -1,4 +1,13 @@
-import { Badge, type BadgeProps, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@vivd/ui";
+import {
+  Badge,
+  type BadgeProps,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@vivd/ui";
 
 import { Check, ChevronDown, Layers, Settings2 } from "lucide-react";
 import type { MouseEventHandler, ReactNode } from "react";
@@ -31,10 +40,10 @@ function defaultStatusMarker(version: VersionSelectorVersion) {
     <span
       className={`ml-auto text-xs ${
         status === "completed"
-          ? "text-green-600"
+          ? "text-emerald-600 dark:text-emerald-400"
           : status === "failed"
-          ? "text-red-500"
-          : "text-muted-foreground"
+            ? "text-destructive"
+            : "text-muted-foreground"
       }`}
     >
       {status === "completed" ? "✓" : status === "failed" ? "✗" : "..."}
@@ -63,7 +72,11 @@ export function VersionSelector({
 
   if (!hasMultipleVersions) {
     return (
-      <Badge variant={triggerVariant} className={triggerClassName} title={triggerTitle}>
+      <Badge
+        variant={triggerVariant}
+        className={triggerClassName}
+        title={triggerTitle}
+      >
         <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
       </Badge>
     );
@@ -75,7 +88,9 @@ export function VersionSelector({
         <Badge
           variant={triggerVariant}
           className={triggerClassName}
-          title={triggerTitle ?? `Click to select from ${versions.length} versions`}
+          title={
+            triggerTitle ?? `Click to select from ${versions.length} versions`
+          }
           onClick={handleStopPropagation}
         >
           <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
@@ -89,11 +104,15 @@ export function VersionSelector({
           <DropdownMenuItem
             key={version.version}
             onClick={() => onSelect(version.version)}
-            className={selectedVersion === version.version ? "bg-accent" : ""}
+            className={
+              selectedVersion === version.version ? "bg-surface-sunken" : ""
+            }
           >
             <Check
               className={`w-4 h-4 mr-2 ${
-                selectedVersion === version.version ? "opacity-100" : "opacity-0"
+                selectedVersion === version.version
+                  ? "opacity-100"
+                  : "opacity-0"
               }`}
             />
             <span>v{version.version}</span>
@@ -115,4 +134,3 @@ export function VersionSelector({
     </DropdownMenu>
   );
 }
-

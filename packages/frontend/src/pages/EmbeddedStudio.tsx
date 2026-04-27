@@ -1,15 +1,9 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { useSidebar } from "@/components/ui/sidebar";
-import { Button } from "@vivd/ui";
+import { Button, Panel } from "@vivd/ui";
 
 import { useTheme } from "@/components/theme";
 import { ROUTES } from "@/app/router";
@@ -35,8 +29,7 @@ import { EmbeddedStudioLiveSurface } from "./embeddedStudio/EmbeddedStudioLiveSu
 import { EmbeddedStudioProjectDialogs } from "./embeddedStudio/EmbeddedStudioProjectDialogs";
 import { toast } from "sonner";
 
-const EMBEDDED_PROJECT_HEADER_INSET_CLASS =
-  "pl-2 pr-3 py-1 md:pl-2.5 md:pr-4";
+const EMBEDDED_PROJECT_HEADER_INSET_CLASS = "pl-2 pr-3 py-1 md:pl-2.5 md:pr-4";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -56,7 +49,9 @@ export default function EmbeddedStudio() {
     scheduleHideImmersivePeek,
   } = useSidebar();
   const [editRequested, setEditRequested] = useState(false);
-  const [previewSurface, setPreviewSurface] = useState<"live" | "publish">("publish");
+  const [previewSurface, setPreviewSurface] = useState<"live" | "publish">(
+    "publish",
+  );
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -74,7 +69,10 @@ export default function EmbeddedStudio() {
       })
     : [];
 
-  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const urlParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
   const resumeStudio = urlParams.get("view") === "studio";
   const versionOverrideRaw = urlParams.get("version");
   const initialGenerationRequested = urlParams.get("initialGeneration") === "1";
@@ -83,7 +81,9 @@ export default function EmbeddedStudio() {
     ? Number.parseInt(versionOverrideRaw, 10)
     : NaN;
   const studioVersion =
-    Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
+    Number.isFinite(versionOverride) && versionOverride > 0
+      ? versionOverride
+      : version;
   const { data: projectStatusData } = trpc.project.status.useQuery(
     { slug: projectSlug!, version: studioVersion },
     {
@@ -98,7 +98,7 @@ export default function EmbeddedStudio() {
             : null;
         const sessionId =
           query.state.data && "studioHandoff" in query.state.data
-            ? query.state.data.studioHandoff?.sessionId ?? null
+            ? (query.state.data.studioHandoff?.sessionId ?? null)
             : null;
         const shouldTrackInitialGeneration =
           initialGenerationRequested ||
@@ -127,7 +127,8 @@ export default function EmbeddedStudio() {
       projectInitialGenerationStatus === "initial_generation_paused");
   const effectiveInitialGenerationRequested =
     initialGenerationRequested || shouldAutoResumeInitialGeneration;
-  const shouldResumeStudio = resumeStudio || effectiveInitialGenerationRequested;
+  const shouldResumeStudio =
+    resumeStudio || effectiveInitialGenerationRequested;
   const canBootstrapStudio = Boolean(
     project || initialGenerationRequested || shouldAutoResumeInitialGeneration,
   );
@@ -176,13 +177,19 @@ export default function EmbeddedStudio() {
   const startStudio = trpc.project.startStudio.useMutation({
     onSuccess: () => {
       if (!projectSlug) return;
-      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
+      utils.project.getStudioUrl.invalidate({
+        slug: projectSlug,
+        version: studioVersion,
+      });
     },
   });
   const hardRestartStudio = trpc.project.hardRestartStudio.useMutation({
     onSuccess: () => {
       if (!projectSlug) return;
-      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
+      utils.project.getStudioUrl.invalidate({
+        slug: projectSlug,
+        version: studioVersion,
+      });
     },
   });
   const shouldPollStudioStatus =
@@ -203,23 +210,25 @@ export default function EmbeddedStudio() {
           : false,
     },
   );
-  const { data: externalPreview } = trpc.project.getExternalPreviewStatus.useQuery(
-    { slug: projectSlug!, version: studioVersion },
-    { enabled: !!projectSlug && !!project },
-  );
-  const regenerateThumbnailMutation = trpc.project.regenerateThumbnail.useMutation({
-    onSuccess: (_data, variables) => {
-      toast.success("Thumbnail regenerated", {
-        description: `${variables.slug} v${variables.version}`,
-      });
-      utils.project.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error("Failed to regenerate thumbnail", {
-        description: error.message,
-      });
-    },
-  });
+  const { data: externalPreview } =
+    trpc.project.getExternalPreviewStatus.useQuery(
+      { slug: projectSlug!, version: studioVersion },
+      { enabled: !!projectSlug && !!project },
+    );
+  const regenerateThumbnailMutation =
+    trpc.project.regenerateThumbnail.useMutation({
+      onSuccess: (_data, variables) => {
+        toast.success("Thumbnail regenerated", {
+          description: `${variables.slug} v${variables.version}`,
+        });
+        utils.project.list.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to regenerate thumbnail", {
+          description: error.message,
+        });
+      },
+    });
   const setPublicPreviewEnabledMutation =
     trpc.project.setPublicPreviewEnabled.useMutation({
       onSuccess: (data) => {
@@ -285,7 +294,7 @@ export default function EmbeddedStudio() {
   const preferredStudioRuntime = useMemo(
     () =>
       editRequested
-        ? startedStudioRuntime ?? queryStudioRuntime
+        ? (startedStudioRuntime ?? queryStudioRuntime)
         : queryStudioRuntime,
     [editRequested, queryStudioRuntime, startedStudioRuntime],
   );
@@ -297,7 +306,10 @@ export default function EmbeddedStudio() {
         error: "Missing project slug",
       };
     }
-    return startStudio.mutateAsync({ slug: projectSlug, version: studioVersion });
+    return startStudio.mutateAsync({
+      slug: projectSlug,
+      version: studioVersion,
+    });
   }, [projectSlug, startStudio, studioVersion]);
 
   const refreshStudioRuntime = useCallback(async () => {
@@ -375,7 +387,8 @@ export default function EmbeddedStudio() {
   const handleEdit = () => {
     if (!projectSlug || !project) return;
     if (isRenamePending) return;
-    if (editRequested || startStudio.isPending || hardRestartStudio.isPending) return;
+    if (editRequested || startStudio.isPending || hardRestartStudio.isPending)
+      return;
     setPreviewSurface("live");
     setEditRequested(true);
     clearRuntimeOverride();
@@ -482,7 +495,9 @@ export default function EmbeddedStudio() {
       if (resolvedInitialSessionId) {
         params.set("sessionId", resolvedInitialSessionId);
       }
-      navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
+      navigate(
+        `${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`,
+      );
     },
     onNavigate: (path) => {
       navigate(path);
@@ -500,11 +515,16 @@ export default function EmbeddedStudio() {
     const liveStudioBaseUrl = studioBaseUrl;
     if (!liveStudioBaseUrl || awaitingInitialGenerationHandoff) return null;
 
-    const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
+    const url = new URL(
+      resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"),
+    );
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
-    url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
+    url.searchParams.set(
+      "publicPreviewEnabled",
+      publicPreviewEnabled ? "1" : "0",
+    );
     url.searchParams.set("sidebarOpen", sidebarOpen ? "1" : "0");
     if (effectiveInitialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
@@ -559,7 +579,8 @@ export default function EmbeddedStudio() {
 
   // A running studio should always take over the embedded surface, even without
   // an explicit `?view=studio` hint, so revisiting a project auto-resumes Studio.
-  const livePreviewActive = previewSurface === "live" || Boolean(studioIframeSrc);
+  const livePreviewActive =
+    previewSurface === "live" || Boolean(studioIframeSrc);
 
   const handleCopyPreviewUrl = () => {
     if (isRenamePending) return;
@@ -584,7 +605,10 @@ export default function EmbeddedStudio() {
   const handleRegenerateThumbnail = () => {
     if (isRenamePending) return;
     if (!projectSlug) return;
-    regenerateThumbnailMutation.mutate({ slug: projectSlug, version: studioVersion });
+    regenerateThumbnailMutation.mutate({
+      slug: projectSlug,
+      version: studioVersion,
+    });
   };
 
   const handleTogglePublicPreview = () => {
@@ -641,7 +665,8 @@ export default function EmbeddedStudio() {
   );
   const isSelectedVersionCompleted =
     selectedVersionInfo?.status === "completed" ||
-    (studioVersion === project?.currentVersion && project?.status === "completed");
+    (studioVersion === project?.currentVersion &&
+      project?.status === "completed");
   const showStudioStartupAction =
     startStudio.isPending ||
     hardRestartStudio.isPending ||
@@ -717,7 +742,9 @@ export default function EmbeddedStudio() {
     return (
       <FramedHostShell
         className="h-full"
-        header={renderEmbeddedHeader({ studioStatusLabel: "Starting studio..." })}
+        header={renderEmbeddedHeader({
+          studioStatusLabel: "Starting studio...",
+        })}
         headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
@@ -763,9 +790,14 @@ export default function EmbeddedStudio() {
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex flex-col items-center justify-center gap-3">
             <div className="px-6 text-center text-destructive">
-              Failed to start studio: {startStudio.data.error || "Unknown error"}
+              Failed to start studio:{" "}
+              {startStudio.data.error || "Unknown error"}
             </div>
-            <Button onClick={handleEdit} size="sm" className="h-8 rounded-md px-3">
+            <Button
+              onClick={handleEdit}
+              size="sm"
+              className="h-8 rounded-md px-3"
+            >
               Retry
             </Button>
           </FramedViewport>
@@ -843,19 +875,25 @@ export default function EmbeddedStudio() {
                       Publish preview not ready yet
                       {externalPreview?.status
                         ? ` (${externalPreview.status})`
-                        : ""}. Click{" "}
-                      <span className="font-medium text-foreground">Start Studio</span>{" "}
+                        : ""}
+                      . Click{" "}
+                      <span className="font-medium text-foreground">
+                        Start Studio
+                      </span>{" "}
                       to start a studio machine.
                     </div>
                     {thumbnailSrc ? (
-                      <div className="overflow-hidden rounded-lg border bg-muted">
+                      <Panel
+                        tone="sunken"
+                        className="overflow-hidden rounded-md p-0"
+                      >
                         <img
                           src={thumbnailSrc}
                           alt={`Thumbnail - ${projectSlug}`}
                           className="h-auto w-full object-contain"
                           loading="lazy"
                         />
-                      </div>
+                      </Panel>
                     ) : null}
                   </div>
                 </div>

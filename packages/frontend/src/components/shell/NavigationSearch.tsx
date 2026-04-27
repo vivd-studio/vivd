@@ -10,14 +10,23 @@ import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "@vivd/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+  StatusPill,
+  Panel,
+} from "@vivd/ui";
 
 import {
   NavigationSearchContext,
   type NavigationSearchContextValue,
 } from "./navigationSearchContext";
 
-type NavigationSearchProject = RouterOutputs["project"]["list"]["projects"][number];
+type NavigationSearchProject =
+  RouterOutputs["project"]["list"]["projects"][number];
 type NavigationSearchItem = {
   id: string;
   label: string;
@@ -62,7 +71,11 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function scoreMatch(value: string, normalizedQuery: string, baseScore: number): number | null {
+function scoreMatch(
+  value: string,
+  normalizedQuery: string,
+  baseScore: number,
+): number | null {
   const normalizedValue = normalizeSearchValue(value);
   const matchIndex = normalizedValue.indexOf(normalizedQuery);
   if (matchIndex === -1) return null;
@@ -80,7 +93,10 @@ function getSearchScore(
   for (const term of queryTerms) {
     let bestTermScore = scoreMatch(item.label, term, 0);
     const sectionScore = scoreMatch(item.section, term, 500);
-    if (sectionScore !== null && (bestTermScore === null || sectionScore < bestTermScore)) {
+    if (
+      sectionScore !== null &&
+      (bestTermScore === null || sectionScore < bestTermScore)
+    ) {
       bestTermScore = sectionScore;
     }
 
@@ -100,8 +116,13 @@ function getSearchScore(
   return totalScore;
 }
 
-function buildGroupedSearchResults(results: NavigationSearchItem[]): GroupedSearchResults[] {
-  const grouped = new Map<NavigationSearchItem["section"], NavigationSearchItem[]>();
+function buildGroupedSearchResults(
+  results: NavigationSearchItem[],
+): GroupedSearchResults[] {
+  const grouped = new Map<
+    NavigationSearchItem["section"],
+    NavigationSearchItem[]
+  >();
   for (const item of results) {
     const existing = grouped.get(item.section) ?? [];
     existing.push(item);
@@ -137,21 +158,27 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   const location = useLocation();
   const recentProjects = useRecentProjects();
   const showPlatformAdminSections =
-    config.showPlatformAdminSections ?? (config.installProfile === "platform");
+    config.showPlatformAdminSections ?? config.installProfile === "platform";
   const instanceSectionLabel =
     config.instanceSectionLabel ??
-    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
+    (config.instanceAdminLabel === "Instance Settings"
+      ? "General"
+      : "Instance");
 
-  const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
-    enabled: !!session && config.hasHostOrganizationAccess,
-  });
+  const { data: membership } = trpc.organization.getMyMembership.useQuery(
+    undefined,
+    {
+      enabled: !!session && config.hasHostOrganizationAccess,
+    },
+  );
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
   const isClientEditor = membership?.organizationRole === "client_editor";
   const isOrgOwner =
     membership?.organizationRole === "owner" ||
     session?.user?.role === "super_admin";
   const isSuperAdmin = session?.user?.role === "super_admin";
-  const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
+  const showSuperAdmin =
+    isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
 
   const isActive = React.useCallback(
     (url: string, end?: boolean) => {
@@ -176,7 +203,13 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
 
   const isSuperAdminTabActive = React.useCallback(
     (
-      tab: "instance" | "orgs" | "users" | "maintenance" | "machines" | "plugins",
+      tab:
+        | "instance"
+        | "orgs"
+        | "users"
+        | "maintenance"
+        | "machines"
+        | "plugins",
     ) => {
       if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
       const section = searchParams.get("section") ?? "instance";
@@ -240,7 +273,13 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
         label: projectLabel,
         section: "Projects",
         to: ROUTES.PROJECT(project.slug),
-        keywords: [project.slug, project.title ?? "", "project", "studio", "editor"],
+        keywords: [
+          project.slug,
+          project.title ?? "",
+          "project",
+          "studio",
+          "editor",
+        ],
         isActive: isActive(ROUTES.PROJECT(project.slug), true),
       });
       items.push(
@@ -404,7 +443,12 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
           label: "Email",
           section: "Super Admin",
           to: `${ROUTES.SUPERADMIN_BASE}?section=email`,
-          keywords: ["deliverability", "suppression", "complaints", "superadmin"],
+          keywords: [
+            "deliverability",
+            "suppression",
+            "complaints",
+            "superadmin",
+          ],
           isActive:
             isActive(ROUTES.SUPERADMIN_BASE, true) &&
             (searchParams.get("section") ?? "instance") === "email",
@@ -517,9 +561,10 @@ function NavigationSearchDialog({
   React.useEffect(() => {
     if (!open || selectedIndex < 0) return;
 
-    const selectedResult = resultsViewportRef.current?.querySelector<HTMLElement>(
-      `[data-search-index="${selectedIndex}"]`,
-    );
+    const selectedResult =
+      resultsViewportRef.current?.querySelector<HTMLElement>(
+        `[data-search-index="${selectedIndex}"]`,
+      );
     selectedResult?.scrollIntoView({ block: "nearest" });
   }, [open, selectedIndex]);
 
@@ -564,7 +609,8 @@ function NavigationSearchDialog({
       >
         <DialogTitle className="sr-only">Search navigation</DialogTitle>
         <DialogDescription className="sr-only">
-          Search across projects, organization pages, settings, and admin routes.
+          Search across projects, organization pages, settings, and admin
+          routes.
         </DialogDescription>
 
         <div className="border-b border-border p-3 sm:p-4">
@@ -591,13 +637,20 @@ function NavigationSearchDialog({
           className="max-h-[min(65dvh,36rem)] overflow-y-auto p-2 sm:p-3"
         >
           {!isSearchActive ? (
-            <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
-              Start typing to jump to projects, settings, plugins, and admin pages.
-            </div>
+            <Panel
+              tone="dashed"
+              className="flex min-h-40 items-center justify-center px-6 text-center text-sm text-muted-foreground"
+            >
+              Start typing to jump to projects, settings, plugins, and admin
+              pages.
+            </Panel>
           ) : searchResults.length === 0 ? (
-            <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+            <Panel
+              tone="dashed"
+              className="flex min-h-40 items-center justify-center px-6 text-center text-sm text-muted-foreground"
+            >
               No results found for “{query.trim()}”.
-            </div>
+            </Panel>
           ) : (
             <div className="space-y-4">
               <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -627,20 +680,25 @@ function NavigationSearchDialog({
                           className={cn(
                             "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
                             isSelected
-                              ? "bg-accent text-accent-foreground"
+                              ? "bg-surface-sunken text-foreground"
                               : "bg-transparent",
                           )}
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{item.label}</p>
+                            <p className="truncate text-sm font-medium">
+                              {item.label}
+                            </p>
                             <p className="truncate text-xs text-muted-foreground">
                               {item.section}
                             </p>
                           </div>
                           {item.isActive ? (
-                            <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            <StatusPill
+                              tone="neutral"
+                              className="text-[10px] uppercase tracking-wide"
+                            >
                               Current
-                            </span>
+                            </StatusPill>
                           ) : null}
                         </button>
                       );
@@ -674,7 +732,10 @@ export function NavigationSearchProvider({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "k" || (!event.metaKey && !event.ctrlKey)) {
+      if (
+        event.key.toLowerCase() !== "k" ||
+        (!event.metaKey && !event.ctrlKey)
+      ) {
         return;
       }
       if (isEditableElement(event.target)) return;

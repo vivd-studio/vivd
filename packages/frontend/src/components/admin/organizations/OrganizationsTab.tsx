@@ -1,6 +1,15 @@
 import { FolderKanban, Globe2, Users, type LucideIcon } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Panel, PanelContent, StatusPill, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+import {
+  Badge,
+  Panel,
+  PanelContent,
+  StatusPill,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@vivd/ui";
 
 import { DomainsPanel } from "./components/DomainsPanel";
 import { MembersPanel } from "./components/MembersPanel";
@@ -27,7 +36,9 @@ function CountChip({ icon: Icon, label, value }: CountChipProps) {
     <div className="inline-flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-1.5 text-sm">
       <Icon className="size-3.5 text-muted-foreground" />
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground tabular-nums">{value}</span>
+      <span className="font-semibold text-foreground tabular-nums">
+        {value}
+      </span>
     </div>
   );
 }
@@ -46,7 +57,7 @@ export function OrganizationsTab({
 
   if (admin.error) {
     return (
-      <div className="text-red-500">
+      <div className="text-destructive">
         Failed to load organizations: {String(admin.error)}
       </div>
     );
@@ -61,7 +72,11 @@ export function OrganizationsTab({
       <Panel>
         <PanelContent className="flex flex-col gap-4 p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone={admin.selectedOrg.status === "active" ? "success" : "danger"}>
+            <StatusPill
+              tone={
+                admin.selectedOrg.status === "active" ? "success" : "danger"
+              }
+            >
               {admin.selectedOrg.status}
             </StatusPill>
             {admin.usage?.limits.blocked ? (
@@ -108,12 +123,16 @@ export function OrganizationsTab({
               <CountChip
                 icon={FolderKanban}
                 label="Projects"
-                value={admin.projectsLoading ? "…" : String(admin.projects.length)}
+                value={
+                  admin.projectsLoading ? "…" : String(admin.projects.length)
+                }
               />
               <CountChip
                 icon={Globe2}
                 label="Domains"
-                value={admin.domainsLoading ? "…" : String(admin.domains.length)}
+                value={
+                  admin.domainsLoading ? "…" : String(admin.domains.length)
+                }
               />
             </div>
           </div>
@@ -121,7 +140,10 @@ export function OrganizationsTab({
       </Panel>
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList variant="underline" className="w-full justify-start overflow-x-auto">
+        <TabsList
+          variant="underline"
+          className="w-full justify-start overflow-x-auto"
+        >
           <TabsTrigger value="usage" className="shrink-0">
             Usage & Limits
           </TabsTrigger>

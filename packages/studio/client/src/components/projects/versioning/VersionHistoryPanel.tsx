@@ -1,4 +1,32 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle, Button, Badge, ScrollArea, Input, Label, InteractiveSurface, InteractiveSurfaceButton, Collapsible, CollapsibleContent, CollapsibleTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  Button,
+  Badge,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  ScrollArea,
+  Input,
+  Label,
+  Panel,
+  InteractiveSurface,
+  InteractiveSurfaceButton,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  StatusPill,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@vivd/ui";
 
 import { useState, useEffect } from "react";
 import {
@@ -61,19 +89,19 @@ export function VersionHistoryPanel({
     isFetching: historyFetching,
   } = trpc.project.gitHistory.useQuery(
     { slug: projectSlug, version },
-    { enabled: open && !!projectSlug }
+    { enabled: open && !!projectSlug },
   );
 
   const { data: changesData, isFetching: changesFetching } =
     trpc.project.gitHasChanges.useQuery(
       { slug: projectSlug, version },
-      { enabled: open && !!projectSlug, refetchInterval: POLLING_BACKGROUND }
+      { enabled: open && !!projectSlug, refetchInterval: POLLING_BACKGROUND },
     );
 
   const { data: workingCommitData, isFetching: workingCommitFetching } =
     trpc.project.gitWorkingCommit.useQuery(
       { slug: projectSlug, version },
-      { enabled: open && !!projectSlug }
+      { enabled: open && !!projectSlug },
     );
 
   const {
@@ -82,7 +110,7 @@ export function VersionHistoryPanel({
     refetch: refetchGitHubSyncStatus,
   } = trpc.project.gitHubSyncStatus.useQuery(
     { slug: projectSlug, version },
-    { enabled: open && !!projectSlug }
+    { enabled: open && !!projectSlug },
   );
 
   const [showLoadWarning, setShowLoadWarning] = useState(false);
@@ -98,7 +126,7 @@ export function VersionHistoryPanel({
 
   const commitCount = Math.max(
     historyData?.totalCommits ?? 0,
-    historyData?.commits?.length ?? 0
+    historyData?.commits?.length ?? 0,
   );
 
   // Default Commit Message
@@ -131,7 +159,10 @@ export function VersionHistoryPanel({
           slug: projectSlug,
           version,
         });
-        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version });
+        utils.project.gitHubSyncStatus.invalidate({
+          slug: projectSlug,
+          version,
+        });
         onRefresh?.();
       }
     },
@@ -164,8 +195,14 @@ export function VersionHistoryPanel({
       toast.success(data.message);
       void Promise.all([
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({
+          slug: projectSlug,
+          version,
+        }),
+        utils.project.gitHubSyncStatus.invalidate({
+          slug: projectSlug,
+          version,
+        }),
       ]);
       onRefresh?.();
     },
@@ -180,8 +217,14 @@ export function VersionHistoryPanel({
       void Promise.all([
         utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({
+          slug: projectSlug,
+          version,
+        }),
+        utils.project.gitHubSyncStatus.invalidate({
+          slug: projectSlug,
+          version,
+        }),
       ]);
       onRefresh?.();
     },
@@ -192,9 +235,18 @@ export function VersionHistoryPanel({
         );
         void Promise.all([
           utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
-          utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-          utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-          utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHasChanges.invalidate({
+            slug: projectSlug,
+            version,
+          }),
+          utils.project.gitWorkingCommit.invalidate({
+            slug: projectSlug,
+            version,
+          }),
+          utils.project.gitHubSyncStatus.invalidate({
+            slug: projectSlug,
+            version,
+          }),
           refetchGitHubSyncStatus(),
         ]);
         onRefresh?.();
@@ -215,8 +267,14 @@ export function VersionHistoryPanel({
       void Promise.all([
         utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({
+          slug: projectSlug,
+          version,
+        }),
+        utils.project.gitHubSyncStatus.invalidate({
+          slug: projectSlug,
+          version,
+        }),
       ]);
       onRefresh?.();
     },
@@ -228,9 +286,18 @@ export function VersionHistoryPanel({
         );
         void Promise.all([
           utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
-          utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-          utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-          utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHasChanges.invalidate({
+            slug: projectSlug,
+            version,
+          }),
+          utils.project.gitWorkingCommit.invalidate({
+            slug: projectSlug,
+            version,
+          }),
+          utils.project.gitHubSyncStatus.invalidate({
+            slug: projectSlug,
+            version,
+          }),
           refetchGitHubSyncStatus(),
         ]);
         onRefresh?.();
@@ -247,12 +314,13 @@ export function VersionHistoryPanel({
   const headCommit = commits[0] || null;
   const activeCommitHash = pinnedWorkingCommitHash || headCommit?.hash || null;
   const workingCommit = pinnedWorkingCommitHash
-    ? commits.find((c: CommitInfo) => c.hash === pinnedWorkingCommitHash) || null
+    ? commits.find((c: CommitInfo) => c.hash === pinnedWorkingCommitHash) ||
+      null
     : null;
   const viewingOlderSnapshot = Boolean(
     headCommit?.hash &&
-      pinnedWorkingCommitHash &&
-      pinnedWorkingCommitHash !== headCommit.hash
+    pinnedWorkingCommitHash &&
+    pinnedWorkingCommitHash !== headCommit.hash,
   );
   // Standalone studio publishes by tag; commit hash is not tracked here.
   const publishedCommitHash: string | null = null;
@@ -274,8 +342,14 @@ export function VersionHistoryPanel({
       void Promise.all([
         utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
-        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
-        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({
+          slug: projectSlug,
+          version,
+        }),
+        utils.project.gitHubSyncStatus.invalidate({
+          slug: projectSlug,
+          version,
+        }),
       ]);
       onRefresh?.();
     },
@@ -337,90 +411,72 @@ export function VersionHistoryPanel({
 
     if (!status.enabled) {
       return (
-        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+        <StatusPill tone="neutral" className="text-[10px]">
           Disabled
-        </Badge>
+        </StatusPill>
       );
     }
 
     if (!status.configured) {
       return (
-        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+        <StatusPill tone="neutral" className="text-[10px]">
           Not configured
-        </Badge>
+        </StatusPill>
       );
     }
 
     if (status.fetchError) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-red-700 border-red-200 bg-red-50"
-        >
+        <StatusPill tone="danger" className="text-[10px]">
           Error
-        </Badge>
+        </StatusPill>
       );
     }
 
     if (status.hasUncommittedChanges) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-amber-700 border-amber-200 bg-amber-50"
-        >
+        <StatusPill tone="warn" className="text-[10px]">
           Local changes
-        </Badge>
+        </StatusPill>
       );
     }
 
     if (status.workingCommitPinned) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-amber-700 border-amber-200 bg-amber-50"
-        >
+        <StatusPill tone="warn" className="text-[10px]">
           Older snapshot
-        </Badge>
+        </StatusPill>
       );
     }
 
     if (status.diverged) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-purple-700 border-purple-200 bg-purple-50"
-        >
+        <StatusPill tone="warn" className="text-[10px]">
           Diverged
-        </Badge>
+        </StatusPill>
       );
     }
 
     if ((status.behind ?? 0) > 0 && (status.ahead ?? 0) === 0) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-blue-700 border-blue-200 bg-blue-50"
-        >
+        <StatusPill tone="info" className="text-[10px]">
           Behind {status.behind}
-        </Badge>
+        </StatusPill>
       );
     }
 
     if ((status.ahead ?? 0) > 0 && (status.behind ?? 0) === 0) {
       return (
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-1.5 text-slate-700 border-slate-200 bg-slate-50"
-        >
+        <StatusPill tone="neutral" className="text-[10px]">
           Ahead {status.ahead}
-        </Badge>
+        </StatusPill>
       );
     }
 
     return (
-      <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+      <StatusPill tone="success" className="text-[10px]">
         Up to date
-      </Badge>
+      </StatusPill>
     );
   })();
 
@@ -459,7 +515,8 @@ export function VersionHistoryPanel({
     if (status.workingCommitPinned) return "Viewing older snapshot";
     if (status.hasUncommittedChanges) return "Local uncommitted changes";
     if (typeof status.ahead === "number" && typeof status.behind === "number") {
-      if (status.ahead === 0 && status.behind === 0) return "Up to date with GitHub";
+      if (status.ahead === 0 && status.behind === 0)
+        return "Up to date with GitHub";
       return `ahead ${status.ahead} • behind ${status.behind}`;
     }
     return "Status available";
@@ -477,38 +534,37 @@ export function VersionHistoryPanel({
 
         <div className="mt-6 flex flex-col h-[calc(100vh-120px)] gap-4">
           {viewingOlderSnapshot && !hasUncommittedChanges ? (
-            <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 space-y-3">
+            <Callout
+              tone="warn"
+              icon={<AlertTriangle />}
+              className="[&>div]:gap-3"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="text-sm font-semibold text-amber-900">
-                    You're viewing an older snapshot
-                  </div>
-                  <div className="text-xs text-amber-800">
-                    Restore this snapshot to make it your latest version. This helps ensure
-                    publishing matches what you're viewing.
-                  </div>
+                  <CalloutTitle>You're viewing an older snapshot</CalloutTitle>
+                  <CalloutDescription>
+                    Restore this snapshot to make it your latest version. This
+                    helps ensure publishing matches what you're viewing.
+                  </CalloutDescription>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="shrink-0 text-amber-700 border-amber-300 bg-white/60"
-                >
+                <StatusPill tone="warn" className="shrink-0">
                   Older Snapshot
-                </Badge>
+                </StatusPill>
               </div>
 
-              <div className="text-xs text-amber-900/80 space-y-1">
+              <div className="space-y-1 text-xs text-muted-foreground">
                 {workingCommit ? (
                   <div>
-                    Viewing: <span className="font-medium">{workingCommit.message}</span>{" "}
-                    <span className="text-amber-800">
-                      · {formatDate(workingCommit.date)}
-                    </span>
+                    Viewing:{" "}
+                    <span className="font-medium">{workingCommit.message}</span>{" "}
+                    <span>· {formatDate(workingCommit.date)}</span>
                   </div>
                 ) : null}
                 {headCommit ? (
                   <div>
-                    Latest: <span className="font-medium">{headCommit.message}</span>{" "}
-                    <span className="text-amber-800">· {formatDate(headCommit.date)}</span>
+                    Latest:{" "}
+                    <span className="font-medium">{headCommit.message}</span>{" "}
+                    <span>· {formatDate(headCommit.date)}</span>
                   </div>
                 ) : null}
               </div>
@@ -539,7 +595,8 @@ export function VersionHistoryPanel({
                     onClick={() => handleLoadCommit(headCommit.hash)}
                     disabled={gitOperationInFlight || isSaving}
                   >
-                    {isLoadingVersion && loadingVersionHash === headCommit.hash ? (
+                    {isLoadingVersion &&
+                    loadingVersionHash === headCommit.hash ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Loading...
@@ -553,12 +610,12 @@ export function VersionHistoryPanel({
                   </Button>
                 ) : null}
               </div>
-            </div>
+            </Callout>
           ) : null}
 
           {/* GitHub Sync Section (super-admin only for now) */}
           {showGitHubSync ? (
-            <div className="p-4 rounded-lg border bg-card shadow-sm space-y-3">
+            <Panel className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Github className="h-4 w-4 text-muted-foreground" />
@@ -583,7 +640,10 @@ export function VersionHistoryPanel({
                 </div>
               </div>
 
-              <Collapsible open={gitHubSyncOpen} onOpenChange={setGitHubSyncOpen}>
+              <Collapsible
+                open={gitHubSyncOpen}
+                onOpenChange={setGitHubSyncOpen}
+              >
                 <CollapsibleTrigger asChild>
                   <InteractiveSurfaceButton
                     variant="choice"
@@ -598,7 +658,9 @@ export function VersionHistoryPanel({
                           {gitHubSyncStatus.repoFullName}
                         </div>
                       ) : (
-                        <div className="text-xs font-medium">Repository status</div>
+                        <div className="text-xs font-medium">
+                          Repository status
+                        </div>
                       )}
                       <div className="text-[11px] text-muted-foreground truncate">
                         {gitHubSummaryText}
@@ -615,7 +677,8 @@ export function VersionHistoryPanel({
                   <div className="text-xs text-muted-foreground space-y-1">
                     {gitHubSyncStatus?.repoFullName ? (
                       <div className="flex flex-wrap items-center gap-1">
-                        <span>Repo:</span> <code>{gitHubSyncStatus.repoFullName}</code>
+                        <span>Repo:</span>{" "}
+                        <code>{gitHubSyncStatus.repoFullName}</code>
                       </div>
                     ) : null}
                     {gitHubSyncStatus?.sshUrl ? (
@@ -641,13 +704,16 @@ export function VersionHistoryPanel({
                     ) : null}
                     {gitHubSyncStatus?.configured &&
                     gitHubSyncStatus?.remoteRepoExists === false ? (
-                      <div className="flex items-start gap-2 text-red-700">
+                      <div className="flex items-start gap-2 text-destructive">
                         <AlertTriangle className="h-4 w-4 mt-0.5" />
-                        <span>GitHub repo not found for this project version.</span>
+                        <span>
+                          GitHub repo not found for this project version.
+                        </span>
                       </div>
                     ) : null}
-                    {gitHubSyncStatus?.configured && gitHubSyncStatus?.fetchError ? (
-                      <div className="flex items-start gap-2 text-red-700">
+                    {gitHubSyncStatus?.configured &&
+                    gitHubSyncStatus?.fetchError ? (
+                      <div className="flex items-start gap-2 text-destructive">
                         <AlertTriangle className="h-4 w-4 mt-0.5" />
                         <span>{gitHubSyncStatus.fetchError}</span>
                       </div>
@@ -662,17 +728,20 @@ export function VersionHistoryPanel({
                       </div>
                     ) : null}
                     {gitHubSyncStatus?.lastFetchedAt ? (
-                      <div>Checked: {formatDate(gitHubSyncStatus.lastFetchedAt)}</div>
+                      <div>
+                        Checked: {formatDate(gitHubSyncStatus.lastFetchedAt)}
+                      </div>
                     ) : null}
                     {gitHubSyncStatus && !gitHubSyncStatus.enabled ? (
                       <div>
                         GitHub sync is disabled in this studio environment.
                       </div>
                     ) : null}
-                    {gitHubSyncStatus?.enabled && !gitHubSyncStatus?.configured ? (
+                    {gitHubSyncStatus?.enabled &&
+                    !gitHubSyncStatus?.configured ? (
                       <div>
-                        Configure <code>GITHUB_ORG</code> and <code>GITHUB_TOKEN</code>{" "}
-                        to enable pulls.
+                        Configure <code>GITHUB_ORG</code> and{" "}
+                        <code>GITHUB_TOKEN</code> to enable pulls.
                       </div>
                     ) : null}
                   </div>
@@ -681,7 +750,10 @@ export function VersionHistoryPanel({
                     <Button
                       size="sm"
                       onClick={() =>
-                        gitHubPullMutation.mutate({ slug: projectSlug, version })
+                        gitHubPullMutation.mutate({
+                          slug: projectSlug,
+                          version,
+                        })
                       }
                       disabled={pullDisabled}
                     >
@@ -697,7 +769,7 @@ export function VersionHistoryPanel({
                       variant="outline"
                       onClick={() => setShowForceSyncConfirm(true)}
                       disabled={forceDisabled}
-                      className="border-red-200 text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="border-destructive/30 text-destructive hover:bg-destructive/10"
                     >
                       {gitHubForceSyncMutation.isPending ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -724,22 +796,17 @@ export function VersionHistoryPanel({
                   ) : null}
                 </CollapsibleContent>
               </Collapsible>
-            </div>
+            </Panel>
           ) : null}
 
           {/* Create Snapshot Section */}
           {hasUncommittedChanges && (
-            <div className="p-4 rounded-lg border bg-card shadow-sm space-y-3">
+            <Panel className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="snapshot-message" className="font-semibold">
                   New Snapshot
                 </Label>
-                <Badge
-                  variant="outline"
-                  className="text-amber-600 border-amber-200 bg-amber-50"
-                >
-                  Unsaved Changes
-                </Badge>
+                <StatusPill tone="warn">Unsaved Changes</StatusPill>
               </div>
 
               <div className="flex gap-2">
@@ -754,7 +821,9 @@ export function VersionHistoryPanel({
                 />
                 <Button
                   onClick={handleSave}
-                  disabled={gitOperationInFlight || isSaving || !commitMessage.trim()}
+                  disabled={
+                    gitOperationInFlight || isSaving || !commitMessage.trim()
+                  }
                   size="icon"
                 >
                   {isSaving ? (
@@ -766,7 +835,10 @@ export function VersionHistoryPanel({
               </div>
 
               {changedFiles.length > 0 ? (
-                <Collapsible open={changedFilesOpen} onOpenChange={setChangedFilesOpen}>
+                <Collapsible
+                  open={changedFilesOpen}
+                  onOpenChange={setChangedFilesOpen}
+                >
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"
@@ -784,7 +856,10 @@ export function VersionHistoryPanel({
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-2">
-                    <div className="max-h-32 overflow-y-auto rounded-md border bg-muted/30 px-2 py-1.5 space-y-1">
+                    <Panel
+                      tone="sunken"
+                      className="max-h-32 overflow-y-auto rounded-md px-2 py-1.5 space-y-1"
+                    >
                       {changedFiles.map((filePath) => (
                         <div
                           key={filePath}
@@ -794,7 +869,7 @@ export function VersionHistoryPanel({
                           {filePath}
                         </div>
                       ))}
-                    </div>
+                    </Panel>
                   </CollapsibleContent>
                 </Collapsible>
               ) : null}
@@ -809,13 +884,13 @@ export function VersionHistoryPanel({
                   size="sm"
                   onClick={handleDiscard}
                   disabled={gitOperationInFlight}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-6 px-2 text-xs"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-6 px-2 text-xs"
                 >
                   <Trash2 className="h-3 w-3 mr-1" />
                   Discard Changes
                 </Button>
               </div>
-            </div>
+            </Panel>
           )}
 
           {/* Commit list */}
@@ -843,7 +918,8 @@ export function VersionHistoryPanel({
 
                   {commits.map((commit: CommitInfo, index: number) => {
                     const isCurrent = activeCommitHash === commit.hash;
-                    const isLatest = index === 0 && activeCommitHash !== commit.hash;
+                    const isLatest =
+                      index === 0 && activeCommitHash !== commit.hash;
                     const isHead = index === 0;
                     const isLoadingThisCommit =
                       isLoadingVersion && loadingVersionHash === commit.hash;
@@ -852,28 +928,28 @@ export function VersionHistoryPanel({
                       <div key={commit.hash} className="relative pl-6">
                         {/* Timeline Dot */}
                         <div
-                          className={`absolute left-[13px] top-[14px] h-4 w-4 rounded-full border-2 z-10 bg-background ${
+                          className={`absolute left-[13px] top-[14px] h-4 w-4 rounded-full border-2 z-10 bg-surface-panel ${
                             isCurrent
-                              ? "border-green-500 bg-green-500/20"
+                              ? "border-emerald-500 bg-emerald-500/20"
                               : isHead
-                              ? "border-primary"
-                              : "border-muted-foreground"
+                                ? "border-primary"
+                                : "border-muted-foreground"
                           }`}
                         >
                           {isCurrent && (
-                            <div className="absolute inset-0.5 rounded-full bg-green-500 animate-pulse" />
+                            <div className="absolute inset-0.5 rounded-full bg-emerald-500 animate-pulse" />
                           )}
                         </div>
 
                         <InteractiveSurface
                           variant="choice"
-                          className="rounded-lg p-3 hover:bg-accent/50"
+                          className="rounded-md p-3 hover:bg-surface-sunken"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <span
-                                  className="font-mono text-[10px] text-muted-foreground bg-muted px-1 rounded"
+                                  className="font-mono text-[10px] text-muted-foreground bg-surface-sunken px-1 rounded"
                                   title={commit.hash}
                                 >
                                   {commit.shortHash}
@@ -895,13 +971,13 @@ export function VersionHistoryPanel({
                                   </Badge>
                                 )}
                                 {publishedCommitHash === commit.hash && (
-                                  <Badge
-                                    variant="default"
-                                    className="text-[10px] h-5 px-1.5 bg-blue-600 hover:bg-blue-700"
+                                  <StatusPill
+                                    tone="info"
+                                    className="text-[10px]"
                                   >
                                     <Globe className="h-3 w-3 mr-0.5" />
                                     Published
-                                  </Badge>
+                                  </StatusPill>
                                 )}
                               </div>
                               <p className="font-medium text-sm truncate leading-tight">
@@ -918,7 +994,11 @@ export function VersionHistoryPanel({
                                 variant="ghost"
                                 size="sm"
                                 className="shrink-0 h-8 w-8 p-0"
-                                title={isLoadingThisCommit ? "Loading version" : "Load this version"}
+                                title={
+                                  isLoadingThisCommit
+                                    ? "Loading version"
+                                    : "Load this version"
+                                }
                                 disabled={gitOperationInFlight}
                                 onClick={() => {
                                   handleLoadCommit(commit.hash);
@@ -987,17 +1067,23 @@ export function VersionHistoryPanel({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
+      <AlertDialog
+        open={showRestoreConfirm}
+        onOpenChange={setShowRestoreConfirm}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restore this snapshot?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will create a new latest snapshot based on what you're currently viewing. You
-              can still switch back to other snapshots anytime.
+              This will create a new latest snapshot based on what you're
+              currently viewing. You can still switch back to other snapshots
+              anytime.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={gitOperationInFlight}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={gitOperationInFlight}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-amber-700 text-white hover:bg-amber-800"
               disabled={gitOperationInFlight}
@@ -1055,9 +1141,9 @@ export function VersionHistoryPanel({
             <AlertDialogHeader>
               <AlertDialogTitle>Force sync from GitHub?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will overwrite your local workspace with GitHub’s <code>main</code>{" "}
-                branch and remove files deleted on GitHub. Vivd will create a local
-                backup tag before overwriting.
+                This will overwrite your local workspace with GitHub’s{" "}
+                <code>main</code> branch and remove files deleted on GitHub.
+                Vivd will create a local backup tag before overwriting.
                 {gitHubSyncStatus?.hasUncommittedChanges
                   ? " You currently have local changes; Vivd will include them in the backup."
                   : ""}
@@ -1071,7 +1157,10 @@ export function VersionHistoryPanel({
                 variant="destructive"
                 disabled={gitOperationInFlight}
                 onClick={() => {
-                  gitHubForceSyncMutation.mutate({ slug: projectSlug, version });
+                  gitHubForceSyncMutation.mutate({
+                    slug: projectSlug,
+                    version,
+                  });
                 }}
               >
                 {gitHubForceSyncMutation.isPending ? (

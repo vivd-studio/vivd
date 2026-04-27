@@ -1,10 +1,36 @@
 import { authClient } from "@/lib/auth-client";
-import { Button, Input, PasswordInput, Card, CardContent, CardHeader, CardTitle, CardDescription, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+import {
+  Button,
+  Callout,
+  CalloutDescription,
+  CalloutTitle,
+  Input,
+  PasswordInput,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatusPill,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@vivd/ui";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
+import {
+  SettingsPageShell,
+  FormContent,
+} from "@/components/settings/SettingsPageShell";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { ROUTES } from "@/app/router/paths";
@@ -64,14 +90,17 @@ export default function Settings() {
 
   const handleUpdateProfile = async (data: ProfileFormValues) => {
     if (!session?.user) {
-      toast.error("Error", { description: "Session not available. Please try again." });
+      toast.error("Error", {
+        description: "Session not available. Please try again.",
+      });
       return;
     }
 
     const currentName = session?.user.name ?? "";
     const currentEmail = session?.user.email ?? "";
     const changedName = data.name !== currentName;
-    const changedEmail = data.email.toLowerCase() !== currentEmail.toLowerCase();
+    const changedEmail =
+      data.email.toLowerCase() !== currentEmail.toLowerCase();
 
     if (!changedName && !changedEmail) {
       toast.message("No changes to save");
@@ -175,155 +204,151 @@ export default function Settings() {
 
         <TabsContent value="profile" className="mt-6">
           <FormContent>
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile</CardTitle>
-                <CardDescription>Update your personal information and email.</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Profile</PanelTitle>
+                <PanelDescription>
+                  Update your personal information and email.
+                </PanelDescription>
+              </PanelHeader>
+              <PanelContent>
                 <Form {...profileForm}>
                   <form
                     onSubmit={profileForm.handleSubmit(handleUpdateProfile)}
                     className="space-y-4"
                   >
-                  <FormField
-                    control={profileForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={profileForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="flex items-center text-sm">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        isEmailVerified
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                      }`}
-                    >
-                      {isEmailVerified ? "Verified" : "Unverified"}
-                    </span>
-                  </div>
-                  {!isEmailVerified && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
-                      <p className="font-medium text-amber-900">
-                        Your email address is not verified yet.
-                      </p>
-                      <p className="mt-1 text-amber-800">
-                        Verify your email to improve account security and account
-                        recovery.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="mt-3"
-                        onClick={handleSendVerificationEmail}
-                        disabled={isSendingVerificationEmail}
-                      >
-                        {isSendingVerificationEmail
-                          ? "Sending..."
-                          : "Send verification email"}
-                      </Button>
+                    <FormField
+                      control={profileForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="flex items-center text-sm">
+                      <StatusPill tone={isEmailVerified ? "success" : "warn"}>
+                        {isEmailVerified ? "Verified" : "Unverified"}
+                      </StatusPill>
                     </div>
-                  )}
-                  <Button
-                    type="submit"
-                    disabled={profileForm.formState.isSubmitting}
-                  >
-                    {profileForm.formState.isSubmitting
-                      ? "Saving..."
-                      : "Save Changes"}
-                  </Button>
-                </form>
-              </Form>
-              </CardContent>
-            </Card>
+                    {!isEmailVerified && (
+                      <Callout tone="warn">
+                        <CalloutTitle>
+                          Your email address is not verified yet.
+                        </CalloutTitle>
+                        <CalloutDescription>
+                          Verify your email to improve account security and
+                          account recovery.
+                        </CalloutDescription>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-3"
+                          onClick={handleSendVerificationEmail}
+                          disabled={isSendingVerificationEmail}
+                        >
+                          {isSendingVerificationEmail
+                            ? "Sending..."
+                            : "Send verification email"}
+                        </Button>
+                      </Callout>
+                    )}
+                    <Button
+                      type="submit"
+                      disabled={profileForm.formState.isSubmitting}
+                    >
+                      {profileForm.formState.isSubmitting
+                        ? "Saving..."
+                        : "Save Changes"}
+                    </Button>
+                  </form>
+                </Form>
+              </PanelContent>
+            </Panel>
           </FormContent>
         </TabsContent>
 
         <TabsContent value="password" className="mt-6">
           <FormContent>
-            <Card>
-              <CardHeader>
-                <CardTitle>Password</CardTitle>
-                <CardDescription>Change your password.</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Password</PanelTitle>
+                <PanelDescription>Change your password.</PanelDescription>
+              </PanelHeader>
+              <PanelContent>
                 <Form {...passwordForm}>
                   <form
                     onSubmit={passwordForm.handleSubmit(handleUpdatePassword)}
                     className="space-y-4"
                   >
-                  <FormField
-                    control={passwordForm.control}
-                    name="currentPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Current Password</FormLabel>
-                        <FormControl>
-                          <PasswordInput {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={passwordForm.control}
-                    name="newPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New Password</FormLabel>
-                        <FormControl>
-                          <PasswordInput {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={passwordForm.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirm Password</FormLabel>
-                        <FormControl>
-                          <PasswordInput {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={passwordForm.formState.isSubmitting}
-                  >
-                    {passwordForm.formState.isSubmitting
-                      ? "Changing..."
-                      : "Change Password"}
-                  </Button>
-                </form>
-              </Form>
-              </CardContent>
-            </Card>
+                    <FormField
+                      control={passwordForm.control}
+                      name="currentPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Current Password</FormLabel>
+                          <FormControl>
+                            <PasswordInput {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={passwordForm.control}
+                      name="newPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New Password</FormLabel>
+                          <FormControl>
+                            <PasswordInput {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={passwordForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirm Password</FormLabel>
+                          <FormControl>
+                            <PasswordInput {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={passwordForm.formState.isSubmitting}
+                    >
+                      {passwordForm.formState.isSubmitting
+                        ? "Changing..."
+                        : "Change Password"}
+                    </Button>
+                  </form>
+                </Form>
+              </PanelContent>
+            </Panel>
           </FormContent>
         </TabsContent>
       </Tabs>

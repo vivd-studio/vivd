@@ -44,7 +44,6 @@ import {
   TableRow,
 } from "@vivd/ui";
 
-
 type StudioMachine =
   RouterOutputs["superadmin"]["listStudioMachines"]["machines"][number];
 type SortKey = "identity" | "state" | "age" | "image" | "machine";
@@ -78,14 +77,17 @@ function formatMachineSizing(machine: StudioMachine): string {
   if (typeof machine.cpus === "number") {
     parts.push(`${machine.cpus} vCPU${machine.cpus === 1 ? "" : "s"}`);
   }
-  if (typeof machine.memoryMb === "number") parts.push(`${machine.memoryMb} MiB`);
+  if (typeof machine.memoryMb === "number")
+    parts.push(`${machine.memoryMb} MiB`);
   return parts.length > 0 ? parts.join(" / ") : "unknown";
 }
 
-function imageStatusFor(
-  machine: StudioMachine,
-): "ok" | "outdated" | "unknown" {
-  if (machine.imageStatus === "ok" || machine.imageStatus === "outdated" || machine.imageStatus === "unknown") {
+function imageStatusFor(machine: StudioMachine): "ok" | "outdated" | "unknown" {
+  if (
+    machine.imageStatus === "ok" ||
+    machine.imageStatus === "outdated" ||
+    machine.imageStatus === "unknown"
+  ) {
     return machine.imageStatus;
   }
   return machine.imageOutdated ? "outdated" : "ok";
@@ -99,7 +101,9 @@ function preferredImageIdentity(options: {
   return options.version || options.digest || options.imageId || null;
 }
 
-function badgeVariantForState(state: string | null): "default" | "secondary" | "outline" {
+function badgeVariantForState(
+  state: string | null,
+): "default" | "secondary" | "outline" {
   if (!state) return "outline";
   if (state === "started") return "default";
   if (state === "suspended") return "secondary";
@@ -128,9 +132,13 @@ function machineCreatedAtMs(machine: StudioMachine): number {
 
 function canParkMachine(state: string | null): boolean {
   const normalized = (state || "unknown").toLowerCase();
-  return !["suspended", "stopped", "stopping", "destroying", "destroyed"].includes(
-    normalized,
-  );
+  return ![
+    "suspended",
+    "stopped",
+    "stopping",
+    "destroying",
+    "destroyed",
+  ].includes(normalized);
 }
 
 function canReconcileMachine(state: string | null): boolean {
@@ -141,7 +149,8 @@ function canReconcileMachine(state: string | null): boolean {
 export function MachinesTab() {
   const utils = trpc.useUtils();
   const [confirmReconcileOpen, setConfirmReconcileOpen] = useState(false);
-  const [destroyCandidate, setDestroyCandidate] = useState<StudioMachine | null>(null);
+  const [destroyCandidate, setDestroyCandidate] =
+    useState<StudioMachine | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("age");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -149,81 +158,88 @@ export function MachinesTab() {
     staleTime: 5_000,
   });
 
-  const imageOptionsQuery = trpc.superadmin.getStudioMachineImageOptions.useQuery(undefined, {
-    staleTime: 60_000,
-  });
+  const imageOptionsQuery =
+    trpc.superadmin.getStudioMachineImageOptions.useQuery(undefined, {
+      staleTime: 60_000,
+    });
 
-  const setImageOverrideMutation = trpc.superadmin.setStudioMachineImageOverrideTag.useMutation({
-    onSuccess: async (data) => {
-      if (!data.updated) {
-        toast.error("Update skipped", {
-          description: ("error" in data && data.error) || "Unable to update image selection",
+  const setImageOverrideMutation =
+    trpc.superadmin.setStudioMachineImageOverrideTag.useMutation({
+      onSuccess: async (data) => {
+        if (!data.updated) {
+          toast.error("Update skipped", {
+            description:
+              ("error" in data && data.error) ||
+              "Unable to update image selection",
+          });
+          return;
+        }
+
+        toast.success("Studio image selection updated");
+        await Promise.all([
+          utils.superadmin.getStudioMachineImageOptions.invalidate(),
+          utils.superadmin.listStudioMachines.invalidate(),
+        ]);
+      },
+      onError: (err: unknown) => {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Update failed", {
+          description: message,
         });
-        return;
-      }
+      },
+    });
 
-      toast.success("Studio image selection updated");
-      await Promise.all([
-        utils.superadmin.getStudioMachineImageOptions.invalidate(),
-        utils.superadmin.listStudioMachines.invalidate(),
-      ]);
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      toast.error("Update failed", {
-        description: message,
-      });
-    },
-  });
+  const reconcileMutation = trpc.superadmin.reconcileStudioMachines.useMutation(
+    {
+      onSuccess: async (data) => {
+        if (!data.reconciled || !("result" in data)) {
+          toast.error("Reconcile skipped", {
+            description:
+              ("error" in data && data.error) ||
+              "Studio machine provider does not support reconciliation",
+          });
+          return;
+        }
 
-  const reconcileMutation = trpc.superadmin.reconcileStudioMachines.useMutation({
-    onSuccess: async (data) => {
-      if (!data.reconciled || !("result" in data)) {
-        toast.error("Reconcile skipped", {
-          description:
-            ("error" in data && data.error) ||
-            "Studio machine provider does not support reconciliation",
+        const result = data.result;
+        toast.success("Reconcile completed", {
+          description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} inactive • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
         });
-        return;
-      }
-
-      const result = data.result;
-      toast.success("Reconcile completed", {
-        description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} inactive • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
-      });
-      await utils.superadmin.listStudioMachines.invalidate();
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      toast.error("Reconcile failed", {
-        description: message,
-      });
-    },
-  });
-
-  const reconcileMachineMutation = trpc.superadmin.reconcileStudioMachine.useMutation({
-    onSuccess: async (data, variables) => {
-      if (!data.reconciled || !("result" in data)) {
-        toast.error("Reconcile skipped", {
-          description:
-            ("error" in data && data.error) ||
-            "Studio machine provider does not support targeted reconciliation",
+        await utils.superadmin.listStudioMachines.invalidate();
+      },
+      onError: (err: unknown) => {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Reconcile failed", {
+          description: message,
         });
-        return;
-      }
+      },
+    },
+  );
 
-      toast.success(`${machineLabel} reconciled`, {
-        description: variables.machineId,
-      });
-      await utils.superadmin.listStudioMachines.invalidate();
-    },
-    onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      toast.error("Reconcile failed", {
-        description: message,
-      });
-    },
-  });
+  const reconcileMachineMutation =
+    trpc.superadmin.reconcileStudioMachine.useMutation({
+      onSuccess: async (data, variables) => {
+        if (!data.reconciled || !("result" in data)) {
+          toast.error("Reconcile skipped", {
+            description:
+              ("error" in data && data.error) ||
+              "Studio machine provider does not support targeted reconciliation",
+          });
+          return;
+        }
+
+        toast.success(`${machineLabel} reconciled`, {
+          description: variables.machineId,
+        });
+        await utils.superadmin.listStudioMachines.invalidate();
+      },
+      onError: (err: unknown) => {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Reconcile failed", {
+          description: message,
+        });
+      },
+    });
 
   const parkMutation = trpc.superadmin.parkStudioMachine.useMutation({
     onSuccess: async (data, variables) => {
@@ -277,11 +293,15 @@ export function MachinesTab() {
     },
   });
 
-  const machines = useMemo(() => machinesQuery.data?.machines ?? [], [machinesQuery.data?.machines]);
+  const machines = useMemo(
+    () => machinesQuery.data?.machines ?? [],
+    [machinesQuery.data?.machines],
+  );
   const provider = machinesQuery.data?.provider ?? "unknown";
   const machineLabel = provider === "docker" ? "Container" : "Machine";
   const parkActionLabel = provider === "docker" ? "Stop" : "Suspend";
-  const activeReconcileMachineId = reconcileMachineMutation.variables?.machineId ?? null;
+  const activeReconcileMachineId =
+    reconcileMachineMutation.variables?.machineId ?? null;
   const activeParkMachineId = parkMutation.variables?.machineId ?? null;
   const effectiveDesiredImage = machines[0]?.desiredImage || null;
   const effectiveDesiredImageVersion = machines[0]?.desiredImageVersion ?? null;
@@ -330,8 +350,10 @@ export function MachinesTab() {
           `${right.organizationId}/${right.projectSlug}/v${right.version}`.toLowerCase();
         compare = leftIdentity.localeCompare(rightIdentity);
       } else if (sortKey === "state") {
-        const leftRank = machineStateRank[(left.state || "unknown").toLowerCase()] ?? 99;
-        const rightRank = machineStateRank[(right.state || "unknown").toLowerCase()] ?? 99;
+        const leftRank =
+          machineStateRank[(left.state || "unknown").toLowerCase()] ?? 99;
+        const rightRank =
+          machineStateRank[(right.state || "unknown").toLowerCase()] ?? 99;
         compare = leftRank - rightRank;
       } else if (sortKey === "age") {
         compare = machineCreatedAtMs(left) - machineCreatedAtMs(right);
@@ -378,7 +400,9 @@ export function MachinesTab() {
     imageOptions.selectionMode === "env" ||
     setImageOverrideMutation.isPending;
   const currentImageSelectorValue =
-    imageOptions?.supported && imageOptions.selectionMode === "pinned" && imageOptions.overrideTag
+    imageOptions?.supported &&
+    imageOptions.selectionMode === "pinned" &&
+    imageOptions.overrideTag
       ? imageOptions.overrideTag
       : imageOptions?.supported && imageOptions.selectionMode === "env"
         ? "__env__"
@@ -387,13 +411,18 @@ export function MachinesTab() {
   const selectorItems = useMemo(() => {
     if (!imageOptions?.supported) return [];
 
-    const items: Array<{ value: string; label: string; description?: string }> = [];
+    const items: Array<{ value: string; label: string; description?: string }> =
+      [];
 
     const latestLabel = "Latest (auto)";
     const latestDescription = imageOptions.latestImage
       ? `Resolves to ${imageOptions.latestImage}`
       : "Resolves from GHCR semver tags";
-    items.push({ value: "__latest__", label: latestLabel, description: latestDescription });
+    items.push({
+      value: "__latest__",
+      label: latestLabel,
+      description: latestDescription,
+    });
 
     if (imageOptions.selectionMode === "env" && imageOptions.envOverrideImage) {
       items.push({
@@ -457,7 +486,9 @@ export function MachinesTab() {
                 onClick={() => setConfirmReconcileOpen(true)}
                 disabled={reconcileMutation.isPending}
               >
-                {reconcileMutation.isPending ? "Reconciling..." : "Reconcile now"}
+                {reconcileMutation.isPending
+                  ? "Reconciling..."
+                  : "Reconcile now"}
               </Button>
             </div>
           </div>
@@ -467,14 +498,17 @@ export function MachinesTab() {
               {desiredImage ? (
                 <>
                   <span className="mx-2">•</span>
-                  Effective desired image: <code className="break-all">{desiredImage}</code>
+                  Effective desired image:{" "}
+                  <code className="break-all">{desiredImage}</code>
                 </>
               ) : null}
               {effectiveDesiredImageIdentity ? (
                 <>
                   <span className="mx-2">•</span>
                   Resolved on host:{" "}
-                  <code className="break-all">{effectiveDesiredImageIdentity}</code>
+                  <code className="break-all">
+                    {effectiveDesiredImageIdentity}
+                  </code>
                 </>
               ) : null}
             </div>
@@ -482,7 +516,9 @@ export function MachinesTab() {
             {imageOptions?.supported ? (
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Studio image:</span>
+                  <span className="text-sm text-muted-foreground">
+                    Studio image:
+                  </span>
                   <Select
                     value={currentImageSelectorValue}
                     onValueChange={(value: string) => {
@@ -518,22 +554,28 @@ export function MachinesTab() {
                     </SelectContent>
                   </Select>
                   {setImageOverrideMutation.isPending ? (
-                    <span className="text-xs text-muted-foreground">Updating…</span>
+                    <span className="text-xs text-muted-foreground">
+                      Updating…
+                    </span>
                   ) : null}
                 </div>
 
                 <div className="text-xs text-muted-foreground">
                   Latest resolves to the highest semver tag in{" "}
-                  <code className="break-all">{imageOptions.repository}</code> (dev-* tags are also listed).
+                  <code className="break-all">{imageOptions.repository}</code>{" "}
+                  (dev-* tags are also listed).
                   {latestCandidateDiffers && imageOptions.latestImage ? (
                     <span>
                       {" "}
                       Latest candidate from GHCR:{" "}
-                      <code className="break-all">{imageOptions.latestImage}</code>.
+                      <code className="break-all">
+                        {imageOptions.latestImage}
+                      </code>
+                      .
                     </span>
                   ) : null}
                   {imageOptions.error ? (
-                    <span className="text-red-500">
+                    <span className="text-destructive">
                       {" "}
                       Failed to fetch tags: {imageOptions.error}
                     </span>
@@ -552,7 +594,8 @@ export function MachinesTab() {
             ) : null}
           </div>
           <PanelDescription className="mt-2">
-            Inspect runtime machine state, reconcile drift, and manage image overrides.
+            Inspect runtime machine state, reconcile drift, and manage image
+            overrides.
           </PanelDescription>
         </PanelHeader>
 
@@ -561,7 +604,7 @@ export function MachinesTab() {
             <Callout tone="danger">
               <CalloutTitle>Failed to list machines</CalloutTitle>
               <CalloutDescription>
-              Failed to list machines: {listError}
+                Failed to list machines: {listError}
               </CalloutDescription>
             </Callout>
           ) : null}
@@ -570,7 +613,9 @@ export function MachinesTab() {
             <Badge variant="outline">total {machines.length}</Badge>
             <Badge variant="outline">outdated {stats.outdated}</Badge>
             {stats.unknownImageState > 0 ? (
-              <Badge variant="outline">image unknown {stats.unknownImageState}</Badge>
+              <Badge variant="outline">
+                image unknown {stats.unknownImageState}
+              </Badge>
             ) : null}
             {Array.from(stats.byState.entries())
               .sort((a, b) => a[0].localeCompare(b[0]))
@@ -661,7 +706,10 @@ export function MachinesTab() {
                           </div>
                           <div className="text-sm">
                             <span className="font-medium">{m.projectSlug}</span>
-                            <span className="text-muted-foreground"> / v{m.version}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              / v{m.version}
+                            </span>
                           </div>
                           {runtimeUrl || m.url ? (
                             <a
@@ -673,7 +721,9 @@ export function MachinesTab() {
                               Live runtime: {runtimeUrl || m.url}
                             </a>
                           ) : (
-                            <div className="text-xs text-muted-foreground">no url</div>
+                            <div className="text-xs text-muted-foreground">
+                              no url
+                            </div>
                           )}
                           {compatibilityUrl || m.routePath ? (
                             <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
@@ -686,137 +736,148 @@ export function MachinesTab() {
                             {m.state || "unknown"}
                           </Badge>
                         </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <div>{formatAge(m.createdAt)}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {formatDate(m.createdAt)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <div className="font-mono text-xs">
-                          {m.region || (m.routePath ? "single-host" : "unknown")}
-                        </div>
-                        {m.routePath ? (
-                          <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
-                            {m.routePath}
+                        <TableCell className="px-3 py-2">
+                          <div>{formatAge(m.createdAt)}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {formatDate(m.createdAt)}
                           </div>
-                        ) : null}
-                        <div className="text-[11px] text-muted-foreground mt-1">
-                          {formatMachineSizing(m)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <Badge
-                          variant={
-                            imageStatusFor(m) === "outdated"
-                              ? "destructive"
-                              : imageStatusFor(m) === "unknown"
-                                ? "outline"
-                                : "secondary"
-                          }
-                        >
-                          {imageStatusFor(m)}
-                        </Badge>
-                        <div className="font-mono text-[11px] text-muted-foreground break-all mt-1">
-                          {m.image || "unknown"}
-                        </div>
-                        {m.imageVersion ? (
-                          <div className="text-[11px] text-muted-foreground mt-1 break-all">
-                            version {m.imageVersion}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <div className="font-mono text-xs">
+                            {m.region ||
+                              (m.routePath ? "single-host" : "unknown")}
                           </div>
-                        ) : null}
-                        {m.imageDigest || m.imageId ? (
-                          <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
-                            {m.imageDigest || m.imageId}
-                          </div>
-                        ) : null}
-                        {imageStatusFor(m) === "outdated" &&
-                        preferredImageIdentity({
-                          version: m.desiredImageVersion,
-                          digest: m.desiredImageDigest,
-                          imageId: m.desiredImageId,
-                        }) ? (
-                          <div className="text-[11px] text-muted-foreground mt-1 break-all">
-                            desired{" "}
-                            {preferredImageIdentity({
-                              version: m.desiredImageVersion,
-                              digest: m.desiredImageDigest,
-                              imageId: m.desiredImageId,
-                            })}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <div className="font-mono text-xs break-all">{m.id}</div>
-                        {m.name ? (
-                          <div className="text-[11px] text-muted-foreground break-all mt-1">
-                            {m.name}
-                          </div>
-                        ) : null}
-                        {typeof m.externalPort === "number" ? (
+                          {m.routePath ? (
+                            <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
+                              {m.routePath}
+                            </div>
+                          ) : null}
                           <div className="text-[11px] text-muted-foreground mt-1">
-                            port {m.externalPort}
+                            {formatMachineSizing(m)}
                           </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() =>
-                              reconcileMachineMutation.mutate({ machineId: m.id })
-                            }
-                            disabled={
-                              reconcileMachineMutation.isPending ||
-                              !canReconcileMachine(m.state)
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <Badge
+                            variant={
+                              imageStatusFor(m) === "outdated"
+                                ? "destructive"
+                                : imageStatusFor(m) === "unknown"
+                                  ? "outline"
+                                  : "secondary"
                             }
                           >
-                            {reconcileMachineMutation.isPending &&
-                            activeReconcileMachineId === m.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCcw className="h-3.5 w-3.5" />
-                            )}
-                            Reconcile
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => parkMutation.mutate({ machineId: m.id })}
-                            disabled={parkMutation.isPending || !canParkMachine(m.state)}
-                          >
-                            {parkMutation.isPending && activeParkMachineId === m.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Pause className="h-3.5 w-3.5" />
-                            )}
-                            {m.state === "suspended"
-                              ? "Suspended"
-                              : m.state === "stopped"
-                                ? "Stopped"
-                                : parkActionLabel}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => setDestroyCandidate(m)}
-                            disabled={destroyMutation.isPending}
-                          >
-                            {destroyMutation.isPending &&
-                            destroyCandidate?.id === m.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                            Destroy
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                            {imageStatusFor(m)}
+                          </Badge>
+                          <div className="font-mono text-[11px] text-muted-foreground break-all mt-1">
+                            {m.image || "unknown"}
+                          </div>
+                          {m.imageVersion ? (
+                            <div className="text-[11px] text-muted-foreground mt-1 break-all">
+                              version {m.imageVersion}
+                            </div>
+                          ) : null}
+                          {m.imageDigest || m.imageId ? (
+                            <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
+                              {m.imageDigest || m.imageId}
+                            </div>
+                          ) : null}
+                          {imageStatusFor(m) === "outdated" &&
+                          preferredImageIdentity({
+                            version: m.desiredImageVersion,
+                            digest: m.desiredImageDigest,
+                            imageId: m.desiredImageId,
+                          }) ? (
+                            <div className="text-[11px] text-muted-foreground mt-1 break-all">
+                              desired{" "}
+                              {preferredImageIdentity({
+                                version: m.desiredImageVersion,
+                                digest: m.desiredImageDigest,
+                                imageId: m.desiredImageId,
+                              })}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <div className="font-mono text-xs break-all">
+                            {m.id}
+                          </div>
+                          {m.name ? (
+                            <div className="text-[11px] text-muted-foreground break-all mt-1">
+                              {m.name}
+                            </div>
+                          ) : null}
+                          {typeof m.externalPort === "number" ? (
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              port {m.externalPort}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() =>
+                                reconcileMachineMutation.mutate({
+                                  machineId: m.id,
+                                })
+                              }
+                              disabled={
+                                reconcileMachineMutation.isPending ||
+                                !canReconcileMachine(m.state)
+                              }
+                            >
+                              {reconcileMachineMutation.isPending &&
+                              activeReconcileMachineId === m.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCcw className="h-3.5 w-3.5" />
+                              )}
+                              Reconcile
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() =>
+                                parkMutation.mutate({ machineId: m.id })
+                              }
+                              disabled={
+                                parkMutation.isPending ||
+                                !canParkMachine(m.state)
+                              }
+                            >
+                              {parkMutation.isPending &&
+                              activeParkMachineId === m.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Pause className="h-3.5 w-3.5" />
+                              )}
+                              {m.state === "suspended"
+                                ? "Suspended"
+                                : m.state === "stopped"
+                                  ? "Stopped"
+                                  : parkActionLabel}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => setDestroyCandidate(m)}
+                              disabled={destroyMutation.isPending}
+                            >
+                              {destroyMutation.isPending &&
+                              destroyCandidate?.id === m.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                              Destroy
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                 </TableBody>
@@ -826,20 +887,27 @@ export function MachinesTab() {
         </PanelContent>
       </Panel>
 
-      <AlertDialog open={confirmReconcileOpen} onOpenChange={setConfirmReconcileOpen}>
+      <AlertDialog
+        open={confirmReconcileOpen}
+        onOpenChange={setConfirmReconcileOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reconcile studio machines?</AlertDialogTitle>
             <AlertDialogDescription>
               This runs the same backend reconciler logic:
               <br />
-              - reconcile non-running machine drift (image/resources/access token)
+              - reconcile non-running machine drift (image/resources/access
+              token)
               <br />
-              - warm reconciled machines (recreate → start → wait for /health → stop)
-              <br />- destroy machines not visited for the configured max inactivity window
+              - warm reconciled machines (recreate → start → wait for /health →
+              stop)
+              <br />- destroy machines not visited for the configured max
+              inactivity window
               {provider === "fly" ? (
                 <>
-                  <br />- note: Fly machine region is immutable; destroy/recreate to move regions
+                  <br />- note: Fly machine region is immutable;
+                  destroy/recreate to move regions
                 </>
               ) : null}
             </AlertDialogDescription>
@@ -879,7 +947,8 @@ export function MachinesTab() {
                     {destroyCandidate.id}
                   </span>
                   <br />
-                  {destroyCandidate.organizationId}/{destroyCandidate.projectSlug}/v
+                  {destroyCandidate.organizationId}/
+                  {destroyCandidate.projectSlug}/v
                   {destroyCandidate.version}
                 </>
               ) : null}
