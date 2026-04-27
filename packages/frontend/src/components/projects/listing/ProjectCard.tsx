@@ -20,7 +20,6 @@ import {
   ProjectCardRenameDialog,
   ProjectCardStatusDialog,
 } from "./projectCard/ProjectCardDialogs";
-import { ProjectCardFooter } from "./projectCard/ProjectCardFooter";
 import { ProjectCardHeader } from "./projectCard/ProjectCardHeader";
 import {
   getDefaultManualProjectStatus,
@@ -145,7 +144,7 @@ export function ProjectCard({
     !isFailed &&
     !isInitialGenerationPaused &&
     selectedVersionStatus !== "unknown";
-  const { label: statusLabel, color: statusColor } =
+  const { label: statusLabel } =
     getProjectStatusPresentation(selectedVersionStatus);
   const activeTagsPopoverAnchorRef: RefObject<Measurable> =
     (tagsPopoverAnchor === "actions"
@@ -273,9 +272,10 @@ export function ProjectCard({
   return (
     <>
       <Panel
-        className={`group relative flex h-full min-h-[160px] flex-col overflow-hidden transition-[border-color,box-shadow,background-color] ${
-          isProcessing ? "border-primary/40 ring-1 ring-primary/15" : ""
-        } ${canOpenStudio ? "cursor-pointer hover:border-primary/30" : ""}`}
+        tone="flat"
+        className={`group relative flex h-full min-h-[160px] flex-col overflow-visible border-transparent bg-transparent shadow-none transition-[box-shadow,background-color] dark:bg-transparent ${
+          isProcessing ? "ring-1 ring-primary/15" : ""
+        } ${canOpenStudio ? "cursor-pointer" : ""}`}
         onClick={() => {
           if (canOpenStudio && !isRenamePending) {
             openProjectStudio();
@@ -344,6 +344,28 @@ export function ProjectCard({
           }}
           onOpenStatusDialog={() => setShowStatusDialog(true)}
           onDelete={() => onDelete(project.slug)}
+          hasThumbnail={isCompleted && !!project.thumbnailUrl}
+        />
+
+        <ProjectCardContent
+          projectSlug={project.slug}
+          thumbnailUrl={project.thumbnailUrl}
+          selectedVersionInfo={selectedVersionInfo}
+          statusLabel={statusLabel}
+          isCompleted={isCompleted}
+          isFailed={isFailed}
+          isInitialGenerationPaused={isInitialGenerationPaused}
+          isProcessing={isProcessing}
+          canOpenStudio={canOpenStudio}
+          canOverrideProjectStatus={canOverrideProjectStatus}
+          isSetStatusPending={setStatusMutation.isPending}
+          publishedDomain={project.publishedDomain}
+          enabledPluginEntries={enabledPluginEntries}
+          isRenamePending={isRenamePending}
+          onOpenPlugins={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
+          onOpenPlugin={(path) => navigate(path)}
+          onOpenProjectStudio={openProjectStudio}
+          onOpenStatusDialog={() => setShowStatusDialog(true)}
         />
 
         <ProjectCardHeader
@@ -358,9 +380,6 @@ export function ProjectCard({
           supportingDetail={supportingDetail}
           publishedUrl={publishedUrl}
           projectTags={projectTags}
-          statusLabel={statusLabel}
-          statusTone={statusColor}
-          isCompleted={isCompleted}
           canManageTags={canManageTags}
           canRenameProject={canRenameProject}
           isRenamePending={isRenamePending}
@@ -412,29 +431,6 @@ export function ProjectCard({
           onSetTagColor={(tag, colorId) => {
             setTagColorMutation.mutate({ tag, colorId });
           }}
-        />
-
-        <ProjectCardContent
-          projectSlug={project.slug}
-          thumbnailUrl={project.thumbnailUrl}
-          selectedVersionInfo={selectedVersionInfo}
-          statusLabel={statusLabel}
-          isCompleted={isCompleted}
-          isFailed={isFailed}
-          isInitialGenerationPaused={isInitialGenerationPaused}
-          isProcessing={isProcessing}
-          canOpenStudio={canOpenStudio}
-          canOverrideProjectStatus={canOverrideProjectStatus}
-          isSetStatusPending={setStatusMutation.isPending}
-          onOpenProjectStudio={openProjectStudio}
-          onOpenStatusDialog={() => setShowStatusDialog(true)}
-        />
-
-        <ProjectCardFooter
-          enabledPluginEntries={enabledPluginEntries}
-          isRenamePending={isRenamePending}
-          onOpenPlugins={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
-          onOpenPlugin={(path) => navigate(path)}
         />
 
         {isRenamePending ? (

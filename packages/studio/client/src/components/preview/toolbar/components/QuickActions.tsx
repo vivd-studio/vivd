@@ -1,4 +1,22 @@
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@vivd/ui";
 
 import { cn } from "@/lib/utils";
 import {
@@ -38,7 +56,9 @@ interface QuickActionsProps {
   isRestartingDevServer?: boolean;
   devServerRestartKind?: "restart" | "clean" | null;
   setHistoryPanelOpen: (value: boolean) => void;
+  historyPanelOpen: boolean;
   setPublishDialogOpen: (value: boolean) => void;
+  publishDialogOpen: boolean;
   hasGitChanges: boolean;
   isPublished: boolean;
   publishStatus?: {
@@ -73,7 +93,9 @@ export function QuickActions({
   isRestartingDevServer,
   devServerRestartKind,
   setHistoryPanelOpen,
+  historyPanelOpen,
   setPublishDialogOpen,
+  publishDialogOpen,
   hasGitChanges,
   isPublished,
   publishStatus,
@@ -95,9 +117,15 @@ export function QuickActions({
   const snapshotsExpandedWidth = 112;
   const publishExpandedWidth = 88;
   const desktopIconButtonClass = "h-[30px] w-[30px] p-0";
+  const snapshotsActionWidth = historyPanelOpen
+    ? snapshotsExpandedWidth
+    : compactDesktopActionWidth;
+  const publishActionWidth = publishDialogOpen
+    ? publishExpandedWidth
+    : compactDesktopActionWidth;
   const desktopActionsWidth =
     (projectSlug
-      ? snapshotsExpandedWidth + desktopActionGap + publishExpandedWidth + desktopActionGap
+      ? snapshotsActionWidth + desktopActionGap + publishActionWidth + desktopActionGap
       : 0) +
     compactDesktopActionWidth;
   const publishTitle = isPublished
@@ -125,12 +153,21 @@ export function QuickActions({
     );
   };
 
-  const expandableActionClass = cn(
-    "group h-[30px] w-[30px] justify-start gap-0 overflow-hidden rounded-lg px-0 text-muted-foreground transition-[width,background-color,color] duration-200 ease-out hover:w-[var(--toolbar-expanded-width)] hover:bg-muted/60 hover:text-foreground",
-  );
+  const expandableActionClass = (active: boolean) =>
+    cn(
+      "group h-[30px] w-[30px] justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
+      active
+        ? "w-[var(--toolbar-expanded-width)] bg-background text-primary shadow-sm ring-1 ring-primary/20"
+        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+    );
 
-  const expandableActionLabelClass =
-    "overflow-hidden whitespace-nowrap text-[13px] font-medium max-w-0 pl-0 pr-0 opacity-0 transition-[max-width,opacity,padding] duration-200 ease-out group-hover:max-w-24 group-hover:pl-0.5 group-hover:pr-2.5 group-hover:opacity-100";
+  const expandableActionLabelClass = (active: boolean) =>
+    cn(
+      "overflow-hidden whitespace-nowrap text-[13px] font-medium transition-[max-width,opacity,padding] duration-200 ease-out",
+      active
+        ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
+        : "max-w-0 pl-0 pr-0 opacity-0",
+    );
 
   const expandableActionStyle = (expandedWidth: number): CSSProperties =>
     ({
@@ -139,36 +176,42 @@ export function QuickActions({
 
   const renderExpandableDesktopAction = ({
     label,
-    title,
+    tooltip,
     icon,
     expandedWidth,
     onClick,
     iconBadge,
+    active,
   }: {
     label: string;
-    title: string;
+    tooltip: string;
     icon: ReactNode;
     expandedWidth: number;
     onClick: () => void;
     iconBadge?: ReactNode;
+    active: boolean;
   }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      className={expandableActionClass}
-      style={expandableActionStyle(expandedWidth)}
-      title={title}
-    >
-      <span className="relative flex h-[30px] w-[30px] shrink-0 items-center justify-center">
-        {icon}
-        {iconBadge}
-      </span>
-      <span aria-hidden="true" className={expandableActionLabelClass}>
-        {label}
-      </span>
-      <span className="sr-only">{label}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClick}
+          className={expandableActionClass(active)}
+          style={expandableActionStyle(expandedWidth)}
+        >
+          <span className="relative flex h-[30px] w-[30px] shrink-0 items-center justify-center">
+            {icon}
+            {iconBadge}
+          </span>
+          <span aria-hidden="true" className={expandableActionLabelClass(active)}>
+            {label}
+          </span>
+          <span className="sr-only">{label}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 
   return (
@@ -181,9 +224,10 @@ export function QuickActions({
         {projectSlug &&
           renderExpandableDesktopAction({
             label: "Snapshots",
-            title: "Snapshots & History",
+            tooltip: "Snapshots & History",
             expandedWidth: snapshotsExpandedWidth,
             onClick: () => setHistoryPanelOpen(true),
+            active: historyPanelOpen,
             icon: <Save className="w-4 h-4" />,
             iconBadge: hasGitChanges ? (
               <span
@@ -197,9 +241,10 @@ export function QuickActions({
         {projectSlug &&
           renderExpandableDesktopAction({
             label: "Publish",
-            title: publishTitle,
+            tooltip: publishTitle,
             expandedWidth: publishExpandedWidth,
             onClick: () => setPublishDialogOpen(true),
+            active: publishDialogOpen,
             icon: (
               <>
                 <Rocket
@@ -228,15 +273,21 @@ export function QuickActions({
 
         {/* More Actions Dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={desktopIconButtonClass}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={desktopIconButtonClass}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                  <span className="sr-only">More actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">More actions</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
               {copied ? (

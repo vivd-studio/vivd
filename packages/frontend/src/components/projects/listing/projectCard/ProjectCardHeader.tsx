@@ -1,13 +1,12 @@
 import type { RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Globe } from "lucide-react";
-import { Badge, Input, PanelHeader, PanelTitle, StatusPill } from "@vivd/ui";
+import { Badge, Input, PanelHeader, PanelTitle } from "@vivd/ui";
 
 import type { TagColor } from "@/lib/tagColors";
 import { VersionSelector } from "../../versioning/VersionSelector";
 import { ProjectTagsPopover, TagChip } from "../ProjectTagsPopover";
 import type { Project, VersionInfo } from "../ProjectCard.types";
-import type { ProjectStatusBadgeVariant } from "./ProjectCard.helpers";
 
 interface ProjectCardHeaderProps {
   project: Project;
@@ -21,9 +20,6 @@ interface ProjectCardHeaderProps {
   supportingDetail: string;
   publishedUrl: string | null;
   projectTags: string[];
-  statusLabel: string;
-  statusTone: ProjectStatusBadgeVariant;
-  isCompleted: boolean;
   canManageTags: boolean;
   canRenameProject: boolean;
   isRenamePending: boolean;
@@ -64,9 +60,6 @@ export function ProjectCardHeader({
   supportingDetail,
   publishedUrl,
   projectTags,
-  statusLabel,
-  statusTone,
-  isCompleted,
   canManageTags,
   canRenameProject,
   isRenamePending,
@@ -95,8 +88,8 @@ export function ProjectCardHeader({
   onSetTagColor,
 }: ProjectCardHeaderProps) {
   return (
-    <PanelHeader className="pl-4 pr-10 pb-3 pt-4">
-      <div className="flex min-h-[44px] items-start justify-between gap-2">
+    <PanelHeader className="px-3.5 pr-10 pb-1.5 pt-2.5">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {isInlineTitleEditing ? (
             <Input
@@ -216,13 +209,6 @@ export function ProjectCardHeader({
               ) : null}
             </div>
           </ProjectTagsPopover>
-          <div className="flex min-h-5 items-center justify-end">
-            {!isCompleted ? (
-              <StatusPill tone={statusTone} className="shrink-0">
-                {statusLabel}
-              </StatusPill>
-            ) : null}
-          </div>
         </div>
       </div>
       {supportingDetail ? (
@@ -233,34 +219,30 @@ export function ProjectCardHeader({
           {supportingDetail}
         </div>
       ) : null}
-      <div className={`grid gap-1 ${supportingDetail ? "mt-2" : "mt-1"}`}>
-        <div className="flex min-h-[18px] items-center gap-1.5">
-          {project.publishedDomain ? (
-            <>
-              <Globe className="h-3 w-3 shrink-0 text-[hsl(var(--success))]" />
-              <a
-                href={publishedUrl ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="truncate text-xs text-[hsl(var(--success))] hover:text-[hsl(var(--success-hover))] hover:underline"
-                title={`Published at ${project.publishedDomain}${
-                  project.publishedVersion
-                    ? ` (v${project.publishedVersion})`
-                    : ""
-                }`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {project.publishedDomain}
-                {project.publishedVersion ? (
-                  <span className="ml-1 text-muted-foreground">
-                    (v{project.publishedVersion})
-                  </span>
-                ) : null}
-              </a>
-            </>
-          ) : null}
+      {project.publishedDomain ? (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <Globe className="h-3 w-3 shrink-0 text-[hsl(var(--success))]" />
+          <a
+            href={publishedUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="truncate text-xs text-[hsl(var(--success))] hover:text-[hsl(var(--success-hover))] hover:underline"
+            title={`Published at ${project.publishedDomain}${
+              project.publishedVersion
+                ? ` (v${project.publishedVersion})`
+                : ""
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {project.publishedDomain}
+            {project.publishedVersion ? (
+              <span className="ml-1 text-muted-foreground">
+                (v{project.publishedVersion})
+              </span>
+            ) : null}
+          </a>
         </div>
-      </div>
+      ) : null}
     </PanelHeader>
   );
 }

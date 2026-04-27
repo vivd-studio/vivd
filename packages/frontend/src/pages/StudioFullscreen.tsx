@@ -348,6 +348,9 @@ export default function StudioFullscreen() {
     studioHostProbeBaseUrl,
     reloadNonce: studioReloadNonce,
     reloadStudioIframe,
+    allowCrossOriginNavigationPresentation: !(
+      studioBootstrapAction && studioBootstrapToken
+    ),
     theme,
     colorTheme,
     setTheme,

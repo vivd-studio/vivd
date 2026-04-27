@@ -47,6 +47,7 @@ export function isStudioIframeShellLoaded(
 
 export function isStudioIframePresented(
   iframe: HTMLIFrameElement | null,
+  options: { allowCrossOriginNavigationPresentation?: boolean } = {},
 ): boolean {
   if (!iframe) return false;
 
@@ -76,8 +77,9 @@ export function isStudioIframePresented(
         hasStudioAssetReference(frameDocument))
     );
   } catch {
-    // Cross-origin runtime documents are not readable here. If the frame is no longer
-    // accessible, it has at least navigated away from the initial about:blank shell.
-    return true;
+    // Cross-origin runtime documents are not readable here. During bootstrapped
+    // startup, only bridge events can prove that an unreadable document is Studio
+    // rather than a bootstrap/auth error document.
+    return options.allowCrossOriginNavigationPresentation === true;
   }
 }

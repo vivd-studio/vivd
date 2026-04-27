@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@vivd/ui";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { StudioToolbar } from "./StudioToolbar";
 
@@ -122,6 +123,14 @@ function createToolbarState() {
   };
 }
 
+function renderToolbar() {
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <StudioToolbar />
+    </TooltipProvider>,
+  );
+}
+
 describe("StudioToolbar", () => {
   beforeAll(() => {
     class ResizeObserverMock {
@@ -180,7 +189,7 @@ describe("StudioToolbar", () => {
       hasOtherActiveSessions: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(
       screen.getByRole("button", { name: /another session is active/i }),
@@ -191,7 +200,7 @@ describe("StudioToolbar", () => {
   });
 
   it("does not show the Sessions button indicator when no session is active", () => {
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(
       screen.queryByText("Another session is active"),
@@ -212,7 +221,7 @@ describe("StudioToolbar", () => {
       hasOtherActiveSessions: false,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(
       screen.queryByText("Another session is active"),
@@ -222,13 +231,48 @@ describe("StudioToolbar", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps inactive workspace controls compact instead of expanding on hover", () => {
+    renderToolbar();
+
+    const explorerButton = screen.getByRole("button", { name: "Show explorer" });
+    const explorerLabel = explorerButton.querySelector(
+      'span[aria-hidden="true"]',
+    );
+
+    expect(explorerButton.className).not.toContain("hover:w");
+    expect(explorerButton.className).not.toContain(
+      "w-[var(--toolbar-expanded-width)]",
+    );
+    expect(explorerLabel?.className).not.toContain("group-hover");
+    expect(explorerLabel).toHaveClass("opacity-0");
+  });
+
+  it("expands workspace controls when their panel is active", () => {
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      assetsOpen: true,
+    });
+
+    renderToolbar();
+
+    const explorerButton = screen.getByRole("button", { name: "Hide explorer" });
+    const explorerLabel = explorerButton.querySelector(
+      'span[aria-hidden="true"]',
+    );
+
+    expect(explorerButton.className).toContain(
+      "w-[var(--toolbar-expanded-width)]",
+    );
+    expect(explorerLabel).toHaveClass("opacity-100");
+  });
+
   it("uses the embedded vivd-mark sidebar toggle without showing a separate fullscreen button", () => {
     mockUseToolbarState.mockReturnValue({
       ...createToolbarState(),
       embedded: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     const toggle = document.querySelector(
       '[data-sidebar-trigger-appearance="brand"]',
@@ -249,7 +293,7 @@ describe("StudioToolbar", () => {
       embedded: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     const toggle = document.querySelector(
       '[data-sidebar-trigger-appearance="brand"]',
@@ -268,7 +312,7 @@ describe("StudioToolbar", () => {
       embedded: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     const toggle = document.querySelector(
       '[data-sidebar-trigger-appearance="brand"]',
@@ -291,7 +335,7 @@ describe("StudioToolbar", () => {
       embedded: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     const toggle = document.querySelector(
       '[data-sidebar-trigger-appearance="panel"]',
@@ -315,7 +359,7 @@ describe("StudioToolbar", () => {
       chatPanel: { width: 560 },
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
   });
@@ -332,20 +376,20 @@ describe("StudioToolbar", () => {
       chatOpen: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
   });
 
   it("renders the vivd mark inline instead of relying on a root-path image asset", () => {
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(screen.getByRole("img", { name: "vivd" })).toBeInTheDocument();
     expect(document.querySelector('img[alt="vivd"]')).toBeNull();
   });
 
   it("always shows the Analytics toolbar button", () => {
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(
       screen.getByRole("button", { name: "Analytics requires activation" }),
@@ -353,7 +397,7 @@ describe("StudioToolbar", () => {
   });
 
   it("shows a support prompt when analytics is not enabled", () => {
-    render(<StudioToolbar />);
+    renderToolbar();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Analytics requires activation" }),
@@ -374,7 +418,7 @@ describe("StudioToolbar", () => {
       embedded: true,
     });
 
-    render(<StudioToolbar />);
+    renderToolbar();
 
     expect(screen.getByRole("button", { name: "Open analytics" })).toBeInTheDocument();
 

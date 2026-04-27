@@ -52,9 +52,6 @@ export function EditControls({
               editMode && expandLabel
                 ? "w-[var(--toolbar-expanded-width)]"
                 : undefined,
-              !editMode && expandLabel
-                ? "hover:w-[var(--toolbar-expanded-width)]"
-                : undefined,
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
@@ -67,9 +64,6 @@ export function EditControls({
                 editMode && expandLabel
                   ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
                   : "max-w-0 pl-0 pr-0 opacity-0",
-                !editMode && expandLabel
-                  ? "group-hover:max-w-24 group-hover:pl-0.5 group-hover:pr-2.5 group-hover:opacity-100"
-                  : undefined,
               )}
             >
               Edit text

@@ -28,7 +28,7 @@ const Tabs = TabsPrimitive.Root;
 const tabsListVariants = cva("text-muted-foreground", {
   variants: {
     variant: {
-      pill: "inline-flex h-10 items-center justify-center rounded-md bg-surface-sunken p-1",
+      pill: "inline-flex h-10 items-center justify-center rounded-md bg-surface-sunken p-1 border border-border/60 dark:border-transparent",
       underline:
         "flex h-10 items-center justify-start gap-1 border-b border-border overflow-y-hidden",
     },

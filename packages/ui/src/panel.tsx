@@ -24,6 +24,7 @@ const panelVariants = cva(
         default: "border-border bg-surface-panel vivd-panel-elevation",
         sunken: "border-border bg-surface-sunken shadow-none",
         dashed: "border-dashed border-border bg-transparent shadow-none",
+        flat: "border-border bg-surface-page dark:bg-surface-panel shadow-none dark:vivd-panel-elevation",
       },
     },
     defaultVariants: {

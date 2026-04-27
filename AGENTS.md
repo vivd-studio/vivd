@@ -95,4 +95,5 @@ Treat `.agents/skills/` as living repo memory: after solving a hard problem, pro
 
 ## Additional Instructions by the creator
 
-Before working on a task, try to understand the users actual underlying intent. If the user is aking to suggest, don't edit yet, try to understand what you need to do and proactively plan for yourself. Only then edit the code.
+Before working on a task, try to understand the users actual underlying intent. If the user is aking to suggest, don't edit yet, try to understand what you need to do and proactively plan for yourself. Only then edit the code. When getting asked a question rather answer before you implement. Treat your interaction like a conversation.
+Treat light and dark themes as rather different and distinct from each other.

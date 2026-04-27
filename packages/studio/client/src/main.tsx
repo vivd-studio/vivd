@@ -56,7 +56,7 @@ function Root() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-          <TooltipProvider>
+          <TooltipProvider delayDuration={100}>
             <App />
           </TooltipProvider>
         </ThemeProvider>

@@ -318,6 +318,81 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.onReady).not.toHaveBeenCalled();
   });
 
+  it("keeps a bootstrapped cross-origin iframe covered until Studio presents", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+      allowCrossOriginNavigationPresentation: false,
+    });
+    const postMessage = vi.fn();
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = {
+      postMessage,
+      get location() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      latestValue?.handleStudioIframeLoad();
+    });
+
+    expect(latestValue?.studioVisible).toBe(false);
+    expect(latestValue?.studioLifecycleState).toBe("document_loading");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:presented" },
+          origin: "https://studio.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(latestValue?.studioVisible).toBe(true);
+    expect(latestValue?.studioLifecycleState).toBe("bridge_pending");
+  });
+
+  it("can reveal cross-origin navigation for trusted non-bootstrap reopen paths", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+      allowCrossOriginNavigationPresentation: true,
+    });
+    const postMessage = vi.fn();
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = {
+      postMessage,
+      get location() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      latestValue?.handleStudioIframeLoad();
+    });
+
+    expect(latestValue?.studioVisible).toBe(true);
+    expect(latestValue?.studioLifecycleState).toBe("bridge_pending");
+  });
+
   it("rechecks same-origin iframe readiness when the page is restored", async () => {
     const props = createLifecycleProps();
     const postMessage = vi.fn();
@@ -549,7 +624,27 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
   });
 
-  it("only surfaces iframe errors after they persist beyond the startup grace window", async () => {
+  it("keeps generic iframe errors on the startup path until timeout", async () => {
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    act(() => {
+      latestValue?.handleStudioIframeError();
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(false);
+    expect(latestValue?.studioLoadError).toBeNull();
+    expect(latestValue?.studioLifecycleState).toBe("document_loading");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS);
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(false);
+    expect(latestValue?.studioLifecycleState).toBe("runtime_stalled");
+  });
+
+  it("surfaces classified legacy bootstrap failures immediately", async () => {
     const props = createLifecycleProps();
     render(<LifecycleHarness {...props} />);
 
@@ -560,23 +655,8 @@ describe("useStudioIframeLifecycle", () => {
       });
     });
 
-    expect(latestValue?.studioLoadErrored).toBe(false);
-    expect(latestValue?.studioLoadError).toMatchObject({
-      message: "Invalid bootstrap token",
-      source: "bootstrap",
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3_900);
-    });
-
-    expect(latestValue?.studioLoadErrored).toBe(false);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-    });
-
     expect(latestValue?.studioLoadErrored).toBe(true);
+    expect(latestValue?.studioLifecycleState).toBe("terminal_failure");
   });
 
   it("surfaces structured terminal bootstrap failures immediately", async () => {

@@ -13,7 +13,7 @@ import { COLOR_THEME_OPTIONS, ThemeIndicator } from "./color-theme-options";
 import { useTheme } from "./theme-provider";
 
 export function ModeToggle() {
-  const { setTheme, colorTheme, setColorTheme } = useTheme();
+  const { theme, setTheme, colorTheme, setColorTheme } = useTheme();
 
   return (
     <DropdownMenu>
@@ -28,13 +28,22 @@ export function ModeToggle() {
         <DropdownMenuLabel className="flex items-center gap-2">
           <Sun className="h-3.5 w-3.5" /> Mode
         </DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => setTheme("light")}>
+        <DropdownMenuItem
+          onClick={() => setTheme("light")}
+          className={theme === "light" ? "vivd-menu-item-selected" : ""}
+        >
           Light
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>
+        <DropdownMenuItem
+          onClick={() => setTheme("dark")}
+          className={theme === "dark" ? "vivd-menu-item-selected" : ""}
+        >
           Dark
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>
+        <DropdownMenuItem
+          onClick={() => setTheme("system")}
+          className={theme === "system" ? "vivd-menu-item-selected" : ""}
+        >
           System
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -45,7 +54,9 @@ export function ModeToggle() {
           <DropdownMenuItem
             key={option.value}
             onClick={() => setColorTheme(option.value)}
-            className={colorTheme === option.value ? "bg-surface-sunken" : ""}
+            className={
+              colorTheme === option.value ? "vivd-menu-item-selected" : ""
+            }
           >
             <ThemeIndicator preview={option.preview} />
             <span>{option.label}</span>

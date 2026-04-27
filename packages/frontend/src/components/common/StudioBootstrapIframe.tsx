@@ -15,9 +15,7 @@ import {
 import { fetchStudioBootstrapStatus } from "@/lib/studioBootstrapStatus";
 
 const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
-const BOOTSTRAP_RETRY_DELAYS_MS = [1_500, 4_000];
 const STARTUP_RESPONSE_RETRY_DELAY_MS = 1_500;
-const MAX_SILENT_BOOTSTRAP_FAILURE_RETRIES = 1;
 const BOOTSTRAP_STATUS_NETWORK_RETRY_DELAY_MS = 1_500;
 
 type StudioBootstrapIframeProps = {
@@ -58,7 +56,6 @@ export function StudioBootstrapIframe({
   const bootstrapFormRef = useRef<HTMLFormElement | null>(null);
   const bootstrapStatusTimerRef = useRef<number | null>(null);
   const startupRetryTimerRef = useRef<number | null>(null);
-  const silentBootstrapFailureRetriesRef = useRef(0);
   const shouldBootstrap = Boolean(bootstrapAction && bootstrapToken);
   const lastSubmittedFingerprintRef = useRef<string | null>(null);
   const [bootstrapReadyFingerprint, setBootstrapReadyFingerprint] =
@@ -88,23 +85,10 @@ export function StudioBootstrapIframe({
       ? `${bootstrapFingerprint}::${bootstrapStatusUrl}`
       : bootstrapFingerprint;
 
-  const isIframeAwaitingBootstrap = () => {
-    const iframe = iframeRef.current;
-    const frameWindow = iframe?.contentWindow;
-    if (!frameWindow) return true;
-
-    try {
-      return frameWindow.location.href === "about:blank";
-    } catch {
-      return false;
-    }
-  };
-
   useEffect(() => {
     if (!shouldBootstrap || !bootstrapFingerprint) {
       lastSubmittedFingerprintRef.current = null;
       setBootstrapReadyFingerprint(null);
-      silentBootstrapFailureRetriesRef.current = 0;
       return;
     }
 
@@ -122,33 +106,14 @@ export function StudioBootstrapIframe({
       lastSubmittedFingerprintRef.current = bootstrapFingerprint;
     };
 
-    const iframeAwaitingBootstrap = isIframeAwaitingBootstrap();
-    if (iframeAwaitingBootstrap || lastSubmittedFingerprintRef.current === null) {
+    if (lastSubmittedFingerprintRef.current !== bootstrapFingerprint) {
       submitBootstrap();
     }
-
-    const timers = BOOTSTRAP_RETRY_DELAYS_MS.map((delayMs) =>
-      window.setTimeout(() => {
-        if (
-          lastSubmittedFingerprintRef.current === bootstrapFingerprint &&
-          isIframeAwaitingBootstrap()
-        ) {
-          submitBootstrap();
-        }
-      }, delayMs),
-    );
-
-    return () => {
-      for (const timer of timers) {
-        window.clearTimeout(timer);
-      }
-    };
   }, [
     bootstrapFingerprint,
     bootstrapReadinessKey,
     bootstrapReadyFingerprint,
     bootstrapStatusUrl,
-    iframeRef,
     shouldBootstrap,
   ]);
 
@@ -278,17 +243,6 @@ export function StudioBootstrapIframe({
     }
 
     if (failure) {
-      if (
-        shouldBootstrap &&
-        failure.source === "bootstrap" &&
-        silentBootstrapFailureRetriesRef.current <
-          MAX_SILENT_BOOTSTRAP_FAILURE_RETRIES
-      ) {
-        silentBootstrapFailureRetriesRef.current += 1;
-        bootstrapFormRef.current?.submit();
-        return;
-      }
-
       if (startupRetryTimerRef.current !== null) {
         window.clearTimeout(startupRetryTimerRef.current);
         startupRetryTimerRef.current = null;

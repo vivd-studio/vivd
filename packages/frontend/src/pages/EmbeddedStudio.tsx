@@ -479,6 +479,9 @@ export default function EmbeddedStudio() {
     studioHostProbeBaseUrl,
     reloadNonce: studioReloadNonce,
     reloadStudioIframe,
+    allowCrossOriginNavigationPresentation: !(
+      studioBootstrapAction && studioBootstrapToken
+    ),
     sidebarOpen,
     theme,
     colorTheme,

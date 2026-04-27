@@ -239,7 +239,7 @@ export function ProjectsList() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] gap-5">
         {[1, 2, 3].map((i) => (
           <Panel key={i} className="h-44 animate-pulse" />
         ))}
@@ -348,7 +348,7 @@ export function ProjectsList() {
           </p>
         </Panel>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] gap-5">
           {filteredAndSortedProjects.map((project) => (
             <ProjectCard
               key={project.slug}

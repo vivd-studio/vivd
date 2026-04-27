@@ -2,7 +2,23 @@
 
 Date: 2026-04-27
 Owner: frontend/studio
-Status: proposed
+Status: implemented
+
+Implementation note: the core startup contract landed on 2026-04-27.
+Studio now exposes structured bootstrap readiness and bootstrap failure
+responses, the host gates browser bootstrap on readiness, Studio emits an early
+`vivd:studio:presented` bridge signal, and startup stalls stay on the startup
+UI path instead of terminal recovery.
+
+Remaining follow-ups:
+
+- Keep the legacy text/iframe compatibility heuristics until the deployed
+  Studio image fleet has the startup-stub and bootstrap-status contract.
+- The rebuilt local Studio image passed the startup/bootstrap portion of
+  `STUDIO_IMAGE=vivd-studio:local npm run studio:host-smoke`, but the smoke
+  later timed out waiting for initial-generation progress. Track that as a
+  separate Studio generation/runtime smoke issue, not as a startup-contract
+  blocker.
 
 ## Why This Exists
 
@@ -544,7 +560,8 @@ Smoke success conditions:
 
 ## Rollout Notes
 
-- Keep current text heuristics and error-display grace only until structured readiness, structured bootstrap errors, and the explicit host state machine land.
+- Keep legacy text heuristics only until structured readiness and bootstrap
+  errors are present across the deployed Studio image fleet.
 - Ship the runtime/status contract first; the host can consume it while old fallback behavior remains in place.
 - Prefer same-origin compatibility URLs for embedded Studio during rollout to avoid cross-origin opacity hiding bootstrap failures.
 - If needed, guard the new host state machine behind a narrow frontend flag for one release, but the default target is the structured path.
@@ -561,4 +578,3 @@ Smoke success conditions:
 
 1. Should `Hard restart` be hidden entirely for non-machine-backed local flows, or shown only when the runtime provider reports restart support?
 2. Should bridge-pending ever show a subtle non-blocking indicator, or should it stay invisible unless a host feature actually fails?
-3. Should the structured response types live in `@vivd/shared/studio`, or stay local to Studio/frontend until the contract settles?

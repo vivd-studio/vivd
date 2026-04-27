@@ -66,6 +66,7 @@ interface ProjectCardActionsMenuProps {
   onOpenRenameDialog: () => void;
   onOpenStatusDialog: () => void;
   onDelete: () => void;
+  hasThumbnail: boolean;
 }
 
 export function ProjectCardActionsMenu({
@@ -106,6 +107,7 @@ export function ProjectCardActionsMenu({
   onOpenRenameDialog,
   onOpenStatusDialog,
   onDelete,
+  hasThumbnail,
 }: ProjectCardActionsMenuProps) {
   const isUrlProject = (project.source || "url") === "url";
 
@@ -115,7 +117,11 @@ export function ProjectCardActionsMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-2 right-2 z-10 h-7 w-7 text-muted-foreground/60 hover:text-foreground"
+          className={`absolute top-2 right-3 z-10 h-7 w-7 ${
+            hasThumbnail
+              ? "bg-black/25 text-white hover:bg-black/40 hover:text-white backdrop-blur-sm"
+              : "text-muted-foreground/60 hover:text-foreground"
+          }`}
           onClick={(event) => event.stopPropagation()}
           disabled={isRenamePending}
         >

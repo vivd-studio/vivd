@@ -122,7 +122,7 @@ describe("isStudioIframePresented", () => {
     expect(isStudioIframePresented(iframe)).toBe(false);
   });
 
-  it("treats cross-origin runtime documents as presented once navigation leaves about:blank", () => {
+  it("does not treat unreadable cross-origin documents as presented by default", () => {
     const iframe = document.createElement("iframe");
 
     Object.defineProperty(iframe, "contentWindow", {
@@ -136,6 +136,27 @@ describe("isStudioIframePresented", () => {
       },
     });
 
-    expect(isStudioIframePresented(iframe)).toBe(true);
+    expect(isStudioIframePresented(iframe)).toBe(false);
+  });
+
+  it("can trust cross-origin navigation for non-bootstrap reopen paths", () => {
+    const iframe = document.createElement("iframe");
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get() {
+        return {
+          get location() {
+            throw new DOMException("Blocked", "SecurityError");
+          },
+        };
+      },
+    });
+
+    expect(
+      isStudioIframePresented(iframe, {
+        allowCrossOriginNavigationPresentation: true,
+      }),
+    ).toBe(true);
   });
 });

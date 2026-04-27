@@ -194,7 +194,7 @@ describe("StudioBootstrapIframe", () => {
     }
   });
 
-  it("retries bootstrap while the iframe remains on about:blank", async () => {
+  it("submits bootstrap once while waiting for an explicit response", async () => {
     vi.useFakeTimers();
     const submitSpy = vi
       .spyOn(HTMLFormElement.prototype, "submit")
@@ -207,18 +207,18 @@ describe("StudioBootstrapIframe", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_500);
       });
-      expect(submitSpy).toHaveBeenCalledTimes(2);
+      expect(submitSpy).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2_500);
       });
-      expect(submitSpy).toHaveBeenCalledTimes(3);
+      expect(submitSpy).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("stops retrying once the iframe has navigated away from about:blank", async () => {
+  it("does not retry bootstrap just because the iframe has navigated", async () => {
     vi.useFakeTimers();
     const submitSpy = vi
       .spyOn(HTMLFormElement.prototype, "submit")
@@ -240,9 +240,10 @@ describe("StudioBootstrapIframe", () => {
     }
   });
 
-  it("retries one bootstrap-class failure silently before surfacing it", () => {
+  it("surfaces terminal bootstrap-class failures without a silent retry", () => {
     frameHref = "http://app.localhost:4100/vivd-studio/api/bootstrap";
-    frameBodyText = '{"error":"Invalid bootstrap token"}';
+    frameBodyText =
+      '{"status":"failed","code":"invalid_bootstrap_token","retryable":false,"message":"Invalid bootstrap token"}';
     const submitSpy = vi
       .spyOn(HTMLFormElement.prototype, "submit")
       .mockImplementation(() => {});
@@ -255,17 +256,15 @@ describe("StudioBootstrapIframe", () => {
     fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
 
     expect(onLoad).not.toHaveBeenCalled();
-    expect(onError).not.toHaveBeenCalled();
-    expect(submitSpy).toHaveBeenCalledTimes(2);
-
-    fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
-
     expect(onError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Invalid bootstrap token",
+        code: "invalid_bootstrap_token",
+        retryable: false,
         source: "bootstrap",
       }),
     );
+    expect(submitSpy).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the startup skeleton path for transient bootstrap startup responses and retries", async () => {
@@ -322,7 +321,7 @@ describe("StudioBootstrapIframe", () => {
     expect(submitSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("does not resubmit on target changes once the iframe has already navigated", () => {
+  it("submits once for a new clean target even after the iframe has navigated", () => {
     const submitSpy = vi
       .spyOn(HTMLFormElement.prototype, "submit")
       .mockImplementation(() => {});
@@ -359,6 +358,6 @@ describe("StudioBootstrapIframe", () => {
       />,
     );
 
-    expect(submitSpy).toHaveBeenCalledTimes(1);
+    expect(submitSpy).toHaveBeenCalledTimes(2);
   });
 });

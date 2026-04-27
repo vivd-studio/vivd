@@ -23,7 +23,6 @@ import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery
 
 const EARLY_STALL_RECOVERY_DELAY_MS = 6_000;
 const EARLY_STALL_RECOVERY_TIMEOUT_MS = 4_000;
-const STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS = 4_000;
 
 function isIframeStillOnAboutBlank(
   iframe: HTMLIFrameElement | null,
@@ -57,6 +56,7 @@ type UseStudioIframeLifecycleOptions = {
   onScheduleHideSidebarPeek?: () => void;
   onToggleSidebar?: () => void;
   onHardRestart?: (version?: number) => void;
+  allowCrossOriginNavigationPresentation?: boolean;
   onTransportDegraded?: (
     signal: {
       transport: "trpc-http";
@@ -84,6 +84,7 @@ export function useStudioIframeLifecycle({
   onScheduleHideSidebarPeek,
   onToggleSidebar,
   onHardRestart,
+  allowCrossOriginNavigationPresentation = false,
   onTransportDegraded,
 }: UseStudioIframeLifecycleOptions) {
   const [studioVisible, setStudioVisible] = useState(false);
@@ -97,15 +98,7 @@ export function useStudioIframeLifecycle({
   const attemptedEarlyRecoveryRef = useRef(false);
   const attemptedEarlyBlankReloadRef = useRef(false);
   const attemptedCrossOriginTimeoutReloadRef = useRef(false);
-  const pendingStudioLoadErrorTimerRef = useRef<number | null>(null);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
-
-  const clearPendingStudioLoadError = useCallback(() => {
-    if (pendingStudioLoadErrorTimerRef.current !== null) {
-      window.clearTimeout(pendingStudioLoadErrorTimerRef.current);
-      pendingStudioLoadErrorTimerRef.current = null;
-    }
-  }, []);
 
   const postMessageToStudio = useCallback(
     (message: VivdHostBridgeMessage) => {
@@ -157,22 +150,20 @@ export function useStudioIframeLifecycle({
   }, [requestStudioReadyCheck, syncSidebarToStudio, syncThemeToStudio]);
 
   const markStudioReady = useCallback(() => {
-    clearPendingStudioLoadError();
     studioReadyRef.current = true;
     setStudioReady(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
     setStudioLoadError(null);
-  }, [clearPendingStudioLoadError]);
+  }, []);
 
   const markStudioVisible = useCallback(() => {
-    clearPendingStudioLoadError();
     studioVisibleRef.current = true;
     setStudioVisible(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
     setStudioLoadError(null);
-  }, [clearPendingStudioLoadError]);
+  }, []);
 
   const handleStudioReady = useCallback(() => {
     const wasReady = studioReadyRef.current;
@@ -194,13 +185,21 @@ export function useStudioIframeLifecycle({
   ]);
 
   const tryMarkStudioVisibleFromIframe = useCallback(() => {
-    if (!isStudioIframePresented(iframeRef.current)) {
+    if (
+      !isStudioIframePresented(iframeRef.current, {
+        allowCrossOriginNavigationPresentation,
+      })
+    ) {
       return false;
     }
 
     markStudioVisible();
     return true;
-  }, [iframeRef, markStudioVisible]);
+  }, [
+    allowCrossOriginNavigationPresentation,
+    iframeRef,
+    markStudioVisible,
+  ]);
 
   const tryMarkStudioReadyFromIframe = useCallback(() => {
     void tryMarkStudioVisibleFromIframe();
@@ -220,7 +219,6 @@ export function useStudioIframeLifecycle({
   ]);
 
   const handleStudioIframeLoad = useCallback(() => {
-    clearPendingStudioLoadError();
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
     setStudioLoadError(null);
@@ -228,29 +226,21 @@ export function useStudioIframeLifecycle({
     requestStudioBridgeSync();
     void tryMarkStudioReadyFromIframe();
   }, [
-    clearPendingStudioLoadError,
     requestStudioBridgeSync,
     tryMarkStudioReadyFromIframe,
     tryMarkStudioVisibleFromIframe,
   ]);
 
   const handleStudioIframeError = useCallback((failure?: StudioIframeFailure) => {
-    clearPendingStudioLoadError();
-    setStudioLoadError(
-      failure ?? {
-        message: "Studio failed to load",
-        source: "network",
-      },
-    );
-    const errorDisplayDelayMs =
-      failure?.retryable === false || failure?.code
-        ? 0
-        : STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS;
-    pendingStudioLoadErrorTimerRef.current = window.setTimeout(() => {
-      pendingStudioLoadErrorTimerRef.current = null;
-      setStudioLoadErrored(true);
-    }, errorDisplayDelayMs);
-  }, [clearPendingStudioLoadError]);
+    if (!failure || failure.retryable === true) {
+      setStudioLoadErrored(false);
+      setStudioLoadError(failure ?? null);
+      return;
+    }
+
+    setStudioLoadError(failure);
+    setStudioLoadErrored(true);
+  }, []);
 
   const recheckStudioReadiness = useCallback(() => {
     if (!studioBaseUrl) return;
@@ -430,14 +420,7 @@ export function useStudioIframeLifecycle({
   }, [reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
-    return () => {
-      clearPendingStudioLoadError();
-    };
-  }, [clearPendingStudioLoadError]);
-
-  useEffect(() => {
     if (!studioBaseUrl) {
-      clearPendingStudioLoadError();
       studioVisibleRef.current = false;
       setStudioVisible(false);
       studioReadyRef.current = false;
@@ -448,7 +431,6 @@ export function useStudioIframeLifecycle({
       return;
     }
 
-    clearPendingStudioLoadError();
     studioVisibleRef.current = false;
     setStudioVisible(false);
     studioReadyRef.current = false;
@@ -462,7 +444,7 @@ export function useStudioIframeLifecycle({
     }, STUDIO_LOAD_TIMEOUT_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [clearPendingStudioLoadError, reloadNonce, studioBaseUrl]);
+  }, [reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
     if (

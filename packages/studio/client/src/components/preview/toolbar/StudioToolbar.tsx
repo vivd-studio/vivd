@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
 import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -18,7 +24,24 @@ import {
   Plus,
   Plug,
 } from "lucide-react";
-import { Button, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@vivd/ui";
+import {
+  Button,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@vivd/ui";
 
 import { SidebarBrandToggleGlyph, VivdIcon } from "@/components/common";
 
@@ -238,7 +261,6 @@ export function StudioToolbar() {
   const expandableToggleClass = (
     active: boolean,
     expanded: boolean,
-    hoverable: boolean = true,
   ) =>
     cn(
       "group relative z-20 h-8 w-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
@@ -246,21 +268,14 @@ export function StudioToolbar() {
         ? "bg-background text-primary shadow-sm ring-1 ring-primary/20"
         : "text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-sm hover:ring-1 hover:ring-border/60",
       expanded ? "w-[var(--toolbar-expanded-width)]" : undefined,
-      !expanded && hoverable ? "hover:w-[var(--toolbar-expanded-width)]" : undefined,
     );
 
-  const expandableToggleLabelClass = (
-    active: boolean,
-    hoverable: boolean = true,
-  ) =>
+  const expandableToggleLabelClass = (expanded: boolean) =>
     cn(
       "overflow-hidden whitespace-nowrap text-[13px] font-medium transition-[max-width,opacity,padding] duration-200 ease-out",
-      active
+      expanded
         ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
         : "max-w-0 pl-0 pr-0 opacity-0",
-      !active && hoverable
-        ? "group-hover:max-w-24 group-hover:pl-0.5 group-hover:pr-2.5 group-hover:opacity-100"
-        : undefined,
     );
 
   const expandableToggleStyle = (expandedWidth: number): CSSProperties =>
@@ -277,14 +292,9 @@ export function StudioToolbar() {
   const cmsExpandedWidth = 96;
   const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
-  const pluginShortcutExpandedWidths = studioToolbarPluginShortcuts.map(
-    (shortcut) => shortcut.expandedWidth ?? 100,
-  );
-  const newSessionExpandedWidth = 68;
   const newSessionControlWidth = canUseAgent ? compactControlWidth : 0;
   const newSessionControlGap = canUseAgent ? toolbarControlGap : 0;
   const sessionToggleGap = canUseAgent ? 4 : 0;
-  const shouldReserveSessionSlot = chatOpen;
   const workspaceLeadingEdge = chatOpen
     ? chatPanel.width
     : leadingChromeWidth + headerHorizontalPadding + 12;
@@ -302,30 +312,27 @@ export function StudioToolbar() {
   const shouldExpandExplorerLabel =
     !shouldCollapseRightSideLabels && assetsOpen;
   const shouldExpandCmsLabel = !shouldCollapseRightSideLabels && cmsOpen;
-  const hoverableWorkspaceLabels = !shouldCollapseRightSideLabels;
-  const newSessionReservedWidth =
-    canUseAgent && hoverableWorkspaceLabels
-      ? newSessionExpandedWidth
-      : newSessionControlWidth;
+  const newSessionReservedWidth = newSessionControlWidth;
+  const sessionControlWidth = shouldExpandSessionLabel
+    ? sessionExpandedWidth
+    : compactControlWidth;
   const sessionGroupWidth =
     newSessionReservedWidth +
     newSessionControlGap +
-    (shouldReserveSessionSlot ? sessionExpandedWidth : compactControlWidth);
-  const explorerControlWidth = compactControlWidth;
-  const cmsControlWidth = compactControlWidth;
-  const editControlWidth = compactControlWidth;
+    sessionControlWidth;
+  const explorerControlWidth = shouldExpandExplorerLabel
+    ? explorerExpandedWidth
+    : compactControlWidth;
+  const cmsControlWidth = shouldExpandCmsLabel
+    ? cmsExpandedWidth
+    : compactControlWidth;
+  const editControlWidth =
+    editMode && !shouldCollapseRightSideLabels
+      ? editExpandedWidth
+      : compactControlWidth;
   const pluginControlWidth = compactControlWidth;
   const pluginShortcutControlWidth =
     compactControlWidth * studioToolbarPluginShortcuts.length;
-  const hoverExpansionAllowance = hoverableWorkspaceLabels
-    ? Math.max(
-        explorerExpandedWidth - compactControlWidth,
-        cmsExpandedWidth - compactControlWidth,
-        editExpandedWidth - compactControlWidth,
-        pluginExpandedWidth - compactControlWidth,
-        ...pluginShortcutExpandedWidths.map((width) => width - compactControlWidth),
-      )
-    : 0;
   const workspaceControlCount =
     (canUseAgent ? 2 : 0) + 4 + studioToolbarPluginShortcuts.length;
   const reservedWorkspaceControlsWidth =
@@ -337,8 +344,7 @@ export function StudioToolbar() {
     editControlWidth +
     pluginControlWidth +
     pluginShortcutControlWidth +
-    toolbarControlGap * Math.max(0, workspaceControlCount - 1) +
-    hoverExpansionAllowance;
+    toolbarControlGap * Math.max(0, workspaceControlCount - 1);
   const workspaceControlStart = chatOpen
     ? chatPanel.width - (sessionGroupWidth + sessionToggleGap + 16)
     : leadingChromeWidth + headerHorizontalPadding + 12;
@@ -379,6 +385,13 @@ export function StudioToolbar() {
         )}`
       : null;
 
+  const renderToolbarTooltip = (tooltip: string, trigger: ReactElement) => (
+    <Tooltip>
+      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+      <TooltipContent side="bottom">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+
   const desktopWorkspaceControls = projectSlug ? (
     <div ref={workspaceControlsRef} className="flex items-center gap-1">
       {canUseAgent ? (
@@ -387,44 +400,38 @@ export function StudioToolbar() {
           style={{ width: sessionGroupWidth }}
         >
           <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleStartNewSession}
-              className={expandableToggleClass(
-                false,
-                false,
-                hoverableWorkspaceLabels,
-              )}
-              style={expandableToggleStyle(newSessionExpandedWidth)}
-              title="New session"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                <Plus className="h-4 w-4" />
-              </span>
-              <span
-                aria-hidden="true"
-                className={expandableToggleLabelClass(
-                  false,
-                  hoverableWorkspaceLabels,
-                )}
+            {renderToolbarTooltip(
+              "New session",
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleStartNewSession}
+                className={expandableToggleClass(false, false)}
               >
-                New
-              </span>
-              <span className="sr-only">New session</span>
-            </Button>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                  <Plus className="h-4 w-4" />
+                </span>
+                <span
+                  aria-hidden="true"
+                  className={expandableToggleLabelClass(false)}
+                >
+                  New
+                </span>
+                <span className="sr-only">New session</span>
+              </Button>,
+            )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleSessionHistory}
-              className={expandableToggleClass(
-                sessionHistoryOpen,
-                shouldExpandSessionLabel,
-                shouldReserveSessionSlot,
-              )}
-              style={expandableToggleStyle(sessionExpandedWidth)}
-                title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+            {renderToolbarTooltip(
+              chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions",
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleSessionHistory}
+                className={expandableToggleClass(
+                  sessionHistoryOpen,
+                  shouldExpandSessionLabel,
+                )}
+                style={expandableToggleStyle(sessionExpandedWidth)}
               >
                 <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
                   <History className="h-4 w-4" />
@@ -434,14 +441,11 @@ export function StudioToolbar() {
                       className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-background"
                       aria-hidden="true"
                     />
-                ) : null}
-              </span>
-              <span
-                aria-hidden="true"
-                className={expandableToggleLabelClass(
-                  shouldExpandSessionLabel,
-                  shouldReserveSessionSlot,
-                )}
+                  ) : null}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className={expandableToggleLabelClass(shouldExpandSessionLabel)}
                 >
                   Sessions
                 </span>
@@ -451,85 +455,81 @@ export function StudioToolbar() {
                 <span className="sr-only">
                   {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
                 </span>
-              </Button>
+              </Button>,
+            )}
           </div>
         </div>
       ) : null}
 
       {canUseAgent ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleToggleChat}
-          className={`h-8 w-8 rounded-lg ${
-            chatOpen && !sessionHistoryOpen
-              ? "bg-primary/10 text-primary shadow-sm"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          }`}
-          title={chatOpen && !sessionHistoryOpen ? "Hide chat" : "Show chat"}
-        >
-          <MessageSquare className="h-4 w-4" />
-          <span className="sr-only">
-            {chatOpen && !sessionHistoryOpen ? "Hide chat" : "Show chat"}
-          </span>
-        </Button>
+        renderToolbarTooltip(
+          chatOpen && !sessionHistoryOpen ? "Hide chat" : "Show chat",
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggleChat}
+            className={`h-8 w-8 rounded-lg ${
+              chatOpen && !sessionHistoryOpen
+                ? "bg-primary/10 text-primary shadow-sm"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            }`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="sr-only">
+              {chatOpen && !sessionHistoryOpen ? "Hide chat" : "Show chat"}
+            </span>
+          </Button>,
+        )
       ) : null}
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setAssetsOpen(!assetsOpen)}
-        className={expandableToggleClass(
-          assetsOpen,
-          shouldExpandExplorerLabel,
-          hoverableWorkspaceLabels,
-        )}
-        style={expandableToggleStyle(explorerExpandedWidth)}
-        title={assetsOpen ? "Hide explorer" : "Show explorer"}
-      >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-          <FolderOpen className="h-4 w-4" />
-        </span>
-        <span
-          aria-hidden="true"
-          className={expandableToggleLabelClass(
+      {renderToolbarTooltip(
+        assetsOpen ? "Hide explorer" : "Show explorer",
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAssetsOpen(!assetsOpen)}
+          className={expandableToggleClass(
+            assetsOpen,
             shouldExpandExplorerLabel,
-            !shouldCollapseRightSideLabels,
           )}
+          style={expandableToggleStyle(explorerExpandedWidth)}
         >
-          Explorer
-        </span>
-        <span className="sr-only">
-          {assetsOpen ? "Hide explorer" : "Show explorer"}
-        </span>
-      </Button>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+            <FolderOpen className="h-4 w-4" />
+          </span>
+          <span
+            aria-hidden="true"
+            className={expandableToggleLabelClass(shouldExpandExplorerLabel)}
+          >
+            Explorer
+          </span>
+          <span className="sr-only">
+            {assetsOpen ? "Hide explorer" : "Show explorer"}
+          </span>
+        </Button>,
+      )}
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setCmsOpen(!cmsOpen)}
-        className={expandableToggleClass(
-          cmsOpen,
-          shouldExpandCmsLabel,
-          hoverableWorkspaceLabels,
-        )}
-        style={expandableToggleStyle(cmsExpandedWidth)}
-        title={cmsOpen ? "Hide content" : "Show content"}
-      >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-          <FileCode className="h-4 w-4" />
-        </span>
-        <span
-          aria-hidden="true"
-          className={expandableToggleLabelClass(
-            shouldExpandCmsLabel,
-            !shouldCollapseRightSideLabels,
-          )}
+      {renderToolbarTooltip(
+        cmsOpen ? "Hide content" : "Show content",
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setCmsOpen(!cmsOpen)}
+          className={expandableToggleClass(cmsOpen, shouldExpandCmsLabel)}
+          style={expandableToggleStyle(cmsExpandedWidth)}
         >
-          Content
-        </span>
-        <span className="sr-only">{cmsOpen ? "Hide content" : "Show content"}</span>
-      </Button>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+            <FileCode className="h-4 w-4" />
+          </span>
+          <span
+            aria-hidden="true"
+            className={expandableToggleLabelClass(shouldExpandCmsLabel)}
+          >
+            Content
+          </span>
+          <span className="sr-only">{cmsOpen ? "Hide content" : "Show content"}</span>
+        </Button>,
+      )}
 
       <EditControls
         projectSlug={projectSlug}
@@ -540,32 +540,27 @@ export function StudioToolbar() {
         expandLabel={!shouldCollapseRightSideLabels}
       />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleOpenPlugins}
-        className={expandableToggleClass(
-          false,
-          false,
-          hoverableWorkspaceLabels,
-        )}
-        style={expandableToggleStyle(pluginExpandedWidth)}
-        title="Open plugins"
-      >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-          <Plug className="h-4 w-4" />
-        </span>
-        <span
-          aria-hidden="true"
-          className={expandableToggleLabelClass(
-            false,
-            !shouldCollapseRightSideLabels,
-          )}
+      {renderToolbarTooltip(
+        "Open plugins",
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleOpenPlugins}
+          className={expandableToggleClass(false, false)}
+          style={expandableToggleStyle(pluginExpandedWidth)}
         >
-          Plugins
-        </span>
-        <span className="sr-only">Open plugins</span>
-      </Button>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+            <Plug className="h-4 w-4" />
+          </span>
+          <span
+            aria-hidden="true"
+            className={expandableToggleLabelClass(false)}
+          >
+            Plugins
+          </span>
+          <span className="sr-only">Open plugins</span>
+        </Button>,
+      )}
 
       {studioToolbarPluginShortcuts.map((shortcut) => {
         const ShortcutIcon = shortcut.icon;
@@ -574,33 +569,29 @@ export function StudioToolbar() {
           ? `Open ${shortcut.label.toLowerCase()}`
           : `${shortcut.label} requires activation`;
         return (
-          <Button
-            key={`toolbar-plugin-shortcut-${shortcut.pluginId}`}
-            variant="ghost"
-            size="sm"
-            onClick={() => handlePluginShortcutAction(shortcut)}
-            className={expandableToggleClass(
-              false,
-              false,
-              hoverableWorkspaceLabels,
-            )}
-            style={expandableToggleStyle(expandedWidth)}
-            title={shortcutTitle}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-              <ShortcutIcon className="h-4 w-4" />
-            </span>
-            <span
-              aria-hidden="true"
-              className={expandableToggleLabelClass(
-                false,
-                !shouldCollapseRightSideLabels,
-              )}
-            >
-              {shortcut.label}
-            </span>
-            <span className="sr-only">{shortcutTitle}</span>
-          </Button>
+          <Tooltip key={`toolbar-plugin-shortcut-${shortcut.pluginId}`}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handlePluginShortcutAction(shortcut)}
+                className={expandableToggleClass(false, false)}
+                style={expandableToggleStyle(expandedWidth)}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                  <ShortcutIcon className="h-4 w-4" />
+                </span>
+                <span
+                  aria-hidden="true"
+                  className={expandableToggleLabelClass(false)}
+                >
+                  {shortcut.label}
+                </span>
+                <span className="sr-only">{shortcutTitle}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{shortcutTitle}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>
@@ -747,7 +738,9 @@ export function StudioToolbar() {
               handleRestartDevServer={handleRestartDevServer}
               isRestartingDevServer={isRestartingDevServer}
               devServerRestartKind={devServerRestartKind}
+              historyPanelOpen={historyPanelOpen}
               setHistoryPanelOpen={setHistoryPanelOpen}
+              publishDialogOpen={publishDialogOpen}
               setPublishDialogOpen={setPublishDialogOpen}
               hasGitChanges={hasGitChanges}
               isPublished={isPublished}
