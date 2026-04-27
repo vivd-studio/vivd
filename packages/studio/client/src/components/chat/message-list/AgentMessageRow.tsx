@@ -195,7 +195,7 @@ export function SessionDivider({
       <button
         type="button"
         onClick={onClick}
-        className={`w-full flex items-center gap-3 my-4 py-1 text-xs transition-colors ${className}`}
+        className={`w-full flex items-center gap-3 my-4 py-1 text-sm transition-colors ${className}`}
       >
         {content}
       </button>
@@ -204,7 +204,7 @@ export function SessionDivider({
 
   return (
     <div
-      className={`w-full flex items-center gap-3 my-4 py-1 text-xs text-muted-foreground ${className}`}
+      className={`w-full flex items-center gap-3 my-4 py-1 text-sm text-muted-foreground ${className}`}
     >
       {content}
     </div>
@@ -302,31 +302,31 @@ function MessagePartBubble({
         tone={toolStatus === "error" ? "destructive" : "muted"}
       >
         <div className="space-y-1">
-          <div className="text-[11px] text-muted-foreground/90">
+          <div className="text-xs text-muted-foreground/90">
             Tool: <span className="font-mono">{String(part.tool ?? "unknown")}</span>
           </div>
           {toolTitle && (
-            <div className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-words">
+            <div className="text-xs text-muted-foreground/90 whitespace-pre-wrap break-words">
               {toolTitle}
             </div>
           )}
           {toolTranscript && (
             <ToolCodeBlock
               text={toolTranscript}
-              className="font-mono text-[12px] text-foreground bg-muted/65"
+              className="font-mono text-sm text-foreground bg-muted/65"
             />
           )}
           {!toolTranscript && toolInput && (
-            <ToolCodeBlock text={toolInput} className="text-[11px] text-foreground/90" />
+            <ToolCodeBlock text={toolInput} className="text-xs text-foreground/90" />
           )}
           {!toolTranscript && toolOutput && (
             <ToolCodeBlock
               text={toolOutput}
-              className="font-mono text-[11px] text-foreground/90 bg-muted/55"
+              className="font-mono text-xs text-foreground/90 bg-muted/55"
             />
           )}
           {toolStatus === "error" && (
-            <div className="text-[11px] text-destructive/90">
+            <div className="text-xs text-destructive/90">
               Action failed. Technical error details are hidden.
             </div>
           )}
@@ -370,7 +370,7 @@ function AgentMarkdownBlock({
 
   return (
     <div
-      className={`rounded-lg px-3 py-1.5 w-full min-w-0 text-sm leading-relaxed max-w-none break-words overflow-x-hidden ${
+      className={`rounded-lg px-3 py-1.5 w-full min-w-0 text-base leading-relaxed max-w-none break-words overflow-x-hidden ${
         animateChunk ? "chat-stream-chunk-fade" : ""
       }`}
     >
@@ -623,7 +623,7 @@ function AgentStateRow({
 
   return (
     <div className="w-full max-w-md">
-      <div className={`text-xs font-medium py-0.5 px-1 leading-5 ${toneClass}`}>
+      <div className={`text-sm font-medium py-0.5 px-1 leading-5 ${toneClass}`}>
         <span className="inline-flex items-center gap-1">{label}</span>
       </div>
     </div>
@@ -655,7 +655,7 @@ function AgentActivityRow({
     <div className="w-full max-w-md">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="group w-full text-left hover:text-foreground transition-colors text-xs font-medium py-0.5 px-1"
+        className="group w-full text-left hover:text-foreground transition-colors text-sm font-medium py-0.5 px-1"
       >
         <span className={`inline-flex max-w-full items-center gap-1 ${toneClass}`}>
           <span className="min-w-0">{label}</span>
@@ -676,7 +676,7 @@ function AgentActivityRow({
         }`}
       >
         {isOpen && (
-          <div className="mt-0.5 ml-1 pl-2 pr-1 pb-1 border-l border-border/60 text-xs text-muted-foreground">
+          <div className="mt-0.5 ml-1 pl-2 pr-1 pb-1 border-l border-border/60 text-sm text-muted-foreground">
             {renderContent ? renderContent(isOpen) : children}
           </div>
         )}

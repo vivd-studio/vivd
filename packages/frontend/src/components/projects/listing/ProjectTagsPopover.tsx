@@ -39,7 +39,7 @@ function areTagListsEqual(a: string[], b: string[]): boolean {
   return a.every((tag, index) => tag === b[index]);
 }
 
-// ─── Tag chip (coloured rectangle, like Trello) ──────────────────────────────
+// Tag chip
 
 interface TagChipProps {
   tag: string;
@@ -54,15 +54,19 @@ export function TagChip({ tag, color, onClick, className }: TagChipProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center rounded px-2.5 py-1 text-xs font-medium transition-opacity",
+        "inline-flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors",
         onClick
-          ? "cursor-pointer hover:opacity-90 active:scale-[0.97]"
+          ? "cursor-pointer hover:bg-surface-sunken hover:text-foreground active:scale-[0.97]"
           : "cursor-default",
         className,
       )}
-      style={{ backgroundColor: color.bg, color: color.text }}
     >
-      {tag}
+      <span
+        aria-hidden="true"
+        className="size-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: color.bg }}
+      />
+      <span className="min-w-0 truncate">{tag}</span>
     </button>
   );
 }
@@ -506,8 +510,12 @@ export function ProjectTagsPopover({
                       >
                         <button
                           type="button"
-                          className="flex flex-1 items-center gap-2 rounded px-2 py-1.5 text-left transition-opacity hover:opacity-90 active:scale-[0.98]"
-                          style={{ backgroundColor: color.bg }}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors active:scale-[0.98]",
+                            active
+                              ? "bg-surface-sunken text-foreground"
+                              : "hover:bg-surface-sunken hover:text-foreground",
+                          )}
                           onClick={() => {
                             setDraftProjectTags((current) =>
                               active
@@ -524,28 +532,25 @@ export function ProjectTagsPopover({
                             className={cn(
                               "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-2 transition-all",
                               active
-                                ? "border-white bg-white"
-                                : "border-white/60",
+                                ? "border-foreground/70 bg-foreground text-background"
+                                : "border-border",
                             )}
                           >
                             {active && (
-                              <Check
-                                className="h-3 w-3"
-                                strokeWidth={3}
-                                style={{ color: color.bg }}
-                              />
+                              <Check className="h-3 w-3" strokeWidth={3} />
                             )}
                           </span>
                           <span
-                            className="truncate text-xs font-medium"
-                            style={{ color: color.text }}
-                          >
+                            aria-hidden="true"
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: color.bg }}
+                          />
+                          <span className="min-w-0 truncate text-xs font-medium">
                             {tag}
                           </span>
                           {isSaving && (
                             <Loader2
-                              className="ml-auto h-3 w-3 shrink-0 animate-spin"
-                              style={{ color: color.text }}
+                              className="ml-auto h-3 w-3 shrink-0 animate-spin text-muted-foreground"
                             />
                           )}
                         </button>

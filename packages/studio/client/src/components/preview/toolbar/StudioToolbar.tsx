@@ -601,7 +601,7 @@ export function StudioToolbar() {
       <header className="relative shrink-0 bg-background">
         <div
           className={cn(
-            "flex flex-wrap items-center gap-1 py-1 md:flex-nowrap",
+            "flex min-h-[var(--vivd-shell-header-height)] flex-wrap items-center gap-1 py-1 md:h-[var(--vivd-shell-header-height)] md:flex-nowrap md:py-0",
             embedded && !fullscreen
               ? "pl-2 pr-3 md:pl-2.5 md:pr-4"
               : "px-3 md:px-4",

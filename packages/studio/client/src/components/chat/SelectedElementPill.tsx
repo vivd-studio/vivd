@@ -12,7 +12,7 @@ export function SelectedElementPill({
   onRemove,
 }: SelectedElementPillProps) {
   return (
-    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-sm max-w-full">
+    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-base max-w-full">
       <Code className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
       <span
         className="text-amber-700 dark:text-amber-300 truncate"
@@ -70,7 +70,7 @@ export function ElementRefPill({
 
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-mono"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-mono"
       title={title}
     >
       <Code className="w-3 h-3" />
@@ -83,7 +83,7 @@ export function ElementRefPill({
 export function DroppedImagePill({ filename }: { filename: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/15 border border-blue-500/30 text-xs"
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/15 border border-blue-500/30 text-sm"
       title={filename}
     >
       <Image className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -108,7 +108,7 @@ export function AttachedFilePill({
 }: AttachedFilePillProps) {
   return (
     <div
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-sm max-w-full"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-base max-w-full"
       title={path}
     >
       <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -132,7 +132,7 @@ export function AttachedFilePill({
 export function AttachedFileRefPill({ filename }: { filename: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-xs"
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-sm"
       title={filename}
     >
       <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />

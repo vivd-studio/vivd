@@ -261,7 +261,7 @@ export function ProjectsList() {
   return (
     <div>
       {hasProjects && (
-        <div className="mb-5 space-y-3">
+        <div className="mb-5 space-y-3 py-2">
           <div className="flex items-center gap-3">
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -308,14 +308,18 @@ export function ProjectsList() {
                     }
                     aria-label={`Filter by tag ${tag}`}
                     aria-pressed={active}
-                    className="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 active:scale-[0.97]"
-                    style={{
-                      backgroundColor: color.bg,
-                      color: color.text,
-                      opacity: active ? 1 : 0.5,
-                    }}
+                    className={`flex max-w-[10rem] items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors active:scale-[0.97] ${
+                      active
+                        ? "bg-surface-sunken text-foreground"
+                        : "text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
+                    }`}
                   >
-                    {tag}
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: color.bg }}
+                    />
+                    <span className="min-w-0 truncate">{tag}</span>
                   </button>
                 );
               })}

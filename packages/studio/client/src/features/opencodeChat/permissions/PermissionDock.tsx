@@ -58,7 +58,7 @@ export function PermissionDock({
           <div className="space-y-2">
             {display.destinationLabel ? (
               <>
-                <p className="text-sm text-muted-foreground">{display.summary}</p>
+                <p className="text-base text-muted-foreground">{display.summary}</p>
                 <a
                   href={display.destinationUrl}
                   target="_blank"
@@ -70,32 +70,32 @@ export function PermissionDock({
               </>
             ) : (
               <>
-                <div className="text-base font-semibold text-foreground">
+                <div className="text-lg font-semibold text-foreground">
                   {display.title}
                 </div>
-                <p className="text-sm text-muted-foreground">{display.summary}</p>
+                <p className="text-base text-muted-foreground">{display.summary}</p>
               </>
             )}
           </div>
 
           {display.showTechnicalDetails ? (
             <details className="mt-3 border-t border-border/50 pt-2">
-              <summary className="cursor-pointer text-[11px] text-muted-foreground transition-colors hover:text-foreground">
+              <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
                 Technical details
               </summary>
               <div className="mt-2 space-y-1.5">
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   Permission type: <code>{display.technicalPermission}</code>
                 </div>
                 {display.technicalPatterns.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       Requested scope
                     </div>
                     {display.technicalPatterns.map((pattern) => (
                       <code
                         key={`${request.id}-${pattern}`}
-                        className="block rounded-md border border-border/50 bg-muted/35 px-2 py-1.5 text-[11px] text-foreground break-all"
+                        className="block rounded-md border border-border/50 bg-muted/35 px-2 py-1.5 text-xs text-foreground break-all"
                       >
                         {pattern}
                       </code>

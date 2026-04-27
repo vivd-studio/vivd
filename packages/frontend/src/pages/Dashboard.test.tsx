@@ -12,6 +12,11 @@ describe("Dashboard", () => {
 
     const projectsList = screen.getByTestId("projects-list");
     expect(projectsList).toBeInTheDocument();
+    expect(projectsList.parentElement).toHaveClass(
+      "overflow-auto",
+      "px-4",
+      "py-3",
+    );
     expect(projectsList.parentElement?.parentElement).toHaveClass(
       "rounded-[10px]",
       "border",

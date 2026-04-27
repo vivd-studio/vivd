@@ -52,7 +52,7 @@ export function UserMessageRow({
           <Button
             variant="ghost"
             size="sm"
-            className="text-[11px] text-muted-foreground/75 hover:text-muted-foreground h-6 px-2"
+            className="text-xs text-muted-foreground/75 hover:text-muted-foreground h-6 px-2"
             onClick={() => onRevert(messageId)}
           >
             <Undo2 className="w-3 h-3 mr-1" />
@@ -73,7 +73,7 @@ export function UserMessageRow({
         className="max-w-[90%] min-w-0"
       >
         <div
-          className="overflow-x-hidden rounded-[18px] bg-muted/40 px-3.5 py-1.5 text-foreground text-sm leading-[1.45] dark:bg-muted/10"
+          className="overflow-x-hidden rounded-[18px] bg-muted/40 px-3.5 py-1.5 text-foreground text-base leading-[1.45] dark:bg-muted/10"
           data-chat-user-message-id={messageId}
         >
           <UserMessageText messageId={messageId} text={cleanMessage} />
@@ -106,7 +106,7 @@ export function UserMessageRow({
         {message.createdAt && (
           <div
             data-chat-user-message-time={messageId}
-            className="mt-0.5 px-1 text-[10px] text-muted-foreground/60 text-right"
+            className="mt-0.5 px-1 text-[11px] text-muted-foreground/60 text-right"
           >
             {formatMessageTime(message.createdAt)}
           </div>
@@ -217,7 +217,7 @@ function UserMessageText({
             type="button"
             data-chat-user-message-toggle={messageId}
             onClick={() => setIsExpanded((prev) => !prev)}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
           >
             <span>{isExpanded ? "Show less" : "Show more"}</span>
             <ChevronDown

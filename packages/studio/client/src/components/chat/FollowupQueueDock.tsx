@@ -40,8 +40,8 @@ export function FollowupQueueDock({
             className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
           >
             <div>
-              <p className="text-sm font-medium text-foreground">Queued Follow-ups</p>
-              <p className="text-xs text-muted-foreground">{summary}</p>
+              <p className="text-base font-medium text-foreground">Queued Follow-ups</p>
+              <p className="text-sm text-muted-foreground">{summary}</p>
             </div>
             {collapsed ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -63,7 +63,7 @@ export function FollowupQueueDock({
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground">
+                      <p className="truncate text-base text-foreground">
                         {item.preview}
                       </p>
                     </div>

@@ -43,7 +43,7 @@ export function SessionList({
   return (
     <div className="flex h-full w-full flex-col">
       <div className="mb-2 px-1">
-        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
+        <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
           Latest Sessions
         </div>
       </div>
@@ -81,7 +81,7 @@ export function SessionList({
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">
+                    <span className="truncate text-base font-medium text-foreground">
                       {label}
                     </span>
                     {sessionIsActive ? (
@@ -92,7 +92,7 @@ export function SessionList({
                       />
                     ) : null}
                   </span>
-                  <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock3 className="h-3 w-3" />
                     {formatSessionTime(session.time?.updated ?? session.time?.created)}
                   </span>

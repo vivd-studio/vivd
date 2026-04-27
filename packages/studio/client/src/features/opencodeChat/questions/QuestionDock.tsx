@@ -234,11 +234,11 @@ export function QuestionDock({
         <div className="rounded-[1.4rem] border border-border/70 bg-background/95 px-4 py-4 shadow-2xl shadow-black/10 backdrop-blur-md supports-[backdrop-filter]:bg-background/82 dark:border-white/10 dark:shadow-black/45 md:px-5 md:py-5">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Agent Question
               </div>
-              <div className="text-sm font-semibold text-foreground">{summary}</div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-base font-semibold text-foreground">{summary}</div>
+              <div className="text-sm text-muted-foreground">
                 Answer to let the run continue.
               </div>
             </div>
@@ -260,13 +260,13 @@ export function QuestionDock({
           </div>
 
           <div className="mt-4 space-y-2">
-            <div className="text-sm font-semibold text-foreground">
+            <div className="text-base font-semibold text-foreground">
               {question.header || `Question ${step + 1}`}
             </div>
-            <div className="text-sm leading-relaxed text-foreground">
+            <div className="text-base leading-relaxed text-foreground">
               {question.question}
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               {multiple ? "Choose one or more answers." : "Choose one answer."}
             </div>
           </div>
@@ -293,9 +293,9 @@ export function QuestionDock({
                       : "border-border/70 bg-background/55 hover:border-primary/40 hover:bg-muted/45",
                   )}
                 >
-                  <div className="text-sm font-medium text-foreground">{option.label}</div>
+                  <div className="text-base font-medium text-foreground">{option.label}</div>
                   {option.description && (
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-1 text-sm text-muted-foreground">
                       {option.description}
                     </div>
                   )}
@@ -319,8 +319,8 @@ export function QuestionDock({
                   className="flex w-full items-center justify-between gap-3 text-left"
                 >
                   <div>
-                    <div className="text-sm font-medium text-foreground">Custom answer</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="text-base font-medium text-foreground">Custom answer</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
                       Type your own response instead of choosing a preset option.
                     </div>
                   </div>
@@ -336,7 +336,7 @@ export function QuestionDock({
                   onChange={(event) => updateCustomValue(event.target.value)}
                   disabled={submitting || !isCustomSelected}
                   placeholder="Type your answer"
-                  className="mt-3"
+                  className="mt-3 text-base md:text-base"
                 />
               </div>
             )}

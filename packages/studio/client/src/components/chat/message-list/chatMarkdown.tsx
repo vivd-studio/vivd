@@ -10,7 +10,7 @@ export function getChatMarkdownComponents({
     ? "my-1 pl-5 space-y-0.5"
     : "my-2 pl-5 space-y-1";
   const headingClass =
-    "text-sm leading-relaxed font-semibold mb-2 mt-3 first:mt-0";
+    "text-base leading-relaxed font-semibold mb-2 mt-3 first:mt-0";
 
   return {
     p: ({ children }: any) => <p className={paragraphClass}>{children}</p>,
@@ -41,10 +41,10 @@ export function getChatMarkdownComponents({
           {children}
         </code>
       ) : (
-        <code className="text-xs leading-relaxed">{children}</code>
+        <code className="text-sm leading-relaxed">{children}</code>
       ),
     pre: ({ children }: any) => (
-      <pre className="my-2 overflow-x-auto rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed">
+      <pre className="my-2 overflow-x-auto rounded-md bg-muted/40 px-3 py-2 text-sm leading-relaxed">
         {children}
       </pre>
     ),

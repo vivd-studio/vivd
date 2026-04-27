@@ -4,6 +4,8 @@
      ============================================ */
   :root {
     --radius: 0.5rem;
+    --vivd-sidebar-collapsed-size: 3rem;
+    --vivd-shell-header-height: var(--vivd-sidebar-collapsed-size);
 
     /* Default Theme - Paper & Sage. Mirror of [data-color-theme="vivd-sharp"]
        below — kept in sync as a fallback when no data-color-theme is set. */

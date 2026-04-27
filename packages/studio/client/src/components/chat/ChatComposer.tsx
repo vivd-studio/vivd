@@ -282,7 +282,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         {/* Textarea - inside container with proper padding */}
         <textarea
           ref={textareaRef}
-          className="flex min-h-[56px] max-h-[200px] w-full resize-none !bg-transparent px-4 pt-3.5 pb-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-[56px] max-h-[200px] w-full resize-none !bg-transparent px-4 pt-3.5 pb-2.5 text-base placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           placeholder={
             isUsageBlocked
               ? "Usage limit reached. Please wait for the limit to reset."
@@ -372,7 +372,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
                   )}
                 </span>
                 <span
-                  className={`overflow-hidden whitespace-nowrap text-sm transition-all duration-200 ${
+                  className={`overflow-hidden whitespace-nowrap text-base transition-all duration-200 ${
                     selectorMode
                       ? "max-w-[100px] opacity-100 ml-1"
                       : "max-w-0 opacity-0 group-hover:max-w-[150px] group-hover:opacity-100 group-hover:ml-1 group-hover:mr-2"

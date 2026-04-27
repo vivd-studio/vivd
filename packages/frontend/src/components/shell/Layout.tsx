@@ -68,7 +68,7 @@ export function Layout() {
           {/* For project pages, EmbeddedStudioToolbar handles the header */}
           {!pageInfo.isProjectPage && !isEmbeddedProjectPanel && (
             <header
-              className="sticky top-0 z-10 shrink-0 border-b bg-background px-3 py-1 transition-[border-color] duration-150 md:px-4"
+              className="sticky top-0 z-10 h-[var(--vivd-shell-header-height)] shrink-0 border-b bg-background px-3 transition-[border-color] duration-150 md:px-4"
               style={{ borderColor: isScrolled ? "hsl(var(--border))" : "transparent" }}
             >
               <HostHeader

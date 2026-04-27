@@ -76,8 +76,8 @@ export function ModelSelector({
                 className={cn("w-4 h-4 mt-0.5 shrink-0", modelConfig.color)}
               />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">{modelConfig.label}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-base font-medium">{modelConfig.label}</div>
+                <div className="text-sm text-muted-foreground">
                   {modelConfig.description}
                 </div>
               </div>

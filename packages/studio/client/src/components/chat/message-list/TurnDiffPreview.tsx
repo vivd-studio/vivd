@@ -112,7 +112,7 @@ export function TurnDiffPreview({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <span className="inline-flex min-w-0 items-center gap-2">
           <FileCode2 className="h-3.5 w-3.5 shrink-0" />
@@ -126,13 +126,13 @@ export function TurnDiffPreview({
       {open ? (
         <div className="border-t border-border/60 px-3 py-3">
           {!hasDisplayDiffs && diffQuery.isLoading ? (
-            <div className="text-xs text-muted-foreground">Loading edited files...</div>
+            <div className="text-sm text-muted-foreground">Loading edited files...</div>
           ) : !hasDisplayDiffs && diffQuery.isError ? (
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               Could not load the tracked file changes for this run.
             </div>
           ) : !hasDisplayDiffs ? (
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               No tracked file changes were recorded for this run.
             </div>
           ) : (
@@ -170,7 +170,7 @@ export function TurnDiffPreview({
                         )
                       }
                       className={cn(
-                        "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-[11px] transition-colors hover:text-foreground",
+                        "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-xs transition-colors hover:text-foreground",
                         isExpanded ? "bg-background" : "bg-background/60",
                       )}
                     >
@@ -184,7 +184,7 @@ export function TurnDiffPreview({
                         {status !== "modified" ? (
                           <span
                             className={cn(
-                              "rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]",
+                              "rounded-full px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em]",
                               status === "added" &&
                                 "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
                               status === "deleted" &&
@@ -206,14 +206,14 @@ export function TurnDiffPreview({
 
                     {isExpanded ? (
                       <div className="border-t border-border/60">
-                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
                           {formatFileDiffStatus(status)} · +{diff.additions} / -
                           {diff.deletions}
                         </div>
 
                         {hasDetailedPreviewData(detailedDiff) ? (
                           preview && preview.lines.length > 0 ? (
-                            <div className="max-h-80 overflow-auto font-mono text-[11px] leading-5">
+                            <div className="max-h-80 overflow-auto font-mono text-xs leading-5">
                               {preview.lines.map((line, index) =>
                                 line.kind === "omitted" ? (
                                   <div
@@ -250,26 +250,26 @@ export function TurnDiffPreview({
                                 ),
                               )}
                               {preview.truncated ? (
-                                <div className="border-t border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                                <div className="border-t border-border/60 px-3 py-2 text-sm text-muted-foreground">
                                   Preview truncated.
                                 </div>
                               ) : null}
                             </div>
                           ) : (
-                            <div className="px-3 py-3 text-xs text-muted-foreground">
+                            <div className="px-3 py-3 text-sm text-muted-foreground">
                               No inline text diff preview is available for this file.
                             </div>
                           )
                         ) : diffQuery.isLoading ? (
-                          <div className="px-3 py-3 text-xs text-muted-foreground">
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
                             Loading diff preview...
                           </div>
                         ) : diffQuery.isError ? (
-                          <div className="px-3 py-3 text-xs text-muted-foreground">
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
                             Could not load the diff preview for this file.
                           </div>
                         ) : (
-                          <div className="px-3 py-3 text-xs text-muted-foreground">
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
                             No detailed diff preview is available for this file.
                           </div>
                         )}

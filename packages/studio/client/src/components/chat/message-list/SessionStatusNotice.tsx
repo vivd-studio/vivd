@@ -34,11 +34,11 @@ export function SessionStatusNotice({
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium leading-5 text-foreground break-words">
+            <p className="text-sm font-medium leading-5 text-foreground break-words">
               {notice.title}
             </p>
             {notice.detail && (
-              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground break-words">
+              <p className="mt-0.5 text-xs leading-4 text-muted-foreground break-words">
                 {notice.detail}
               </p>
             )}

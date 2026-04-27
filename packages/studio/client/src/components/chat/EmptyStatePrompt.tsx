@@ -44,7 +44,7 @@ export function EmptyStatePrompt({
       {initialGenerationRequested ? (
         <div className="mb-6 flex w-full max-w-md flex-col items-center gap-3 px-6">
           {showInitialGenerationWaitingState ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-base text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               {initialGenerationStarting
                 ? "Starting initial site generation..."
@@ -53,7 +53,7 @@ export function EmptyStatePrompt({
           ) : null}
           {initialGenerationFailed ? (
             <div className="flex w-full flex-col items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3">
-              <div className="text-sm text-destructive">
+              <div className="text-base text-destructive">
                 Initial generation did not start: {initialGenerationFailed}
               </div>
               <Button
@@ -76,13 +76,13 @@ export function EmptyStatePrompt({
 
       {/* Subtle suggestions - no background, just text */}
       <div className="w-full max-w-md px-4">
-        <p className="text-xs text-muted-foreground/60 mb-4">Or try:</p>
+        <p className="text-sm text-muted-foreground/60 mb-4">Or try:</p>
         <div className="flex flex-col gap-1">
           {suggestions.map((suggestion, idx) => (
             <button
               key={idx}
               onClick={() => onSuggestionClick?.(suggestion.text)}
-              className="flex items-center gap-2 text-left text-sm py-2 px-1 rounded-md hover:bg-muted/30 transition-colors group"
+              className="flex items-center gap-2 text-left text-base py-2 px-1 rounded-md hover:bg-muted/30 transition-colors group"
             >
               <suggestion.icon className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-amber-500 transition-colors shrink-0" />
               <span className="text-muted-foreground/70 group-hover:text-foreground transition-colors">

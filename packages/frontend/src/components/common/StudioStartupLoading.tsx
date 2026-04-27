@@ -144,7 +144,10 @@ export function StudioStartupLoading({
     >
       {header ? (
         <div
-          className={cn("shrink-0 px-3 py-1 md:px-4", headerClassName)}
+          className={cn(
+            "h-[var(--vivd-shell-header-height)] shrink-0 px-3 md:px-4",
+            headerClassName,
+          )}
           data-testid="studio-startup-header"
         >
           {header}

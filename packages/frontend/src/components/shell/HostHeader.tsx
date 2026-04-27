@@ -36,7 +36,12 @@ export function HostHeader({
     showSearch || showModeToggle || showProfileMenu || Boolean(endAccessory);
 
   return (
-    <div className={cn("flex min-h-8 items-center gap-2", className)}>
+    <div
+      className={cn(
+        "flex min-h-[var(--vivd-shell-header-height)] items-center gap-2",
+        className,
+      )}
+    >
       {leadingAccessory ? (
         <div className="flex shrink-0 items-center gap-2">
           {leadingAccessory}

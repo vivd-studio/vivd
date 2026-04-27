@@ -29,7 +29,7 @@ import { EmbeddedStudioLiveSurface } from "./embeddedStudio/EmbeddedStudioLiveSu
 import { EmbeddedStudioProjectDialogs } from "./embeddedStudio/EmbeddedStudioProjectDialogs";
 import { toast } from "sonner";
 
-const EMBEDDED_PROJECT_HEADER_INSET_CLASS = "pl-2 pr-3 py-1 md:pl-2.5 md:pr-4";
+const EMBEDDED_PROJECT_HEADER_INSET_CLASS = "pl-2 pr-3 md:pl-2.5 md:pr-4";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.

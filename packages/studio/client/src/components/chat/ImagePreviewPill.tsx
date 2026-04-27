@@ -26,7 +26,7 @@ export function FilePreviewPill({
           <FileText className="h-5 w-5 text-muted-foreground" />
         </div>
       )}
-      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+      <span className="text-sm text-muted-foreground truncate max-w-[100px]">
         {fileName}
       </span>
       <button

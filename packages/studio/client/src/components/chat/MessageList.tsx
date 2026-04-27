@@ -213,13 +213,13 @@ export function MessageList() {
           <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
             <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm text-destructive">
+              <div className="font-medium text-base text-destructive">
                 {blockedUsageTitle}
               </div>
               {usageLimitStatus.warnings.map((warning, i) => (
                 <p
                   key={i}
-                  className="text-xs text-muted-foreground mt-1 break-words"
+                  className="text-sm text-muted-foreground mt-1 break-words"
                 >
                   {warning}
                 </p>
@@ -237,13 +237,13 @@ export function MessageList() {
             <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 max-w-[90%] w-full">
               <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm text-yellow-700 dark:text-yellow-500">
+                <div className="font-medium text-base text-yellow-700 dark:text-yellow-500">
                   Approaching Usage Limit
                 </div>
                 {usageLimitStatus.warnings.map((warning, i) => (
                   <p
                     key={i}
-                    className="text-xs text-muted-foreground mt-1 break-words"
+                    className="text-sm text-muted-foreground mt-1 break-words"
                   >
                     {warning}
                   </p>
@@ -274,7 +274,7 @@ export function MessageList() {
             variant="outline"
             size="sm"
             onClick={handleUnrevert}
-            className="text-sm"
+            className="text-base"
           >
             <Undo2 className="w-4 h-4 mr-2" />
             Restore reverted changes
@@ -287,7 +287,7 @@ export function MessageList() {
           <button
             type="button"
             onClick={handleContinueSession}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             {interruptedContinueLabel}
           </button>
@@ -301,7 +301,7 @@ export function MessageList() {
         !isThinking &&
         !isLoading && (
           <div className="flex justify-end pt-1 pb-0.5">
-            <div className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[10px] text-muted-foreground/55">
+            <div className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] text-muted-foreground/55">
               <CheckCheck className="h-3 w-3 text-emerald-600/70" />
               {latestCompletedAgentTimestamp ? (
                 <span>{formatMessageTime(latestCompletedAgentTimestamp)}</span>
@@ -348,7 +348,7 @@ export function MessageList() {
             <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 max-w-[90%] w-full">
               <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                   Chat revert is best-effort. For safer rollback, create snapshots in Version History.
                 </div>
               </div>

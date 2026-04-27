@@ -48,7 +48,7 @@ export function FramedHostShell({
         {header ? (
           <div
             className={cn(
-              "shrink-0 px-3 py-1 md:px-4",
+              "h-[var(--vivd-shell-header-height)] shrink-0 px-3 md:px-4",
               headerClassName,
             )}
           >

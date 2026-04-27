@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { Measurable } from "@radix-ui/rect";
 import { Globe } from "lucide-react";
-import { Badge, Input, PanelHeader, PanelTitle } from "@vivd/ui";
+import { Input, PanelHeader, PanelTitle } from "@vivd/ui";
 
 import type { TagColor } from "@/lib/tagColors";
 import { VersionSelector } from "../../versioning/VersionSelector";
@@ -198,12 +198,9 @@ export function ProjectCardHeader({
                     />
                   ))}
                   {projectTags.length > 4 ? (
-                    <Badge
-                      variant="secondary"
-                      className="h-5 shrink-0 px-2 py-0 text-[10px]"
-                    >
+                    <span className="inline-flex h-5 shrink-0 items-center rounded-md px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
                       +{projectTags.length - 4}
-                    </Badge>
+                    </span>
                   ) : null}
                 </>
               ) : null}
