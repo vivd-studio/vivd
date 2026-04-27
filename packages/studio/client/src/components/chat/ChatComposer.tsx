@@ -232,223 +232,225 @@ export function ChatComposer({ className }: ChatComposerProps) {
         className="hidden"
       />
 
-      {/* Show attached element pill above input */}
-      {attachedElement && (
-        <div className="mb-2">
-          <SelectedElementPill
-            selector={attachedElement.selector}
-            description={attachedElement.description}
-            onRemove={() => setAttachedElement(null)}
-          />
-        </div>
-      )}
-
-      {/* Show attached image previews above input */}
-      {attachedImages.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {attachedImages.map((img) => (
-            <ImagePreviewPill
-              key={img.tempId}
-              previewUrl={img.previewUrl}
-              fileName={img.file.name}
-              onRemove={() => removeAttachedImage(img.tempId)}
+      <div className="mx-auto w-full max-w-3xl">
+        {/* Show attached element pill above input */}
+        {attachedElement && (
+          <div className="mb-2">
+            <SelectedElementPill
+              selector={attachedElement.selector}
+              description={attachedElement.description}
+              onRemove={() => setAttachedElement(null)}
             />
-          ))}
-        </div>
-      )}
-
-      {/* Show attached files above input */}
-      {attachedFiles.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {attachedFiles.map((file) => (
-            <AttachedFilePill
-              key={file.id}
-              filename={file.filename}
-              path={file.path}
-              onRemove={() => removeAttachedFile(file.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Main input container - single shared surface for textarea + action row */}
-      <InteractiveSurface
-        variant="field"
-        className={cn("rounded-xl overflow-hidden shadow-sm", {
-          "border-primary border-dashed bg-primary/5": isDragOver,
-          "border-destructive/55": !isDragOver && isUsageBlocked,
-        })}
-      >
-        {/* Textarea - inside container with proper padding */}
-        <textarea
-          ref={textareaRef}
-          className="flex min-h-[56px] max-h-[200px] w-full resize-none !bg-transparent px-4 pt-3.5 pb-2.5 text-base placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder={
-            isUsageBlocked
-              ? "Usage limit reached. Please wait for the limit to reset."
-              : selectorMode
-                ? "Click an element in the preview..."
-                : attachedElement || attachedImages.length > 0
-                  ? "Describe what you want to change..."
-                  : "What would you like to change?"
-          }
-          value={input}
-          onChange={handleTextareaChange}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          disabled={isDisabled}
-          rows={2}
-        />
-
-        {/* Action bar at the bottom - no separator */}
-        <div className="flex items-center justify-between gap-2 bg-transparent px-3 pb-2">
-          {/* Left side: Plus circle button + Element selector */}
-          <div className="flex items-center gap-1">
-            {/* Plus button - circle with dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={isDisabled}
-                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                >
-                  <Plus className="w-5 h-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top">
-                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add File
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    Follow-up behavior
-                    <DropdownMenuShortcut>
-                      {followupBehavior === "queue" ? "Queue" : "Steer"}
-                    </DropdownMenuShortcut>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    <DropdownMenuLabel>When a session is busy</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={followupBehavior}
-                      onValueChange={(value) =>
-                        setFollowupBehavior(value as "queue" | "steer")
-                      }
-                    >
-                      <DropdownMenuRadioItem value="steer">
-                        Steer
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="queue">
-                        Queue
-                      </DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Element selector button - expands on hover with text */}
-            {selectorModeAvailable && setSelectorMode && (
-              <button
-                onClick={() => setSelectorMode(!selectorMode)}
-                disabled={isDisabled}
-                className={`group flex items-center gap-0 h-8 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  selectorMode
-                    ? "bg-amber-500 hover:bg-amber-600 text-white px-3"
-                    : "text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 border border-transparent hover:border-amber-500/40 hover:bg-amber-500/5"
-                }`}
-              >
-                <span
-                  className={`flex items-center justify-center ${
-                    selectorMode ? "" : "w-8 h-8"
-                  }`}
-                >
-                  {selectorMode ? (
-                    <X className="w-4 h-4" />
-                  ) : (
-                    <MousePointerClick className="w-4 h-4" />
-                  )}
-                </span>
-                <span
-                  className={`overflow-hidden whitespace-nowrap text-base transition-all duration-200 ${
-                    selectorMode
-                      ? "max-w-[100px] opacity-100 ml-1"
-                      : "max-w-0 opacity-0 group-hover:max-w-[150px] group-hover:opacity-100 group-hover:ml-1 group-hover:mr-2"
-                  }`}
-                >
-                  {selectorMode ? "Cancel" : "Show me an Element"}
-                </span>
-              </button>
-            )}
           </div>
+        )}
 
-          {/* Right side: Model selector + Send button */}
-          <div className="flex items-center gap-1">
-            {/* Model selector dropdown - only when multiple models available */}
-            {availableModels.length > 0 && (
-              <ModelSelector
-                models={availableModels}
-                selectedModel={selectedModel}
-                onSelect={setSelectedModel}
-                disabled={isDisabled}
+        {/* Show attached image previews above input */}
+        {attachedImages.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachedImages.map((img) => (
+              <ImagePreviewPill
+                key={img.tempId}
+                previewUrl={img.previewUrl}
+                fileName={img.file.name}
+                onRemove={() => removeAttachedImage(img.tempId)}
               />
-            )}
+            ))}
+          </div>
+        )}
 
-            {/* Stop button - only shown when generating */}
-            {isGenerating && (
-              <Button
-                onClick={handleStopGeneration}
-                size="icon"
-                variant="destructive"
-                className="h-8 w-8 rounded-full"
-                title="Stop generation"
-                aria-label="Stop generation"
-              >
-                <Square className="w-4 h-4" />
-              </Button>
-            )}
+        {/* Show attached files above input */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachedFiles.map((file) => (
+              <AttachedFilePill
+                key={file.id}
+                filename={file.filename}
+                path={file.path}
+                onRemove={() => removeAttachedFile(file.id)}
+              />
+            ))}
+          </div>
+        )}
 
-            {showSteerActions ? (
-              <>
-                <Button
-                  onClick={handleSteerSend}
-                  disabled={!canSend}
-                  size="sm"
-                  variant="secondary"
-                  className="h-8 rounded-full px-3"
-                  title="Steer message (Cmd+Enter)"
-                  aria-label="Steer message"
-                  aria-keyshortcuts="Meta+Enter"
+        {/* Main input container - single shared surface for textarea + action row */}
+        <InteractiveSurface
+          variant="field"
+          className={cn("rounded-xl overflow-hidden shadow-sm", {
+            "border-primary border-dashed bg-primary/5": isDragOver,
+            "border-destructive/55": !isDragOver && isUsageBlocked,
+          })}
+        >
+          {/* Textarea - inside container with proper padding */}
+          <textarea
+            ref={textareaRef}
+            className="flex min-h-[56px] max-h-[200px] w-full resize-none !bg-transparent px-4 pt-3.5 pb-2.5 text-base placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder={
+              isUsageBlocked
+                ? "Usage limit reached. Please wait for the limit to reset."
+                : selectorMode
+                  ? "Click an element in the preview..."
+                  : attachedElement || attachedImages.length > 0
+                    ? "Describe what you want to change..."
+                    : "What would you like to change?"
+            }
+            value={input}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            disabled={isDisabled}
+            rows={2}
+          />
+
+          {/* Action bar at the bottom - no separator */}
+          <div className="flex items-center justify-between gap-2 bg-transparent px-3 pb-2">
+            {/* Left side: Plus circle button + Element selector */}
+            <div className="flex items-center gap-1">
+              {/* Plus button - circle with dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={isDisabled}
+                    className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top">
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add File
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      Follow-up behavior
+                      <DropdownMenuShortcut>
+                        {followupBehavior === "queue" ? "Queue" : "Steer"}
+                      </DropdownMenuShortcut>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuLabel>When a session is busy</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={followupBehavior}
+                        onValueChange={(value) =>
+                          setFollowupBehavior(value as "queue" | "steer")
+                        }
+                      >
+                        <DropdownMenuRadioItem value="steer">
+                          Steer
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="queue">
+                          Queue
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Element selector button - expands on hover with text */}
+              {selectorModeAvailable && setSelectorMode && (
+                <button
+                  onClick={() => setSelectorMode(!selectorMode)}
+                  disabled={isDisabled}
+                  className={`group flex items-center gap-0 h-8 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    selectorMode
+                      ? "bg-amber-500 hover:bg-amber-600 text-white px-3"
+                      : "text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 border border-transparent hover:border-amber-500/40 hover:bg-amber-500/5"
+                  }`}
                 >
-                  <ChevronsRight className="mr-1.5 h-3.5 w-3.5" />
-                  Steer
+                  <span
+                    className={`flex items-center justify-center ${
+                      selectorMode ? "" : "w-8 h-8"
+                    }`}
+                  >
+                    {selectorMode ? (
+                      <X className="w-4 h-4" />
+                    ) : (
+                      <MousePointerClick className="w-4 h-4" />
+                    )}
+                  </span>
+                  <span
+                    className={`overflow-hidden whitespace-nowrap text-base transition-all duration-200 ${
+                      selectorMode
+                        ? "max-w-[100px] opacity-100 ml-1"
+                        : "max-w-0 opacity-0 group-hover:max-w-[150px] group-hover:opacity-100 group-hover:ml-1 group-hover:mr-2"
+                    }`}
+                  >
+                    {selectorMode ? "Cancel" : "Show me an Element"}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Right side: Model selector + Send button */}
+            <div className="flex items-center gap-1">
+              {/* Model selector dropdown - only when multiple models available */}
+              {availableModels.length > 0 && (
+                <ModelSelector
+                  models={availableModels}
+                  selectedModel={selectedModel}
+                  onSelect={setSelectedModel}
+                  disabled={isDisabled}
+                />
+              )}
+
+              {/* Stop button - only shown when generating */}
+              {isGenerating && (
+                <Button
+                  onClick={handleStopGeneration}
+                  size="icon"
+                  variant="destructive"
+                  className="h-8 w-8 rounded-full"
+                  title="Stop generation"
+                  aria-label="Stop generation"
+                >
+                  <Square className="w-4 h-4" />
                 </Button>
+              )}
+
+              {showSteerActions ? (
+                <>
+                  <Button
+                    onClick={handleSteerSend}
+                    disabled={!canSend}
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-full px-3"
+                    title="Steer message (Cmd+Enter)"
+                    aria-label="Steer message"
+                    aria-keyshortcuts="Meta+Enter"
+                  >
+                    <ChevronsRight className="mr-1.5 h-3.5 w-3.5" />
+                    Steer
+                  </Button>
+                  <Button
+                    onClick={handleSend}
+                    disabled={!canSend}
+                    size="sm"
+                    className="h-8 rounded-full px-3"
+                  >
+                    Queue
+                  </Button>
+                </>
+              ) : (
                 <Button
                   onClick={handleSend}
                   disabled={!canSend}
-                  size="sm"
-                  className="h-8 rounded-full px-3"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  title="Send message"
+                  aria-label="Send message"
                 >
-                  Queue
+                  <Send className="w-4 h-4" />
                 </Button>
-              </>
-            ) : (
-              <Button
-                onClick={handleSend}
-                disabled={!canSend}
-                size="icon"
-                className="h-8 w-8 rounded-full"
-                title="Send message"
-                aria-label="Send message"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </InteractiveSurface>
+        </InteractiveSurface>
+      </div>
     </div>
   );
 }

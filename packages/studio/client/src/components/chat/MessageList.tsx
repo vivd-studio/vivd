@@ -318,8 +318,10 @@ export function MessageList() {
         data-testid="session-context-indicator-overlay"
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-start px-3 pt-3 md:px-5 md:pt-2"
       >
-        <div className="pointer-events-auto">
-          <SessionContextIndicator />
+        <div className="mx-auto w-full max-w-3xl">
+          <div className="pointer-events-auto w-fit">
+            <SessionContextIndicator />
+          </div>
         </div>
       </div>
       <div
@@ -337,7 +339,7 @@ export function MessageList() {
           ref={transcriptContentRef}
           data-chat-transcript-content=""
           className={cn(
-            "flex flex-col gap-2 [overflow-anchor:none]",
+            "mx-auto flex w-full max-w-3xl flex-col gap-2 [overflow-anchor:none]",
             showEmptyState
               ? "px-0 pt-4 pb-10 md:px-0 md:pt-4 md:pb-12"
               : "px-4 pt-4 pb-16 md:px-6 md:pt-5 md:pb-20",

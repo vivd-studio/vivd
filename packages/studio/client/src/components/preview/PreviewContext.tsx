@@ -404,7 +404,7 @@ export function PreviewProvider({
     storageKey: "previewModal.chatPanelWidth",
     defaultWidth: 400,
     minWidth: 320,
-    maxWidth: 600,
+    maxWidth: 1200,
     side: "left",
   });
 

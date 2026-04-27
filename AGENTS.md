@@ -56,6 +56,8 @@ For current plugin extraction details and common wiring pitfalls, use `.agents/s
 
 For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machines/SKILL.md` and the relevant docs under `plans/`.
 
+Please run `npm run studio:dev:refresh` after you have made changes to the studio code.
+
 ## Generated Sites
 
 - The generator outputs plain HTML (`index.html`) by default.
