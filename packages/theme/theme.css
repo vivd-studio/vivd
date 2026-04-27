@@ -53,7 +53,7 @@
 
   .dark {
     /* Clean Dark Theme - Sleek & Modern */
-    --background: 224 71% 4%; /* Near black */
+    --background: 224 40% 8%; /* Matches dark sidebar */
     --foreground: 210 20% 98%; /* Off-white */
 
     --card: 224 40% 12%; /* Lighter for elevation contrast */
@@ -161,7 +161,7 @@
   [data-color-theme="natural"].dark,
   .dark[data-color-theme="natural"] {
     /* Natural Dark Theme - Warm & Earthy */
-    --background: 20 20% 8%;
+    --background: 20 18% 11%; /* Matches dark sidebar */
     --foreground: 40 20% 92%;
 
     --card: 20 18% 15%; /* Lighter for elevation contrast */
@@ -269,7 +269,7 @@
   [data-color-theme="vivd-green"].dark,
   .dark[data-color-theme="vivd-green"] {
     /* Vivd Green Dark Theme - Bold & Sharp */
-    --background: 20 25% 6%; /* Deep charcoal */
+    --background: 20 22% 10%; /* Matches dark sidebar */
     --foreground: 40 30% 95%; /* Bright off-white */
 
     --card: 20 22% 14%; /* Lighter for elevation contrast */
@@ -374,7 +374,7 @@
   [data-color-theme="vivd-sharp"].dark,
   .dark[data-color-theme="vivd-sharp"] {
     /* Vivd Sharp Dark Theme - Maximum Contrast */
-    --background: 0 0% 4%; /* Near pure black */
+    --background: 0 0% 7%; /* Matches dark sidebar */
     --foreground: 0 0% 98%; /* Near pure white */
 
     --card: 0 0% 10%; /* Panel tone — round step up from page */
@@ -482,7 +482,7 @@
   [data-color-theme="ocean"].dark,
   .dark[data-color-theme="ocean"] {
     /* Ocean Dark Theme - Deep Sea */
-    --background: 222 47% 11%; /* Deep Navy */
+    --background: 217 33% 17%; /* Matches dark sidebar */
     --foreground: 210 40% 98%; /* Pale blue text */
 
     --card: 217 33% 21%; /* Lighter for elevation contrast */
@@ -590,7 +590,7 @@
   [data-color-theme="aurora"].dark,
   .dark[data-color-theme="aurora"] {
     /* Aurora Dark Theme - Inky charcoal with vivid magenta/red bloom */
-    --background: 228 16% 7%;
+    --background: 228 16% 9%; /* Matches dark sidebar */
     --foreground: 220 40% 97%;
 
     --card: 228 18% 11%;
@@ -692,7 +692,7 @@
   [data-color-theme="mono"].dark,
   .dark[data-color-theme="mono"] {
     /* Mono Dark Theme - Near-black UI */
-    --background: 0 0% 4%;
+    --background: 0 0% 7%; /* Matches dark sidebar */
     --foreground: 0 0% 96%;
 
     --card: 0 0% 10%;

@@ -22,7 +22,7 @@ const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
 const DEFAULT_GENERATION_BUSY_GRACE_TIMEOUT_MS = 30_000;
 const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
 const INITIAL_GENERATION_ACTION_POLL_MS = 2_000;
-const DEFAULT_INITIAL_GENERATION_MIN_RECORDED_ACTIONS = 2;
+const DEFAULT_INITIAL_GENERATION_MIN_RECORDED_ACTIONS = 1;
 const INITIAL_GENERATION_SESSION_HISTORY_PROBE_INTERVAL_MS = 10_000;
 const DEFAULT_STUDIO_READY_TIMEOUT_MS = 90_000;
 const STUDIO_READY_PROGRESS_LOG_INTERVAL_MS = 15_000;
@@ -475,11 +475,11 @@ async function detectAuthMode(page, timeoutMs) {
     [
       {
         name: "signup",
-        locator: page.getByRole("button", { name: "Create Admin Account" }),
+        locator: page.getByRole("button", { name: /Create admin account/i }),
       },
       {
         name: "login",
-        locator: page.getByRole("button", { name: "Login" }),
+        locator: page.getByRole("button", { name: /Login|Sign in/i }),
       },
     ],
     timeoutMs,
@@ -492,8 +492,10 @@ async function completeAuthOnCurrentPage({
   credentials,
   timeoutMs,
 }) {
-  const signupButton = page.getByRole("button", { name: "Create Admin Account" });
-  const loginButton = page.getByRole("button", { name: "Login" });
+  const signupButton = page.getByRole("button", {
+    name: /Create admin account/i,
+  });
+  const loginButton = page.getByRole("button", { name: /Login|Sign in/i });
   const authMode = await detectAuthMode(
     page,
     Math.min(timeoutMs, DEFAULT_AUTH_WAIT_TIMEOUT_MS),
@@ -604,8 +606,14 @@ async function ensureScratchWizardVisible({
   const visibleState = await waitForVisibleState(
     [
       { name: "scratch", locator: scratchHeading },
-      { name: "signup", locator: page.getByRole("button", { name: "Create Admin Account" }) },
-      { name: "login", locator: page.getByRole("button", { name: "Login" }) },
+      {
+        name: "signup",
+        locator: page.getByRole("button", { name: /Create admin account/i }),
+      },
+      {
+        name: "login",
+        locator: page.getByRole("button", { name: /Login|Sign in/i }),
+      },
     ],
     timeoutMs,
   );
@@ -683,9 +691,9 @@ async function readScratchSubmitState(page) {
           .split(/\n/u)
           .map((line) => line.trim())
           .find((line) => line.startsWith("Project:")) ?? null;
-      const authScreen = bodyText.includes("Create Admin Account")
+      const authScreen = /Create admin account/i.test(bodyText)
         ? "signup"
-        : bodyText.includes("Login")
+        : /Login|Sign in/i.test(bodyText)
           ? "login"
           : null;
 

@@ -145,7 +145,7 @@ export function Layout() {
                             <>
                               <BreadcrumbSeparator />
                               <BreadcrumbItem>
-                                <ProjectWizard onGenerationStarted={() => {}} />
+                                <ProjectWizard />
                               </BreadcrumbItem>
                             </>
                           ) : null}
@@ -163,7 +163,7 @@ export function Layout() {
             className={`flex-1 min-h-0 ${
               pageInfo.isProjectPage
                 ? "overflow-hidden"
-                : pageInfo.isScratchWizardPage
+                : pageInfo.isScratchWizardPage || pageInfo.isProjectsIndexPage
                   ? "overflow-hidden"
                   : isEmbeddedProjectPanel
                     ? "overflow-auto"

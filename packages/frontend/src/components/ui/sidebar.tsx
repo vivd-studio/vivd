@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeft } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -592,13 +591,6 @@ const SidebarTrigger = React.forwardRef<
     [isImmersiveDesktop, onBlur, open, revealOnHover, scheduleHideImmersivePeek],
   );
 
-  const icon =
-    appearance === "brand" ? (
-      <SidebarBrandToggleGlyph morphOnHover={morphOnHover} />
-    ) : (
-      <PanelLeft aria-hidden="true" className="!size-4" />
-    );
-
   const button = (
     <Button
       ref={ref}
@@ -626,7 +618,11 @@ const SidebarTrigger = React.forwardRef<
       }}
       {...props}
     >
-      {icon}
+      <SidebarBrandToggleGlyph
+        appearance={appearance}
+        morphOnHover={morphOnHover}
+        open={open}
+      />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );

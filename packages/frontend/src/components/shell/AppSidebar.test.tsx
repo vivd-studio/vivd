@@ -864,6 +864,16 @@ describe("AppSidebar search", () => {
     );
   });
 
+  it("does not draw the docked rail divider on the projects index", () => {
+    renderSidebar({ path: ROUTES.DASHBOARD, sidebarOpen: false });
+
+    const sidebarRail = document.querySelector(
+      "[data-state][data-overlay-state] > div:nth-of-type(2)",
+    ) as HTMLElement | null;
+
+    expect(sidebarRail).toHaveClass("group-data-[side=left]:border-r-0");
+  });
+
   it("shows a persistent docs link derived from the current host", () => {
     renderSidebar();
 

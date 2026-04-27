@@ -43,6 +43,7 @@ export function AppSidebar() {
   const { openSearch } = useNavigationSearch();
 
   const isCollapsed = state === "collapsed";
+  const isProjectsIndex = location.pathname === ROUTES.DASHBOARD;
   const showImmersiveSidebarToggle = isCollapsed && isImmersiveDesktop;
   const [showAllProjects, setShowAllProjects] = React.useState(false);
   const showPlatformAdminSections =
@@ -126,7 +127,14 @@ export function AppSidebar() {
   });
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      className={
+        isProjectsIndex
+          ? "group-data-[side=left]:border-r-0 group-data-[side=right]:border-l-0"
+          : undefined
+      }
+    >
       <SidebarHeader>
         {showImmersiveSidebarToggle ? (
           <div className="flex w-full items-center justify-center">

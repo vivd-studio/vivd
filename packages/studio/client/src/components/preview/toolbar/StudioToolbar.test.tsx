@@ -284,6 +284,9 @@ describe("StudioToolbar", () => {
     expect(
       toggle?.querySelector('[data-sidebar-brand-glyph="brand"]'),
     ).toHaveClass("!size-6");
+    expect(
+      toggle?.querySelector('[data-sidebar-panel-action="open"]'),
+    ).toBeInTheDocument();
     expect(screen.queryByTitle(/fullscreen/i)).not.toBeInTheDocument();
   });
 
@@ -343,6 +346,12 @@ describe("StudioToolbar", () => {
 
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAccessibleName(/Toggle Sidebar/);
+    expect(
+      toggle?.querySelector('[data-sidebar-panel-action="close"]'),
+    ).toBeInTheDocument();
+    expect(
+      toggle?.querySelector('[data-sidebar-panel-glyph="close"]'),
+    ).toHaveClass("rotate-0", "opacity-100");
     expect(screen.queryByRole("img", { name: "vivd" })).not.toBeInTheDocument();
   });
 

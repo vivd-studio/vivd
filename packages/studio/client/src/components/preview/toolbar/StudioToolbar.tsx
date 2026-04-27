@@ -20,7 +20,6 @@ import {
   FolderOpen,
   History,
   MessageSquare,
-  PanelLeft,
   Plus,
   Plug,
 } from "lucide-react";
@@ -635,11 +634,11 @@ export function StudioToolbar() {
                   postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
                 }}
               >
-                {hostSidebarOpen ? (
-                  <PanelLeft className="h-4 w-4" />
-                ) : (
-                  <SidebarBrandToggleGlyph morphOnHover={false} />
-                )}
+                <SidebarBrandToggleGlyph
+                  appearance={hostSidebarOpen ? "panel" : "brand"}
+                  morphOnHover={false}
+                  open={hostSidebarOpen}
+                />
                 <span className="sr-only">Toggle Sidebar</span>
               </Button>
             ) : (

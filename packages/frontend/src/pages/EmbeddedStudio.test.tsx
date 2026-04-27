@@ -336,6 +336,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: false,
+      setOpen: vi.fn(),
+      setOpenMobile: vi.fn(),
       showImmersivePeek: vi.fn(),
       scheduleHideImmersivePeek: vi.fn(),
     });
@@ -426,6 +428,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: true,
+      setOpen: vi.fn(),
+      setOpenMobile: vi.fn(),
       showImmersivePeek: vi.fn(),
       scheduleHideImmersivePeek: vi.fn(),
     });
@@ -581,6 +585,8 @@ describe("EmbeddedStudio", () => {
 
   it("keeps the host header and shows loading state in the breadcrumb while studio is booting after edit", () => {
     const startStudioMutate = vi.fn();
+    const setSidebarOpen = vi.fn();
+    const setSidebarOpenMobile = vi.fn();
     startStudioUseMutationMock.mockReturnValue({
       mutate: startStudioMutate,
       isPending: false,
@@ -588,11 +594,21 @@ describe("EmbeddedStudio", () => {
       error: null,
       reset: vi.fn(),
     });
+    useSidebarMock.mockReturnValue({
+      toggleSidebar: vi.fn(),
+      open: true,
+      setOpen: setSidebarOpen,
+      setOpenMobile: setSidebarOpenMobile,
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
+    });
 
     renderEmbeddedStudio();
 
     fireEvent.click(screen.getByRole("button", { name: "Start Studio" }));
 
+    expect(setSidebarOpen).toHaveBeenCalledWith(false);
+    expect(setSidebarOpenMobile).toHaveBeenCalledWith(false);
     expect(startStudioMutate).toHaveBeenCalledWith({
       slug: "site-1",
       version: 1,
@@ -931,6 +947,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: true,
+      setOpen: vi.fn(),
+      setOpenMobile: vi.fn(),
       showImmersivePeek: vi.fn(),
       scheduleHideImmersivePeek: vi.fn(),
     });

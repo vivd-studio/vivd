@@ -48,4 +48,15 @@ describe("getPageInfo", () => {
       projectSlug: "demo",
     });
   });
+
+  it("marks the projects index as a framed content page", () => {
+    const pageInfo = getPageInfo("/vivd-studio");
+
+    expect(pageInfo).toMatchObject({
+      title: "Projects",
+      isProjectPage: false,
+      isProjectsIndexPage: true,
+    });
+    expect(pageInfo.usesImmersiveSidebar).toBeUndefined();
+  });
 });

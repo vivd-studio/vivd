@@ -45,6 +45,8 @@ export default function EmbeddedStudio() {
   const {
     toggleSidebar,
     open: sidebarOpen,
+    setOpen: setSidebarOpen,
+    setOpenMobile: setSidebarOpenMobile,
     showImmersivePeek,
     scheduleHideImmersivePeek,
   } = useSidebar();
@@ -390,6 +392,8 @@ export default function EmbeddedStudio() {
     if (isRenamePending) return;
     if (editRequested || startStudio.isPending || hardRestartStudio.isPending)
       return;
+    setSidebarOpen(false);
+    setSidebarOpenMobile(false);
     setPreviewSurface("live");
     setEditRequested(true);
     clearRuntimeOverride();

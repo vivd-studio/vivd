@@ -9,6 +9,7 @@ export interface PageInfo {
   isProjectPluginPage?: boolean;
   projectPluginId?: string;
   isScratchWizardPage?: boolean;
+  isProjectsIndexPage?: boolean;
 }
 
 function formatPluginPageTitle(pluginId: string) {
@@ -68,7 +69,11 @@ export function getPageInfo(pathname: string): PageInfo {
   }
 
   if (pathname === "/vivd-studio" || pathname === "/vivd-studio/") {
-    return { title: "Projects", isProjectPage: false };
+    return {
+      title: "Projects",
+      isProjectPage: false,
+      isProjectsIndexPage: true,
+    };
   }
   if (pathname.startsWith("/vivd-studio/superadmin")) {
     return { title: "Super Admin", isProjectPage: false };

@@ -213,6 +213,28 @@ describe("SidebarProvider persistence", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses distinct open and close glyphs for the sidebar trigger state", () => {
+    render(<TestSidebar />);
+
+    const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+    const openGlyph = trigger.querySelector('[data-sidebar-panel-glyph="open"]');
+    const closeGlyph = trigger.querySelector('[data-sidebar-panel-glyph="close"]');
+
+    expect(openGlyph).toHaveClass("rotate-90", "opacity-0");
+    expect(closeGlyph).toHaveClass("rotate-0", "opacity-100");
+    expect(
+      trigger.querySelector('[data-sidebar-panel-action="close"]'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+
+    expect(openGlyph).toHaveClass("rotate-0", "opacity-100");
+    expect(closeGlyph).toHaveClass("-rotate-90", "opacity-0");
+    expect(
+      trigger.querySelector('[data-sidebar-panel-action="open"]'),
+    ).toBeInTheDocument();
+  });
+
   it("starts hidden in immersive mode when the shared sidebar preference is collapsed", () => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
 
