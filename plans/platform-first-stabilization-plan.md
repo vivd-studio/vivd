@@ -125,13 +125,14 @@ Do not publish or stabilize a public `plugin-sdk` until this policy boundary is 
 
 ### Phase 3: Put solo and self-host operations behind flags
 
-Keep the code bootable internally, but stop treating it as a supported surface.
+Keep the code bootable and scoped. The self-host admin surface can remain gated where the
+product has not earned a simple public workflow, but the `solo` install/docs path is
+again part of the public story.
 
 Feature flags now in use for this correction:
 
 - `VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE`
 - `VIVD_ENABLE_SELF_HOST_ADMIN_FEATURES`
-- `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES`
 
 Targets:
 
@@ -151,8 +152,8 @@ Current progress:
 
 Near-term rule:
 
-- internal compatibility is acceptable
-- public product commitment is not
+- public `solo` documentation is acceptable when it stays scoped to the one-host path
+- avoid implying hosted-platform parity for self-host admin/operator workflows
 
 ### Phase 4: Rewrite public docs around end users
 
@@ -163,23 +164,24 @@ Public docs should focus on:
 - editing in Studio
 - enabling and configuring plugins
 - publishing and managing domains
+- installing and operating the scoped `solo` self-host path
 - teams, collaboration, and support
 
-Public docs should stop focusing on:
+Public docs should avoid letting self-hosting sprawl into:
 
-- self-host install and update flows
-- compose bundles and Caddy/TLS setup
 - operator-heavy configuration matrices
+- broad multi-tenant platform operations
+- internal Fly/runtime runbooks
 
-If self-host documentation is still needed internally, move it to internal repo docs or plans rather than leaving it in the public docs information architecture.
+Self-host documentation should stay public when it describes the supported `solo` path,
+and deeper implementation notes should stay in internal plans or focused skills.
 
 Current progress:
 
-- operator guides are now hidden from the default docs nav and landing pages
-- self-host asset sync is skipped in ordinary docs builds unless the operator flag is enabled
-- the docs workspace now prepares a generated docs source tree and marks operator pages `draft: true` when `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES` is off
-- the default docs build therefore drops those operator routes entirely instead of only hiding them from search/navigation
-- the remaining end-user docs now avoid linking to operator/self-host pages unless the same flag is enabled
+- the docs nav and landing page now expose Self-Hosting, Instance Settings, Self-Host Config Reference, and Email & Deliverability by default
+- self-host install assets are synced in ordinary docs builds unless explicitly skipped
+- the docs workspace still prepares a generated docs source tree before build/typecheck
+- end-user docs link to self-host guidance where it helps explain install-wide behavior
 
 ### Phase 5: Reduce test and release surface
 

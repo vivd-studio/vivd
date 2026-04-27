@@ -1,11 +1,11 @@
 # Vivd Project State
 
-> Goal: ship Vivd as a reliable hosted website builder first. Keep self-host and open-core as deferred options, not current product drivers.
+> Goal: ship Vivd as a reliable hosted website builder while keeping the public `solo` self-host path coherent, scoped, and documented.
 
 ## Current Snapshot
 
-- Hosted `platform` mode is the product focus; `solo` stays internal or experimental.
-- Product decisions should favor the hosted SaaS path over `solo` parity; keep `solo` mostly as a compatibility or local Docker-provider testing lane.
+- Hosted `platform` mode is the managed SaaS lane; `solo` is the public self-host lane for one-host installs.
+- Product decisions should avoid promising `solo` parity with every hosted-platform workflow, but public docs and README should present the supported `solo` path clearly.
 - The backend/control-plane, Studio runtime, and plugin package boundaries are established enough for product work; current cleanup is about simplification, not another boundary rewrite.
 - Preview and publish still run through the existing Studio/local build path while preview architecture and Studio lifecycle hardening continue.
 - Scratch-to-Studio handoff is much better, but still needs repeatable attach/build validation across local, CI, and hosted flows.
@@ -31,6 +31,8 @@
 
 Keep entries short: one sentence on the change, plus a brief validation note when it matters.
 
+- 2026-04-28: Stopped preview and new-project routes from owning immersive sidebar mode; only the embedded live Studio surface now requests the fully hidden host sidebar. Validation: `npm run test:run -w @vivd/frontend -- src/components/shell/pageInfo.test.ts src/pages/EmbeddedStudio.test.tsx src/components/projects/create/ProjectWizard.test.tsx src/components/ui/sidebar.test.tsx src/components/shell/AppSidebar.test.tsx`, `npm run typecheck -w @vivd/frontend`, and touched-file `git diff --check` pass.
+- 2026-04-28: Restored the public self-host story across the README and docs so `solo` is visible by default while remaining scoped to the one-host self-host path. Validation: `npm run typecheck -w @vivd/docs`, `npm run build -w @vivd/docs`, and `git diff --check` pass.
 - 2026-04-28: Doubled the Studio chat sidebar resize cap and centered chat contents inside a readable max-width column. Validation: `npm run typecheck:client -w @vivd/studio`, `npm run test:run -w @vivd/studio -- client/src/components/chat/ChatComposer.test.tsx client/src/components/chat/MessageList.test.tsx client/src/components/chat/ChatPanel.test.tsx`, and `git diff --check` pass.
 - 2026-04-28: Restored the framed projects overview with the tighter content inset while keeping the extra vertical spacing around the search/filter controls and subtle dot-led tags. Validation: `npm run test:run -w @vivd/frontend -- src/pages/Dashboard.test.tsx src/components/shell/pageInfo.test.ts src/components/projects/listing/ProjectsList.test.tsx src/components/projects/listing/ProjectTagsPopover.test.tsx src/components/projects/listing/ProjectCard.inline-title.test.tsx`, `npm run typecheck -w @vivd/frontend`, direct touched-file ESLint, and `git diff --check` pass.
 - 2026-04-28: Matched app host headers and the Studio toolbar to the collapsed sidebar rail height through shared theme sizing so toolbar icons stay vertically centered. Validation: frontend/Studio typechecks, targeted sidebar/startup/toolbar tests, frontend build, Studio client build, and `git diff --check` pass.

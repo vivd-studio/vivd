@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-if (process.env.PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES !== "true") {
-  console.log("[docs] Skipping self-host asset sync; operator guides are hidden.");
+if (process.env.PUBLIC_VIVD_DOCS_SKIP_SELF_HOST_ASSET_SYNC === "true") {
+  console.log("[docs] Skipping self-host asset sync by request.");
   process.exit(0);
 }
 

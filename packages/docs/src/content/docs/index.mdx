@@ -4,13 +4,13 @@ description: Public product documentation for Vivd users, agencies, and customer
 tableOfContents: false
 hero:
   title: Vivd Docs for the full site lifecycle.
-  tagline: Clear product guidance for first prompt, Studio edits, plugins, domains, and launch.
+  tagline: Clear product guidance for first prompt, Studio edits, plugins, domains, launch, and solo self-hosting.
   actions:
     - text: Getting Started
       link: /getting-started/
       variant: primary
-    - text: Plugins
-      link: /plugins/
+    - text: Self-Hosting
+      link: /self-hosting/
       variant: secondary
     - text: Troubleshooting
       link: /troubleshooting/
@@ -20,7 +20,6 @@ hero:
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import AppCtas from "../../components/AppCtas.astro";
 import DocShot from "../../components/DocShot.astro";
-import { showOperatorGuides } from "../../lib/docsFlags";
 
 <p class="eyebrow">[ Start Here ]</p>
 
@@ -54,36 +53,32 @@ import { showOperatorGuides } from "../../lib/docsFlags";
   />
 </CardGrid>
 
-{showOperatorGuides ? (
-  <>
-    <p class="eyebrow">[ Operator Guides ]</p>
+<p class="eyebrow">[ Self-Hosting & Admin ]</p>
 
-    ## Experimental operator docs
+## Run Vivd yourself
 
-    <CardGrid>
-      <LinkCard
-        title="Self-Hosting"
-        href="/self-hosting/"
-        description="Operator guidance for the hidden self-host path and install bootstrap flow."
-      />
-      <LinkCard
-        title="Instance Settings"
-        href="/instance-settings/"
-        description="Install-wide admin defaults for experimental self-host/operator deployments."
-      />
-      <LinkCard
-        title="Self-Host Config Reference"
-        href="/self-host-config-reference/"
-        description="Optional env and deployment details for the experimental self-host bundle."
-      />
-      <LinkCard
-        title="Email & Deliverability"
-        href="/email-and-deliverability/"
-        description="Install-wide transactional email behavior for operator-managed deployments."
-      />
-    </CardGrid>
-  </>
-) : null}
+<CardGrid>
+  <LinkCard
+    title="Self-Hosting"
+    href="/self-hosting/"
+    description="Install the solo self-host bundle with one public host and Docker-based Studio machines."
+  />
+  <LinkCard
+    title="Instance Settings"
+    href="/instance-settings/"
+    description="Configure install-wide defaults for self-hosted Vivd, including routing, network, and limits."
+  />
+  <LinkCard
+    title="Self-Host Config Reference"
+    href="/self-host-config-reference/"
+    description="Use optional env and deployment details when the normal self-host install path is not enough."
+  />
+  <LinkCard
+    title="Email & Deliverability"
+    href="/email-and-deliverability/"
+    description="Configure transactional email identity and monitor delivery health for a self-hosted install."
+  />
+</CardGrid>
 
 <DocShot
   src="/screenshots/docs/theme-aurora-light-new-proj-chat.webp"
@@ -100,7 +95,7 @@ import { showOperatorGuides } from "../../lib/docsFlags";
   <section class="docs-flow-card">
     <span class="docs-flow-card__step">01 Understand the model</span>
     <h3>Start with the product path, not the internals.</h3>
-    <p>Read the main concepts first so the Studio, plugin, and publish guides all make sense in the same workflow.</p>
+    <p>Read the main concepts first so the Studio, plugin, publish, and self-hosting guides all make sense in the same workflow.</p>
     <div class="docs-flow-card__links">
       <a href="/getting-started/">Getting Started</a>
       <a href="/how-vivd-works/">How Vivd Works</a>
@@ -126,24 +121,21 @@ import { showOperatorGuides } from "../../lib/docsFlags";
   </section>
   <section class="docs-flow-card">
     <span class="docs-flow-card__step">04 Publish and operate</span>
-    <h3>Finish the launch path with domains, checks, and customer-ready handoff details.</h3>
-    <p>Keep publish targets, plugin checks, and troubleshooting close once you move from draft to live.</p>
+    <h3>Finish the launch path with domains, checks, and self-host basics.</h3>
+    <p>Keep publish targets, plugin checks, and solo self-host guidance close once you move from draft to live.</p>
     <div class="docs-flow-card__links">
       <a href="/publish-your-site/">Publish Your Site</a>
       <a href="/domains-and-publish-targets/">Domains & Publish Targets</a>
+      <a href="/self-hosting/">Self-Hosting</a>
       <a href="/troubleshooting/">Troubleshooting</a>
     </div>
   </section>
 </div>
 
-{showOperatorGuides ? (
-  <p>
-    Operator/self-host material is intentionally separated from the main product path. Use
-    <a href="/self-hosting/"> Self-Hosting</a> and
-    <a href="/instance-settings/"> Instance Settings</a> only when you are explicitly
-    working on the experimental operator flow.
-  </p>
-) : null}
+<p>
+  If you are self-hosting, keep <a href="/self-hosting/">Self-Hosting</a> and
+  <a href="/instance-settings/"> Instance Settings</a> close by from the start.
+</p>
 
 <p class="eyebrow">[ Explore ]</p>
 
@@ -161,6 +153,11 @@ import { showOperatorGuides } from "../../lib/docsFlags";
     description="Understand the isolated Studio runtime, OpenCode workspace model, and bucket-backed architecture."
   />
   <LinkCard
+    title="Self-Hosting"
+    href="/self-hosting/"
+    description="Install and operate the solo self-host path."
+  />
+  <LinkCard
     title="Plugins"
     href="/plugins/"
     description="Set up Contact Form and Analytics before the final launch pass."
@@ -169,6 +166,11 @@ import { showOperatorGuides } from "../../lib/docsFlags";
     title="Domains & Publish Targets"
     href="/domains-and-publish-targets/"
     description="Understand domain verification, allowlists, and why publish can be blocked."
+  />
+  <LinkCard
+    title="Email & Deliverability"
+    href="/email-and-deliverability/"
+    description="Configure transactional email identity and monitor delivery health."
   />
   <LinkCard
     title="Organization User Management"
@@ -185,32 +187,20 @@ import { showOperatorGuides } from "../../lib/docsFlags";
     href="/faq-glossary/"
     description="Get quick answers to common product terms and expectations."
   />
-  {showOperatorGuides ? (
-    <LinkCard
-      title="Email & Deliverability"
-      href="/email-and-deliverability/"
-      description="Configure transactional email identity and monitor delivery health."
-    />
-  ) : null}
 </CardGrid>
 
 <Aside type="note" title="What this docs site covers">
   <ul>
     <li>Product workflows for creating, editing, publishing, and operating sites in Vivd.</li>
     <li>The runtime model behind Vivd's isolated Studio machines and real project workspaces.</li>
+    <li>The `solo` self-host install path and first-run setup.</li>
+    <li>Instance-level self-host admin settings and defaults.</li>
     <li>Domain registration, verification, and publish-target behavior.</li>
+    <li>Transactional email identity and delivery-health operations.</li>
     <li>Plugin setup for Contact Form and Analytics.</li>
     <li>Team-access guidance for agencies and customer-facing projects.</li>
     <li>Practical troubleshooting for common issues.</li>
-    {showOperatorGuides ? (
-      <li>Operator/admin guides for self-hosting and install-wide email policy.</li>
-    ) : null}
   </ul>
-  <p>
-    {showOperatorGuides
-      ? "Operator/self-host guides are intentionally separated and experimental."
-      : "Operator/self-host guides are intentionally hidden from the default public docs path."}
-  </p>
   <p>
     This docs site intentionally does <strong>not</strong> cover internal architecture,
     Fly machine internals, contributor workflows, or deep deployment-ops runbooks.

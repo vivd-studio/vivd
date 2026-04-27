@@ -4,7 +4,6 @@ description: Understand how Vivd handles domain registration, verification, and 
 ---
 
 import { Aside } from "@astrojs/starlight/components";
-import { showOperatorGuides } from "../../lib/docsFlags";
 
 Publishing in Vivd depends on two related pieces:
 
@@ -108,18 +107,11 @@ These are the most common reasons the dialog refuses to publish:
 - Studio has unsaved changes
 - Studio is currently viewing an older snapshot
 
-{showOperatorGuides ? (
-  <>
-    <h2>Typical self-host defaults</h2>
+## Typical self-host defaults
 
-    <p>
-      On <code>solo</code> self-host installs, the main public host from{" "}
-      <code>Instance Settings -&gt; Network</code> is always a publish target for
-      the local instance. Solo installs can also use additional registered
-      custom publish domains, but tenant-host style routing stays off.
-    </p>
-  </>
-) : null}
+On `solo` self-host installs, the main public host from `Instance Settings -> Network`
+is always a publish target for the local instance. Solo installs can also use additional
+registered custom publish domains, but tenant-host style routing stays off.
 
 ## Recommended launch workflow
 
@@ -136,9 +128,4 @@ These are the most common reasons the dialog refuses to publish:
 - Read [Publish Your Site](/publish-your-site/) for the end-to-end launch flow.
 - Use [Troubleshooting](/troubleshooting/) if a domain looks right but publishing is still blocked.
 
-{showOperatorGuides ? (
-  <p>
-    Read <a href="/instance-settings/">Instance Settings</a> for install-wide
-    routing and capability settings.
-  </p>
-) : null}
+Read [Instance Settings](/instance-settings/) for install-wide routing and capability settings.

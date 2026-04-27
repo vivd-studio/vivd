@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,11 +12,17 @@ import { NavigationSearchProvider } from "./NavigationSearch";
 import { HeaderBreadcrumbTextLink, HostHeader } from "./HostHeader";
 import { getPageInfo } from "./pageInfo";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import {
+  ShellSidebarModeProvider,
+  type ShellSidebarDesktopMode,
+} from "./ShellSidebarModeContext";
 
 export function Layout() {
   const { isPending } = authClient.useSession();
   const { config } = useAppConfig();
   const location = useLocation();
+  const routeKey = `${location.pathname}${location.search}`;
+  const searchParams = new URLSearchParams(location.search);
   const pageInfo = getPageInfo(location.pathname);
   const pageTitle = location.pathname.startsWith("/vivd-studio/superadmin")
     ? config.instanceAdminLabel
@@ -29,6 +35,33 @@ export function Layout() {
 
   const mainRef = useRef<HTMLElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [contentSidebarMode, setContentSidebarMode] = useState<{
+    key: string;
+    mode: ShellSidebarDesktopMode;
+  }>({ key: "", mode: "default" });
+  const routeSidebarMode: ShellSidebarDesktopMode =
+    pageInfo.isProjectPage &&
+    (searchParams.get("view") === "studio" ||
+      searchParams.get("initialGeneration") === "1")
+      ? "immersive"
+      : "default";
+  const requestedContentSidebarMode =
+    contentSidebarMode.key === routeKey ? contentSidebarMode.mode : "default";
+  const desktopMode: ShellSidebarDesktopMode =
+    routeSidebarMode === "immersive" ||
+    requestedContentSidebarMode === "immersive"
+      ? "immersive"
+      : "default";
+  const setRouteContentSidebarMode = useCallback(
+    (mode: ShellSidebarDesktopMode) => {
+      setContentSidebarMode((current) =>
+        current.key === routeKey && current.mode === mode
+          ? current
+          : { key: routeKey, mode },
+      );
+    },
+    [routeKey],
+  );
 
   useEffect(() => {
     const mainElement = mainRef.current;
@@ -55,9 +88,9 @@ export function Layout() {
 
   return (
     <SidebarProvider
-      desktopMode={pageInfo.usesImmersiveSidebar ? "immersive" : "default"}
+      desktopMode={desktopMode}
       immersiveKey={
-        pageInfo.usesImmersiveSidebar
+        desktopMode === "immersive"
           ? pageInfo.projectSlug ?? location.pathname
           : undefined
       }
@@ -170,7 +203,11 @@ export function Layout() {
                     : "overflow-auto px-6 py-4"
             }`}
           >
-            <Outlet />
+            <ShellSidebarModeProvider
+              setDesktopMode={setRouteContentSidebarMode}
+            >
+              <Outlet />
+            </ShellSidebarModeProvider>
           </main>
         </div>
       </NavigationSearchProvider>

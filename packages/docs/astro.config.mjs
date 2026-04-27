@@ -1,9 +1,6 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
-const showOperatorGuides =
-  process.env.PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES === "true";
-
 export default defineConfig({
   site: process.env.VIVD_DOCS_SITE_URL || "http://docs.localhost",
   output: "static",
@@ -58,22 +55,18 @@ export default defineConfig({
             { slug: "troubleshooting" },
           ],
         },
-        ...(showOperatorGuides
-          ? [
-              {
-                label: "Operator Guides (Experimental)",
-                items: [
-                  { slug: "self-hosting", label: "Self-Hosting" },
-                  {
-                    slug: "self-host-config-reference",
-                    label: "Self-Host Config Reference",
-                  },
-                  { slug: "instance-settings", label: "Instance Settings" },
-                  { slug: "email-and-deliverability", label: "Email & Deliverability" },
-                ],
-              },
-            ]
-          : []),
+        {
+          label: "Self-Hosting & Admin",
+          items: [
+            { slug: "self-hosting", label: "Self-Hosting" },
+            {
+              slug: "self-host-config-reference",
+              label: "Self-Host Config Reference",
+            },
+            { slug: "instance-settings", label: "Instance Settings" },
+            { slug: "email-and-deliverability", label: "Email & Deliverability" },
+          ],
+        },
       ],
       social: [
         {

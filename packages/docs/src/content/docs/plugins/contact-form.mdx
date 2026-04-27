@@ -4,7 +4,6 @@ description: Configure the Contact Form plugin so visitors can submit leads from
 ---
 
 import DocShot from "../../../components/DocShot.astro";
-import { showOperatorGuides } from "../../../lib/docsFlags";
 
 The Contact Form plugin is for projects that need lead capture on the published website.
 
@@ -43,10 +42,5 @@ The Contact Form plugin is for projects that need lead capture on the published 
 - Leave `Allowed source hosts` empty unless you explicitly need a manual allowlist. Setting values there overrides Vivd's auto-detected published, tenant, and Studio preview hosts, which can cause Turnstile hostname-authorization failures in preview if the list is too narrow.
 - If the live site behaves differently from Studio, see [Troubleshooting](/troubleshooting/).
 
-{showOperatorGuides ? (
-  <p>
-    For the experimental operator/self-host path, use{" "}
-    <a href="/email-and-deliverability/">Email & Deliverability</a> when the
-    problem looks install-wide rather than project-specific.
-  </p>
-) : null}
+For self-hosted installs, use [Email & Deliverability](/email-and-deliverability/) when
+the problem looks install-wide rather than project-specific.

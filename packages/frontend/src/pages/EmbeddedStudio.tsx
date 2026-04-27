@@ -27,6 +27,7 @@ import { createStudioRuntimeSession } from "@/lib/studioRuntimeSession";
 import { EmbeddedStudioHeader } from "./embeddedStudio/EmbeddedStudioHeader";
 import { EmbeddedStudioLiveSurface } from "./embeddedStudio/EmbeddedStudioLiveSurface";
 import { EmbeddedStudioProjectDialogs } from "./embeddedStudio/EmbeddedStudioProjectDialogs";
+import { useShellSidebarDesktopMode } from "@/components/shell/ShellSidebarModeContext";
 import { toast } from "sonner";
 
 const EMBEDDED_PROJECT_HEADER_INSET_CLASS = "pl-2 pr-3 md:pl-2.5 md:pr-4";
@@ -609,6 +610,7 @@ export default function EmbeddedStudio() {
   // an explicit `?view=studio` hint, so revisiting a project auto-resumes Studio.
   const livePreviewActive =
     previewSurface === "live" || Boolean(studioIframeSrc);
+  useShellSidebarDesktopMode(livePreviewActive ? "immersive" : "default");
 
   const handleCopyPreviewUrl = () => {
     if (isRenamePending) return;

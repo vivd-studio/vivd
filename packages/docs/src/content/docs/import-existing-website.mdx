@@ -4,7 +4,6 @@ description: Use a live website URL as the starting point for a new Vivd project
 ---
 
 import DocShot from "../../components/DocShot.astro";
-import { showOperatorGuides } from "../../lib/docsFlags";
 
 URL import is the fastest way to get a first draft when you already have a public website.
 
@@ -59,40 +58,24 @@ Common cases include:
 When that happens, the failure is usually the source site's protection policy,
 not that the URL is private or malformed.
 
-{showOperatorGuides ? (
-  <>
-    <h2>Self-hosted workaround for blocked datacenter IPs</h2>
+## Self-hosted workaround for blocked datacenter IPs
 
-    <p>
-      If you self-host Vivd, you can route the bundled scraper through a
-      residential proxy:
-    </p>
+If you self-host Vivd, you can route the bundled scraper through a residential proxy:
 
-    <pre><code class="language-env">{`PROXY_HOST=proxy.example.com
+<pre><code class="language-env">{`PROXY_HOST=proxy.example.com
 PROXY_PORT=823
 PROXY_USERNAME=...
 PROXY_PASSWORD=...`}</code></pre>
 
-    <p>
-      Set <code>PROXY_HOST</code> to enable proxying. <code>PROXY_PORT</code>{" "}
-      defaults to <code>823</code>, and credentials are only sent when both{" "}
-      <code>PROXY_USERNAME</code> and <code>PROXY_PASSWORD</code> are set.
-    </p>
+Set `PROXY_HOST` to enable proxying. `PROXY_PORT` defaults to `823`, and credentials are
+only sent when both `PROXY_USERNAME` and `PROXY_PASSWORD` are set.
 
-    <p>
-      This is useful when the source site blocks datacenter IPs but still allows
-      normal residential traffic. It is an install-level scraper setting, not a
-      per-project field in the import dialog. If you run a separate scraper via{" "}
-      <code>SCRAPER_URL</code>, configure the proxy on that scraper deployment
-      instead.
-    </p>
+This is useful when the source site blocks datacenter IPs but still allows normal
+residential traffic. It is an install-level scraper setting, not a per-project field in
+the import dialog. If you run a separate scraper via `SCRAPER_URL`, configure the proxy
+on that scraper deployment instead.
 
-    <p>
-      For the full env reference, see{" "}
-      <a href="/self-host-config-reference/">Self-Host Config Reference</a>.
-    </p>
-  </>
-) : null}
+For the full env reference, see [Self-Host Config Reference](/self-host-config-reference/).
 
 ## What happens right after import
 

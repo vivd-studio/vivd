@@ -68,11 +68,10 @@ Please run `npm run studio:dev:refresh` after you have made changes to the studi
 - Install dependencies at repo root.
 - Avoid per-package lockfiles.
 - Run scripts via workspaces, for example `npm run build -w @vivd/backend`.
-- The clear product direction is the hosted `platform` path aimed at the SaaS product. Prefer decisions that simplify, harden, or clarify the hosted control plane and customer-facing platform workflows first.
-- Treat `solo`, public self-hosting, and operator-only flows as experimental/internal compatibility paths unless a task explicitly targets them.
-- `solo` can still matter as a narrow compatibility and local-testing lane, especially for Docker-provider or self-host-style verification, but it is not a primary product investment area.
-- Keep public docs and default product copy end-user-focused and platform-first. Operator/self-host guides should stay behind `PUBLIC_VIVD_DOCS_SHOW_OPERATOR_GUIDES=true`.
-- If a task explicitly touches the experimental self-host install path, the install bundle source of truth remains `packages/docs/public/install/docker-compose.yml`.
+- The hosted `platform` path is the managed SaaS product lane; prefer decisions that simplify, harden, or clarify hosted control-plane and customer-facing platform workflows when a task does not explicitly target self-hosting.
+- Treat `solo` self-hosting as a public but narrower product path: one primary host, Docker-based Studio machines, and local S3-compatible storage by default. Do not imply full hosted-platform parity unless the code and docs support it.
+- Keep public docs and default product copy clear about both paths: hosted remains invite-led/managed, while `solo` self-hosting is available for people who want to run Vivd themselves.
+- If a task explicitly touches the self-host install path, the install bundle source of truth remains `packages/docs/public/install/docker-compose.yml`.
 - Add optional config knobs to `.env.example`.
 
 ## DB / Testing / Git

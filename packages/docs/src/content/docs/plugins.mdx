@@ -4,19 +4,13 @@ description: Understand the product plugins that extend a Vivd project beyond th
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
-import { showOperatorGuides } from "../../lib/docsFlags";
 
 Plugins let a Vivd project do more than render pages. In the current product surface, the main plugin workflows are Contact Form and Analytics.
 
-{showOperatorGuides ? (
-  <p>
-    On experimental self-host/operator installs, plugin availability can also be controlled
-    instance-wide before you do any project-level setup. Use
-    <a href="/instance-settings/"> Instance Settings</a> and the adjacent `Plugins` admin
-    surface when a plugin appears unavailable across the whole installation rather than
-    just one project.
-  </p>
-) : null}
+On self-hosted installs, plugin availability can also be controlled instance-wide before
+you do any project-level setup. Use [Instance Settings](/instance-settings/) and the
+adjacent `Plugins` admin surface when a plugin appears unavailable across the whole
+installation rather than just one project.
 
 <Aside type="tip" title="When to do plugin setup">
   Configure plugins before the final publish pass, not after launch day. That keeps form delivery, analytics expectations, and handoff steps inside the same review cycle.

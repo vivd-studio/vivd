@@ -32,21 +32,25 @@ describe("getPageInfo", () => {
   });
 
   it("treats the scratch route as a non-project page with its own content shell", () => {
-    expect(getPageInfo("/vivd-studio/projects/new/scratch")).toMatchObject({
+    const pageInfo = getPageInfo("/vivd-studio/projects/new/scratch");
+
+    expect(pageInfo).toMatchObject({
       title: "New project",
       isProjectPage: false,
-      usesImmersiveSidebar: true,
       isScratchWizardPage: true,
     });
+    expect("usesImmersiveSidebar" in pageInfo).toBe(false);
   });
 
-  it("marks project overview routes as immersive-sidebar pages", () => {
-    expect(getPageInfo("/vivd-studio/projects/demo")).toMatchObject({
+  it("keeps project overview routes as project pages without route-owned sidebar mode", () => {
+    const pageInfo = getPageInfo("/vivd-studio/projects/demo");
+
+    expect(pageInfo).toMatchObject({
       title: "Projects",
       isProjectPage: true,
-      usesImmersiveSidebar: true,
       projectSlug: "demo",
     });
+    expect("usesImmersiveSidebar" in pageInfo).toBe(false);
   });
 
   it("marks the projects index as a framed content page", () => {
@@ -57,6 +61,6 @@ describe("getPageInfo", () => {
       isProjectPage: false,
       isProjectsIndexPage: true,
     });
-    expect(pageInfo.usesImmersiveSidebar).toBeUndefined();
+    expect("usesImmersiveSidebar" in pageInfo).toBe(false);
   });
 });
