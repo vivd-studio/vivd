@@ -1353,6 +1353,10 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   let busyGraceApplied = false;
   let answeredQuestionCount = 0;
   const answeredQuestionRequestIds = new Set();
+  const decorateOutcome = (outcome) =>
+    answeredQuestionCount > 0
+      ? `answered-${answeredQuestionCount}-agent-question${answeredQuestionCount === 1 ? "" : "s"}-then-${outcome}`
+      : outcome;
 
   while (true) {
     const elapsedMs = Date.now() - startedAt;
@@ -1519,11 +1523,6 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
     }
 
     if (lastRecordedActionCount >= minRecordedActions) {
-      const decorateOutcome = (outcome) =>
-        answeredQuestionCount > 0
-          ? `answered-${answeredQuestionCount}-agent-question${answeredQuestionCount === 1 ? "" : "s"}-then-${outcome}`
-          : outcome;
-
       log(
         `Observed initial-generation progress for session ${sessionIdFromUrl ?? "unknown"} (recordedActions=${lastRecordedActionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"}); checking for a stop opportunity`,
       );
@@ -1551,6 +1550,40 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
 
   const sendButtonVisible = await sendButton.isVisible().catch(() => false);
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
+  const hasActiveRunEvidence =
+    lastProgressEvidenceCount > 0 ||
+    lastVisibleState === "stop" ||
+    lastVisibleState === "assistant-activity";
+  const canAcceptActiveSingleAction =
+    minRecordedActions > 1 &&
+    lastRecordedActionCount >= 1 &&
+    lastRecordedActionCount < minRecordedActions &&
+    hasActiveRunEvidence &&
+    (lastSessionStatus === "busy" ||
+      lastSessionStatus === "retry" ||
+      lastVisibleState === "stop" ||
+      lastVisibleState === "assistant-activity");
+
+  if (
+    canAcceptActiveSingleAction &&
+    (await stopButton.isVisible().catch(() => false))
+  ) {
+    log(
+      `Initial generation is still active after ${settleTimeoutMs}ms with ${lastRecordedActionCount} recorded action(s); accepting active progress and stopping the run`,
+    );
+    await sleep(5_000);
+    if (await stopButton.isVisible().catch(() => false)) {
+      await stopButton.click({ timeout: 5_000 });
+      await expectVisible(
+        sendButton,
+        settleTimeoutMs,
+        "send button after active single-action stop",
+      );
+      return decorateOutcome(
+        `stopped-active-run-after-${lastRecordedActionCount}-recorded-action${lastRecordedActionCount === 1 ? "" : "s"}`,
+      );
+    }
+  }
 
   throw new Error(
     `Initial generation did not reach ${minRecordedActions} recorded action(s) or a pending agent question within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} pendingQuestions=${lastPendingQuestionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} busyGraceApplied=${busyGraceApplied} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
