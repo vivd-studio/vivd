@@ -169,6 +169,17 @@ vi.mock("@/lib/brand", () => ({
 import EmbeddedStudio from "./EmbeddedStudio";
 import { MemoryRouter } from "react-router-dom";
 
+const STUDIO_HANDOVER_TEST_SETTLE_MS = 1_600;
+
+async function settleStudioHandover() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(STUDIO_HANDOVER_TEST_SETTLE_MS);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(STUDIO_HANDOVER_TEST_SETTLE_MS);
+  });
+}
+
 function createHealthResponse(ready: boolean) {
   return {
     ok: true,
@@ -967,57 +978,111 @@ describe("EmbeddedStudio", () => {
     expect(iframeUrl.searchParams.get("sidebarOpen")).toBe("1");
   });
 
-  it("treats a same-origin studio iframe load as ready when the shell document is present", () => {
+  it("does not reload the embedded studio iframe when the host sidebar toggles", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1",
     });
-    const postMessage = vi.fn();
-    const contentWindowMock = {
-      postMessage,
-      location: { pathname: "/_studio/runtime-123/vivd-studio" },
-    };
-    const frameDocument = document.implementation.createHTMLDocument("studio");
-    const root = frameDocument.createElement("div");
-    root.id = "root";
-    frameDocument.body.append(root);
-    const script = frameDocument.createElement("script");
-    script.setAttribute(
-      "src",
-      "/_studio/runtime-123/vivd-studio/assets/index-abc123.js",
-    );
-    frameDocument.head.append(script);
-
+    useSidebarMock.mockReturnValue({
+      toggleSidebar: vi.fn(),
+      open: true,
+      setOpen: vi.fn(),
+      setOpenMobile: vi.fn(),
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
+    });
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
-        url: "/_studio/runtime-123",
+        url: "https://studio.example.com/runtime",
         bootstrapToken: null,
       },
     });
 
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
-      configurable: true,
-      get() {
-        return contentWindowMock;
-      },
-    });
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
-      configurable: true,
-      get() {
-        return frameDocument;
-      },
-    });
-
-    renderEmbeddedStudio();
-
+    const view = renderEmbeddedStudio();
     const iframe = screen.getByTitle("Vivd Studio - site-1");
-    fireEvent.load(iframe);
+    const initialSrc = iframe.getAttribute("src");
+    expect(new URL(initialSrc ?? "").searchParams.get("sidebarOpen")).toBe("1");
 
-    expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "vivd:host:theme" }),
-      window.location.origin,
+    useSidebarMock.mockReturnValue({
+      toggleSidebar: vi.fn(),
+      open: false,
+      setOpen: vi.fn(),
+      setOpenMobile: vi.fn(),
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
+    });
+
+    view.rerender(
+      <MemoryRouter>
+        <EmbeddedStudio />
+      </MemoryRouter>,
     );
+
+    expect(screen.getByTitle("Vivd Studio - site-1").getAttribute("src")).toBe(
+      initialSrc,
+    );
+  });
+
+  it("treats a same-origin studio iframe load as ready when the shell document is present", async () => {
+    vi.useFakeTimers();
+
+    try {
+      useLocationMock.mockReturnValue({
+        search: "?view=studio&version=1",
+      });
+      const postMessage = vi.fn();
+      const contentWindowMock = {
+        postMessage,
+        location: { pathname: "/_studio/runtime-123/vivd-studio" },
+      };
+      const frameDocument = document.implementation.createHTMLDocument("studio");
+      const root = frameDocument.createElement("div");
+      root.id = "root";
+      frameDocument.body.append(root);
+      const script = frameDocument.createElement("script");
+      script.setAttribute(
+        "src",
+        "/_studio/runtime-123/vivd-studio/assets/index-abc123.js",
+      );
+      frameDocument.head.append(script);
+
+      getStudioUrlUseQueryMock.mockReturnValue({
+        data: {
+          status: "running",
+          url: "/_studio/runtime-123",
+          bootstrapToken: null,
+        },
+      });
+
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+        configurable: true,
+        get() {
+          return contentWindowMock;
+        },
+      });
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
+        configurable: true,
+        get() {
+          return frameDocument;
+        },
+      });
+
+      renderEmbeddedStudio();
+
+      const iframe = screen.getByTitle("Vivd Studio - site-1");
+      fireEvent.load(iframe);
+
+      expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
+      await settleStudioHandover();
+
+      expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "vivd:host:theme" }),
+        window.location.origin,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("retries same-origin iframe readiness after an early load event", async () => {
@@ -1073,9 +1138,7 @@ describe("EmbeddedStudio", () => {
       expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
 
       currentDocument = shellDocument;
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(300);
-      });
+      await settleStudioHandover();
 
       expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
@@ -1148,9 +1211,7 @@ describe("EmbeddedStudio", () => {
       ).not.toBeInTheDocument();
 
       currentDocument = shellDocument;
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1_100);
-      });
+      await settleStudioHandover();
 
       expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
@@ -1162,44 +1223,53 @@ describe("EmbeddedStudio", () => {
     }
   });
 
-  it("removes the startup overlay after a cross-origin studio load even if the ready handshake is missed", () => {
-    useLocationMock.mockReturnValue({
-      search: "?view=studio&version=1",
-    });
-    const postMessage = vi.fn();
-    const contentWindowMock = { postMessage };
-    Object.defineProperty(contentWindowMock, "location", {
-      configurable: true,
-      get() {
-        throw new DOMException("Blocked", "SecurityError");
-      },
-    });
+  it("fades out the startup overlay after a cross-origin studio load even if the ready handshake is missed", async () => {
+    vi.useFakeTimers();
 
-    getStudioUrlUseQueryMock.mockReturnValue({
-      data: {
-        status: "running",
-        url: "https://studio.example.com/runtime",
-        bootstrapToken: null,
-      },
-    });
+    try {
+      useLocationMock.mockReturnValue({
+        search: "?view=studio&version=1",
+      });
+      const postMessage = vi.fn();
+      const contentWindowMock = { postMessage };
+      Object.defineProperty(contentWindowMock, "location", {
+        configurable: true,
+        get() {
+          throw new DOMException("Blocked", "SecurityError");
+        },
+      });
 
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
-      configurable: true,
-      get() {
-        return contentWindowMock;
-      },
-    });
+      getStudioUrlUseQueryMock.mockReturnValue({
+        data: {
+          status: "running",
+          url: "https://studio.example.com/runtime",
+          bootstrapToken: null,
+        },
+      });
 
-    renderEmbeddedStudio();
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+        configurable: true,
+        get() {
+          return contentWindowMock;
+        },
+      });
 
-    const iframe = screen.getByTitle("Vivd Studio - site-1");
-    fireEvent.load(iframe);
+      renderEmbeddedStudio();
 
-    expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "vivd:host:ready-check" }),
-      "https://studio.example.com",
-    );
+      const iframe = screen.getByTitle("Vivd Studio - site-1");
+      fireEvent.load(iframe);
+
+      expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
+      await settleStudioHandover();
+
+      expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "vivd:host:ready-check" }),
+        "https://studio.example.com",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("auto-reloads the iframe when the initial studio document 503s but health becomes ready", async () => {
@@ -1289,6 +1359,8 @@ describe("EmbeddedStudio", () => {
       expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
 
       fireEvent.load(reloadedIframe);
+
+      await settleStudioHandover();
 
       expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
     } finally {

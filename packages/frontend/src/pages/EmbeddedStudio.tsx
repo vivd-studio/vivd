@@ -57,6 +57,10 @@ export default function EmbeddedStudio() {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const studioIframeInitialSidebarOpenRef = useRef<{
+    requestKey: string;
+    open: boolean;
+  } | null>(null);
 
   // Fetch project data to get current version
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -520,9 +524,31 @@ export default function EmbeddedStudio() {
     onTransportDegraded: requestStudioRecoveryCheck,
   });
 
+  const studioIframeTarget = useMemo(
+    () => `vivd-studio-embedded-${projectSlug || "project"}-v${studioVersion}`,
+    [projectSlug, studioVersion],
+  );
+
+  const studioIframeRequestKey = `${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`;
+
+  if (
+    studioIframeInitialSidebarOpenRef.current?.requestKey !==
+    studioIframeRequestKey
+  ) {
+    studioIframeInitialSidebarOpenRef.current = {
+      requestKey: studioIframeRequestKey,
+      open: sidebarOpen,
+    };
+  }
+
   const studioIframeSrc = useMemo(() => {
     const liveStudioBaseUrl = studioBaseUrl;
     if (!liveStudioBaseUrl || awaitingInitialGenerationHandoff) return null;
+    const initialSidebarOpen =
+      studioIframeInitialSidebarOpenRef.current?.requestKey ===
+      studioIframeRequestKey
+        ? studioIframeInitialSidebarOpenRef.current.open
+        : false;
 
     const url = new URL(
       resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"),
@@ -534,7 +560,7 @@ export default function EmbeddedStudio() {
       "publicPreviewEnabled",
       publicPreviewEnabled ? "1" : "0",
     );
-    url.searchParams.set("sidebarOpen", sidebarOpen ? "1" : "0");
+    url.searchParams.set("sidebarOpen", initialSidebarOpen ? "1" : "0");
     if (effectiveInitialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
@@ -568,17 +594,10 @@ export default function EmbeddedStudio() {
     projectSlug,
     publicPreviewEnabled,
     resolvedInitialSessionId,
-    sidebarOpen,
+    studioIframeRequestKey,
     studioBaseUrl,
     studioVersion,
   ]);
-
-  const studioIframeTarget = useMemo(
-    () => `vivd-studio-embedded-${projectSlug || "project"}-v${studioVersion}`,
-    [projectSlug, studioVersion],
-  );
-
-  const studioIframeRequestKey = `${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`;
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
@@ -815,28 +834,9 @@ export default function EmbeddedStudio() {
     );
   }
 
-  if (editRequested && !studioIframeSrc) {
-    return (
-      <FramedHostShell
-        className="h-full"
-        header={renderEmbeddedHeader({
-          includeProjectActions: true,
-          studioStatusLabel: hardRestartStudio.isPending
-            ? "Restarting studio..."
-            : "Starting studio...",
-        })}
-        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
-      >
-        <div className="relative flex h-full min-h-0 flex-col bg-background">
-          <StudioStartupLoading className="h-full min-h-0" />
-        </div>
-      </FramedHostShell>
-    );
-  }
-
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {livePreviewActive && studioIframeSrc ? (
+      {livePreviewActive ? (
         <EmbeddedStudioLiveSurface
           projectSlug={projectSlug}
           studioIframeRef={studioIframeRef}
@@ -914,7 +914,7 @@ export default function EmbeddedStudio() {
         </FramedHostShell>
       )}
 
-      {!studioIframeSrc ? (
+      {!livePreviewActive ? (
         <PublishSiteDialog
           open={publishDialogOpen}
           onOpenChange={setPublishDialogOpen}

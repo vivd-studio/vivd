@@ -31,6 +31,9 @@
 
 Keep entries short: one sentence on the change, plus a brief validation note when it matters.
 
+- 2026-04-28: Smoothed embedded Studio handoff by keeping one startup cover mounted across the runtime URL/iframe transition and fading it only after the existing visible/ready signal. Validation: `npm run test:run -w @vivd/frontend -- EmbeddedStudio.test.tsx` and `npm run typecheck -w @vivd/frontend` pass.
+- 2026-04-28: Added a subtle left edge to the embedded Studio live surface so the dark Studio shell separates from the matching app sidebar background. Validation: `npm run test:run -w @vivd/frontend -- src/pages/EmbeddedStudio.test.tsx`, `npm run typecheck -w @vivd/frontend`, and `git diff --check -- PROJECT_STATE.md packages/frontend/src/pages/embeddedStudio/EmbeddedStudioLiveSurface.tsx` pass.
+- 2026-04-28: Stopped embedded Studio host sidebar toggles from changing the Studio iframe URL, so unsaved Studio sessions no longer receive a false page-leave prompt when the sidebar is opened or closed. Validation: `npm run test:run -w @vivd/frontend -- src/pages/EmbeddedStudio.test.tsx -t "does not reload the embedded studio iframe"` and `npm run typecheck -w @vivd/frontend` pass; the full `EmbeddedStudio.test.tsx` run is still blocked by two in-progress startup handover overlay assertions.
 - 2026-04-28: Wrapped the projects index in the same framed preview viewport used by preview and the Scratch wizard while preserving normal dashboard sidebar behavior, including no auto-collapse on New Project. Validation: `npm run test:run -w @vivd/frontend -- src/pages/Dashboard.test.tsx src/components/shell/pageInfo.test.ts src/components/projects/listing/ProjectsList.test.tsx src/components/projects/create/ProjectWizard.test.tsx src/components/shell/AppSidebar.test.tsx`, `npm run typecheck -w @vivd/frontend`, direct touched-file ESLint, and `git diff --check` pass.
 - 2026-04-27: Auto-collapsed the host sidebar when users start Studio from a project or open the New Project flow. Validation: `npm run test:run -w @vivd/frontend -- src/pages/EmbeddedStudio.test.tsx src/components/projects/create/ProjectWizard.test.tsx` and `npm run typecheck -w @vivd/frontend` pass.
 - 2026-04-27: Replaced static sidebar panel glyphs with animated open/close sidebar icons in the shared frontend and Studio triggers. Validation: `npm run test:run -w @vivd/frontend -- src/components/ui/sidebar.test.tsx`, `npm run test:run -w @vivd/studio -- client/src/components/preview/toolbar/StudioToolbar.test.tsx`, `npm run typecheck -w @vivd/frontend`, and `npm run typecheck:client -w @vivd/studio` pass.
@@ -154,4 +157,4 @@ Keep entries short: one sentence on the change, plus a brief validation note whe
 - Older progress entries and trimmed detail live in `PROJECT_STATE_ARCHIVE.md`.
 - Superseded or historical plans live under `plans/old/`.
 
-Last updated: 2026-04-27
+Last updated: 2026-04-28
