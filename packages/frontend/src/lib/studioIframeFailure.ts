@@ -3,24 +3,38 @@ export type StudioIframeFailureSource = "bootstrap" | "response" | "network";
 export interface StudioIframeFailure {
   message: string;
   status?: string;
+  code?: string;
+  retryable?: boolean;
   source: StudioIframeFailureSource;
 }
 
 function parseStructuredErrorPayload(
   bodyText: string,
-): { error: string; status?: string } | null {
+): {
+  error: string;
+  status?: string;
+  code?: string;
+  retryable?: boolean;
+} | null {
   const trimmed = bodyText.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
 
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     const error =
-      typeof parsed.error === "string" ? parsed.error.trim() : "";
+      typeof parsed.error === "string"
+        ? parsed.error.trim()
+        : typeof parsed.message === "string"
+          ? parsed.message.trim()
+          : "";
     if (!error) return null;
 
     const status =
       typeof parsed.status === "string" ? parsed.status.trim() : undefined;
-    return { error, status };
+    const code = typeof parsed.code === "string" ? parsed.code.trim() : undefined;
+    const retryable =
+      typeof parsed.retryable === "boolean" ? parsed.retryable : undefined;
+    return { error, status, code, retryable };
   } catch {
     return null;
   }
@@ -33,8 +47,7 @@ function normalizeBodyText(value: string | null | undefined): string {
 function looksLikeStartupPendingMessage(message: string): boolean {
   return (
     message.includes("studio is starting up") ||
-    message.includes("please retry shortly") ||
-    message.includes("studio bootstrap unavailable")
+    message.includes("please retry shortly")
   );
 }
 
@@ -47,6 +60,11 @@ export function isStudioIframeStartupPending(options: {
   const parsed = parseStructuredErrorPayload(options.bodyText?.trim() || "");
   const parsedStatus = parsed?.status?.trim().toLowerCase();
   const parsedError = normalizeBodyText(parsed?.error);
+  const parsedCode = parsed?.code?.trim().toLowerCase();
+
+  if (parsed?.retryable || parsedCode === "runtime_starting") {
+    return true;
+  }
 
   if (parsedStatus === "starting" || parsedStatus === "installing") {
     return true;
@@ -86,6 +104,8 @@ export function detectStudioIframeFailure(options: {
     return {
       message: parsed?.error || bodyText || "Studio bootstrap failed",
       status: parsed?.status,
+      code: parsed?.code,
+      retryable: parsed?.retryable,
       source: "bootstrap",
     };
   }
@@ -94,6 +114,8 @@ export function detectStudioIframeFailure(options: {
     return {
       message: parsed.error,
       status: parsed.status,
+      code: parsed.code,
+      retryable: parsed.retryable,
       source: /bootstrap token/i.test(parsed.error) ? "bootstrap" : "response",
     };
   }
@@ -102,7 +124,27 @@ export function detectStudioIframeFailure(options: {
     return {
       message: parsed.error,
       status: parsed.status,
+      code: parsed.code,
+      retryable: parsed.retryable,
       source: /bootstrap token/i.test(parsed.error) ? "bootstrap" : "response",
+    };
+  }
+
+  if (/^unauthorized$/i.test(bodyText)) {
+    return {
+      message: bodyText,
+      code: "unauthorized",
+      retryable: false,
+      source: "response",
+    };
+  }
+
+  if (/studio bootstrap unavailable/i.test(bodyText)) {
+    return {
+      message: bodyText,
+      code: "bootstrap_unconfigured",
+      retryable: false,
+      source: "bootstrap",
     };
   }
 
@@ -124,6 +166,14 @@ export function describeStudioIframeFailure(
       title: "Studio is taking longer than usual",
       description:
         "The studio machine may still be booting or it might be unresponsive. Try reloading first. If it keeps hanging, hard restart the studio machine.",
+    };
+  }
+
+  if (failure.code === "bootstrap_unconfigured") {
+    return {
+      title: "Studio runtime is not configured",
+      description:
+        "The Studio runtime is missing its secure handoff configuration. Reload first. If it keeps happening, hard restart the studio machine.",
     };
   }
 

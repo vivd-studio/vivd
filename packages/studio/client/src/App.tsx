@@ -40,12 +40,18 @@ export function App() {
     window.history.back();
   };
 
+  const postStudioPresented = useCallback(() => {
+    if (!embedded) return;
+    postVivdHostMessage({ type: "vivd:studio:presented" });
+  }, [embedded]);
+
   const postStudioReady = useCallback(() => {
     if (!embedded) return;
     postVivdHostMessage({ type: "vivd:studio:ready" });
   }, [embedded]);
 
-  // Signal to the host app that the studio JS is running (iframe onLoad can fire before React mounts).
+  // Signal to the host app that the Studio shell is presented, then keep the
+  // bridge-ready handshake alive in case the first message is missed.
   // Also answer explicit host ready checks so a missed first message does not leave the
   // host stuck on its boot screen while the studio is already interactive.
   useEffect(() => {
@@ -55,6 +61,7 @@ export function App() {
 
     const announceReady = () => {
       if (hostReadyAcknowledged) return;
+      postStudioPresented();
       postStudioReady();
     };
 
@@ -94,7 +101,7 @@ export function App() {
       window.clearTimeout(readyTimeout);
       window.removeEventListener("message", onMessage);
     };
-  }, [embedded, postStudioReady]);
+  }, [embedded, postStudioPresented, postStudioReady]);
 
   return (
     <>

@@ -2,9 +2,12 @@ import crypto from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import type express from "express";
 import {
+  createStudioBootstrapStatusPayload,
   STUDIO_USER_ACTION_TOKEN_HEADER,
   STUDIO_USER_ACTION_TOKEN_COOKIE,
   STUDIO_USER_ACTION_TOKEN_PARAM,
+  type StudioBootstrapStatusCode,
+  type StudioBootstrapStatusPayload,
   verifyStudioBootstrapToken,
 } from "@vivd/shared/studio";
 
@@ -18,6 +21,7 @@ export const STUDIO_AUTH_QUERY = "vivdStudioToken";
 export const STUDIO_AUTH_COOKIE = "vivd_studio_token";
 export const STUDIO_BOOTSTRAP_TOKEN_PARAM = "bootstrapToken";
 export const STUDIO_BOOTSTRAP_NEXT_PARAM = "next";
+const RETRYABLE_STARTUP_RETRY_AFTER_SECONDS = "2";
 
 type ProvidedStudioToken = {
   source: "header" | "authorization" | "query" | "cookie" | null;
@@ -30,6 +34,10 @@ type StudioAuthRequestLike = {
   url?: string;
   query?: Record<string, unknown>;
   get?: (name: string) => string | undefined;
+};
+
+type StudioBootstrapHandlerOptions = {
+  canBootstrap?: () => boolean;
 };
 
 let cachedStudioUserActionToken: string | null = null;
@@ -378,6 +386,60 @@ export function setStudioAuthCookie(
   setScopedStudioCookie(req, res, STUDIO_AUTH_COOKIE, token);
 }
 
+export function setStudioStartupContractHeaders(
+  res: express.Response,
+  options: { retryable?: boolean } = {},
+): void {
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  if (options.retryable) {
+    res.setHeader("retry-after", RETRYABLE_STARTUP_RETRY_AFTER_SECONDS);
+  }
+}
+
+export function setStudioBootstrapStatusHeaders(
+  res: express.Response,
+  options: { retryable?: boolean } = {},
+): void {
+  setStudioStartupContractHeaders(res, options);
+  res.setHeader("access-control-allow-origin", "*");
+}
+
+export function createStudioBootstrapContractPayload(options: {
+  code?: StudioBootstrapStatusCode;
+  retryable: boolean;
+  canBootstrap: boolean;
+  message: string;
+  status?: StudioBootstrapStatusPayload["status"];
+}): StudioBootstrapStatusPayload {
+  const payload: StudioBootstrapStatusPayload = {
+    status:
+      options.status ??
+      (options.retryable ? "starting" : "failed"),
+    retryable: options.retryable,
+    canBootstrap: options.canBootstrap,
+    message: options.message,
+  };
+  if (options.code) {
+    payload.code = options.code;
+  }
+  return createStudioBootstrapStatusPayload(payload);
+}
+
+export function sendStudioBootstrapContractJson(
+  res: express.Response,
+  httpStatus: number,
+  payload: StudioBootstrapStatusPayload,
+  options: { cors?: boolean } = {},
+): express.Response {
+  if (options.cors) {
+    setStudioBootstrapStatusHeaders(res, { retryable: payload.retryable });
+  } else {
+    setStudioStartupContractHeaders(res, { retryable: payload.retryable });
+  }
+  return res.status(httpStatus).json(payload);
+}
+
 export function setStudioUserActionCookie(
   req: express.Request,
   res: express.Response,
@@ -401,12 +463,35 @@ function persistStudioAuthCookie(
 
 export function createStudioBootstrapHandler(
   env: NodeJS.ProcessEnv = process.env,
+  options: StudioBootstrapHandlerOptions = {},
 ): express.RequestHandler {
   return (req, res) => {
+    if (options.canBootstrap && !options.canBootstrap()) {
+      return sendStudioBootstrapContractJson(
+        res,
+        503,
+        createStudioBootstrapContractPayload({
+          code: "runtime_starting",
+          retryable: true,
+          canBootstrap: false,
+          message: "Studio is starting",
+        }),
+      );
+    }
+
     const accessToken = getStudioAccessToken(env);
     const studioId = getStudioId(env);
     if (!accessToken || !studioId) {
-      return res.status(503).json({ error: "Studio bootstrap unavailable" });
+      return sendStudioBootstrapContractJson(
+        res,
+        503,
+        createStudioBootstrapContractPayload({
+          code: "bootstrap_unconfigured",
+          retryable: false,
+          canBootstrap: false,
+          message: "Studio bootstrap is not configured",
+        }),
+      );
     }
 
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -415,10 +500,28 @@ export function createStudioBootstrapHandler(
     const userActionToken = body[STUDIO_USER_ACTION_TOKEN_PARAM];
 
     if (typeof bootstrapToken !== "string" || !bootstrapToken.trim()) {
-      return res.status(400).json({ error: "Missing bootstrap token" });
+      return sendStudioBootstrapContractJson(
+        res,
+        400,
+        createStudioBootstrapContractPayload({
+          code: "missing_bootstrap_token",
+          retryable: false,
+          canBootstrap: true,
+          message: "Missing bootstrap token",
+        }),
+      );
     }
     if (typeof nextTarget !== "string" || !nextTarget.trim()) {
-      return res.status(400).json({ error: "Missing bootstrap target" });
+      return sendStudioBootstrapContractJson(
+        res,
+        400,
+        createStudioBootstrapContractPayload({
+          code: "missing_bootstrap_target",
+          retryable: false,
+          canBootstrap: true,
+          message: "Missing bootstrap target",
+        }),
+      );
     }
 
     const verified = verifyStudioBootstrapToken(bootstrapToken, {
@@ -426,7 +529,16 @@ export function createStudioBootstrapHandler(
       studioId,
     });
     if (!verified) {
-      return res.status(401).json({ error: "Invalid bootstrap token" });
+      return sendStudioBootstrapContractJson(
+        res,
+        401,
+        createStudioBootstrapContractPayload({
+          code: "invalid_bootstrap_token",
+          retryable: false,
+          canBootstrap: true,
+          message: "Invalid bootstrap token",
+        }),
+      );
     }
 
     const redirectTarget = resolveStudioBootstrapRedirectTarget(req, nextTarget);
@@ -440,7 +552,16 @@ export function createStudioBootstrapHandler(
         forwardedProto: getFirstHeaderValue(req.headers[FORWARDED_PROTO_HEADER]),
         forwardedPrefix: getFirstHeaderValue(req.headers[FORWARDED_PREFIX_HEADER]),
       });
-      return res.status(400).json({ error: "Invalid bootstrap target" });
+      return sendStudioBootstrapContractJson(
+        res,
+        400,
+        createStudioBootstrapContractPayload({
+          code: "invalid_bootstrap_target",
+          retryable: false,
+          canBootstrap: true,
+          message: "Invalid bootstrap target",
+        }),
+      );
     }
 
     setStudioAuthCookie(req, res, accessToken);
@@ -472,7 +593,16 @@ export function createRequireStudioAuth(
       combinedPath.startsWith("/vivd-studio/api/");
 
     if (wantsJson) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return sendStudioBootstrapContractJson(
+        res,
+        401,
+        createStudioBootstrapContractPayload({
+          code: "unauthorized",
+          retryable: false,
+          canBootstrap: true,
+          message: "Unauthorized",
+        }),
+      );
     }
     return res.status(401).send("Unauthorized");
   };

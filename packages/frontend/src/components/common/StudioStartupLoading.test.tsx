@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StudioStartupLoading } from "./StudioStartupLoading";
 
 describe("StudioStartupLoading", () => {
@@ -59,5 +59,27 @@ describe("StudioStartupLoading", () => {
       "h-dvh",
       "w-screen",
     );
+  });
+
+  it("renders a startup-stall treatment with recovery actions", () => {
+    const onReload = vi.fn();
+    const onHardRestart = vi.fn();
+
+    render(
+      <StudioStartupLoading
+        status="stalled"
+        onReload={onReload}
+        onHardRestart={onHardRestart}
+      />,
+    );
+
+    expect(screen.getByText("Studio is still starting")).toBeInTheDocument();
+    expect(screen.getByText("This is taking longer than usual.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reload/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Hard restart/i }));
+
+    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(onHardRestart).toHaveBeenCalledTimes(1);
   });
 });

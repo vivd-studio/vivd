@@ -13,7 +13,14 @@ import {
 } from "../services/runtime/RuntimeQuiesceCoordinator.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
-import { createStudioBootstrapHandler } from "../http/studioAuth.js";
+import {
+  createStudioBootstrapContractPayload,
+  createStudioBootstrapHandler,
+  getStudioAccessToken,
+  getStudioId,
+  sendStudioBootstrapContractJson,
+  setStudioBootstrapStatusHeaders,
+} from "../http/studioAuth.js";
 import {
   normalizeStudioWorkingImageUpload,
   shouldNormalizeStudioWorkingImageUpload,
@@ -225,10 +232,59 @@ export function registerStudioRuntimeHttpRoutes(
   app.get("/health", (_req, res) => {
     const initialized = workspace.isInitialized();
     res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cache-Control", "no-store");
     res.json({
       status: initialized ? "ok" : "starting",
       initialized,
     });
+  });
+
+  app.options("/vivd-studio/api/bootstrap-status", (_req, res) => {
+    setStudioBootstrapStatusHeaders(res);
+    res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.status(204).end();
+  });
+
+  app.get("/vivd-studio/api/bootstrap-status", (_req, res) => {
+    if (!workspace.isInitialized()) {
+      return sendStudioBootstrapContractJson(
+        res,
+        503,
+        createStudioBootstrapContractPayload({
+          code: "runtime_starting",
+          retryable: true,
+          canBootstrap: false,
+          message: "Studio is starting",
+        }),
+        { cors: true },
+      );
+    }
+
+    if (!getStudioAccessToken(process.env) || !getStudioId(process.env)) {
+      return sendStudioBootstrapContractJson(
+        res,
+        503,
+        createStudioBootstrapContractPayload({
+          code: "bootstrap_unconfigured",
+          retryable: false,
+          canBootstrap: false,
+          message: "Studio bootstrap is not configured",
+        }),
+        { cors: true },
+      );
+    }
+
+    return sendStudioBootstrapContractJson(
+      res,
+      200,
+      createStudioBootstrapContractPayload({
+        status: "ready",
+        retryable: false,
+        canBootstrap: true,
+        message: "Studio is ready",
+      }),
+      { cors: true },
+    );
   });
 
   // Cleanup endpoint for sendBeacon on page leave (fire-and-forget)
@@ -266,7 +322,9 @@ export function registerStudioRuntimeHttpRoutes(
     "/vivd-studio/api/bootstrap",
     resumeRuntimeAfterActivity,
     express.urlencoded({ extended: false }),
-    createStudioBootstrapHandler(process.env),
+    createStudioBootstrapHandler(process.env, {
+      canBootstrap: () => workspace.isInitialized(),
+    }),
   );
 
   // Serve workspace files in a backend-compatible path:

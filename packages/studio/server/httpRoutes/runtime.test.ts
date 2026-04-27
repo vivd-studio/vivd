@@ -213,6 +213,7 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     routeLayer.route.stack[0].handle({} as any, { set, json } as any, vi.fn());
 
     expect(set).toHaveBeenCalledWith("Access-Control-Allow-Origin", "*");
+    expect(set).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(json).toHaveBeenCalledWith({
       status: "ok",
       initialized: true,
@@ -233,10 +234,90 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     routeLayer.route.stack[0].handle({} as any, { set, json } as any, vi.fn());
 
     expect(set).toHaveBeenCalledWith("Access-Control-Allow-Origin", "*");
+    expect(set).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(json).toHaveBeenCalledWith({
       status: "starting",
       initialized: false,
     });
+  });
+
+  it("reports bootstrap status as starting until the workspace is initialized", () => {
+    const { app } = createTestRuntimeApp({ initialized: false });
+    const routeLayer = app.router.stack.find(
+      (layer: any) =>
+        layer.route?.path === "/vivd-studio/api/bootstrap-status" &&
+        layer.route?.methods?.get,
+    );
+    const setHeader = vi.fn();
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+    if (!routeLayer?.route?.stack[0]) {
+      throw new Error("Expected bootstrap-status route");
+    }
+
+    routeLayer.route.stack[0].handle(
+      {} as any,
+      { setHeader, status, json } as any,
+      vi.fn(),
+    );
+
+    expect(status).toHaveBeenCalledWith(503);
+    expect(setHeader).toHaveBeenCalledWith("access-control-allow-origin", "*");
+    expect(setHeader).toHaveBeenCalledWith("cache-control", "no-store");
+    expect(setHeader).toHaveBeenCalledWith("retry-after", "2");
+    expect(json).toHaveBeenCalledWith({
+      status: "starting",
+      code: "runtime_starting",
+      retryable: true,
+      canBootstrap: false,
+      message: "Studio is starting",
+    });
+  });
+
+  it("reports bootstrap status as ready once bootstrap can run", () => {
+    const previousAccessToken = process.env.STUDIO_ACCESS_TOKEN;
+    const previousStudioId = process.env.STUDIO_ID;
+    process.env.STUDIO_ACCESS_TOKEN = "studio-token";
+    process.env.STUDIO_ID = "studio-1";
+    const { app } = createTestRuntimeApp({ initialized: true });
+    const routeLayer = app.router.stack.find(
+      (layer: any) =>
+        layer.route?.path === "/vivd-studio/api/bootstrap-status" &&
+        layer.route?.methods?.get,
+    );
+    const setHeader = vi.fn();
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+    if (!routeLayer?.route?.stack[0]) {
+      throw new Error("Expected bootstrap-status route");
+    }
+
+    try {
+      routeLayer.route.stack[0].handle(
+        {} as any,
+        { setHeader, status, json } as any,
+        vi.fn(),
+      );
+
+      expect(status).toHaveBeenCalledWith(200);
+      expect(json).toHaveBeenCalledWith({
+        status: "ready",
+        retryable: false,
+        canBootstrap: true,
+        message: "Studio is ready",
+      });
+    } finally {
+      if (typeof previousAccessToken === "string") {
+        process.env.STUDIO_ACCESS_TOKEN = previousAccessToken;
+      } else {
+        delete process.env.STUDIO_ACCESS_TOKEN;
+      }
+      if (typeof previousStudioId === "string") {
+        process.env.STUDIO_ID = previousStudioId;
+      } else {
+        delete process.env.STUDIO_ID;
+      }
+    }
   });
 
   it("registers the bootstrap endpoint without runtime auth middleware in front of it", () => {

@@ -34,6 +34,7 @@ export function StudioLoadFailurePanel({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const copy = describeStudioIframeFailure(failure);
   const details = [
+    failure?.code ? `Code: ${failure.code}` : null,
     failure?.status ? `Status: ${failure.status}` : null,
     failure?.message?.trim() || null,
   ]

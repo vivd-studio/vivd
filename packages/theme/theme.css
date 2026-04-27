@@ -5,52 +5,48 @@
   :root {
     --radius: 0.5rem;
 
-    /* Clean Light Theme - Minimal & Professional */
-    --background: 0 0% 100%; /* Pure white */
-    --foreground: 224 10% 15%; /* Near black with slight warmth */
+    /* Default Theme - Paper & Sage. Mirror of [data-color-theme="vivd-sharp"]
+       below — kept in sync as a fallback when no data-color-theme is set. */
+    --background: 40 18% 97%;
+    --foreground: 30 22% 9%;
 
-    --card: 210 20% 99%; /* Very subtle cool tint */
-    --card-foreground: 224 10% 15%;
+    --card: 40 30% 99%;
+    --card-foreground: 30 22% 9%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 10% 15%;
+    --popover: 40 30% 99%;
+    --popover-foreground: 30 22% 9%;
 
-    /* Primary: Calm slate blue */
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 152 60% 42%;
+    --primary-foreground: 40 30% 99%;
 
-    /* Secondary: Light gray */
-    --secondary: 220 14% 95%;
-    --secondary-foreground: 224 10% 25%;
+    --secondary: 40 20% 92%;
+    --secondary-foreground: 30 22% 14%;
 
-    /* Muted: Soft gray */
-    --muted: 220 14% 94%;
-    --muted-foreground: 220 9% 46%;
+    --muted: 40 18% 95%;
+    --muted-foreground: 30 10% 36%;
 
-    /* Accent: Subtle indigo */
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 40 70% 65%;
+    --accent-foreground: 30 25% 12%;
 
-    --success: 145 63% 42%;
-    --success-foreground: 0 0% 100%;
-    --success-hover: 145 68% 37%;
+    --success: 152 64% 38%;
+    --success-foreground: 40 30% 99%;
+    --success-hover: 152 68% 32%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 8 78% 52%;
+    --destructive-foreground: 40 30% 99%;
 
-    --border: 220 13% 89%;
-    --input: 220 13% 89%;
-    --ring: 217 91% 60%;
+    --border: 35 14% 82%;
+    --input: 35 14% 82%;
+    --ring: 152 60% 42%;
 
-    --chart-1: 217 91% 60%; /* Blue */
-    --chart-2: 142 71% 45%; /* Green */
-    --chart-3: 262 83% 58%; /* Purple */
-    --chart-4: 43 96% 56%; /* Yellow */
-    --chart-5: 0 84% 60%; /* Red */
+    --chart-1: 152 60% 42%;
+    --chart-2: 40 78% 55%;
+    --chart-3: 18 65% 52%;
+    --chart-4: 200 45% 48%;
+    --chart-5: 280 35% 56%;
 
-    /* Chat user bubble: softer blue-gray */
-    --chat-user: 220 13% 88%;
-    --chat-user-foreground: 224 10% 20%;
+    --chat-user: 40 18% 90%;
+    --chat-user-foreground: 30 22% 9%;
   }
 
   .dark {
@@ -312,56 +308,53 @@
   }
 
   /* ============================================
-     VIVD SHARP Theme (Maximum Contrast & Sharpness)
+     VIVD SHARP — the active brand theme.
+     Paper-sage palette, brand-aligned with vivd.studio landing.
+     :root above mirrors these values as a fallback.
      ============================================ */
   [data-color-theme="vivd-sharp"] {
-    /* Vivd Sharp Light Theme - Maximum Clarity */
-    --background: 0 0% 100%; /* Pure white */
-    --foreground: 0 0% 5%; /* Near black */
+    /* Light: warm paper cream + vibrant sage, Lovable-grade contrast */
+    --background: 40 18% 97%;
+    --foreground: 30 22% 9%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 5%;
+    --card: 40 30% 99%;
+    --card-foreground: 30 22% 9%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 5%;
+    --popover: 40 30% 99%;
+    --popover-foreground: 30 22% 9%;
 
-    /* Primary: Maximum Saturation Emerald */
-    --primary: 152 80% 38%;
-    --primary-foreground: 0 0% 100%;
+    /* Primary: vibrant sage — lifted L=42 + sat 60% so logo and buttons pop */
+    --primary: 152 60% 42%;
+    --primary-foreground: 40 30% 99%;
 
-    /* Secondary: Pure light gray */
-    --secondary: 0 0% 92%;
-    --secondary-foreground: 0 0% 10%;
+    --secondary: 40 20% 92%;
+    --secondary-foreground: 30 22% 14%;
 
-    /* Muted: Neutral gray */
-    --muted: 0 0% 92%;
-    --muted-foreground: 0 0% 40%;
+    --muted: 40 18% 95%;
+    --muted-foreground: 30 10% 36%;
 
-    /* Accent: Maximum Saturation Gold */
-    --accent: 45 100% 68%;
-    --accent-foreground: 0 0% 5%;
+    --accent: 40 70% 65%;
+    --accent-foreground: 30 25% 12%;
 
-    --success: 152 80% 38%;
-    --success-foreground: 0 0% 100%;
-    --success-hover: 152 84% 33%;
+    --success: 152 64% 38%;
+    --success-foreground: 40 30% 99%;
+    --success-hover: 152 68% 32%;
 
-    --destructive: 0 90% 48%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 8 78% 52%;
+    --destructive-foreground: 40 30% 99%;
 
-    --border: 0 0% 84%;
-    --input: 0 0% 84%;
-    --ring: 152 80% 30%;
+    --border: 35 14% 82%;
+    --input: 35 14% 82%;
+    --ring: 152 60% 42%;
 
-    /* Charts */
-    --chart-1: 152 80% 38%;
-    --chart-2: 45 100% 55%;
-    --chart-3: 184 70% 25%;
-    --chart-4: 40 95% 55%;
-    --chart-5: 193 50% 50%;
+    --chart-1: 152 60% 42%;
+    --chart-2: 40 78% 55%;
+    --chart-3: 18 65% 52%;
+    --chart-4: 200 45% 48%;
+    --chart-5: 280 35% 56%;
 
-    /* Chat user bubble: clean gray */
-    --chat-user: 0 0% 84%;
-    --chat-user-foreground: 0 0% 10%;
+    --chat-user: 40 18% 90%;
+    --chat-user-foreground: 30 22% 9%;
   }
 
   [data-color-theme="vivd-sharp"].dark,
@@ -370,7 +363,7 @@
     --background: 0 0% 4%; /* Near pure black */
     --foreground: 0 0% 98%; /* Near pure white */
 
-    --card: 0 0% 11%; /* Lighter for elevation contrast */
+    --card: 0 0% 10%; /* Panel tone — round step up from page */
     --card-foreground: 0 0% 98%;
 
     --popover: 0 0% 5%;
@@ -384,8 +377,8 @@
     --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 98%;
 
-    /* Muted: Dark neutral */
-    --muted: 0 0% 25%;
+    /* Muted: Dark neutral — pulled down to match border rhythm */
+    --muted: 0 0% 18%;
     --muted-foreground: 0 0% 60%;
 
     /* Accent: Subtle background for hovers */
@@ -399,8 +392,8 @@
     --destructive: 0 80% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
+    --border: 0 0% 18%; /* Bumped from 15% — visible against L=10% cards */
+    --input: 0 0% 18%;
     --ring: 152 85% 48%;
 
     /* Charts */
@@ -722,14 +715,14 @@
    screen's animated gradient backdrop.
    ============================================ */
 @layer base {
-  /* Default (Blue) – Botanical garden */
+  /* Default (Paper-Sage) – Warm sage & honey botanical */
   :root {
-    --scratch-bloom-1: 152 55% 62%;
-    --scratch-bloom-2: 42 82% 65%;
-    --scratch-bloom-3: 14 78% 74%;
-    --scratch-bloom-4: 268 42% 72%;
-    --scratch-bloom-5: 180 52% 56%;
-    --scratch-bloom-6: 38 65% 72%;
+    --scratch-bloom-1: 150 38% 56%;
+    --scratch-bloom-2: 40 60% 68%;
+    --scratch-bloom-3: 18 50% 70%;
+    --scratch-bloom-4: 280 25% 70%;
+    --scratch-bloom-5: 170 35% 55%;
+    --scratch-bloom-6: 35 45% 70%;
   }
   .dark {
     --scratch-bloom-1: 152 62% 40%;
@@ -878,7 +871,7 @@
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select {
-    background-color: hsl(var(--background));
+    background-color: hsl(var(--surface-input));
   }
 }
 
@@ -958,14 +951,14 @@
 }
 
 :root {
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --sidebar: hsl(40 18% 97%); /* Matches --background */
+  --sidebar-foreground: hsl(30 22% 9%);
+  --sidebar-primary: hsl(152 60% 42%);
+  --sidebar-primary-foreground: hsl(40 30% 99%);
+  --sidebar-accent: hsl(40 18% 90%);
+  --sidebar-accent-foreground: hsl(30 22% 9%);
+  --sidebar-border: hsl(35 14% 82%);
+  --sidebar-ring: hsl(152 60% 42%);
 }
 
 .dark {
@@ -1027,16 +1020,16 @@
   --sidebar-ring: hsl(152 65% 55%);
 }
 
-/* Vivd Sharp theme sidebar */
+/* Vivd Sharp theme sidebar — same surface as the page background */
 [data-color-theme="vivd-sharp"] {
-  --sidebar: hsl(0 0% 96%);
-  --sidebar-foreground: hsl(0 0% 10%);
-  --sidebar-primary: hsl(152 80% 38%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(0 0% 92%);
-  --sidebar-accent-foreground: hsl(0 0% 5%);
-  --sidebar-border: hsl(0 0% 88%);
-  --sidebar-ring: hsl(152 80% 30%);
+  --sidebar: hsl(40 18% 97%); /* Matches --background exactly */
+  --sidebar-foreground: hsl(30 22% 9%);
+  --sidebar-primary: hsl(152 60% 42%);
+  --sidebar-primary-foreground: hsl(40 30% 99%);
+  --sidebar-accent: hsl(40 18% 90%); /* Hover/active pill */
+  --sidebar-accent-foreground: hsl(30 22% 9%);
+  --sidebar-border: hsl(35 14% 82%);
+  --sidebar-ring: hsl(152 60% 42%);
 }
 
 [data-color-theme="vivd-sharp"].dark,
@@ -1047,7 +1040,7 @@
   --sidebar-primary-foreground: hsl(0 0% 4%);
   --sidebar-accent: hsl(0 0% 12%);
   --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(0 0% 15%);
+  --sidebar-border: hsl(0 0% 18%);
   --sidebar-ring: hsl(152 85% 48%);
 }
 
@@ -1157,9 +1150,9 @@
   :root {
     --surface-page: var(--background);
     --surface-panel: var(--card);
-    --surface-sunken: 220 12% 97%;
+    --surface-sunken: 40 16% 94%;
     --surface-raised: var(--popover);
-    --surface-table-header: 220 11% 95.5%;
+    --surface-table-header: 40 14% 92%;
     --surface-input: var(--muted);
   }
 
@@ -1172,8 +1165,8 @@
     --surface-table-header: 40 15% 94.8%;
   }
   [data-color-theme="vivd-sharp"] {
-    --surface-sunken: 0 0% 97%;
-    --surface-table-header: 0 0% 95.5%;
+    --surface-sunken: 40 16% 94%;
+    --surface-table-header: 40 14% 92%;
   }
   [data-color-theme="ocean"] {
     --surface-sunken: 210 30% 98%;
@@ -1210,8 +1203,9 @@
   }
   [data-color-theme="vivd-sharp"].dark,
   .dark[data-color-theme="vivd-sharp"] {
-    --surface-sunken: 0 0% 16%;
-    --surface-table-header: 0 0% 14%;
+    --surface-sunken: 0 0% 14%;
+    --surface-table-header: 0 0% 12%;
+    --surface-input: 0 0% 8%; /* Darker than panel — recessed field feel */
   }
   [data-color-theme="ocean"].dark,
   .dark[data-color-theme="ocean"] {
@@ -1241,7 +1235,7 @@
   }
 
   .dark .vivd-panel-elevation {
-    box-shadow: none;
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.04);
   }
 
   .vivd-tile-elevation {

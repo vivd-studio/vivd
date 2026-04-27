@@ -1,6 +1,7 @@
 import type { ColorTheme, Theme } from "../types/index.js";
 
 export type VivdStudioBridgeMessage =
+  | { type: "vivd:studio:presented" }
   | { type: "vivd:studio:ready" }
   | {
       type: "vivd:studio:transport-degraded";
@@ -36,6 +37,7 @@ export function parseVivdStudioBridgeMessageData(
 
   switch (type) {
     case "vivd:studio:ready":
+    case "vivd:studio:presented":
     case "vivd:studio:close":
     case "vivd:studio:exitFullscreen":
     case "vivd:studio:fullscreen":

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { STUDIO_BOOTSTRAP_STATUS_PATH } from "@vivd/shared/studio";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { useStudioRuntimeGuard } from "./useStudioRuntimeGuard";
 
@@ -109,6 +110,32 @@ export function selectHostProbeStudioBaseUrl(
   );
 }
 
+export function selectBootstrapStatusStudioBaseUrl(
+  runtime: StudioRuntimeSession | null,
+): string | null {
+  if (!runtime) return null;
+
+  if (typeof window !== "undefined") {
+    const sameOriginCompatibilityUrl = pickFirstDefinedUrl([
+      runtime.compatibilityUrl,
+    ]);
+    if (
+      sameOriginCompatibilityUrl &&
+      resolveWindowRelativeOrigin(sameOriginCompatibilityUrl) ===
+        window.location.origin
+    ) {
+      return sameOriginCompatibilityUrl;
+    }
+  }
+
+  return pickFirstDefinedUrl([
+    runtime.browserUrl,
+    runtime.url,
+    runtime.runtimeUrl,
+    runtime.compatibilityUrl,
+  ]);
+}
+
 export function useStudioHostRuntime({
   resetKey,
   runtime,
@@ -174,6 +201,8 @@ export function useStudioHostRuntime({
 
   const studioBaseUrl = selectBrowserStudioBaseUrl(studioRuntime);
   const studioHostProbeBaseUrl = selectHostProbeStudioBaseUrl(studioRuntime);
+  const studioBootstrapStatusBaseUrl =
+    selectBootstrapStatusStudioBaseUrl(studioRuntime);
 
   const { isRecovering: isStudioRecovering, requestRecoveryCheck } =
     useStudioRuntimeGuard({
@@ -194,6 +223,13 @@ export function useStudioHostRuntime({
     if (!studioBaseUrl) return null;
     return resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio/api/bootstrap");
   }, [studioBaseUrl]);
+  const studioBootstrapStatusUrl = useMemo(() => {
+    if (!studioBootstrapStatusBaseUrl) return null;
+    return resolveStudioRuntimeUrl(
+      studioBootstrapStatusBaseUrl,
+      STUDIO_BOOTSTRAP_STATUS_PATH.replace(/^\/+/, ""),
+    );
+  }, [studioBootstrapStatusBaseUrl]);
 
   return {
     studioRuntime,
@@ -202,6 +238,7 @@ export function useStudioHostRuntime({
     studioRuntimeUrl,
     studioCompatibilityUrl,
     studioBootstrapToken,
+    studioBootstrapStatusUrl,
     studioUserActionToken,
     studioBootstrapAction,
     reloadNonce,

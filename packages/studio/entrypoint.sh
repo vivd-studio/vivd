@@ -483,6 +483,28 @@ const host = process.env.STUB_HOST || "0.0.0.0";
 const readyFile = process.env.STUB_READY_FILE || "";
 const sockets = new Set();
 let shuttingDown = false;
+const startupPayload = {
+  status: "starting",
+  code: "runtime_starting",
+  retryable: true,
+  canBootstrap: false,
+  message: "Studio is starting"
+};
+
+const setJsonHeaders = (res, retryable = false) => {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  if (retryable) {
+    res.setHeader("Retry-After", "2");
+  }
+};
+
+const sendJson = (res, statusCode, payload) => {
+  res.statusCode = statusCode;
+  setJsonHeaders(res, payload.retryable === true);
+  res.end(JSON.stringify(payload));
+};
 
 const cleanup = () => {
   if (!readyFile) return;
@@ -494,14 +516,31 @@ const cleanup = () => {
 };
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ status: "starting" }));
+  const pathname = new URL(req.url || "/", "http://localhost").pathname;
+
+  if (req.method === "OPTIONS") {
+    setJsonHeaders(res);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
+  if (pathname === "/health") {
+    sendJson(res, 200, { status: "starting", initialized: false });
+    return;
+  }
+
+  if (
+    pathname === "/vivd-studio/api/bootstrap-status" ||
+    pathname === "/vivd-studio/api/bootstrap"
+  ) {
+    sendJson(res, 503, startupPayload);
     return;
   }
   res.statusCode = 503;
   res.setHeader("Content-Type", "text/plain");
+  res.setHeader("Cache-Control", "no-store");
   res.end("Studio is starting up. Please retry shortly.");
 });
 

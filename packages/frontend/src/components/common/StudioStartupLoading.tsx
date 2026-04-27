@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw, RotateCw } from "lucide-react";
+import { Button } from "@vivd/ui";
 import { cn } from "@/lib/utils";
 import { FramedViewport } from "@/components/common/FramedHostShell";
 
 interface StudioStartupLoadingProps {
   fullScreen?: boolean;
   className?: string;
+  status?: "loading" | "stalled";
+  onReload?: () => void | Promise<void>;
+  onHardRestart?: () => void | Promise<void>;
+  isHardRestartPending?: boolean;
   header?: ReactNode;
   headerClassName?: string;
 }
@@ -41,7 +46,19 @@ function ChatPanelGhost({ width }: { width: number }) {
   );
 }
 
-function PreviewPanel() {
+function PreviewPanel({
+  status,
+  onReload,
+  onHardRestart,
+  isHardRestartPending,
+}: {
+  status: "loading" | "stalled";
+  onReload?: () => void | Promise<void>;
+  onHardRestart?: () => void | Promise<void>;
+  isHardRestartPending?: boolean;
+}) {
+  const stalled = status === "stalled";
+
   return (
     <div
       className="relative flex-1 min-w-0 bg-background px-1 pb-1 pt-0 md:pb-1.5 md:pl-0 md:pr-1.5"
@@ -56,11 +73,44 @@ function PreviewPanel() {
             />
 
             <div className="space-y-1">
-              <p className="text-sm font-medium">Starting studio</p>
+              <p className="text-sm font-medium">
+                {stalled ? "Studio is still starting" : "Starting studio"}
+              </p>
               <p className="text-xs text-muted-foreground">
-                This can take a little longer on first startup.
+                {stalled
+                  ? "This is taking longer than usual."
+                  : "This can take a little longer on first startup."}
               </p>
             </div>
+
+            {stalled ? (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                {onReload ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onReload()}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reload
+                  </Button>
+                ) : null}
+                {onHardRestart ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void onHardRestart()}
+                    disabled={isHardRestartPending}
+                  >
+                    {isHardRestartPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCw className="mr-2 h-4 w-4" />
+                    )}
+                    {isHardRestartPending ? "Restarting" : "Hard restart"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </FramedViewport>
@@ -71,6 +121,10 @@ function PreviewPanel() {
 export function StudioStartupLoading({
   fullScreen = false,
   className,
+  status = "loading",
+  onReload,
+  onHardRestart,
+  isHardRestartPending = false,
   header,
   headerClassName,
 }: StudioStartupLoadingProps) {
@@ -99,7 +153,12 @@ export function StudioStartupLoading({
 
       <div className="relative flex flex-1 min-h-0">
         <ChatPanelGhost width={chatPanelWidth} />
-        <PreviewPanel />
+        <PreviewPanel
+          status={status}
+          onReload={onReload}
+          onHardRestart={onHardRestart}
+          isHardRestartPending={isHardRestartPending}
+        />
       </div>
 
       <span className="sr-only">Loading studio interface</span>

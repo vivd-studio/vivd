@@ -242,10 +242,14 @@ export function useStudioIframeLifecycle({
         source: "network",
       },
     );
+    const errorDisplayDelayMs =
+      failure?.retryable === false || failure?.code
+        ? 0
+        : STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS;
     pendingStudioLoadErrorTimerRef.current = window.setTimeout(() => {
       pendingStudioLoadErrorTimerRef.current = null;
       setStudioLoadErrored(true);
-    }, STUDIO_LOAD_ERROR_DISPLAY_DELAY_MS);
+    }, errorDisplayDelayMs);
   }, [clearPendingStudioLoadError]);
 
   const recheckStudioReadiness = useCallback(() => {
@@ -263,6 +267,12 @@ export function useStudioIframeLifecycle({
 
       const message = parseVivdStudioBridgeMessage(event);
       if (!message) return;
+
+      if (message.type === "vivd:studio:presented") {
+        markStudioVisible();
+        requestStudioBridgeSync();
+        return;
+      }
 
       if (message.type === "vivd:studio:ready") {
         handleStudioReady();
@@ -337,6 +347,7 @@ export function useStudioIframeLifecycle({
     ackStudioReady,
     markStudioVisible,
     markStudioReady,
+    requestStudioBridgeSync,
     onClose,
     onFullscreen,
     onHardRestart,
@@ -402,7 +413,12 @@ export function useStudioIframeLifecycle({
   }, [reloadStudioIframe]);
 
   useStudioIframeTimeoutRecovery({
-    enabled: Boolean(studioLoadTimedOut && studioHostProbeBaseUrl && !studioReady),
+    enabled: Boolean(
+      studioLoadTimedOut &&
+        studioHostProbeBaseUrl &&
+        !studioReady &&
+        !studioVisible,
+    ),
     studioProbeBaseUrl: studioHostProbeBaseUrl,
     onHealthyRuntimeDetected: handleHealthyRuntimeTimeoutRecovery,
   });
@@ -454,6 +470,7 @@ export function useStudioIframeLifecycle({
       studioReady ||
       studioHostProbeBaseUrl ||
       !studioBaseUrl ||
+      studioVisible ||
       attemptedCrossOriginTimeoutReloadRef.current
     ) {
       return;
@@ -469,12 +486,14 @@ export function useStudioIframeLifecycle({
     studioHostProbeBaseUrl,
     studioLoadTimedOut,
     studioReady,
+    studioVisible,
   ]);
 
   useEffect(() => {
     if (
       studioHostProbeBaseUrl ||
       !studioBaseUrl ||
+      studioVisible ||
       studioReady ||
       attemptedEarlyBlankReloadRef.current
     ) {
@@ -505,12 +524,14 @@ export function useStudioIframeLifecycle({
     reloadStudioIframe,
     studioBaseUrl,
     studioHostProbeBaseUrl,
+    studioVisible,
     studioReady,
   ]);
 
   useEffect(() => {
     if (
       !studioHostProbeBaseUrl ||
+      studioVisible ||
       studioReady ||
       attemptedEarlyRecoveryRef.current
     ) {
@@ -519,7 +540,12 @@ export function useStudioIframeLifecycle({
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      if (cancelled || attemptedEarlyRecoveryRef.current || studioReady) return;
+      if (
+        cancelled ||
+        attemptedEarlyRecoveryRef.current ||
+        studioVisibleRef.current ||
+        studioReady
+      ) return;
 
       const controller = new AbortController();
       const timeout = window.setTimeout(() => {
@@ -534,7 +560,7 @@ export function useStudioIframeLifecycle({
           },
         );
 
-        if (!cancelled && healthy && !studioReady) {
+        if (!cancelled && healthy && !studioReady && !studioVisibleRef.current) {
           attemptedEarlyRecoveryRef.current = true;
           void reloadStudioIframe();
         }
@@ -549,9 +575,18 @@ export function useStudioIframeLifecycle({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [reloadStudioIframe, studioHostProbeBaseUrl, studioReady]);
+  }, [reloadStudioIframe, studioHostProbeBaseUrl, studioReady, studioVisible]);
 
   return {
+    studioLifecycleState: studioReady
+      ? "bridge_ready"
+      : studioVisible
+        ? "bridge_pending"
+        : studioLoadErrored
+          ? "terminal_failure"
+          : studioLoadTimedOut
+            ? "runtime_stalled"
+            : "document_loading",
     studioVisible,
     studioReady,
     studioLoadTimedOut,

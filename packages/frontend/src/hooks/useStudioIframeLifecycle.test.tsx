@@ -285,6 +285,39 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.onReady).toHaveBeenCalledTimes(1);
   });
 
+  it("reveals a cross-origin studio on presented before bridge-ready", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+    });
+    const postMessage = vi.fn();
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = { postMessage };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:presented" },
+          origin: "https://studio.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(latestValue?.studioVisible).toBe(true);
+    expect(latestValue?.studioReady).toBe(false);
+    expect(latestValue?.studioLifecycleState).toBe("bridge_pending");
+    expect(props.onReady).not.toHaveBeenCalled();
+  });
+
   it("rechecks same-origin iframe readiness when the page is restored", async () => {
     const props = createLifecycleProps();
     const postMessage = vi.fn();
@@ -544,6 +577,72 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     expect(latestValue?.studioLoadErrored).toBe(true);
+  });
+
+  it("surfaces structured terminal bootstrap failures immediately", async () => {
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    act(() => {
+      latestValue?.handleStudioIframeError({
+        message: "Studio bootstrap is not configured",
+        code: "bootstrap_unconfigured",
+        retryable: false,
+        source: "bootstrap",
+      });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(latestValue?.studioLoadErrored).toBe(true);
+    expect(latestValue?.studioLifecycleState).toBe("terminal_failure");
+  });
+
+  it("does not reload a presented studio just because bridge-ready is late", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(createHealthResponse(true));
+    vi.stubGlobal("fetch", fetchMock);
+    const props = createLifecycleProps();
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameDocument = document.implementation.createHTMLDocument("studio");
+    const root = frameDocument.createElement("div");
+    root.id = "root";
+    frameDocument.body.appendChild(root);
+    Object.defineProperty(frameDocument, "readyState", {
+      configurable: true,
+      value: "complete",
+    });
+    const frameWindow = {
+      location: { pathname: "/vivd-studio" },
+      postMessage: vi.fn(),
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => frameDocument,
+    });
+
+    await act(async () => {
+      latestValue?.handleStudioIframeLoad();
+    });
+
+    expect(latestValue?.studioVisible).toBe(true);
+    expect(latestValue?.studioReady).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STUDIO_LOAD_TIMEOUT_MS + 1_000);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(props.reloadStudioIframe).not.toHaveBeenCalled();
+    expect(latestValue?.studioLifecycleState).toBe("bridge_pending");
   });
 
   it("keeps the startup skeleton when a transient iframe error recovers quickly", async () => {

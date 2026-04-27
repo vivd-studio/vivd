@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Loader2 } from "lucide-react";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { LoadingSpinner } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -15,10 +16,6 @@ import {
   Callout,
   CalloutDescription,
   Panel,
-  PanelContent,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
   Form,
   FormControl,
   FormField,
@@ -164,16 +161,15 @@ export default function InviteAccept() {
 
   if (!token) {
     return (
-      <div className="flex h-screen items-center justify-center p-4">
-        <Panel className="w-full max-w-lg">
-          <PanelHeader>
-            <PanelTitle>Invitation link missing</PanelTitle>
-            <PanelDescription>
-              Open the full invite email link to continue.
-            </PanelDescription>
-          </PanelHeader>
-        </Panel>
-      </div>
+      <AuthShell
+        title="Invitation link missing"
+        description="Open the full invite email link to continue."
+        contentClassName="max-w-xl"
+      >
+        <Button asChild className="w-full">
+          <Link to={ROUTES.LOGIN}>Go to login</Link>
+        </Button>
+      </AuthShell>
     );
   }
 
@@ -183,22 +179,18 @@ export default function InviteAccept() {
 
   if (inviteQuery.error || !invite) {
     return (
-      <div className="flex h-screen items-center justify-center p-4">
-        <Panel className="w-full max-w-lg">
-          <PanelHeader>
-            <PanelTitle>Invitation unavailable</PanelTitle>
-            <PanelDescription>
-              {inviteQuery.error?.message ??
-                "This invitation is invalid or no longer available."}
-            </PanelDescription>
-          </PanelHeader>
-          <PanelContent>
-            <Button asChild className="w-full">
-              <Link to={ROUTES.LOGIN}>Go to login</Link>
-            </Button>
-          </PanelContent>
-        </Panel>
-      </div>
+      <AuthShell
+        title="Invitation unavailable"
+        description={
+          inviteQuery.error?.message ??
+          "This invitation is invalid or no longer available."
+        }
+        contentClassName="max-w-xl"
+      >
+        <Button asChild className="w-full">
+          <Link to={ROUTES.LOGIN}>Go to login</Link>
+        </Button>
+      </AuthShell>
     );
   }
 
@@ -212,192 +204,187 @@ export default function InviteAccept() {
   const showMismatch = isPending && Boolean(session) && !isMatchingSignedInUser;
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Panel className="w-full max-w-xl">
-        <PanelHeader>
-          <PanelTitle>Organization invite</PanelTitle>
-          <PanelDescription>
-            Join {invite.organizationName} as {formatRole(invite.role)}.
-          </PanelDescription>
-        </PanelHeader>
-        <PanelContent className="space-y-6">
-          <Panel tone="sunken" className="space-y-2 p-4 text-sm">
+    <AuthShell
+      title="Organization invite"
+      description={`Join ${invite.organizationName} as ${formatRole(invite.role)}.`}
+      contentClassName="max-w-xl"
+    >
+      <div className="space-y-6">
+        <Panel tone="sunken" className="space-y-2 p-4 text-sm">
+          <div>
+            <span className="font-medium">Email:</span> {invite.email}
+          </div>
+          <div>
+            <span className="font-medium">Role:</span> {formatRole(invite.role)}
+          </div>
+          {invite.projectTitle ? (
             <div>
-              <span className="font-medium">Email:</span> {invite.email}
+              <span className="font-medium">Assigned project:</span>{" "}
+              {invite.projectTitle}
             </div>
+          ) : null}
+          {invite.inviterName || invite.inviterEmail ? (
             <div>
-              <span className="font-medium">Role:</span>{" "}
-              {formatRole(invite.role)}
+              <span className="font-medium">Invited by:</span>{" "}
+              {invite.inviterName || invite.inviterEmail}
             </div>
-            {invite.projectTitle ? (
-              <div>
-                <span className="font-medium">Assigned project:</span>{" "}
-                {invite.projectTitle}
-              </div>
-            ) : null}
-            {invite.inviterName || invite.inviterEmail ? (
-              <div>
-                <span className="font-medium">Invited by:</span>{" "}
-                {invite.inviterName || invite.inviterEmail}
-              </div>
-            ) : null}
-          </Panel>
+          ) : null}
+        </Panel>
 
-          {invite.organizationStatus !== "active" ? (
+        {invite.organizationStatus !== "active" ? (
+          <Callout tone="danger">
+            <CalloutDescription>
+              This organization is currently suspended, so the invite cannot be
+              accepted.
+            </CalloutDescription>
+          </Callout>
+        ) : null}
+
+        {invite.state === "expired" ? (
+          <Callout tone="info">
+            <CalloutDescription>
+              This invitation has expired. Ask an admin to resend it.
+            </CalloutDescription>
+          </Callout>
+        ) : null}
+
+        {invite.state === "canceled" ? (
+          <Callout tone="info">
+            <CalloutDescription>
+              This invitation was canceled. Ask an admin for a new invite if you
+              still need access.
+            </CalloutDescription>
+          </Callout>
+        ) : null}
+
+        {invite.state === "accepted" ? (
+          <div className="space-y-3">
+            <Callout tone="info">
+              <CalloutDescription>
+                This invitation has already been accepted.
+              </CalloutDescription>
+            </Callout>
+            <Button asChild className="w-full">
+              <Link to={ROUTES.LOGIN}>Go to login</Link>
+            </Button>
+          </div>
+        ) : null}
+
+        {showExistingAccountPrompt ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              An account already exists for this email. Sign in first, then
+              accept the invite.
+            </p>
+            <Button asChild className="w-full">
+              <Link to={loginHref}>Sign in to accept invite</Link>
+            </Button>
+          </div>
+        ) : null}
+
+        {showMismatch ? (
+          <div className="space-y-3">
             <Callout tone="danger">
               <CalloutDescription>
-                This organization is currently suspended, so the invite cannot
-                be accepted.
+                You are signed in as {session?.user.email}, but this invite is
+                for {invite.email}. Sign out and continue with the invited email
+                address.
               </CalloutDescription>
             </Callout>
-          ) : null}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleSignOut}
+            >
+              Sign out
+            </Button>
+          </div>
+        ) : null}
 
-          {invite.state === "expired" ? (
-            <Callout tone="info">
-              <CalloutDescription>
-                This invitation has expired. Ask an admin to resend it.
-              </CalloutDescription>
-            </Callout>
-          ) : null}
+        {showSignedInAccept ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              You are signed in with the invited email address and can accept
+              this invitation now.
+            </p>
+            <Button
+              className="w-full"
+              onClick={handleExistingAccountAccept}
+              disabled={acceptInviteForSignedInUser.isPending}
+            >
+              {acceptInviteForSignedInUser.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Accept invitation
+            </Button>
+          </div>
+        ) : null}
 
-          {invite.state === "canceled" ? (
-            <Callout tone="info">
-              <CalloutDescription>
-                This invitation was canceled. Ask an admin for a new invite if
-                you still need access.
-              </CalloutDescription>
-            </Callout>
-          ) : null}
-
-          {invite.state === "accepted" ? (
-            <div className="space-y-3">
-              <Callout tone="info">
-                <CalloutDescription>
-                  This invitation has already been accepted.
-                </CalloutDescription>
-              </Callout>
-              <Button asChild className="w-full">
-                <Link to={ROUTES.LOGIN}>Go to login</Link>
-              </Button>
-            </div>
-          ) : null}
-
-          {showExistingAccountPrompt ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                An account already exists for this email. Sign in first, then
-                accept the invite.
-              </p>
-              <Button asChild className="w-full">
-                <Link to={loginHref}>Sign in to accept invite</Link>
-              </Button>
-            </div>
-          ) : null}
-
-          {showMismatch ? (
-            <div className="space-y-3">
-              <Callout tone="danger">
-                <CalloutDescription>
-                  You are signed in as {session?.user.email}, but this invite is
-                  for {invite.email}. Sign out and continue with the invited
-                  email address.
-                </CalloutDescription>
-              </Callout>
+        {showSignupForm ? (
+          <Form {...signupForm}>
+            <form
+              onSubmit={signupForm.handleSubmit(handleSignupAccept)}
+              className="space-y-4"
+            >
+              <FormField
+                control={signupForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Your name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={signupForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <PasswordInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={signupForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <PasswordInput {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <Button
-                variant="outline"
+                type="submit"
                 className="w-full"
-                onClick={handleSignOut}
+                disabled={acceptInviteWithSignup.isPending}
               >
-                Sign out
-              </Button>
-            </div>
-          ) : null}
-
-          {showSignedInAccept ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                You are signed in with the invited email address and can accept
-                this invitation now.
-              </p>
-              <Button
-                className="w-full"
-                onClick={handleExistingAccountAccept}
-                disabled={acceptInviteForSignedInUser.isPending}
-              >
-                {acceptInviteForSignedInUser.isPending ? (
+                {acceptInviteWithSignup.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Accept invitation
+                Create account and accept invite
               </Button>
-            </div>
-          ) : null}
+            </form>
+          </Form>
+        ) : null}
 
-          {showSignupForm ? (
-            <Form {...signupForm}>
-              <form
-                onSubmit={signupForm.handleSubmit(handleSignupAccept)}
-                className="space-y-4"
-              >
-                <FormField
-                  control={signupForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Your name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={signupForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <PasswordInput {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={signupForm.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <PasswordInput {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={acceptInviteWithSignup.isPending}
-                >
-                  {acceptInviteWithSignup.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Create account and accept invite
-                </Button>
-              </form>
-            </Form>
-          ) : null}
-
-          {actionError ? (
-            <Callout tone="danger">
-              <CalloutDescription>{actionError}</CalloutDescription>
-            </Callout>
-          ) : null}
-        </PanelContent>
-      </Panel>
-    </div>
+        {actionError ? (
+          <Callout tone="danger">
+            <CalloutDescription>{actionError}</CalloutDescription>
+          </Callout>
+        ) : null}
+      </div>
+    </AuthShell>
   );
 }

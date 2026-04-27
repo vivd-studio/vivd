@@ -92,3 +92,7 @@ For deeper OpenCode/Fly/runtime behavior, use `.agents/skills/fly-studio-machine
 
 Keep this file focused on durable repo-wide rules and orientation. Put specialist runbooks, deep implementation notes, and transitional migration detail in focused docs or skills instead of expanding this file.
 Treat `.agents/skills/` as living repo memory: after solving a hard problem, proactively create or update the relevant skill with durable learnings, debugging guidance, and the highest-signal validation paths.
+
+## Additional Instructions by the creator
+
+Before working on a task, try to understand the users actual underlying intent. If the user is aking to suggest, don't edit yet, try to understand what you need to do and proactively plan for yourself. Only then edit the code.

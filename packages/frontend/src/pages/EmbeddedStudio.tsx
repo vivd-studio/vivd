@@ -324,6 +324,7 @@ export default function EmbeddedStudio() {
     studioBaseUrl,
     studioHostProbeBaseUrl,
     studioBootstrapToken,
+    studioBootstrapStatusUrl,
     studioUserActionToken,
     studioBootstrapAction,
     reloadNonce: studioReloadNonce,
@@ -468,6 +469,7 @@ export default function EmbeddedStudio() {
     studioVisible,
     studioReady,
     studioLoadErrored,
+    studioLoadTimedOut,
     studioLoadError,
     handleStudioIframeLoad,
     handleStudioIframeError,
@@ -835,11 +837,13 @@ export default function EmbeddedStudio() {
           studioIframeRequestKey={studioIframeRequestKey}
           studioIframeSrc={studioIframeSrc}
           studioBootstrapAction={studioBootstrapAction}
+          studioBootstrapStatusUrl={studioBootstrapStatusUrl}
           studioBootstrapToken={studioBootstrapToken}
           studioUserActionToken={studioUserActionToken}
           studioVisible={studioVisible}
           studioReady={studioReady}
           studioLoadErrored={studioLoadErrored}
+          studioLoadTimedOut={studioLoadTimedOut}
           studioLoadError={studioLoadError}
           onStudioIframeLoad={handleStudioIframeLoad}
           onStudioIframeError={handleStudioIframeError}

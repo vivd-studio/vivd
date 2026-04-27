@@ -113,7 +113,13 @@ describe("createRequireStudioAuth", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ error: "Unauthorized" });
+    expect(res.body).toEqual({
+      status: "failed",
+      code: "unauthorized",
+      retryable: false,
+      canBootstrap: true,
+      message: "Unauthorized",
+    });
   });
 
   it("accepts a query token and persists a scoped auth cookie", () => {
@@ -530,6 +536,52 @@ describe("createStudioBootstrapHandler", () => {
     handler(req, res, vi.fn());
 
     expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ error: "Invalid bootstrap token" });
+    expect(res.body).toEqual({
+      status: "failed",
+      code: "invalid_bootstrap_token",
+      retryable: false,
+      canBootstrap: true,
+      message: "Invalid bootstrap token",
+    });
+  });
+
+  it("returns runtime_starting when bootstrap is attempted before runtime readiness", () => {
+    const handler = createStudioBootstrapHandler(
+      {
+        STUDIO_ACCESS_TOKEN: "studio-token",
+        STUDIO_ID: "studio-1",
+      } as any,
+      { canBootstrap: () => false },
+    );
+    const req = createMockRequest({ path: "/vivd-studio/api/bootstrap" });
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({
+      status: "starting",
+      code: "runtime_starting",
+      retryable: true,
+      canBootstrap: false,
+      message: "Studio is starting",
+    });
+  });
+
+  it("returns bootstrap_unconfigured when secure handoff env is missing", () => {
+    const handler = createStudioBootstrapHandler({} as any);
+    const req = createMockRequest({ path: "/vivd-studio/api/bootstrap" });
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({
+      status: "failed",
+      code: "bootstrap_unconfigured",
+      retryable: false,
+      canBootstrap: false,
+      message: "Studio bootstrap is not configured",
+    });
   });
 });

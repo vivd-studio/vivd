@@ -5,11 +5,6 @@ import {
   CalloutDescription,
   Input,
   PasswordInput,
-  Panel,
-  PanelContent,
-  PanelDescription,
-  PanelHeader,
-  PanelTitle,
   Form,
   FormControl,
   FormField,
@@ -21,8 +16,10 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router/paths";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { getDocsUrl } from "@/lib/docsUrl";
 import { hardRedirect } from "@/lib/hardRedirect";
 
@@ -46,6 +43,8 @@ export default function Signup() {
     },
   });
 
+  const isSubmitting = form.formState.isSubmitting;
+
   const handleSignup = async (data: SignupFormValues) => {
     await authClient.signUp.email(
       {
@@ -67,93 +66,109 @@ export default function Signup() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <Panel className="w-full max-w-sm">
-        <PanelHeader>
-          <PanelTitle className="text-2xl">First Time Setup</PanelTitle>
-          <PanelDescription>Create your admin account</PanelDescription>
-        </PanelHeader>
-        <PanelContent>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleSignup)}
-              className="grid gap-4"
-            >
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Admin" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="admin@example.com"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <PasswordInput {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <AuthShell
+      title="Set up your workspace"
+      description="Create the first admin account and open the Vivd control plane."
+      footer={
+        <>
+          Need product guidance first?{" "}
+          <a
+            href={docsUrl}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            Read the docs
+          </a>
+        </>
+      }
+    >
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSignup)} className="space-y-5">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-[0.8rem] font-medium">
+                  Name
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    autoComplete="name"
+                    placeholder="Admin"
+                    className="h-10"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-[0.8rem] font-medium">
+                  Email
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="admin@company.com"
+                    className="h-10"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-[0.8rem] font-medium">
+                  Password
+                </FormLabel>
+                <FormControl>
+                  <PasswordInput
+                    autoComplete="new-password"
+                    className="h-10"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-              {form.formState.errors.root && (
-                <Callout tone="danger" className="py-3">
-                  <CalloutDescription>
-                    {form.formState.errors.root.message}
-                  </CalloutDescription>
-                </Callout>
-              )}
+          {form.formState.errors.root && (
+            <Callout tone="danger" className="py-3">
+              <CalloutDescription>
+                {form.formState.errors.root.message}
+              </CalloutDescription>
+            </Callout>
+          )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting
-                  ? "Creating Account..."
-                  : "Create Admin Account"}
-              </Button>
-
-              <p className="text-center text-xs text-muted-foreground">
-                Need product guidance first?{" "}
-                <a
-                  href={docsUrl}
-                  className="underline underline-offset-4 hover:text-foreground"
-                >
-                  Read the docs
-                </a>
-              </p>
-            </form>
-          </Form>
-        </PanelContent>
-      </Panel>
-    </div>
+          <Button
+            type="submit"
+            size="lg"
+            className="mt-2 h-10 w-full"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Creating account
+              </>
+            ) : (
+              "Create admin account"
+            )}
+          </Button>
+        </form>
+      </Form>
+    </AuthShell>
   );
 }

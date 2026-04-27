@@ -5,10 +5,6 @@ import {
   CalloutDescription,
   Input,
   PasswordInput,
-  Panel,
-  PanelContent,
-  PanelHeader,
-  PanelTitle,
   Form,
   FormControl,
   FormField,
@@ -21,7 +17,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Loader2 } from "lucide-react";
 import { ROUTES } from "@/app/router/paths";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { getDocsUrl } from "@/lib/docsUrl";
 import { hardRedirect } from "@/lib/hardRedirect";
 
@@ -52,6 +50,8 @@ export default function Login() {
     },
   });
 
+  const isSubmitting = form.formState.isSubmitting;
+
   const handleLogin = async (data: LoginFormValues) => {
     await authClient.signIn.email(
       {
@@ -70,99 +70,108 @@ export default function Login() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <Panel className="w-full max-w-sm">
-        <PanelHeader>
-          <PanelTitle className="text-2xl">Login</PanelTitle>
-        </PanelHeader>
-        <PanelContent>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleLogin)}
-              className="grid gap-4"
-            >
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="m@example.com"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <PasswordInput {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Link
-                to={ROUTES.FORGOT_PASSWORD}
-                className="text-sm text-muted-foreground hover:underline"
-              >
-                Forgot password?
-              </Link>
+    <AuthShell
+      title="Welcome back"
+      description="Sign in to your workspace and pick up where the site work left off."
+      footer={
+        <>
+          New to Vivd?{" "}
+          <a
+            href={docsUrl}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            Read the product docs
+          </a>
+        </>
+      }
+    >
+      {(wasReset || wasVerified) && (
+        <Callout tone="success" className="mb-6 py-3">
+          <CalloutDescription>
+            {wasReset
+              ? "Password updated. You can now sign in."
+              : "Email verified successfully."}
+          </CalloutDescription>
+        </Callout>
+      )}
 
-              {wasReset && (
-                <Callout tone="success" className="py-3">
-                  <CalloutDescription>
-                    Password updated. You can now sign in.
-                  </CalloutDescription>
-                </Callout>
-              )}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleLogin)} className="space-y-5">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-[0.8rem] font-medium">
+                  Email
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    className="h-10"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-              {wasVerified && (
-                <Callout tone="success" className="py-3">
-                  <CalloutDescription>
-                    Email verified successfully.
-                  </CalloutDescription>
-                </Callout>
-              )}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-[0.8rem] font-medium">
+                    Password
+                  </FormLabel>
+                  <Link
+                    to={ROUTES.FORGOT_PASSWORD}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <FormControl>
+                  <PasswordInput
+                    autoComplete="current-password"
+                    className="h-10"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-              {form.formState.errors.root && (
-                <Callout tone="danger" className="py-3">
-                  <CalloutDescription>
-                    {form.formState.errors.root.message}
-                  </CalloutDescription>
-                </Callout>
-              )}
+          {form.formState.errors.root && (
+            <Callout tone="danger" className="py-3">
+              <CalloutDescription>
+                {form.formState.errors.root.message}
+              </CalloutDescription>
+            </Callout>
+          )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting ? "Logging in..." : "Login"}
-              </Button>
-
-              <p className="text-center text-xs text-muted-foreground">
-                New to Vivd?{" "}
-                <a
-                  href={docsUrl}
-                  className="underline underline-offset-4 hover:text-foreground"
-                >
-                  Read the product docs
-                </a>
-              </p>
-            </form>
-          </Form>
-        </PanelContent>
-      </Panel>
-    </div>
+          <Button
+            type="submit"
+            size="lg"
+            className="mt-2 h-10 w-full"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Signing in
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </Button>
+        </form>
+      </Form>
+    </AuthShell>
   );
 }

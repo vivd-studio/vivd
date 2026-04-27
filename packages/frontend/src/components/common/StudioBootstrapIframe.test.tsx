@@ -44,6 +44,7 @@ describe("StudioBootstrapIframe", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     if (originalContentWindow) {
       Object.defineProperty(
         HTMLIFrameElement.prototype,
@@ -93,6 +94,32 @@ describe("StudioBootstrapIframe", () => {
     );
   }
 
+  function createBootstrapStatusResponse(
+    payload: unknown,
+    options: { status?: number; retryAfter?: string } = {},
+  ): Response {
+    const status = options.status ?? 200;
+    const headers = new Map<string, string>([
+      ["content-type", "application/json"],
+    ]);
+    if (options.retryAfter) {
+      headers.set("retry-after", options.retryAfter);
+    }
+
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: {
+        get: (name: string) => headers.get(name.toLowerCase()) ?? null,
+      },
+      clone() {
+        return this;
+      },
+      json: vi.fn().mockResolvedValue(payload),
+      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
+    } as unknown as Response;
+  }
+
   it("submits the bootstrap form immediately when bootstrap is enabled", () => {
     const submitSpy = vi
       .spyOn(HTMLFormElement.prototype, "submit")
@@ -101,6 +128,70 @@ describe("StudioBootstrapIframe", () => {
     renderBootstrapIframe();
 
     expect(submitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for bootstrap status readiness before submitting the bootstrap form", async () => {
+    vi.useFakeTimers();
+    const submitSpy = vi
+      .spyOn(HTMLFormElement.prototype, "submit")
+      .mockImplementation(() => {});
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createBootstrapStatusResponse(
+          {
+            status: "starting",
+            code: "runtime_starting",
+            retryable: true,
+            canBootstrap: false,
+            message: "Studio is starting",
+          },
+          { status: 503, retryAfter: "1.5" },
+        ),
+      )
+      .mockResolvedValueOnce(
+        createBootstrapStatusResponse({
+          status: "ready",
+          retryable: false,
+          canBootstrap: true,
+          message: "Studio is ready",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      renderBootstrapIframe({
+        bootstrapStatusUrl:
+          "http://app.localhost:4100/vivd-studio/api/bootstrap-status",
+      });
+
+      expect(submitSpy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(submitSpy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://app.localhost:4100/vivd-studio/api/bootstrap-status",
+        expect.objectContaining({
+          method: "GET",
+          mode: "cors",
+          cache: "no-store",
+        }),
+      );
+      expect(submitSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("retries bootstrap while the iframe remains on about:blank", async () => {

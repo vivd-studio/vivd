@@ -257,6 +257,7 @@ export default function ProjectFullscreen() {
     studioBaseUrl,
     studioHostProbeBaseUrl,
     studioBootstrapToken,
+    studioBootstrapStatusUrl,
     studioUserActionToken,
     studioBootstrapAction,
     reloadNonce: studioReloadNonce,
@@ -360,6 +361,7 @@ export default function ProjectFullscreen() {
     studioVisible,
     studioReady,
     studioLoadErrored,
+    studioLoadTimedOut,
     studioLoadError,
     handleStudioIframeLoad,
     handleStudioIframeError,
@@ -987,6 +989,7 @@ export default function ProjectFullscreen() {
             title={`Vivd Studio - ${projectSlug}`}
             cleanSrc={studioIframeSrc}
             bootstrapAction={studioBootstrapAction}
+            bootstrapStatusUrl={studioBootstrapStatusUrl}
             bootstrapToken={studioBootstrapToken}
             userActionToken={studioUserActionToken}
             submissionKey={studioIframeRequestKey}
@@ -1011,6 +1014,10 @@ export default function ProjectFullscreen() {
               ) : (
                 <StudioStartupLoading
                   className="h-full min-h-0"
+                  status={studioLoadTimedOut ? "stalled" : "loading"}
+                  onReload={reloadStudioIframe}
+                  onHardRestart={handleHardRestart}
+                  isHardRestartPending={hardRestartStudio.isPending}
                   header={renderFullscreenHeader({
                     actionSlot: (
                       <Button

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  selectBootstrapStatusStudioBaseUrl,
   selectBrowserStudioBaseUrl,
   selectHostProbeStudioBaseUrl,
   type StudioRuntimeSession,
@@ -138,5 +139,33 @@ describe("selectHostProbeStudioBaseUrl", () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("selectBootstrapStatusStudioBaseUrl", () => {
+  it("prefers the same-origin compatibility route for bootstrap status", () => {
+    expect(
+      selectBootstrapStatusStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "http://localhost:4100",
+          url: "http://localhost:4100",
+          runtimeUrl: "http://localhost:4100",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
+      ),
+    ).toBe("/_studio/runtime-1");
+  });
+
+  it("falls back to the direct runtime route when no same-origin compatibility route exists", () => {
+    expect(
+      selectBootstrapStatusStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "http://localhost:4100",
+          url: "http://localhost:4100",
+          runtimeUrl: "http://localhost:4100",
+          compatibilityUrl: null,
+        }),
+      ),
+    ).toBe("http://localhost:4100");
   });
 });

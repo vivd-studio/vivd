@@ -51,6 +51,10 @@ describe("App", () => {
     render(<App />);
 
     expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:studio:presented" },
+      "https://host.example.com",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
       { type: "vivd:studio:ready" },
       "https://host.example.com",
     );
@@ -59,7 +63,7 @@ describe("App", () => {
       vi.advanceTimersByTime(500);
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(2);
+    expect(postMessage).toHaveBeenCalledTimes(4);
 
     act(() => {
       window.dispatchEvent(
@@ -71,7 +75,7 @@ describe("App", () => {
       );
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(6);
     expect(postMessage).toHaveBeenLastCalledWith(
       { type: "vivd:studio:ready" },
       "https://host.example.com",
@@ -88,6 +92,6 @@ describe("App", () => {
       vi.advanceTimersByTime(1_500);
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(6);
   });
 });

@@ -2,6 +2,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type RefObject,
   type SyntheticEvent,
 } from "react";
@@ -11,11 +12,13 @@ import {
   isStudioIframeStartupPending,
   type StudioIframeFailure,
 } from "@/lib/studioIframeFailure";
+import { fetchStudioBootstrapStatus } from "@/lib/studioBootstrapStatus";
 
 const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
 const BOOTSTRAP_RETRY_DELAYS_MS = [1_500, 4_000];
 const STARTUP_RESPONSE_RETRY_DELAY_MS = 1_500;
 const MAX_SILENT_BOOTSTRAP_FAILURE_RETRIES = 1;
+const BOOTSTRAP_STATUS_NETWORK_RETRY_DELAY_MS = 1_500;
 
 type StudioBootstrapIframeProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -24,6 +27,7 @@ type StudioBootstrapIframeProps = {
   title: string;
   cleanSrc: string;
   bootstrapAction: string | null;
+  bootstrapStatusUrl?: string | null;
   bootstrapToken: string | null;
   userActionToken: string | null;
   submissionKey: string;
@@ -41,6 +45,7 @@ export function StudioBootstrapIframe({
   title,
   cleanSrc,
   bootstrapAction,
+  bootstrapStatusUrl = null,
   bootstrapToken,
   userActionToken,
   submissionKey,
@@ -51,10 +56,13 @@ export function StudioBootstrapIframe({
   onError,
 }: StudioBootstrapIframeProps) {
   const bootstrapFormRef = useRef<HTMLFormElement | null>(null);
+  const bootstrapStatusTimerRef = useRef<number | null>(null);
   const startupRetryTimerRef = useRef<number | null>(null);
   const silentBootstrapFailureRetriesRef = useRef(0);
   const shouldBootstrap = Boolean(bootstrapAction && bootstrapToken);
   const lastSubmittedFingerprintRef = useRef<string | null>(null);
+  const [bootstrapReadyFingerprint, setBootstrapReadyFingerprint] =
+    useState<string | null>(null);
   const bootstrapFingerprint = useMemo(
     () =>
       shouldBootstrap
@@ -75,6 +83,10 @@ export function StudioBootstrapIframe({
       userActionToken,
     ],
   );
+  const bootstrapReadinessKey =
+    bootstrapFingerprint && bootstrapStatusUrl
+      ? `${bootstrapFingerprint}::${bootstrapStatusUrl}`
+      : bootstrapFingerprint;
 
   const isIframeAwaitingBootstrap = () => {
     const iframe = iframeRef.current;
@@ -91,12 +103,19 @@ export function StudioBootstrapIframe({
   useEffect(() => {
     if (!shouldBootstrap || !bootstrapFingerprint) {
       lastSubmittedFingerprintRef.current = null;
+      setBootstrapReadyFingerprint(null);
       silentBootstrapFailureRetriesRef.current = 0;
       return;
     }
 
     const form = bootstrapFormRef.current;
     if (!form) return;
+    if (
+      bootstrapStatusUrl &&
+      bootstrapReadyFingerprint !== bootstrapReadinessKey
+    ) {
+      return;
+    }
 
     const submitBootstrap = () => {
       form.submit();
@@ -124,10 +143,83 @@ export function StudioBootstrapIframe({
         window.clearTimeout(timer);
       }
     };
-  }, [bootstrapFingerprint, iframeRef, shouldBootstrap]);
+  }, [
+    bootstrapFingerprint,
+    bootstrapReadinessKey,
+    bootstrapReadyFingerprint,
+    bootstrapStatusUrl,
+    iframeRef,
+    shouldBootstrap,
+  ]);
+
+  useEffect(() => {
+    if (!shouldBootstrap || !bootstrapFingerprint || !bootstrapStatusUrl) {
+      setBootstrapReadyFingerprint(null);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const clearBootstrapStatusTimer = () => {
+      if (bootstrapStatusTimerRef.current !== null) {
+        window.clearTimeout(bootstrapStatusTimerRef.current);
+        bootstrapStatusTimerRef.current = null;
+      }
+    };
+
+    const scheduleStatusProbe = (delayMs: number) => {
+      clearBootstrapStatusTimer();
+      bootstrapStatusTimerRef.current = window.setTimeout(() => {
+        bootstrapStatusTimerRef.current = null;
+        void probeStatus();
+      }, delayMs);
+    };
+
+    const probeStatus = async () => {
+      try {
+        const result = await fetchStudioBootstrapStatus(bootstrapStatusUrl, {
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+
+        if (result.kind === "ready") {
+          setBootstrapReadyFingerprint(bootstrapReadinessKey);
+          return;
+        }
+
+        if (result.kind === "failed") {
+          onError?.(result.failure);
+          return;
+        }
+
+        scheduleStatusProbe(result.retryAfterMs);
+      } catch {
+        if (cancelled) return;
+        scheduleStatusProbe(BOOTSTRAP_STATUS_NETWORK_RETRY_DELAY_MS);
+      }
+    };
+
+    void probeStatus();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearBootstrapStatusTimer();
+    };
+  }, [
+    bootstrapFingerprint,
+    bootstrapReadinessKey,
+    bootstrapStatusUrl,
+    onError,
+    shouldBootstrap,
+  ]);
 
   useEffect(() => {
     return () => {
+      if (bootstrapStatusTimerRef.current !== null) {
+        window.clearTimeout(bootstrapStatusTimerRef.current);
+      }
       if (startupRetryTimerRef.current !== null) {
         window.clearTimeout(startupRetryTimerRef.current);
       }

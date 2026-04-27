@@ -180,6 +180,28 @@ function createHealthResponse(ready: boolean) {
   };
 }
 
+function createBootstrapReadyResponse() {
+  const payload = {
+    status: "ready",
+    retryable: false,
+    canBootstrap: true,
+    message: "Studio is ready",
+  };
+  return {
+    ok: true,
+    status: 200,
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === "content-type" ? "application/json" : null,
+    },
+    clone() {
+      return this;
+    },
+    json: vi.fn().mockResolvedValue(payload),
+    text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
+  };
+}
+
 function makeProject(slug = "site-1") {
   return {
     slug,
@@ -218,6 +240,7 @@ describe("EmbeddedStudio", () => {
     window.history.replaceState({}, "", "/");
     window.sessionStorage.clear();
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(createBootstrapReadyResponse()));
     useParamsMock.mockReset();
     useLocationMock.mockReset();
     useNavigateMock.mockReset();
@@ -781,7 +804,7 @@ describe("EmbeddedStudio", () => {
     );
   });
 
-  it("rewrites the embedded studio bootstrap target when a backend-polled session id appears later", () => {
+  it("rewrites the embedded studio bootstrap target when a backend-polled session id appears later", async () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);
     useLocationMock.mockReturnValue({
@@ -839,6 +862,10 @@ describe("EmbeddedStudio", () => {
       </MemoryRouter>,
     );
 
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(navigateMock).not.toHaveBeenCalled();
     expect(HTMLFormElement.prototype.submit).toHaveBeenCalledTimes(1);
     nextField = document.querySelector(
@@ -847,7 +874,7 @@ describe("EmbeddedStudio", () => {
     expect(nextField?.value).toContain("sessionId=sess-polled");
   });
 
-  it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {
+  it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", async () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1",
     });
@@ -889,6 +916,11 @@ describe("EmbeddedStudio", () => {
       'input[name="userActionToken"]',
     ) as HTMLInputElement | null;
     expect(userActionTokenField?.value).toBe("user-action-token-1");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(HTMLFormElement.prototype.submit).toHaveBeenCalledOnce();
   });
 

@@ -13,11 +13,13 @@ type EmbeddedStudioLiveSurfaceProps = {
   studioIframeRequestKey: string;
   studioIframeSrc: string;
   studioBootstrapAction: string | null;
+  studioBootstrapStatusUrl: string | null;
   studioBootstrapToken: string | null;
   studioUserActionToken: string | null;
   studioVisible: boolean;
   studioReady: boolean;
   studioLoadErrored: boolean;
+  studioLoadTimedOut: boolean;
   studioLoadError: StudioIframeFailure | null;
   onStudioIframeLoad: () => void;
   onStudioIframeError: (failure?: StudioIframeFailure) => void;
@@ -36,11 +38,13 @@ export function EmbeddedStudioLiveSurface({
   studioIframeRequestKey,
   studioIframeSrc,
   studioBootstrapAction,
+  studioBootstrapStatusUrl,
   studioBootstrapToken,
   studioUserActionToken,
   studioVisible,
   studioReady,
   studioLoadErrored,
+  studioLoadTimedOut,
   studioLoadError,
   onStudioIframeLoad,
   onStudioIframeError,
@@ -61,6 +65,7 @@ export function EmbeddedStudioLiveSurface({
           title={`Vivd Studio - ${projectSlug}`}
           cleanSrc={studioIframeSrc}
           bootstrapAction={studioBootstrapAction}
+          bootstrapStatusUrl={studioBootstrapStatusUrl}
           bootstrapToken={studioBootstrapToken}
           userActionToken={studioUserActionToken}
           submissionKey={studioIframeRequestKey}
@@ -85,6 +90,10 @@ export function EmbeddedStudioLiveSurface({
             ) : (
               <StudioStartupLoading
                 className="h-full min-h-0"
+                status={studioLoadTimedOut ? "stalled" : "loading"}
+                onReload={onReloadStudioIframe}
+                onHardRestart={onHardRestart}
+                isHardRestartPending={isHardRestartPending}
                 header={startupHeader}
                 headerClassName={startupHeaderClassName}
               />
