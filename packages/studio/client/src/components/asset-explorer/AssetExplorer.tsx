@@ -8,8 +8,9 @@ import { toast } from "sonner";
 import type { AssetItem, ViewMode, FileTreeNode } from "./types";
 import {
   ASTRO_CONTENT_MEDIA_PATH,
+  ASTRO_SHARED_MEDIA_PATH,
   buildImageUrl,
-  isVivdInternalAssetPath,
+  pickAssetCreationTargetPath,
   pickInitialAssetExplorerPath,
   STUDIO_UPLOADS_PATH,
 } from "./utils";
@@ -34,6 +35,25 @@ interface AssetExplorerProps {
   onClose?: () => void;
 }
 
+function flattenAssetTree(nodes: FileTreeNode[]): AssetItem[] {
+  const files: AssetItem[] = [];
+  for (const node of nodes) {
+    if (node.type === "file") {
+      files.push({
+        name: node.name,
+        type: "file",
+        path: node.path,
+        size: node.size,
+        mimeType: node.mimeType,
+        isImage: node.isImage,
+      });
+    } else if (node.children) {
+      files.push(...flattenAssetTree(node.children));
+    }
+  }
+  return files;
+}
+
 export function AssetExplorer({
   projectSlug,
   version,
@@ -56,6 +76,9 @@ export function AssetExplorer({
   // Navigation state (for gallery mode) - will be initialized based on folder detection
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [initialPathDetected, setInitialPathDetected] = useState(false);
+  const [astroGalleryScope, setAstroGalleryScope] = useState<
+    "browse" | "shared" | "all" | "public"
+  >("browse");
 
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -136,11 +159,22 @@ export function AssetExplorer({
   const publicImagesHasItems = !!publicImagesCheck.data?.items?.length;
   const imagesHasItems = !!imagesCheck.data?.items?.length;
   const fallbackGalleryPath = pickInitialAssetExplorerPath({
-    isAstroProject,
+    isAstroProject: Boolean(isAstroProject),
     uploadsHasItems,
     publicImagesHasItems,
     imagesHasItems,
   });
+  const assetCreationTargetPath = pickAssetCreationTargetPath({
+    isAstroProject: Boolean(isAstroProject),
+    currentPath,
+    fallbackGalleryPath,
+  });
+  const scopedAssetCreationTargetPath =
+    isAstroProject && astroGalleryScope === "public"
+      ? currentPath?.startsWith("public")
+        ? currentPath
+        : "public"
+      : assetCreationTargetPath;
 
   // Detect initial path
   useEffect(() => {
@@ -180,10 +214,24 @@ export function AssetExplorer({
     },
     { enabled: viewMode === "gallery" && currentPath !== null, staleTime: 0 },
   );
+  const allManagedMediaQuery = trpc.assets.listAllAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      rootPath: ASTRO_CONTENT_MEDIA_PATH,
+    },
+    {
+      enabled:
+        viewMode === "gallery" &&
+        Boolean(isAstroProject) &&
+        astroGalleryScope === "all",
+      staleTime: 0,
+    },
+  );
 
-  // Query for create image dialog - use the same detected gallery path as the main explorer.
+  // Query for create image dialog from the same folder new generated images will use.
   const allImagesQuery = trpc.assets.listAssets.useQuery(
-    { slug: projectSlug, version, relativePath: currentPath ?? fallbackGalleryPath },
+    { slug: projectSlug, version, relativePath: scopedAssetCreationTargetPath },
     { enabled: isCreateImageOpen && currentPath !== null, staleTime: 0 },
   );
 
@@ -203,6 +251,13 @@ export function AssetExplorer({
       (item) => item.type === "file" && item.isImage,
     ) || [];
 
+  const allManagedMediaItems =
+    allManagedMediaQuery.data?.tree
+      ? flattenAssetTree(allManagedMediaQuery.data.tree).filter(
+          (item) => item.isImage,
+        )
+      : [];
+
   // Mutations
   const createFolderMutation = trpc.assets.createFolder.useMutation({
     onSuccess: () => {
@@ -219,9 +274,14 @@ export function AssetExplorer({
 
   const createImageMutation = trpc.assets.createImageWithAI.useMutation({
     onSuccess: (data) => {
+      const generatedDir =
+        data.path.split("/").slice(0, -1).join("/") || fallbackGalleryPath;
       setIsCreateImageOpen(false);
       setCreateImagePrompt("");
       setSelectedReferenceImages([]);
+      setCurrentPath(generatedDir);
+      setFileTreeRevealPath(data.path);
+      setFileTreeHighlightedPath(data.path);
       galleryQuery.refetch();
       utils.assets.invalidate();
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.path));
@@ -298,7 +358,7 @@ export function AssetExplorer({
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUpload(e.dataTransfer.files, currentPath ?? STUDIO_UPLOADS_PATH);
+      handleUpload(e.dataTransfer.files, scopedAssetCreationTargetPath);
     }
   };
 
@@ -320,17 +380,12 @@ export function AssetExplorer({
   const handleCreateImage = () => {
     if (!createImagePrompt.trim()) return;
 
-    const targetPath =
-      currentPath && !isVivdInternalAssetPath(currentPath)
-        ? currentPath
-        : fallbackGalleryPath;
-
     createImageMutation.mutate({
       slug: projectSlug,
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
-      targetPath,
+      targetPath: scopedAssetCreationTargetPath,
     });
   };
 
@@ -341,6 +396,7 @@ export function AssetExplorer({
   };
 
   const handleNavigate = (path: string) => {
+    setAstroGalleryScope("browse");
     setCurrentPath(path);
   };
 
@@ -375,7 +431,8 @@ export function AssetExplorer({
 
       <AssetToolbar
         currentPath={currentPath ?? ""}
-        onFilesSelected={(files) => handleUpload(files, STUDIO_UPLOADS_PATH)}
+        uploadTargetPath={scopedAssetCreationTargetPath}
+        onFilesSelected={(files) => handleUpload(files, scopedAssetCreationTargetPath)}
         onRefresh={() => {
           galleryQuery.refetch();
           utils.assets.invalidate();
@@ -388,6 +445,7 @@ export function AssetExplorer({
             ? () => {
                 const parts = currentPath.split("/");
                 parts.pop();
+                setAstroGalleryScope("browse");
                 setCurrentPath(parts.join("/"));
               }
             : undefined
@@ -400,6 +458,31 @@ export function AssetExplorer({
         }
         uploadStatus={uploadStatus}
       />
+
+      {isAstroProject && viewMode === "gallery" && (
+        <div className="flex gap-1 overflow-x-auto border-b px-3 py-2">
+          {[
+            { key: "browse", label: "Browse", path: ASTRO_CONTENT_MEDIA_PATH },
+            { key: "shared", label: "Shared", path: ASTRO_SHARED_MEDIA_PATH },
+            { key: "all", label: "All Media", path: ASTRO_CONTENT_MEDIA_PATH },
+            { key: "public", label: "Public", path: "public" },
+          ].map((scope) => (
+            <Button
+              key={scope.key}
+              type="button"
+              variant={astroGalleryScope === scope.key ? "secondary" : "ghost"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                setAstroGalleryScope(scope.key as typeof astroGalleryScope);
+                setCurrentPath(scope.path);
+              }}
+            >
+              {scope.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {uploadStatus !== "idle" && uploadTargetPath && (
         <div className="flex items-center gap-3 border-b bg-primary/5 px-4 py-2">
@@ -447,7 +530,7 @@ export function AssetExplorer({
             onDelete={handleDelete as (item: FileTreeNode) => void}
             onAddToChat={handleAddToChat as (item: FileTreeNode) => void}
             onCreateFolder={handleCreateFolder}
-            onFilesUpload={(files) => handleUpload(files, STUDIO_UPLOADS_PATH)}
+            onFilesUpload={handleUpload}
             onRefetch={() => {
               galleryQuery.refetch();
               utils.assets.invalidate();
@@ -458,6 +541,22 @@ export function AssetExplorer({
             projectSlug={projectSlug}
             version={version}
             currentPath={currentPath ?? ""}
+            uploadTargetPath={scopedAssetCreationTargetPath}
+            itemsOverride={
+              isAstroProject && astroGalleryScope === "all"
+                ? allManagedMediaItems
+                : undefined
+            }
+            isLoadingOverride={
+              isAstroProject && astroGalleryScope === "all"
+                ? allManagedMediaQuery.isLoading
+                : undefined
+            }
+            emptyLabel={
+              isAstroProject && astroGalleryScope === "all"
+                ? "No managed images yet"
+                : undefined
+            }
             onNavigate={handleNavigate}
             onAiEdit={
               canUseAiImages

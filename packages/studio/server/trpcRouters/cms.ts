@@ -37,6 +37,16 @@ type CmsTextFileSnapshot = CmsTextFileWrite & {
 };
 
 const CMS_TEXT_FILE_PATH_REGEX = /\.(?:json|ya?ml|md|mdx|markdown)$/i;
+const CMS_PREVIEW_COPYABLE_IMAGE_REGEX = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
+
+type CmsPreviewAssetAction = {
+  kind: "copy-to-entry";
+  sourcePath: string;
+};
+
+type CmsPreviewEntryFieldUpdate = CmsEntryFieldUpdate & {
+  assetAction?: CmsPreviewAssetAction;
+};
 
 async function prepareCmsArtifacts(projectDir: string): Promise<CmsPrepareResult> {
   const report = await validateCmsWorkspace(projectDir);
@@ -82,6 +92,140 @@ function isTextFile(relativePath: string): boolean {
 function isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
   const relative = path.relative(rootPath, candidatePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function normalizeWorkspaceRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+}
+
+function sanitizeFilename(filename: string): string {
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext).replace(/[^a-zA-Z0-9_-]+/g, "-");
+  const safeBase = base.replace(/^-+|-+$/g, "") || "asset";
+  return `${safeBase}${ext.toLowerCase()}`;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    const stats = await fs.stat(filePath);
+    return stats.isFile();
+  } catch (error) {
+    const code = error && typeof error === "object" ? (error as NodeJS.ErrnoException).code : null;
+    if (code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function getUniqueDestinationFilename(
+  destinationDir: string,
+  requestedFilename: string,
+): Promise<string> {
+  const safeFilename = sanitizeFilename(requestedFilename);
+  const ext = path.extname(safeFilename);
+  const base = path.basename(safeFilename, ext);
+
+  let index = 1;
+  while (true) {
+    const candidate = index === 1 ? safeFilename : `${base}-${index}${ext}`;
+    if (!(await fileExists(path.join(destinationDir, candidate)))) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
+async function copyPreviewAssetToEntryMedia(
+  projectDir: string,
+  update: CmsPreviewEntryFieldUpdate,
+): Promise<CmsEntryFieldUpdate> {
+  const report = await validateCmsWorkspace(projectDir);
+  if (!report.initialized) {
+    throw new Error("CMS workspace not initialized");
+  }
+
+  const model = report.models.find((item) => item.key === update.modelKey);
+  if (!model) {
+    throw new Error(`Collection not found: ${update.modelKey}`);
+  }
+
+  const entry = model.entries.find((item) => item.key === update.entryKey);
+  if (!entry) {
+    throw new Error(`Entry not found: ${update.modelKey}:${update.entryKey}`);
+  }
+
+  const sourcePath = normalizeWorkspaceRelativePath(
+    update.assetAction?.sourcePath ?? "",
+  );
+  if (!sourcePath) {
+    throw new Error("Source image path is required");
+  }
+  if (path.isAbsolute(sourcePath) || hasDotSegment(sourcePath)) {
+    throw new Error("Invalid source image path");
+  }
+  if (!CMS_PREVIEW_COPYABLE_IMAGE_REGEX.test(sourcePath)) {
+    throw new Error("Only local image assets can be copied into CMS media");
+  }
+
+  const sourceAbsolutePath = path.join(projectDir, sourcePath);
+  const realProjectDir = await fs.realpath(projectDir);
+  const realSourcePath = await fs.realpath(sourceAbsolutePath);
+  if (!isPathInsideRoot(realProjectDir, realSourcePath)) {
+    throw new Error("Invalid source image path");
+  }
+
+  const sourceStats = await fs.stat(realSourcePath);
+  if (!sourceStats.isFile()) {
+    throw new Error("Source image path is not a file");
+  }
+
+  const destinationDirRelativePath = path.posix.join(
+    "src/content/media",
+    update.modelKey,
+    update.entryKey,
+  );
+  const destinationDir = path.join(projectDir, destinationDirRelativePath);
+  await fs.mkdir(destinationDir, { recursive: true });
+  const realDestinationDir = await fs.realpath(destinationDir);
+  if (!isPathInsideRoot(realProjectDir, realDestinationDir)) {
+    throw new Error("Invalid destination media path");
+  }
+
+  const destinationFilename = await getUniqueDestinationFilename(
+    destinationDir,
+    path.basename(sourcePath),
+  );
+  const destinationRelativePath = path.posix.join(
+    destinationDirRelativePath,
+    destinationFilename,
+  );
+  await fs.copyFile(realSourcePath, path.join(projectDir, destinationRelativePath));
+
+  return {
+    modelKey: update.modelKey,
+    entryKey: update.entryKey,
+    fieldPath: update.fieldPath,
+    value: destinationRelativePath,
+  };
+}
+
+async function resolvePreviewAssetActions(
+  projectDir: string,
+  updates: CmsPreviewEntryFieldUpdate[],
+): Promise<CmsEntryFieldUpdate[]> {
+  const resolved: CmsEntryFieldUpdate[] = [];
+  for (const update of updates) {
+    if (update.assetAction?.kind === "copy-to-entry") {
+      resolved.push(await copyPreviewAssetToEntryMedia(projectDir, update));
+    } else {
+      resolved.push({
+        modelKey: update.modelKey,
+        entryKey: update.entryKey,
+        fieldPath: update.fieldPath,
+        value: update.value,
+      });
+    }
+  }
+  return resolved;
 }
 
 async function buildCmsTextFileSnapshots(
@@ -250,6 +394,12 @@ const cmsEntryFieldUpdateSchema = z.object({
     .array(z.union([z.string().min(1), z.number().int().nonnegative()]))
     .min(1),
   value: z.unknown(),
+  assetAction: z
+    .object({
+      kind: z.literal("copy-to-entry"),
+      sourcePath: z.string().min(1),
+    })
+    .optional(),
 });
 
 const cmsTextFileWriteSchema = z.object({
@@ -361,9 +511,13 @@ export const cmsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const projectDir = requireWorkspace(ctx);
+      const updates = await resolvePreviewAssetActions(
+        projectDir,
+        input.updates as CmsPreviewEntryFieldUpdate[],
+      );
       const updated = await updateCmsEntryFields(
         projectDir,
-        input.updates as CmsEntryFieldUpdate[],
+        updates,
       );
       const prepared = await prepareCmsArtifacts(projectDir);
       markCmsWorkspaceChange(input.slug, input.version, "cms-preview-updated");

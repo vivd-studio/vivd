@@ -15,7 +15,11 @@ import {
   usePreviewBridgeMessages,
   type SelectedElement,
 } from "./usePreviewBridgeMessages";
-import { usePreviewInlineEditing } from "./usePreviewInlineEditing";
+import {
+  usePreviewInlineEditing,
+  type PendingImageDropChoiceRequest,
+} from "./usePreviewInlineEditing";
+import type { ImageDropChoiceKind } from "./imageDropPlan";
 import { usePreviewRuntimeState } from "./usePreviewRuntimeState";
 import {
   DEVICE_PRESETS,
@@ -70,6 +74,8 @@ interface PreviewContextValue {
   iframeLoading: boolean;
   isPreviewLoading: boolean;
   hasUnsavedChanges: boolean;
+  imageDropChoiceRequest: PendingImageDropChoiceRequest | null;
+  resolveImageDropChoice: (choice: ImageDropChoiceKind | null) => void;
   currentPreviewPath: string;
 
   // Element Selector
@@ -371,6 +377,8 @@ export function PreviewProvider({
     handleSave,
     handleCancelEdit,
     clearPendingPatches,
+    imageDropChoiceRequest,
+    resolveImageDropChoice,
   } = usePreviewInlineEditing({
     iframeRef,
     projectSlug,
@@ -527,6 +535,8 @@ export function PreviewProvider({
     iframeLoading,
     isPreviewLoading,
     hasUnsavedChanges,
+    imageDropChoiceRequest,
+    resolveImageDropChoice,
     currentPreviewPath,
 
     // Element Selector

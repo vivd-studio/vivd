@@ -149,6 +149,46 @@ const IMAGE_EDITING_MODEL =
   process.env.IMAGE_EDITING_MODEL || "google/gemini-3-pro-image-preview";
 const HERO_GENERATION_MODEL =
   process.env.HERO_GENERATION_MODEL || "google/gemini-3-pro-image-preview";
+const ASTRO_SHARED_MEDIA_PATH = "src/content/media/shared";
+const STATIC_IMAGE_TARGET_PATH = "images";
+
+function normalizeDirectoryPath(inputPath: string): string {
+  return inputPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function projectHasAstroConfig(projectDir: string): boolean {
+  return [
+    "astro.config.mjs",
+    "astro.config.js",
+    "astro.config.ts",
+    "astro.config.cjs",
+    "astro.config.mts",
+  ].some((candidate) => fs.existsSync(path.join(projectDir, candidate)));
+}
+
+function directoryExists(projectDir: string, relativePath: string): boolean {
+  const absolutePath = path.join(projectDir, relativePath);
+  return fs.existsSync(absolutePath) && fs.statSync(absolutePath).isDirectory();
+}
+
+function resolveCreateImageTargetPath(
+  projectDir: string,
+  requestedTargetPath: string,
+): string {
+  const normalizedTargetPath = normalizeDirectoryPath(requestedTargetPath);
+  if (normalizedTargetPath) return normalizedTargetPath;
+
+  if (
+    projectHasAstroConfig(projectDir) ||
+    directoryExists(projectDir, ASTRO_SHARED_MEDIA_PATH)
+  ) {
+    return ASTRO_SHARED_MEDIA_PATH;
+  }
+
+  return directoryExists(projectDir, "public/images")
+    ? "public/images"
+    : STATIC_IMAGE_TARGET_PATH;
+}
 
 async function callOpenRouter(body: any): Promise<any> {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -817,9 +857,10 @@ export const assetsRouter = router({
         throw new Error("Project directory not found");
       }
 
+      const resolvedTargetPath = resolveCreateImageTargetPath(projectDir, targetPath);
       let saveDir: string;
       try {
-        saveDir = safeJoin(projectDir, targetPath);
+        saveDir = safeJoin(projectDir, resolvedTargetPath);
       } catch {
         throw new Error("Invalid path");
       }
@@ -897,12 +938,8 @@ export const assetsRouter = router({
         // Save the image
         await saveGeneratedImage(imageUrl, newFilePath);
 
-        const normalizedTarget = targetPath
-          .replace(/\\/g, "/")
-          .replace(/^\/+/, "")
-          .replace(/\/+$/, "");
-        const newRelativePath = normalizedTarget
-          ? path.posix.join(normalizedTarget, newFileName)
+        const newRelativePath = resolvedTargetPath
+          ? path.posix.join(resolvedTargetPath, newFileName)
           : newFileName;
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
         projectTouchReporter.touch(input.slug);

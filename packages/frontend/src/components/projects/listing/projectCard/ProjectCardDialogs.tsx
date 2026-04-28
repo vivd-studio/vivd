@@ -9,6 +9,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Field,
+  FieldDescription,
+  FieldLabel,
   Input,
   Panel,
   Select,
@@ -50,6 +53,19 @@ interface ProjectCardRenameDialogProps {
   renameSlugInput: string;
   isPending: boolean;
   onRenameSlugInputChange: (value: string) => void;
+  onConfirm: () => void;
+}
+
+interface ProjectCardDuplicateDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sourceProjectSlug: string;
+  sourceVersion: number;
+  duplicateTitleInput: string;
+  duplicateSlugInput: string;
+  isPending: boolean;
+  onDuplicateTitleInputChange: (value: string) => void;
+  onDuplicateSlugInputChange: (value: string) => void;
   onConfirm: () => void;
 }
 
@@ -216,6 +232,87 @@ export function ProjectCardRenameDialog({
             onClick={onConfirm}
           >
             {isPending ? "Renaming..." : "Rename slug"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export function ProjectCardDuplicateDialog({
+  open,
+  onOpenChange,
+  sourceProjectSlug,
+  sourceVersion,
+  duplicateTitleInput,
+  duplicateSlugInput,
+  isPending,
+  onDuplicateTitleInputChange,
+  onDuplicateSlugInputChange,
+  onConfirm,
+}: ProjectCardDuplicateDialogProps) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Duplicate selected version</AlertDialogTitle>
+          <AlertDialogDescription>
+            Create a new project from {sourceProjectSlug} v{sourceVersion}.
+            The new project starts at v1. Other versions are not copied in this
+            first workflow.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-4">
+          <Field>
+            <FieldLabel htmlFor="duplicate-title">Project title</FieldLabel>
+            <Input
+              id="duplicate-title"
+              value={duplicateTitleInput}
+              onChange={(event) =>
+                onDuplicateTitleInputChange(event.target.value)
+              }
+              placeholder="Project title"
+              autoFocus
+              disabled={isPending}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="duplicate-slug">Project slug</FieldLabel>
+            <Input
+              id="duplicate-slug"
+              value={duplicateSlugInput}
+              onChange={(event) =>
+                onDuplicateSlugInputChange(event.target.value)
+              }
+              placeholder="project-copy"
+              autoComplete="off"
+              disabled={isPending}
+            />
+            <FieldDescription>
+              Lowercase letters, numbers, and hyphens only.
+            </FieldDescription>
+          </Field>
+          {isPending ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Duplicating project...
+            </div>
+          ) : null}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={
+              isPending ||
+              !duplicateTitleInput.trim() ||
+              !duplicateSlugInput.trim()
+            }
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+          >
+            {isPending ? "Duplicating..." : "Duplicate as new project"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

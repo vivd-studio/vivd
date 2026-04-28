@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { trpc } from "@/lib/trpc";
@@ -16,6 +16,7 @@ import { UrlFormFields } from "./UrlFormFields";
 import { Globe, Sparkles, ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { VivdIcon } from "@/components/common";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type WizardStep = "choice" | "url" | "import";
 
@@ -30,6 +31,7 @@ export function SingleProjectCreateView() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
+  const { isSuperAdmin } = usePermissions();
   const utils = trpc.useUtils();
 
   const form = useForm<UrlFormValues>({
@@ -68,6 +70,12 @@ export function SingleProjectCreateView() {
     }
   };
 
+  useEffect(() => {
+    if (!isSuperAdmin && step === "import") {
+      setStep("choice");
+    }
+  }, [isSuperAdmin, step]);
+
   const handleBack = () => {
     setStep("choice");
     form.reset();
@@ -75,6 +83,7 @@ export function SingleProjectCreateView() {
   };
 
   const handleImport = async () => {
+    if (!isSuperAdmin) return;
     if (!importFile) return;
     setIsImporting(true);
     const toastId = toast.loading("Importing project", {
@@ -210,23 +219,25 @@ export function SingleProjectCreateView() {
               </div>
             </InteractiveSurfaceButton>
 
-            <InteractiveSurfaceButton
-              variant="choice"
-              onClick={() => setStep("import")}
-              className="w-full rounded-xl p-5 text-left group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                  <Upload className="h-6 w-6" />
-                </div>
-                <div>
-                  <div className="font-semibold text-lg">Import from ZIP</div>
-                  <div className="text-sm text-muted-foreground">
-                    Upload a previously exported project ZIP
+            {isSuperAdmin && (
+              <InteractiveSurfaceButton
+                variant="choice"
+                onClick={() => setStep("import")}
+                className="w-full rounded-xl p-5 text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+                    <Upload className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-lg">Import from ZIP</div>
+                    <div className="text-sm text-muted-foreground">
+                      Upload a previously exported project ZIP
+                    </div>
                   </div>
                 </div>
-              </div>
-            </InteractiveSurfaceButton>
+              </InteractiveSurfaceButton>
+            )}
           </div>
         )}
 
@@ -252,7 +263,7 @@ export function SingleProjectCreateView() {
         )}
 
         {/* Import flow */}
-        {step === "import" && (
+        {isSuperAdmin && step === "import" && (
           <div className="space-y-4">
             <div className="rounded-lg border bg-muted/30 p-4">
               <div className="text-sm text-muted-foreground">

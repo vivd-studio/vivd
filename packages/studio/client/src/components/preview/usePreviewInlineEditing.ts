@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type RefObject,
@@ -13,6 +14,11 @@ import { toAstroRuntimeAssetPath } from "./assetPathMapping";
 import {
   getPreviewImageDropSupport,
 } from "./imageDropHeuristics";
+import {
+  resolveCmsDropMode,
+  type ImageDropChoiceKind,
+  type ImageDropPlan,
+} from "./imageDropPlan";
 import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
@@ -50,6 +56,10 @@ interface UsePreviewInlineEditingOptions {
   refreshPreview: () => void;
 }
 
+export interface PendingImageDropChoiceRequest {
+  plan: ImageDropPlan;
+}
+
 function toHtmlElement(target: EventTarget | Node | null): HTMLElement | null {
   if (!target || typeof target !== "object") {
     return null;
@@ -74,10 +84,15 @@ export function usePreviewInlineEditing({
   const utils = trpc.useUtils();
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [imageDropChoiceRequest, setImageDropChoiceRequest] =
+    useState<PendingImageDropChoiceRequest | null>(null);
 
   const pendingImagePatchesRef = useRef<Map<string, ImagePatch>>(new Map());
   const baselineSrcRef = useRef<Map<string, string | null>>(new Map());
   const editModeCleanupRef = useRef<(() => void) | null>(null);
+  const imageDropChoiceResolverRef = useRef<
+    ((choice: ImageDropChoiceKind | null) => void) | null
+  >(null);
 
   const syncUnsavedChangesState = useCallback(() => {
     setHasUnsavedChanges(pendingImagePatchesRef.current.size > 0);
@@ -92,6 +107,31 @@ export function usePreviewInlineEditing({
   const cleanupEditModeListeners = useCallback(() => {
     editModeCleanupRef.current?.();
     editModeCleanupRef.current = null;
+  }, []);
+
+  const requestImageDropChoice = useCallback((plan: ImageDropPlan) => {
+    imageDropChoiceResolverRef.current?.(null);
+
+    return new Promise<ImageDropChoiceKind | null>((resolve) => {
+      imageDropChoiceResolverRef.current = resolve;
+      setImageDropChoiceRequest({ plan });
+    });
+  }, []);
+
+  const resolveImageDropChoice = useCallback(
+    (choice: ImageDropChoiceKind | null) => {
+      imageDropChoiceResolverRef.current?.(choice);
+      imageDropChoiceResolverRef.current = null;
+      setImageDropChoiceRequest(null);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      imageDropChoiceResolverRef.current?.(null);
+      imageDropChoiceResolverRef.current = null;
+    };
   }, []);
 
   const getEditableTarget = useCallback((target: EventTarget | null) => {
@@ -217,8 +257,9 @@ export function usePreviewInlineEditing({
     version: selectedVersion,
     enabled: !!projectSlug && !editMode,
     getDropSupport: getImageDropSupport,
-    onImageDropped: (assetPath, targetImg, previousSrcAttr) => {
-      if (!iframeRef.current?.contentDocument) return;
+    requestDropChoice: requestImageDropChoice,
+    onImageDropped: (assetPath, targetImg, previousSrcAttr, dropOptions) => {
+      if (!iframeRef.current?.contentDocument) return false;
       const dropSupport = getImageDropSupport(targetImg, assetPath);
       if (!dropSupport.canDrop || !dropSupport.strategy) {
         if (previousSrcAttr) {
@@ -230,18 +271,28 @@ export function usePreviewInlineEditing({
           dropSupport.reason ??
             "Vivd can't save this preview image drop safely yet.",
         );
-        return;
+        return false;
       }
 
       if (dropSupport.strategy === "cms" && dropSupport.cmsBinding) {
         const cmsBinding = dropSupport.cmsBinding;
         const key = `cms:${cmsBinding.modelKey}:${cmsBinding.entryKey}:${cmsBinding.fieldPath.join(".")}`;
+        const dropMode = dropOptions?.plan
+          ? resolveCmsDropMode(dropOptions.plan, dropOptions.choice)
+          : "reference";
         pendingImagePatchesRef.current.set(key, {
           type: "setCmsField",
           modelKey: cmsBinding.modelKey,
           entryKey: cmsBinding.entryKey,
           fieldPath: cmsBinding.fieldPath,
           value: assetPath,
+          assetAction:
+            dropMode === "copy-to-entry"
+              ? {
+                  kind: "copy-to-entry",
+                  sourcePath: assetPath,
+                }
+              : undefined,
         });
         syncUnsavedChangesState();
         return;
@@ -270,7 +321,7 @@ export function usePreviewInlineEditing({
           toast.error(
             "Vivd couldn't resolve the Astro source file for this preview image drop.",
           );
-          return;
+          return false;
         }
 
         const sourceFile = normalizeAstroSourceFile(dropSupport.astroSourceFile);
@@ -290,7 +341,7 @@ export function usePreviewInlineEditing({
             "This image doesn't have a source src value, so Vivd can't save the change for Astro projects.",
           );
           syncUnsavedChangesState();
-          return;
+          return false;
         }
         const newValue = toAstroRuntimeAssetPath(assetPath, baseline);
         if (!newValue) {
@@ -303,7 +354,7 @@ export function usePreviewInlineEditing({
             "Vivd can only save Astro preview drops directly for CMS-bound images or `public/` assets. Bind the image to CMS content or use a public asset URL.",
           );
           syncUnsavedChangesState();
-          return;
+          return false;
         }
         if (baseline === newValue) {
           pendingImagePatchesRef.current.delete(key);
@@ -668,6 +719,7 @@ export function usePreviewInlineEditing({
               entryKey: update.entryKey,
               fieldPath: update.fieldPath,
               value: update.value,
+              assetAction: update.assetAction,
             })),
           });
           cmsApplied = cmsResult.updated.updated.length;
@@ -769,6 +821,8 @@ export function usePreviewInlineEditing({
     editMode,
     hasUnsavedChanges,
     isSaving,
+    imageDropChoiceRequest,
+    resolveImageDropChoice,
     toggleEditMode,
     handleSave,
     handleCancelEdit,

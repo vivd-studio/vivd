@@ -66,6 +66,13 @@ describe("getProjectStatusPresentation", () => {
       color: "info",
     });
   });
+
+  it("labels optimistic project duplication as in-progress work", () => {
+    expect(getProjectStatusPresentation("duplicating_project")).toEqual({
+      label: "Duplicating",
+      color: "info",
+    });
+  });
 });
 
 describe("getProjectFailurePresentation", () => {

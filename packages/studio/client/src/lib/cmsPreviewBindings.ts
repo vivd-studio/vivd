@@ -15,6 +15,10 @@ export interface CmsPreviewFieldUpdate {
   entryKey: string;
   fieldPath: CmsFieldPathSegment[];
   value: unknown;
+  assetAction?: {
+    kind: "copy-to-entry";
+    sourcePath: string;
+  };
 }
 
 const CMS_COLLECTION_ATTR = "data-cms-collection";

@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import { File, FileCode, FileText, Image as ImageIcon } from "lucide-react";
 import {
   ASTRO_CONTENT_MEDIA_PATH,
+  ASTRO_SHARED_MEDIA_PATH,
   buildAssetFileUrl,
   buildImageUrl,
   buildProjectFileUrl,
   canDragAssetToPreview,
   getStudioImageUrlCandidates,
   getFileTreeIconComponent,
+  getAssetScopeLabel,
+  isAstroManagedMediaPath,
   isVivdInternalAssetPath,
+  pickAssetCreationTargetPath,
   pickInitialAssetExplorerPath,
 } from "./utils";
 
@@ -140,5 +144,68 @@ describe("asset explorer path helpers", () => {
         imagesHasItems: true,
       })
     ).toBe(ASTRO_CONTENT_MEDIA_PATH);
+  });
+
+  it("keeps generated Astro assets in managed media folders", () => {
+    expect(isAstroManagedMediaPath("src/content/media/shared/logo.png")).toBe(
+      true,
+    );
+    expect(isAstroManagedMediaPath("src/content/posts/logo.png")).toBe(false);
+    expect(isAstroManagedMediaPath("public/images/logo.png")).toBe(false);
+
+    expect(
+      pickAssetCreationTargetPath({
+        isAstroProject: true,
+        currentPath: ASTRO_CONTENT_MEDIA_PATH,
+        fallbackGalleryPath: ASTRO_CONTENT_MEDIA_PATH,
+      }),
+    ).toBe(ASTRO_SHARED_MEDIA_PATH);
+
+    expect(
+      pickAssetCreationTargetPath({
+        isAstroProject: true,
+        currentPath: "src/content/media/products",
+        fallbackGalleryPath: ASTRO_CONTENT_MEDIA_PATH,
+      }),
+    ).toBe("src/content/media/products");
+
+    expect(
+      pickAssetCreationTargetPath({
+        isAstroProject: true,
+        currentPath: "public/images",
+        fallbackGalleryPath: ASTRO_CONTENT_MEDIA_PATH,
+      }),
+    ).toBe(ASTRO_SHARED_MEDIA_PATH);
+  });
+
+  it("labels managed asset scopes for gallery cards", () => {
+    expect(getAssetScopeLabel("src/content/media/shared/logo.png")).toBe(
+      "shared",
+    );
+    expect(getAssetScopeLabel("src/content/media/products/apollo/logo.png")).toBe(
+      "products/apollo",
+    );
+    expect(getAssetScopeLabel("src/content/media/products/logo.png")).toBe("products");
+    expect(getAssetScopeLabel("public/images/logo.png")).toBe("public");
+    expect(getAssetScopeLabel(".vivd/uploads/logo.png")).toBe("working");
+    expect(getAssetScopeLabel("images/logo.png")).toBeNull();
+  });
+
+  it("keeps static asset creation in the visible project asset folder", () => {
+    expect(
+      pickAssetCreationTargetPath({
+        isAstroProject: false,
+        currentPath: "public/images",
+        fallbackGalleryPath: "public/images",
+      }),
+    ).toBe("public/images");
+
+    expect(
+      pickAssetCreationTargetPath({
+        isAstroProject: false,
+        currentPath: ".vivd/uploads",
+        fallbackGalleryPath: "images",
+      }),
+    ).toBe("images");
   });
 });

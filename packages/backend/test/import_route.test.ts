@@ -169,7 +169,7 @@ describe("import route safety checks", () => {
       session: {
         user: {
           id: "user-1",
-          role: "admin",
+          role: "super_admin",
         },
       },
       organizationId: "org-1",
@@ -177,8 +177,8 @@ describe("import route safety checks", () => {
     });
     checkOrganizationAccessMock.mockResolvedValue({
       ok: true,
-      isSuperAdmin: false,
-      organizationRole: "admin",
+      isSuperAdmin: true,
+      organizationRole: null,
     });
     getProjectMock.mockResolvedValue(null);
     detectProjectTypeMock.mockReturnValue({
@@ -246,13 +246,39 @@ describe("import route safety checks", () => {
       session: {
         user: {
           id: "user-1",
-          role: "admin",
+          role: "super_admin",
         },
       },
       organizationId: "Org_A2",
     });
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ error: "Missing file" });
+  });
+
+  it("rejects ZIP import for non-superadmin organization admins", async () => {
+    checkOrganizationAccessMock.mockResolvedValueOnce({
+      ok: true,
+      isSuperAdmin: false,
+      organizationRole: "admin",
+    });
+
+    const handler = getImportHandler();
+    const req = {
+      query: {},
+      body: {},
+      headers: {},
+      file: undefined,
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      error: "ZIP import is restricted to superadmins",
+    });
+    expect(createProjectVersionMock).not.toHaveBeenCalled();
+    expect(extractZipMock).not.toHaveBeenCalled();
   });
 
   it("rejects imported ZIP archives that contain symlinks", async () => {
@@ -397,7 +423,7 @@ describe("import route safety checks", () => {
     });
   });
 
-  it("repairs referenced Astro CMS helpers before uploading imported Astro source", async () => {
+  it("repairs referenced Astro CMS helpers and re-uploads source after Astro build", async () => {
     extractZipMock.mockImplementationOnce(
       async (_zipPath: string, options: { dir: string }) => {
         const siteDir = path.join(options.dir, "site");
@@ -444,10 +470,19 @@ describe("import route safety checks", () => {
     expect(ensureReferencedAstroCmsToolkitMock).toHaveBeenCalledWith(
       "/tmp/vivd-import-test/org-1/site/v1",
     );
-    expect(uploadProjectSourceToBucketMock).toHaveBeenCalledOnce();
+    expect(uploadProjectSourceToBucketMock).toHaveBeenCalledTimes(2);
     expect(
       ensureReferencedAstroCmsToolkitMock.mock.invocationCallOrder[0],
     ).toBeLessThan(uploadProjectSourceToBucketMock.mock.invocationCallOrder[0]!);
+    expect(
+      uploadProjectSourceToBucketMock.mock.invocationCallOrder[0]!,
+    ).toBeLessThan(buildSyncMock.mock.invocationCallOrder[0]!);
+    expect(buildSyncMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      uploadProjectSourceToBucketMock.mock.invocationCallOrder[1]!,
+    );
+    expect(
+      uploadProjectSourceToBucketMock.mock.invocationCallOrder[1]!,
+    ).toBeLessThan(uploadProjectPreviewToBucketMock.mock.invocationCallOrder[0]!);
     expect(updateVersionStatusMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       slug: "site",

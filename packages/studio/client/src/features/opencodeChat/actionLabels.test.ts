@@ -88,4 +88,28 @@ describe("resolveToolActivityLabelParts", () => {
       action: "Validate the CMS schema and content.",
     });
   });
+
+  it("builds readable labels for list tools", () => {
+    expect(
+      resolveToolActivityLabelParts({
+        toolName: "list",
+        status: "running",
+        toolInput: { path: "/workspace/src" },
+      }),
+    ).toEqual({
+      action: "Listing",
+      target: "src...",
+    });
+
+    expect(
+      resolveToolActivityLabelParts({
+        toolName: "list",
+        status: "completed",
+        toolInput: { path: "/workspace/src" },
+      }),
+    ).toEqual({
+      action: "Listed",
+      target: "src",
+    });
+  });
 });

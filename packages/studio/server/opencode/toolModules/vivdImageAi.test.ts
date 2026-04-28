@@ -165,7 +165,7 @@ describe("vivdImageAiToolDefinition", () => {
 
       const result = JSON.parse(raw);
       expect(result.ok).toBe(true);
-      expect(result.output.path.startsWith("src/content/media/")).toBe(true);
+      expect(result.output.path.startsWith("src/content/media/shared/")).toBe(true);
       expect(fs.existsSync(path.join(workspaceDir, result.output.path))).toBe(true);
     } finally {
       fs.rmSync(workspaceDir, { recursive: true, force: true });

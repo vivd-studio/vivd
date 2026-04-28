@@ -64,7 +64,7 @@ describe("getPreviewImageDropSupport", () => {
     });
   });
 
-  it("allows nested src/content assets for source-backed Astro drops", () => {
+  it("rejects non-media src/content assets for source-backed Astro drops", () => {
     const image = createImage(
       `
         <section data-astro-source-file="/repo/src/pages/index.astro" data-astro-source-loc="12:4">
@@ -80,8 +80,8 @@ describe("getPreviewImageDropSupport", () => {
         assetPath: "src/content/posts/horse/hero.webp",
       }),
     ).toMatchObject({
-      canDrop: true,
-      strategy: "astro-import",
+      canDrop: false,
+      strategy: null,
     });
   });
 

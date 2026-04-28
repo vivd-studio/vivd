@@ -24,7 +24,7 @@ const IMAGE_CREATION_MODEL =
   (process.env.HERO_GENERATION_MODEL || "").trim() || DEFAULT_IMAGE_MODEL;
 const MAX_INPUT_IMAGES = 5;
 const DEFAULT_OUTPUT_DIR = "images";
-const ASTRO_OUTPUT_DIR = "src/content/media";
+const ASTRO_OUTPUT_DIR = "src/content/media/shared";
 const IMAGE_DOWNLOAD_TIMEOUT_MS =
   Number.parseInt(process.env.VIVD_IMAGE_AI_DOWNLOAD_TIMEOUT_MS || "", 10) || 600_000;
 const IMAGE_EXTENSIONS = new Set([
@@ -270,8 +270,8 @@ function resolveOutputDirectory(
   );
   if (hasAstroConfig) return ASTRO_OUTPUT_DIR;
 
-  const publicImagesAbsolute = path.join(projectDir, ASTRO_OUTPUT_DIR);
-  if (fs.existsSync(publicImagesAbsolute) && fs.statSync(publicImagesAbsolute).isDirectory()) {
+  const astroMediaAbsolute = path.join(projectDir, ASTRO_OUTPUT_DIR);
+  if (fs.existsSync(astroMediaAbsolute) && fs.statSync(astroMediaAbsolute).isDirectory()) {
     return ASTRO_OUTPUT_DIR;
   }
 
@@ -325,7 +325,7 @@ const vivdImageAiArgs = {
     .string()
     .default("")
     .describe(
-      "Optional output directory (relative to project root). Defaults to source image directory for edits, or auto-detected src/content/media (Astro) vs images/ for prompt-only creates.",
+      "Optional output directory (relative to project root). Defaults to source image directory for edits, or auto-detected src/content/media/shared (Astro) vs images/ for prompt-only creates.",
     ),
 };
 

@@ -90,13 +90,20 @@ function resolveInstallCommand(
   ) {
     return {
       cmd: "npm",
-      args: ["ci", "--prefer-offline", "--no-audit", "--no-fund"],
+      args: ["ci", "--include=optional", "--prefer-offline", "--no-audit", "--no-fund"],
     };
   }
 
   return {
     cmd: "npm",
-    args: ["install", "--prefer-offline", "--no-audit", "--no-fund"],
+    args: ["install", "--include=optional", "--prefer-offline", "--no-audit", "--no-fund"],
+  };
+}
+
+function resolveNpmOptionalRepairInstallCommand(): { cmd: string; args: string[] } {
+  return {
+    cmd: "npm",
+    args: ["install", "--include=optional", "--prefer-offline", "--no-audit", "--no-fund"],
   };
 }
 
@@ -434,11 +441,26 @@ function hasEsbuildPackage(projectDir: string): boolean {
   );
 }
 
+function hasRollupPackage(projectDir: string): boolean {
+  return fs.existsSync(
+    path.join(projectDir, "node_modules", "rollup", "package.json")
+  );
+}
+
 function removeNodeModules(projectDir: string): void {
   fs.rmSync(path.join(projectDir, "node_modules"), {
     recursive: true,
     force: true,
   });
+}
+
+function removeNpmInstallArtifacts(projectDir: string): void {
+  removeNodeModules(projectDir);
+  fs.rmSync(path.join(projectDir, "package-lock.json"), { force: true });
+}
+
+function removeNpmLockfile(projectDir: string): void {
+  fs.rmSync(path.join(projectDir, "package-lock.json"), { force: true });
 }
 
 async function detectEsbuildBinaryMismatch(
@@ -468,6 +490,51 @@ async function detectEsbuildBinaryMismatch(
 
   if (!hasVersionMismatch) return null;
   return output.trim() || "esbuild host/binary version mismatch";
+}
+
+function isMissingRollupNativeOptionalDependency(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return (
+    output.includes("@rollup/rollup-") &&
+    (normalized.includes("cannot find module") ||
+      normalized.includes("cannot find package") ||
+      normalized.includes("module_not_found"))
+  );
+}
+
+function isEsbuildBinaryMismatchMessage(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return (
+    (normalized.includes("node_modules/esbuild") &&
+      normalized.includes("expected") &&
+      normalized.includes("but got")) ||
+    normalized.includes("you installed esbuild for another platform") ||
+    (normalized.includes("host version") &&
+      normalized.includes("does not match binary version"))
+  );
+}
+
+async function detectRollupNativeOptionalDependencyFailure(
+  projectDir: string
+): Promise<string | null> {
+  if (!hasRollupPackage(projectDir)) return null;
+
+  const sanityCheck = await runProcess(
+    "node",
+    ["-e", "require('rollup')"],
+    {
+      cwd: projectDir,
+      timeoutMs: 20_000,
+    }
+  );
+
+  if (sanityCheck.code === 0 && !sanityCheck.timedOut) {
+    return null;
+  }
+
+  const output = `${sanityCheck.stderr}\n${sanityCheck.stdout}`;
+  if (!isMissingRollupNativeOptionalDependency(output)) return null;
+  return output.trim() || "missing Rollup native optional dependency";
 }
 
 function formatInstallFailure(result: RunProcessResult): string {
@@ -620,14 +687,18 @@ export class DevServerService {
             : "restart",
     });
     if (options?.clean || options?.resetCaches) {
-      this.cleanDevServerCaches(projectDir, { removeNodeModules: Boolean(options?.clean) });
+      const config = detectProjectType(projectDir);
+      this.cleanDevServerCaches(projectDir, {
+        removeNodeModules: Boolean(options?.clean),
+        removeNpmLockfile: Boolean(options?.clean && config.packageManager === "npm"),
+      });
     }
     return await this.getOrStartDevServer(projectDir, basePath);
   }
 
   private cleanDevServerCaches(
     projectDir: string,
-    options?: { removeNodeModules?: boolean }
+    options?: { removeNodeModules?: boolean; removeNpmLockfile?: boolean }
   ): void {
     const toRemove = [
       path.join(projectDir, ".astro"),
@@ -648,6 +719,14 @@ export class DevServerService {
     if (options?.removeNodeModules) {
       try {
         removeNodeModules(projectDir);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (options?.removeNpmLockfile) {
+      try {
+        removeNpmLockfile(projectDir);
       } catch {
         // ignore
       }
@@ -728,6 +807,7 @@ export class DevServerService {
 
       let installedDependencies = false;
       let needsInstall = !hasNodeModules(projectDir);
+      let forceNpmOptionalRepairInstall = false;
       const initialDepsDigest = getProjectDependencyDigest(
         projectDir,
         config.packageManager
@@ -767,6 +847,20 @@ export class DevServerService {
         }
       }
 
+      if (!needsInstall && config.packageManager === "npm") {
+        const rollupNativeFailure =
+          await detectRollupNativeOptionalDependencyFailure(projectDir);
+        if (rollupNativeFailure) {
+          console.warn(
+            "[DevServer] Detected missing Rollup native optional dependency. Reinstalling dependencies without npm lockfile."
+          );
+          debugLog("Rollup native optional dependency failure:", rollupNativeFailure);
+          removeNpmInstallArtifacts(projectDir);
+          needsInstall = true;
+          forceNpmOptionalRepairInstall = true;
+        }
+      }
+
       // Install dependencies if needed
       if (needsInstall) {
         serverInfo.status = "installing";
@@ -795,22 +889,72 @@ export class DevServerService {
             }
           }
 
+          if (restoredFromCache && config.packageManager === "npm") {
+            const rollupNativeFailureAfterRestore =
+              await detectRollupNativeOptionalDependencyFailure(projectDir);
+            if (rollupNativeFailureAfterRestore) {
+              console.warn(
+                "[DevServer] Cached node_modules is missing Rollup native optional dependency. Falling back to fresh npm install without lockfile."
+              );
+              debugLog(
+                "Rollup native optional dependency failure after cache restore:",
+                rollupNativeFailureAfterRestore
+              );
+              removeNpmInstallArtifacts(projectDir);
+              restoredFromCache = false;
+              forceNpmOptionalRepairInstall = true;
+            }
+          }
+
           if (!isActive()) return;
 
           if (!restoredFromCache) {
             console.log(`[DevServer] Installing dependencies in ${projectDir}`);
 
-            const install = resolveInstallCommand(projectDir, config.packageManager);
+            const install =
+              forceNpmOptionalRepairInstall && config.packageManager === "npm"
+                ? resolveNpmOptionalRepairInstallCommand()
+                : resolveInstallCommand(projectDir, config.packageManager);
             const installEnv = resolveInstallEnv(projectDir);
             debugLog(
               `Install command: ${install.cmd} ${install.args.join(" ")}`
             );
 
-            const result = await runProcess(install.cmd, install.args, {
+            let result = await runProcess(install.cmd, install.args, {
               cwd: projectDir,
               env: installEnv,
               timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
             });
+
+            if (
+              (result.code !== 0 || result.timedOut) &&
+              config.packageManager === "npm" &&
+              !forceNpmOptionalRepairInstall
+            ) {
+              const msg = formatInstallFailure(result);
+              if (isEsbuildBinaryMismatchMessage(msg)) {
+                console.warn(
+                  "[DevServer] Detected esbuild native binary mismatch during npm install. Retrying without npm lockfile."
+                );
+                debugLog("esbuild install mismatch details:", msg);
+                removeNpmInstallArtifacts(projectDir);
+                forceNpmOptionalRepairInstall = true;
+
+                const repairInstall = resolveNpmOptionalRepairInstallCommand();
+                debugLog(
+                  `Repair install command: ${repairInstall.cmd} ${repairInstall.args.join(" ")}`
+                );
+                result = await runProcess(
+                  repairInstall.cmd,
+                  repairInstall.args,
+                  {
+                    cwd: projectDir,
+                    env: installEnv,
+                    timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+                  }
+                );
+              }
+            }
 
             if (result.code !== 0 || result.timedOut) {
               const msg = formatInstallFailure(result);
@@ -838,6 +982,93 @@ export class DevServerService {
               serverInfo.error =
                 "Dependency install completed but esbuild binary is incompatible";
               return;
+            }
+
+            if (config.packageManager === "npm") {
+              const rollupNativeFailureAfterInstall =
+                await detectRollupNativeOptionalDependencyFailure(projectDir);
+              if (rollupNativeFailureAfterInstall) {
+                if (forceNpmOptionalRepairInstall) {
+                  console.error(
+                    "[DevServer] Dependencies installed, but Rollup native optional dependency is still missing."
+                  );
+                  debugLog(
+                    "Rollup native optional dependency failure after repair install:",
+                    rollupNativeFailureAfterInstall
+                  );
+                  serverInfo.status = "error";
+                  serverInfo.error =
+                    "Dependency install completed but Rollup native optional dependency is missing";
+                  return;
+                }
+
+                console.warn(
+                  "[DevServer] Detected missing Rollup native optional dependency after npm install. Retrying without npm lockfile."
+                );
+                debugLog(
+                  "Rollup native optional dependency failure after install:",
+                  rollupNativeFailureAfterInstall
+                );
+                removeNpmInstallArtifacts(projectDir);
+
+                const repairInstall = resolveNpmOptionalRepairInstallCommand();
+                debugLog(
+                  `Repair install command: ${repairInstall.cmd} ${repairInstall.args.join(" ")}`
+                );
+                const repairResult = await runProcess(
+                  repairInstall.cmd,
+                  repairInstall.args,
+                  {
+                    cwd: projectDir,
+                    env: installEnv,
+                    timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+                  }
+                );
+
+                if (repairResult.code !== 0 || repairResult.timedOut) {
+                  const msg = formatInstallFailure(repairResult);
+                  console.error(
+                    `[DevServer] Failed to repair npm optional dependencies: ${msg}`
+                  );
+                  serverInfo.status = "error";
+                  serverInfo.error = `npm optional dependency repair failed: ${msg}`;
+                  return;
+                }
+
+                if (!isActive()) return;
+
+                const esbuildMismatchAfterRepair =
+                  await detectEsbuildBinaryMismatch(projectDir);
+                if (esbuildMismatchAfterRepair) {
+                  console.error(
+                    "[DevServer] Dependencies repaired, but esbuild is still mismatched."
+                  );
+                  debugLog(
+                    "esbuild mismatch after npm optional dependency repair:",
+                    esbuildMismatchAfterRepair
+                  );
+                  serverInfo.status = "error";
+                  serverInfo.error =
+                    "Dependency repair completed but esbuild binary is incompatible";
+                  return;
+                }
+
+                const rollupNativeFailureAfterRepair =
+                  await detectRollupNativeOptionalDependencyFailure(projectDir);
+                if (rollupNativeFailureAfterRepair) {
+                  console.error(
+                    "[DevServer] Dependencies repaired, but Rollup native optional dependency is still missing."
+                  );
+                  debugLog(
+                    "Rollup native optional dependency failure after npm optional dependency repair:",
+                    rollupNativeFailureAfterRepair
+                  );
+                  serverInfo.status = "error";
+                  serverInfo.error =
+                    "Dependency repair completed but Rollup native optional dependency is missing";
+                  return;
+                }
+              }
             }
 
             installedDependencies = true;

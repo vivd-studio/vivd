@@ -5,7 +5,7 @@ import { LoadingSpinner } from "@/components/common";
 
 import type { AssetItem } from "./types";
 import { AssetItemCard } from "./AssetItemCard";
-import { buildImageUrl, isTextFile, STUDIO_UPLOADS_PATH } from "./utils";
+import { buildImageUrl, isTextFile } from "./utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 
@@ -13,6 +13,10 @@ interface ImageGalleryViewProps {
   projectSlug: string;
   version: number;
   currentPath: string;
+  uploadTargetPath: string;
+  itemsOverride?: AssetItem[];
+  isLoadingOverride?: boolean;
+  emptyLabel?: string;
   onNavigate: (path: string) => void;
   onAiEdit?: (item: AssetItem) => void;
   onDelete: (item: AssetItem) => void;
@@ -28,6 +32,10 @@ export function ImageGalleryView({
   projectSlug,
   version,
   currentPath,
+  uploadTargetPath,
+  itemsOverride,
+  isLoadingOverride,
+  emptyLabel = "No files yet",
   onNavigate,
   onAiEdit,
   onDelete,
@@ -54,8 +62,11 @@ export function ImageGalleryView({
     },
     {
       staleTime: 0,
+      enabled: !itemsOverride,
     },
   );
+  const items = itemsOverride ?? data?.items ?? [];
+  const loading = isLoadingOverride ?? isLoading;
 
   const handleItemClick = useCallback(
     (item: AssetItem) => {
@@ -106,7 +117,7 @@ export function ImageGalleryView({
     [projectSlug, version]
   );
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-32">
         <LoadingSpinner message="Loading files..." />
@@ -114,7 +125,7 @@ export function ImageGalleryView({
     );
   }
 
-  if (!data?.items?.length) {
+  if (!items.length) {
     return (
       <div
         className={`min-h-[200px] flex flex-col items-center justify-center text-muted-foreground ${
@@ -124,12 +135,12 @@ export function ImageGalleryView({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <p>No files yet</p>
+        <p>{emptyLabel}</p>
         <p className="text-sm">
-          Drop files here to upload to {currentPath || STUDIO_UPLOADS_PATH}
+          Drop files here to upload to {uploadTargetPath}
         </p>
         <p className="text-xs">
-          Use Upload to save working files to {STUDIO_UPLOADS_PATH}
+          Use Upload to save files to {uploadTargetPath}
         </p>
       </div>
     );
@@ -146,7 +157,7 @@ export function ImageGalleryView({
     >
       {/* Masonry layout with 2 columns */}
       <div className="columns-2 gap-2">
-        {data.items.map((item) => (
+        {items.map((item) => (
           <div key={item.path} className="break-inside-avoid mb-2">
             <AssetItemCard
               item={item}

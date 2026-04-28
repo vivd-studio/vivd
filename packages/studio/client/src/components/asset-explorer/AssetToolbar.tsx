@@ -12,6 +12,7 @@ import {
 
 interface AssetToolbarProps {
   currentPath?: string;
+  uploadTargetPath: string;
   uploadStatus: "idle" | "uploading" | "optimizing";
   onBack?: () => void;
   onCreateFolder: () => void;
@@ -22,6 +23,7 @@ interface AssetToolbarProps {
 
 export function AssetToolbar({
   currentPath,
+  uploadTargetPath,
   uploadStatus,
   onBack,
   onCreateFolder,
@@ -103,7 +105,7 @@ export function AssetToolbar({
           onClick={() => fileInputRef.current?.click()}
           disabled={isProcessing}
           title={
-            isProcessing ? "Processing..." : "Upload files to .vivd/uploads"
+            isProcessing ? "Processing..." : `Upload files to ${uploadTargetPath}`
           }
         >
           {isProcessing ? (

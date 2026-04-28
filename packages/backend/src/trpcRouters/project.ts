@@ -5,6 +5,7 @@ import { projectMaintenanceProcedures } from "./project/maintenance";
 import { previewProcedures } from "./project/preview";
 import { studioProcedures } from "./project/studio";
 import { projectTagProcedures } from "./project/tags";
+import { projectCopyProcedures } from "./project/copy";
 
 export const projectRouter = router({
   ...projectGenerationProcedures,
@@ -13,4 +14,5 @@ export const projectRouter = router({
   ...previewProcedures,
   ...studioProcedures,
   ...projectTagProcedures,
+  ...projectCopyProcedures,
 });

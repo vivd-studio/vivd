@@ -16,6 +16,7 @@ import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { ProjectCardActionsMenu } from "./projectCard/ProjectCardActionsMenu";
 import { ProjectCardContent } from "./projectCard/ProjectCardContent";
 import {
+  ProjectCardDuplicateDialog,
   ProjectCardEditTitleDialog,
   ProjectCardRenameDialog,
   ProjectCardStatusDialog,
@@ -38,6 +39,18 @@ export {
   isStudioAccessibleProjectStatus,
 } from "./projectCard/ProjectCard.helpers";
 
+function slugifyProjectInput(input: string): string {
+  return (
+    input
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project-copy"
+  );
+}
+
 export function ProjectCard({
   project,
   availableTags,
@@ -54,9 +67,12 @@ export function ProjectCard({
     project.currentVersion || 1,
   );
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [editTitleInput, setEditTitleInput] = useState(project.title ?? "");
+  const [duplicateTitleInput, setDuplicateTitleInput] = useState("");
+  const [duplicateSlugInput, setDuplicateSlugInput] = useState("");
   const [inlineTitleInput, setInlineTitleInput] = useState(
     project.title?.trim() || project.slug,
   );
@@ -97,6 +113,7 @@ export function ProjectCard({
 
   const {
     deleteTagMutation,
+    duplicateProjectMutation,
     regenerateThumbnailMutation,
     renameSlugMutation,
     renameTagMutation,
@@ -117,14 +134,19 @@ export function ProjectCard({
       setIsInlineTitleEditing(false);
       setInlineTitleInput(title);
     },
+    onDuplicateProjectSuccess: () => {
+      setShowDuplicateDialog(false);
+    },
   });
 
   const canManagePreview = isAdmin;
   const canRenameProject = isAdmin;
   const canDeleteProject = isAdmin;
+  const canDuplicateProject = isAdmin;
   const canManageTags = isAdmin;
   const canOverrideProjectStatus = isAdmin;
   const isRenamePending = renameSlugMutation.isPending;
+  const isProjectCopyPending = duplicateProjectMutation.isPending;
   const isTitleUpdatePending = updateTitleMutation.isPending;
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
   const projectTags = project.tags ?? [];
@@ -242,6 +264,13 @@ export function ProjectCard({
     navigate(projectStudioRoute);
   };
 
+  const openDuplicateDialog = () => {
+    const duplicateTitle = `${displayTitle} copy`;
+    setDuplicateTitleInput(duplicateTitle);
+    setDuplicateSlugInput(slugifyProjectInput(duplicateTitle));
+    setShowDuplicateDialog(true);
+  };
+
   const startInlineTitleEdit = () => {
     if (!canRenameProject || isRenamePending || isTitleUpdatePending) return;
     setInlineTitleInput(displayTitle);
@@ -277,7 +306,7 @@ export function ProjectCard({
           isProcessing ? "ring-1 ring-primary/15" : ""
         } ${canOpenStudio ? "cursor-pointer" : ""}`}
         onClick={() => {
-          if (canOpenStudio && !isRenamePending) {
+          if (canOpenStudio && !isRenamePending && !isProjectCopyPending) {
             openProjectStudio();
           }
         }}
@@ -295,11 +324,13 @@ export function ProjectCard({
           canManageTags={canManageTags}
           canRenameProject={canRenameProject}
           canDeleteProject={canDeleteProject}
+          canDuplicateProject={canDuplicateProject}
           canOverrideProjectStatus={canOverrideProjectStatus}
           isCompleted={isCompleted}
           isProcessing={isProcessing}
+          isDuplicateProjectPending={duplicateProjectMutation.isPending}
           isRegenerating={isRegenerating}
-          isRenamePending={isRenamePending}
+          isRenamePending={isRenamePending || isProjectCopyPending}
           isTitleUpdatePending={isTitleUpdatePending}
           isRegenerateThumbnailPending={regenerateThumbnailMutation.isPending}
           isSetPublicPreviewEnabledPending={
@@ -325,6 +356,7 @@ export function ProjectCard({
               "_blank",
             );
           }}
+          onOpenDuplicateDialog={openDuplicateDialog}
           onRegenerateThumbnail={() =>
             regenerateThumbnailMutation.mutate({
               slug: project.slug,
@@ -433,14 +465,16 @@ export function ProjectCard({
           }}
         />
 
-        {isRenamePending ? (
+        {isRenamePending || isProjectCopyPending ? (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface-page/80 backdrop-blur-sm">
             <Panel
               tone="sunken"
               className="flex items-center gap-2 p-3 text-sm font-medium shadow-sm"
             >
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              Renaming project slug...
+              {isRenamePending
+                ? "Renaming project slug..."
+                : "Duplicating as new project..."}
             </Panel>
           </div>
         ) : null}
@@ -480,6 +514,32 @@ export function ProjectCard({
           updateTitleMutation.mutate({
             slug: project.slug,
             title: editTitleInput.trim(),
+          });
+        }}
+      />
+
+      <ProjectCardDuplicateDialog
+        open={showDuplicateDialog}
+        onOpenChange={(open) => {
+          if (duplicateProjectMutation.isPending) return;
+          setShowDuplicateDialog(open);
+        }}
+        sourceProjectSlug={project.slug}
+        sourceVersion={selectedVersion}
+        duplicateTitleInput={duplicateTitleInput}
+        duplicateSlugInput={duplicateSlugInput}
+        isPending={duplicateProjectMutation.isPending}
+        onDuplicateTitleInputChange={(value) => {
+          setDuplicateTitleInput(value);
+          setDuplicateSlugInput(slugifyProjectInput(value));
+        }}
+        onDuplicateSlugInputChange={setDuplicateSlugInput}
+        onConfirm={() => {
+          duplicateProjectMutation.mutate({
+            sourceSlug: project.slug,
+            sourceVersion: selectedVersion,
+            title: duplicateTitleInput.trim(),
+            slug: duplicateSlugInput.trim(),
           });
         }}
       />

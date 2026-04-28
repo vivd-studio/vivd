@@ -313,6 +313,54 @@ export async function copyProjectArtifactsInBucket(options: {
   return { copied: true, objectsCopied: res.objectsCopied };
 }
 
+export async function copyProjectVersionArtifactsInBucket(options: {
+  organizationId: string;
+  sourceSlug: string;
+  sourceVersion: number;
+  targetSlug: string;
+  targetVersion: number;
+}): Promise<{ copied: boolean; objectsCopied: number }> {
+  const storage = getStorage();
+  if (!storage) return { copied: false, objectsCopied: 0 };
+
+  const sourcePrefix = getProjectVersionBasePrefix({
+    tenantId: options.organizationId,
+    slug: options.sourceSlug,
+    version: options.sourceVersion,
+  });
+  const targetPrefix = getProjectVersionBasePrefix({
+    tenantId: options.organizationId,
+    slug: options.targetSlug,
+    version: options.targetVersion,
+  });
+
+  const targetHasObjects = await doesPrefixHaveObjects({
+    client: storage.client,
+    bucket: storage.bucket,
+    keyPrefix: targetPrefix,
+  });
+  if (targetHasObjects) {
+    throw new Error(
+      `Target artifact prefix already exists for "${options.targetSlug}" v${options.targetVersion}.`,
+    );
+  }
+
+  const res = await copyBucketPrefix({
+    client: storage.client,
+    bucket: storage.bucket,
+    sourceKeyPrefix: sourcePrefix,
+    targetKeyPrefix: targetPrefix,
+  });
+  if (res.errors.length > 0) {
+    const first = res.errors[0];
+    throw new Error(
+      `Artifact copy failed for ${res.errors.length} object(s). First failure: ${first?.sourceKey ?? "unknown"} -> ${first?.targetKey ?? "unknown"} (${first?.error ?? "unknown error"})`,
+    );
+  }
+
+  return { copied: true, objectsCopied: res.objectsCopied };
+}
+
 export function getProjectPreviewMetaPathOnDisk(options: {
   versionDir: string;
 }): string {

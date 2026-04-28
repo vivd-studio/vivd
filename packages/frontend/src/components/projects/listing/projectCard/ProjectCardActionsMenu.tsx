@@ -41,9 +41,11 @@ interface ProjectCardActionsMenuProps {
   canManageTags: boolean;
   canRenameProject: boolean;
   canDeleteProject: boolean;
+  canDuplicateProject: boolean;
   canOverrideProjectStatus: boolean;
   isCompleted: boolean;
   isProcessing: boolean;
+  isDuplicateProjectPending: boolean;
   isRegenerating: boolean;
   isRenamePending: boolean;
   isTitleUpdatePending: boolean;
@@ -58,6 +60,7 @@ interface ProjectCardActionsMenuProps {
   onOpenPluginShortcut: (path: string) => void;
   onOpenTagsPopoverFromActions: () => void;
   onDownloadZip: () => void;
+  onOpenDuplicateDialog: () => void;
   onRegenerateThumbnail: () => void;
   onRegenerate: () => void;
   onManageVersions: () => void;
@@ -82,9 +85,11 @@ export function ProjectCardActionsMenu({
   canManageTags,
   canRenameProject,
   canDeleteProject,
+  canDuplicateProject,
   canOverrideProjectStatus,
   isCompleted,
   isProcessing,
+  isDuplicateProjectPending,
   isRegenerating,
   isRenamePending,
   isTitleUpdatePending,
@@ -99,6 +104,7 @@ export function ProjectCardActionsMenu({
   onOpenPluginShortcut,
   onOpenTagsPopoverFromActions,
   onDownloadZip,
+  onOpenDuplicateDialog,
   onRegenerateThumbnail,
   onRegenerate,
   onManageVersions,
@@ -224,6 +230,21 @@ export function ProjectCardActionsMenu({
           <Download className="w-4 h-4 mr-2" />
           Download as ZIP
         </DropdownMenuItem>
+        {canDuplicateProject ? (
+          <DropdownMenuItem
+            onClick={onOpenDuplicateDialog}
+            disabled={!isCompleted || isDuplicateProjectPending}
+          >
+            {isDuplicateProjectPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Copy className="w-4 h-4 mr-2" />
+            )}
+            {isDuplicateProjectPending
+              ? "Duplicating..."
+              : "Duplicate as new project"}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem
           onClick={onRegenerateThumbnail}
           disabled={!isCompleted || isRegenerateThumbnailPending}

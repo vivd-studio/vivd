@@ -3,9 +3,10 @@ import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetExplorer } from "./AssetExplorer";
-import { ASTRO_CONTENT_MEDIA_PATH } from "./utils";
+import { ASTRO_CONTENT_MEDIA_PATH, ASTRO_SHARED_MEDIA_PATH } from "./utils";
 
 const listAssetsUseQueryMock = vi.fn();
+const listAllAssetsUseQueryMock = vi.fn();
 const getPreviewInfoUseQueryMock = vi.fn();
 const createFolderUseMutationMock = vi.fn();
 const createImageUseMutationMock = vi.fn();
@@ -13,7 +14,9 @@ const useUtilsMock = vi.fn();
 const invalidateMock = vi.fn();
 const refetchMock = vi.fn();
 const fetchMock = vi.fn();
+const createImageMutateMock = vi.fn();
 let currentPreviewPath = "/";
+let canUseAiImages = false;
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -27,6 +30,9 @@ vi.mock("@/lib/trpc", () => ({
       listAssets: {
         useQuery: (...args: unknown[]) => listAssetsUseQueryMock(...args),
       },
+      listAllAssets: {
+        useQuery: (...args: unknown[]) => listAllAssetsUseQueryMock(...args),
+      },
       createFolder: {
         useMutation: (...args: unknown[]) => createFolderUseMutationMock(...args),
       },
@@ -39,7 +45,7 @@ vi.mock("@/lib/trpc", () => ({
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
-    canUseAiImages: false,
+    canUseAiImages,
   }),
 }));
 
@@ -79,7 +85,9 @@ vi.mock("@/components/ui/scroll-area", () => ({
 }));
 
 vi.mock("./AssetToolbar", () => ({
-  AssetToolbar: () => <div data-testid="asset-toolbar" />,
+  AssetToolbar: ({ uploadTargetPath }: { uploadTargetPath: string }) => (
+    <div data-testid="asset-toolbar" data-upload-target={uploadTargetPath} />
+  ),
 }));
 
 vi.mock("./CreateFolderInput", () => ({
@@ -91,7 +99,29 @@ vi.mock("./ImagePreviewDialog", () => ({
 }));
 
 vi.mock("./CreateImageDialog", () => ({
-  CreateImageDialog: () => null,
+  CreateImageDialog: ({
+    open,
+    prompt,
+    onPromptChange,
+    onSubmit,
+  }: {
+    open: boolean;
+    prompt: string;
+    onPromptChange: (value: string) => void;
+    onSubmit: () => void;
+  }) =>
+    open ? (
+      <div data-testid="create-image-dialog">
+        <input
+          aria-label="image prompt"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.currentTarget.value)}
+        />
+        <button type="button" onClick={onSubmit}>
+          Submit image
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("./ViewModeToggle", () => ({
@@ -105,11 +135,13 @@ vi.mock("./FileTreeView", () => ({
 vi.mock("./ImageGalleryView", () => ({
   ImageGalleryView: ({
     currentPath,
+    itemsOverride,
     onDragOver,
     onDragLeave,
     onDrop,
   }: {
     currentPath: string;
+    itemsOverride?: Array<{ path: string }>;
     onDragOver: (e: React.DragEvent) => void;
     onDragLeave: (e: React.DragEvent) => void;
     onDrop: (e: React.DragEvent) => void;
@@ -117,6 +149,7 @@ vi.mock("./ImageGalleryView", () => ({
     <div
       data-testid="image-gallery-view"
       data-path={currentPath}
+      data-items-count={itemsOverride?.length ?? -1}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -139,7 +172,9 @@ describe("AssetExplorer", () => {
     invalidateMock.mockReset();
     refetchMock.mockReset();
     fetchMock.mockReset();
+    createImageMutateMock.mockReset();
     getPreviewInfoUseQueryMock.mockReset();
+    canUseAiImages = false;
 
     useUtilsMock.mockReturnValue({
       assets: {
@@ -184,6 +219,11 @@ describe("AssetExplorer", () => {
         };
       },
     );
+    listAllAssetsUseQueryMock.mockReset();
+    listAllAssetsUseQueryMock.mockReturnValue({
+      data: { tree: [] },
+      isLoading: false,
+    });
 
     createFolderUseMutationMock.mockReturnValue({
       mutate: vi.fn(),
@@ -191,7 +231,7 @@ describe("AssetExplorer", () => {
     });
 
     createImageUseMutationMock.mockReturnValue({
-      mutate: vi.fn(),
+      mutate: createImageMutateMock,
       isPending: false,
     });
 
@@ -243,7 +283,7 @@ describe("AssetExplorer", () => {
     );
   });
 
-  it("uses src/content/media as the Astro gallery root and upload target", async () => {
+  it("uses src/content/media as the Astro gallery root and shared media as the default upload target", async () => {
     getPreviewInfoUseQueryMock.mockReturnValue({
       data: {
         mode: "devserver",
@@ -262,6 +302,10 @@ describe("AssetExplorer", () => {
         ASTRO_CONTENT_MEDIA_PATH,
       );
     });
+    expect(screen.getByTestId("asset-toolbar")).toHaveAttribute(
+      "data-upload-target",
+      ASTRO_SHARED_MEDIA_PATH,
+    );
 
     const file = new File(["demo"], "logo.png", { type: "image/png" });
     const files = createFileList([file]);
@@ -282,8 +326,87 @@ describe("AssetExplorer", () => {
     });
 
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      `path=${encodeURIComponent(ASTRO_CONTENT_MEDIA_PATH)}`,
+      `path=${encodeURIComponent(ASTRO_SHARED_MEDIA_PATH)}`,
     );
+  });
+
+  it("targets generated Astro images to shared media from the gallery root", async () => {
+    canUseAiImages = true;
+    getPreviewInfoUseQueryMock.mockReturnValue({
+      data: {
+        mode: "devserver",
+        status: "ready",
+        url: "/",
+      },
+      isFetched: true,
+      isLoading: false,
+    });
+
+    render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+        "data-path",
+        ASTRO_CONTENT_MEDIA_PATH,
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Image" }));
+    fireEvent.change(screen.getByLabelText("image prompt"), {
+      target: { value: "Clean hero image" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit image" }));
+
+    expect(createImageMutateMock).toHaveBeenCalledWith({
+      slug: "demo",
+      version: 1,
+      prompt: "Clean hero image",
+      referenceImages: [],
+      targetPath: ASTRO_SHARED_MEDIA_PATH,
+    });
+  });
+
+  it("shows a recursive All Media scope for Astro managed images", async () => {
+    getPreviewInfoUseQueryMock.mockReturnValue({
+      data: {
+        mode: "devserver",
+        status: "ready",
+        url: "/",
+      },
+      isFetched: true,
+      isLoading: false,
+    });
+    listAllAssetsUseQueryMock.mockReturnValue({
+      data: {
+        tree: [
+          {
+            name: "shared",
+            type: "folder",
+            path: "src/content/media/shared",
+            children: [
+              {
+                name: "hero.webp",
+                type: "file",
+                path: "src/content/media/shared/hero.webp",
+                isImage: true,
+              },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "All Media" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+        "data-items-count",
+        "1",
+      );
+    });
   });
 
   it("revalidates asset queries when the preview route changes", async () => {

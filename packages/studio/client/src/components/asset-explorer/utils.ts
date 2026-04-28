@@ -10,6 +10,7 @@ import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 export const STUDIO_UPLOADS_PATH = ".vivd/uploads";
 export const ASTRO_CONTENT_MEDIA_PATH = "src/content/media";
+export const ASTRO_SHARED_MEDIA_PATH = `${ASTRO_CONTENT_MEDIA_PATH}/shared`;
 export const FILE_TREE_INDENT_STEP_PX = 16;
 export const FILE_TREE_BASE_PADDING_PX = 12;
 export const FILE_TREE_GRAYED_FOLDER_NAMES = [
@@ -195,6 +196,68 @@ export function shouldIgnoreFileTreeMoveTarget(assetPath: string): boolean {
 export function isVivdInternalAssetPath(assetPath: string): boolean {
   const normalized = normalizeAssetPath(assetPath);
   return normalized === ".vivd" || normalized.startsWith(".vivd/");
+}
+
+export function isAstroManagedMediaPath(assetPath: string): boolean {
+  const normalized = normalizeAssetPath(assetPath);
+  return (
+    normalized === ASTRO_CONTENT_MEDIA_PATH ||
+    normalized.startsWith(`${ASTRO_CONTENT_MEDIA_PATH}/`)
+  );
+}
+
+export function getAssetScopeLabel(assetPath: string): string | null {
+  const normalized = normalizeAssetPath(assetPath);
+  if (
+    normalized === ASTRO_SHARED_MEDIA_PATH ||
+    normalized.startsWith(`${ASTRO_SHARED_MEDIA_PATH}/`)
+  ) {
+    return "shared";
+  }
+  if (isAstroManagedMediaPath(normalized)) {
+    const mediaRelativePath = normalized
+      .slice(ASTRO_CONTENT_MEDIA_PATH.length)
+      .replace(/^\/+/, "");
+    const [collection, entry] = mediaRelativePath.split("/").filter(Boolean);
+    if (collection && entry && !/\.[a-z0-9]+$/i.test(entry)) {
+      return `${collection}/${entry}`;
+    }
+    if (collection) return collection;
+    return "media";
+  }
+  if (normalized === "public" || normalized.startsWith("public/")) {
+    return "public";
+  }
+  if (isVivdInternalAssetPath(normalized)) {
+    return "working";
+  }
+  return null;
+}
+
+export function pickAssetCreationTargetPath(options: {
+  isAstroProject: boolean;
+  currentPath?: string | null;
+  fallbackGalleryPath: string;
+}): string {
+  const currentPath = options.currentPath
+    ? normalizeAssetPath(options.currentPath)
+    : "";
+
+  if (options.isAstroProject) {
+    if (
+      currentPath &&
+      currentPath !== ASTRO_CONTENT_MEDIA_PATH &&
+      isAstroManagedMediaPath(currentPath)
+    ) {
+      return currentPath;
+    }
+
+    return ASTRO_SHARED_MEDIA_PATH;
+  }
+
+  return currentPath && !isVivdInternalAssetPath(currentPath)
+    ? currentPath
+    : options.fallbackGalleryPath;
 }
 
 export function canDragAssetToPreview(assetPath: string): boolean {

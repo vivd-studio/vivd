@@ -1,11 +1,15 @@
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
+
+type DuplicateProjectResult = RouterOutputs["project"]["duplicateProject"];
+type ProjectListResult = RouterOutputs["project"]["list"];
 
 interface UseProjectCardMutationsArgs {
   projectSlug: string;
   selectedVersion: number;
   onRenameSuccess: () => void;
   onTitleUpdateSuccess: (title: string) => void;
+  onDuplicateProjectSuccess: (result: DuplicateProjectResult) => void;
 }
 
 export function useProjectCardMutations({
@@ -13,8 +17,10 @@ export function useProjectCardMutations({
   selectedVersion,
   onRenameSuccess,
   onTitleUpdateSuccess,
+  onDuplicateProjectSuccess,
 }: UseProjectCardMutationsArgs) {
   const utils = trpc.useUtils();
+  const duplicateProjectToastId = `duplicate-project-${projectSlug}`;
 
   const setStatusMutation = trpc.project.setStatus.useMutation({
     onSuccess: (data, variables) => {
@@ -137,6 +143,80 @@ export function useProjectCardMutations({
     },
   });
 
+  const duplicateProjectMutation = trpc.project.duplicateProject.useMutation({
+    onMutate: async (variables) => {
+      await utils.project.list.cancel();
+      const previousList = utils.project.list.getData();
+      const createdAt = new Date().toISOString();
+      const targetSlug =
+        variables.slug?.trim() || `${variables.sourceSlug.trim()}-copy`;
+      const targetTitle = variables.title?.trim() || targetSlug;
+
+      utils.project.list.setData(undefined, (current): ProjectListResult | undefined => {
+        if (!current) return current;
+        return {
+          ...current,
+          projects: [
+            {
+              slug: targetSlug,
+              url: "",
+              source: "scratch",
+              title: targetTitle,
+              tags: [],
+              status: "duplicating_project",
+              createdAt,
+              updatedAt: createdAt,
+              currentVersion: 1,
+              totalVersions: 1,
+              versions: [
+                {
+                  version: 1,
+                  createdAt,
+                  status: "duplicating_project",
+                },
+              ],
+              publishedDomain: null,
+              publishedVersion: null,
+              thumbnailUrl: null,
+              publicPreviewEnabled: false,
+              enabledPlugins: [],
+            },
+            ...current.projects.filter((project) => project.slug !== targetSlug),
+          ],
+        };
+      });
+
+      toast.loading("Duplicating project", {
+        id: duplicateProjectToastId,
+        description: `Copying ${variables.sourceSlug} v${variables.sourceVersion ?? selectedVersion} as a new project...`,
+      });
+
+      return { previousList };
+    },
+    onSuccess: async (data) => {
+      toast.success("Project duplicated", {
+        id: duplicateProjectToastId,
+        description: `${data.targetSlug} v${data.targetVersion} is ready.`,
+      });
+      await utils.project.list.invalidate();
+      await utils.project.list.refetch();
+      await utils.project.status.invalidate({
+        slug: data.targetSlug,
+        version: data.targetVersion,
+      });
+      onDuplicateProjectSuccess(data);
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousList) {
+        utils.project.list.setData(undefined, context.previousList);
+      }
+      toast.error("Failed to duplicate project", {
+        id: duplicateProjectToastId,
+        description: error.message,
+      });
+    },
+  });
+
   const setPublicPreviewEnabledMutation =
     trpc.project.setPublicPreviewEnabled.useMutation({
       onSuccess: (data) => {
@@ -160,6 +240,7 @@ export function useProjectCardMutations({
 
   return {
     deleteTagMutation,
+    duplicateProjectMutation,
     regenerateThumbnailMutation,
     renameSlugMutation,
     renameTagMutation,

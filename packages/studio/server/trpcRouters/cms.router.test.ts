@@ -553,6 +553,78 @@ heroImage: ../media/blog/original.webp
     });
   });
 
+  it("copies dropped shared media into entry media before saving CMS image fields", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "shared"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "blog", "welcome"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: ({ image }) =>
+      z.object({
+        title: z.string(),
+        heroImage: image().optional(),
+      }),
+  }),
+};
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "blog", "welcome.yaml"),
+      `title: Welcome
+heroImage: ../media/shared/old.webp
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "shared", "hero.webp"),
+      "new image",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "blog", "welcome", "hero.webp"),
+      "existing image",
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.applyPreviewFieldUpdates({
+      slug: "demo-site",
+      version: 1,
+      updates: [
+        {
+          modelKey: "blog",
+          entryKey: "welcome",
+          fieldPath: ["heroImage"],
+          value: "src/content/media/shared/hero.webp",
+          assetAction: {
+            kind: "copy-to-entry",
+            sourcePath: "src/content/media/shared/hero.webp",
+          },
+        },
+      ],
+    });
+
+    expect(result.report.valid).toBe(true);
+    await expect(
+      fs.readFile(
+        path.join(projectDir, "src", "content", "media", "blog", "welcome", "hero-2.webp"),
+        "utf8",
+      ),
+    ).resolves.toBe("new image");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "welcome.yaml"), "utf8"),
+    ).resolves.toContain("heroImage: ../media/blog/welcome/hero-2.webp");
+  });
+
   it("saves CMS entries and sidecars through one server mutation", async () => {
     await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
     await fs.writeFile(

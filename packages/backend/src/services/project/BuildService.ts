@@ -55,12 +55,46 @@ function isMissingRollupNativeDependency(message: string): boolean {
   );
 }
 
+function isEsbuildBinaryMismatch(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    (normalized.includes("node_modules/esbuild") &&
+      normalized.includes("expected") &&
+      normalized.includes("but got")) ||
+    normalized.includes("you installed esbuild for another platform")
+  );
+}
+
 function resetNpmInstallArtifacts(versionDir: string): void {
   fs.rmSync(path.join(versionDir, "node_modules"), {
     recursive: true,
     force: true,
   });
   fs.rmSync(path.join(versionDir, "package-lock.json"), { force: true });
+}
+
+function installDependenciesWithNativeRetry(
+  versionDir: string,
+  config: ProjectTypeConfig,
+): void {
+  try {
+    installDependencies(versionDir, config);
+    return;
+  } catch (err) {
+    const message = getErrorMessage(err);
+    if (
+      config.packageManager !== "npm" ||
+      !isEsbuildBinaryMismatch(message)
+    ) {
+      throw err;
+    }
+
+    console.warn(
+      `[Build] Detected esbuild native binary mismatch in ${versionDir}; reinstalling npm dependencies without the existing lockfile.`,
+    );
+    resetNpmInstallArtifacts(versionDir);
+    installDependencies(versionDir, config);
+  }
 }
 
 function buildAstroWithNativeRetry(
@@ -84,7 +118,7 @@ function buildAstroWithNativeRetry(
       `[Build] Missing Rollup native optional dependency in ${versionDir}; reinstalling npm dependencies without the existing lockfile.`,
     );
     resetNpmInstallArtifacts(versionDir);
-    installDependencies(versionDir, config);
+    installDependenciesWithNativeRetry(versionDir, config);
 
     try {
       runAstroBuild(versionDir, outputDir);
@@ -226,7 +260,7 @@ class BuildService {
     }
 
     if (!hasNodeModules(versionDir)) {
-      installDependencies(versionDir, config);
+      installDependenciesWithNativeRetry(versionDir, config);
     }
 
     // Run astro build with custom output directory
@@ -274,7 +308,7 @@ class BuildService {
       }
 
       if (!hasNodeModules(versionDir)) {
-        installDependencies(versionDir, config);
+        installDependenciesWithNativeRetry(versionDir, config);
       }
 
       // Run astro build

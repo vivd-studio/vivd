@@ -13,6 +13,7 @@ import {
   ZIP_IMPORT_MAX_FILE_SIZE_MB,
 } from "@/lib/import-utils";
 import { ROUTES } from "@/app/router";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Button, Input, Form, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
 
 import { VersionDialog } from "../versioning/VersionDialog";
@@ -43,6 +44,7 @@ export function NewProjectHeaderActions() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
+  const { isSuperAdmin } = usePermissions();
   const utils = trpc.useUtils();
 
   const form = useForm<UrlFormValues>({
@@ -141,6 +143,7 @@ export function NewProjectHeaderActions() {
   };
 
   const handleImport = async () => {
+    if (!isSuperAdmin) return;
     if (!importFile) return;
     setIsImporting(true);
     const toastId = toast.loading("Importing project", {
@@ -189,18 +192,20 @@ export function NewProjectHeaderActions() {
           <Globe className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">From website</span>
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9 rounded-[10px] border border-transparent bg-card/48 px-3.5 text-[13px] font-medium text-foreground/92 shadow-[0_12px_30px_hsl(var(--background)/0.16)] hover:border-primary/18 hover:bg-card/76 hover:text-foreground"
-          onClick={() => {
-            resetTransientState();
-            setMode("import");
-          }}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Import ZIP</span>
-        </Button>
+        {isSuperAdmin && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 rounded-[10px] border border-transparent bg-card/48 px-3.5 text-[13px] font-medium text-foreground/92 shadow-[0_12px_30px_hsl(var(--background)/0.16)] hover:border-primary/18 hover:bg-card/76 hover:text-foreground"
+            onClick={() => {
+              resetTransientState();
+              setMode("import");
+            }}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Import ZIP</span>
+          </Button>
+        )}
       </div>
 
       <Dialog open={mode === "url"} onOpenChange={(open) => (!open ? closeDialog() : setMode("url"))}>
@@ -235,7 +240,7 @@ export function NewProjectHeaderActions() {
       </Dialog>
 
       <Dialog
-        open={mode === "import"}
+        open={isSuperAdmin && mode === "import"}
         onOpenChange={(open) => (!open ? closeDialog() : setMode("import"))}
       >
         <DialogContent className="sm:max-w-md">

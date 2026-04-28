@@ -3,6 +3,13 @@ import {
   type CmsPreviewBinding,
 } from "@/lib/cmsPreviewBindings";
 import { type PreviewMode } from "./types";
+import {
+  computeImageDropPlan,
+  isAstroImportableImageAssetPath,
+  isPublicImageAssetPath,
+  type ImageDropPlan,
+  type ImageDropTargetContext,
+} from "./imageDropPlan";
 
 const ASTRO_SOURCE_SELECTOR = "[data-astro-source-file]";
 
@@ -20,6 +27,7 @@ export interface PreviewImageDropSupport {
   cmsBinding: CmsPreviewBinding | null;
   astroSourceFile: string | null;
   astroSourceLoc: string | null;
+  plan: ImageDropPlan;
 }
 
 function normalizeAssetPath(assetPath: string): string {
@@ -27,16 +35,11 @@ function normalizeAssetPath(assetPath: string): string {
 }
 
 export function isAstroImportableContentAssetPath(assetPath: string): boolean {
-  const normalizedPath = normalizeAssetPath(assetPath);
-  return (
-    normalizedPath === "src/content" ||
-    normalizedPath.startsWith("src/content/")
-  );
+  return isAstroImportableImageAssetPath(assetPath);
 }
 
 export function isPublicAssetPath(assetPath: string): boolean {
-  const normalizedPath = normalizeAssetPath(assetPath);
-  return normalizedPath === "public" || normalizedPath.startsWith("public/");
+  return isPublicImageAssetPath(assetPath);
 }
 
 export function getPreviewImageBaselineSource(
@@ -99,148 +102,76 @@ export function getPreviewImageDropSupport(options: {
   const { astroSourceFile, astroSourceLoc } = readAstroSourceMeta(targetImg);
   const hasResponsiveMarkup = hasResponsivePreviewImageMarkup(targetImg);
   const hasAstroAnchor = Boolean(astroSourceLoc || baselineSrc);
+  let target: ImageDropTargetContext;
 
   if (cmsBinding && (cmsBinding.kind === null || cmsBinding.kind === "asset")) {
-    return {
-      canDrop: true,
-      strategy: "cms",
-      baselineSrc,
+    target = {
+      kind: "cms-asset-field",
       cmsBinding,
+      baselineSrc,
       astroSourceFile,
       astroSourceLoc,
     };
-  }
-
-  if (previewMode === "devserver") {
+  } else if (previewMode === "devserver") {
     if (!astroSourceFile) {
-      return {
-        canDrop: false,
-        strategy: null,
+      target = {
+        kind: "unsupported-image",
         reason:
           "Dev-server preview drops only work on CMS-bound or source-backed Astro images.",
         baselineSrc,
-        cmsBinding: null,
-        astroSourceFile: null,
-        astroSourceLoc: null,
       };
-    }
-
-    if (!hasAstroAnchor) {
-      return {
-        canDrop: false,
-        strategy: null,
+    } else if (!hasAstroAnchor) {
+      target = {
+        kind: "unsupported-image",
         reason:
           "This Astro image does not expose enough source information for a stable preview drop yet.",
         baselineSrc,
-        cmsBinding: null,
+      };
+    } else {
+      target = {
+        kind: "astro-source-image",
         astroSourceFile,
         astroSourceLoc,
-      };
-    }
-
-    if (!assetPath) {
-      return {
-        canDrop: true,
-        strategy: "astro-import",
         baselineSrc,
-        cmsBinding: null,
-        astroSourceFile,
-        astroSourceLoc,
+        hasResponsiveMarkup,
       };
     }
-
-    if (isAstroImportableContentAssetPath(assetPath)) {
-      return {
-        canDrop: true,
-        strategy: "astro-import",
-        baselineSrc,
-        cmsBinding: null,
-        astroSourceFile,
-        astroSourceLoc,
-      };
-    }
-
-    if (!isPublicAssetPath(assetPath)) {
-      return {
-        canDrop: false,
-        strategy: null,
-        reason:
-          "Astro preview drops only support local image assets under `src/content/**` or files under `public/`.",
-        baselineSrc,
-        cmsBinding: null,
-        astroSourceFile,
-        astroSourceLoc,
-      };
-    }
-
-    if (!baselineSrc) {
-      return {
-        canDrop: false,
-        strategy: null,
-        reason:
-          "This Astro image does not expose a stable src value, so Vivd can't rewrite it safely from preview.",
-        baselineSrc,
-        cmsBinding: null,
-        astroSourceFile,
-        astroSourceLoc,
-      };
-    }
-
-    if (hasResponsiveMarkup) {
-      return {
-        canDrop: false,
-        strategy: null,
-        reason:
-          "Responsive Astro images can only be preview-dropped with local `src/content/**` assets right now.",
-        baselineSrc,
-        cmsBinding: null,
-        astroSourceFile,
-        astroSourceLoc,
-      };
-    }
-
-    return {
-      canDrop: true,
-      strategy: "astro-public",
+  } else {
+    target = {
+      kind: "static-html-image",
       baselineSrc,
-      cmsBinding: null,
-      astroSourceFile,
-      astroSourceLoc,
+      hasResponsiveMarkup,
     };
   }
 
-  if (hasResponsiveMarkup) {
-    return {
-      canDrop: false,
-      strategy: null,
-      reason:
-        "Responsive `picture`/`srcset` images can't be replaced directly from the static preview yet.",
-      baselineSrc,
-      cmsBinding: null,
-      astroSourceFile,
-      astroSourceLoc,
-    };
-  }
-
-  if (!baselineSrc) {
-    return {
-      canDrop: false,
-      strategy: null,
-      reason:
-        "This image does not expose a stable src value, so Vivd can't save the preview drop safely.",
-      baselineSrc,
-      cmsBinding: null,
-      astroSourceFile,
-      astroSourceLoc,
-    };
-  }
+  const plan = computeImageDropPlan({
+    assetPath: assetPath ? normalizeAssetPath(assetPath) : null,
+    target,
+  });
+  const astroSourceWrite = plan.writes.find(
+    (write) => write.type === "astro-source",
+  );
+  const strategy: PreviewImageDropStrategy | null = !plan.canDrop
+    ? null
+    : plan.kind === "set-cms-reference" ||
+        plan.kind === "copy-to-cms-entry" ||
+        plan.kind === "import-working-asset"
+      ? "cms"
+      : plan.kind === "set-astro-source-image"
+        ? astroSourceWrite?.type === "astro-source" &&
+          astroSourceWrite.mode === "public-runtime"
+          ? "astro-public"
+          : "astro-import"
+        : "static-html";
 
   return {
-    canDrop: true,
-    strategy: "static-html",
+    canDrop: plan.canDrop,
+    strategy,
+    reason: plan.reason,
     baselineSrc,
-    cmsBinding: null,
+    cmsBinding: target.kind === "cms-asset-field" ? target.cmsBinding : null,
     astroSourceFile,
     astroSourceLoc,
+    plan,
   };
 }

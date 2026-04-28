@@ -119,6 +119,8 @@ export function PreviewContent() {
     setEditingAsset,
     pendingDeleteAsset,
     setPendingDeleteAsset,
+    imageDropChoiceRequest,
+    resolveImageDropChoice,
   } = usePreview();
 
   const { canUseAiImages } = usePermissions();
@@ -342,6 +344,15 @@ export function PreviewContent() {
     if (!viewingImagePath) return null;
     return navigableFiles[currentFileIndex] || null;
   }, [navigableFiles, currentFileIndex, viewingImagePath]);
+
+  const primaryImageDropChoice =
+    imageDropChoiceRequest?.plan.choices.find((choice) => choice.primary) ??
+    imageDropChoiceRequest?.plan.choices[0] ??
+    null;
+  const secondaryImageDropChoices =
+    imageDropChoiceRequest?.plan.choices.filter(
+      (choice) => choice.kind !== primaryImageDropChoice?.kind,
+    ) ?? [];
 
   const framedViewport = viewportMode !== "desktop";
   const activeFrame = viewportMode === "tablet" ? TABLET_PRESET : selectedDevice;
@@ -609,6 +620,63 @@ export function PreviewContent() {
                     "Delete"
                   )}
                 </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            open={!!imageDropChoiceRequest}
+            onOpenChange={(open) => {
+              if (!open) resolveImageDropChoice(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Choose where this image lives</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>
+                      {imageDropChoiceRequest?.plan.label ??
+                        "Choose how to use this image."}
+                    </p>
+                    {imageDropChoiceRequest?.plan.detail ? (
+                      <p className="text-xs">
+                        {imageDropChoiceRequest.plan.detail}
+                      </p>
+                    ) : null}
+                    {imageDropChoiceRequest?.plan.warnings.map((warning) => (
+                      <p
+                        key={warning}
+                        className="text-xs text-amber-600 dark:text-amber-400"
+                      >
+                        {warning}
+                      </p>
+                    ))}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => resolveImageDropChoice(null)}>
+                  Cancel
+                </AlertDialogCancel>
+                {secondaryImageDropChoices.map((choice) => (
+                  <AlertDialogAction
+                    key={choice.kind}
+                    variant="outline"
+                    onClick={() => resolveImageDropChoice(choice.kind)}
+                  >
+                    {choice.label}
+                  </AlertDialogAction>
+                ))}
+                {primaryImageDropChoice ? (
+                  <AlertDialogAction
+                    onClick={() =>
+                      resolveImageDropChoice(primaryImageDropChoice.kind)
+                    }
+                  >
+                    {primaryImageDropChoice.label}
+                  </AlertDialogAction>
+                ) : null}
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

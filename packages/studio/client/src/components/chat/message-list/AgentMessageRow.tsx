@@ -19,6 +19,27 @@ const EDIT_LIKE_TOOL_NAMES = new Set([
   "bash",
 ]);
 
+const GROUPABLE_EDIT_TOOL_NAMES = new Set([
+  "edit",
+  "write",
+  "patch",
+  "multiedit",
+  "apply_patch",
+]);
+
+type AgentDisplayItem =
+  | {
+      type: "part";
+      key: string;
+      part: any;
+      index: number;
+    }
+  | {
+      type: "activity-group";
+      key: string;
+      parts: any[];
+    };
+
 export function AgentMessageRow({
   item,
   orderedParts,
@@ -33,14 +54,19 @@ export function AgentMessageRow({
   const orderedActionParts = orderedParts.filter(
     (part) => part?.type === "reasoning" || part?.type === "tool",
   );
-  const orderedResponseParts = orderedParts.filter(
-    (part) => part?.type === "text",
+  const displayItems = buildAgentDisplayItems(orderedParts, {
+    groupActivity: item.runInProgress || item.showWorkedSection,
+    runInProgress: item.runInProgress,
+  });
+  const hasActivityGroup = displayItems.some(
+    (displayItem) => displayItem.type === "activity-group",
   );
   const hasLegacyContent =
     item.message &&
     (!item.message.parts || item.message.parts.length === 0) &&
     item.message.content;
-  const lastOrderedActionPart = orderedActionParts[orderedActionParts.length - 1];
+  const lastOrderedActionPart =
+    orderedActionParts[orderedActionParts.length - 1];
   const hasActiveOrderedAction =
     Boolean(lastOrderedActionPart) &&
     (lastOrderedActionPart?.type === "reasoning" ||
@@ -61,57 +87,56 @@ export function AgentMessageRow({
         <SessionDivider label={item.sessionDividerLabel} className="mt-1" />
       ) : null}
 
-      {item.showWorkedSection ? (
-        <WorkedSessionSection
-          label={item.workedLabel ?? "Worked session"}
-          isOpen={workedOpen}
-          onToggle={onToggleWorked}
-        >
-          {orderedActionParts.map((part, index) => (
-            <MessagePartBubble
-              key={part?.id ?? `worked-action-${index}`}
-              part={part}
-              isStreaming={false}
-              isLast={index === orderedActionParts.length - 1}
-            />
-          ))}
-        </WorkedSessionSection>
-      ) : (
-        <>
-          {orderedParts.map((part, index) => (
-            <MessagePartBubble
-              key={part?.id ?? `live-part-${index}`}
-              part={part}
-              isStreaming={item.runInProgress}
-              isLast={index === orderedParts.length - 1}
-            />
-          ))}
-          {item.runInProgress && item.fallbackState && !hasActiveOrderedAction && (
-            <AgentStateRow
-              label={
-                <LoadingStateLabel
-                  prefix={
-                    <span className="font-semibold">
-                      {item.fallbackState === "waiting" ? "Waiting" : "Working"}
-                    </span>
-                  }
+      {displayItems.map((displayItem, index) => {
+        if (displayItem.type === "activity-group") {
+          return (
+            <WorkedSessionSection
+              key={displayItem.key}
+              label={buildActivityGroupLabel(
+                displayItem.parts,
+                item.runInProgress,
+                item.workedLabel,
+              )}
+              isOpen={workedOpen}
+              onToggle={onToggleWorked}
+            >
+              {displayItem.parts.map((part, groupPartIndex) => (
+                <ActivityGroupDetailPart
+                  key={part?.id ?? `${displayItem.key}-part-${groupPartIndex}`}
+                  part={part}
+                  isLast={groupPartIndex === displayItem.parts.length - 1}
                 />
-              }
-              tone="muted"
-            />
-          )}
-        </>
-      )}
+              ))}
+            </WorkedSessionSection>
+          );
+        }
 
-      {item.showWorkedSection &&
-        orderedResponseParts.map((part, index) => (
+        return (
           <MessagePartBubble
-            key={part?.id ?? `response-${index}`}
-            part={part}
+            key={displayItem.key}
+            part={displayItem.part}
             isStreaming={item.runInProgress}
-            isLast={index === orderedResponseParts.length - 1}
+            isLast={index === displayItems.length - 1}
           />
-        ))}
+        );
+      })}
+      {item.runInProgress &&
+        item.fallbackState &&
+        !hasActiveOrderedAction &&
+        !hasActivityGroup && (
+          <AgentStateRow
+            label={
+              <LoadingStateLabel
+                prefix={
+                  <span className="font-semibold">
+                    {item.fallbackState === "waiting" ? "Waiting" : "Working"}
+                  </span>
+                }
+              />
+            }
+            tone="muted"
+          />
+        )}
 
       {hasLegacyContent && (
         <AgentMarkdownBlock
@@ -130,39 +155,283 @@ export function AgentMessageRow({
   );
 }
 
+function buildAgentDisplayItems(
+  orderedParts: any[],
+  options: { groupActivity: boolean; runInProgress: boolean },
+): AgentDisplayItem[] {
+  if (!options.groupActivity) {
+    return orderedParts.map((part, index) => ({
+      type: "part",
+      key: part?.id ?? `part-${index}`,
+      part,
+      index,
+    }));
+  }
+
+  const hasActionPart = orderedParts.some(isActionPart);
+  if (!hasActionPart) {
+    return orderedParts.map((part, index) => ({
+      type: "part",
+      key: part?.id ?? `part-${index}`,
+      part,
+      index,
+    }));
+  }
+
+  if (options.runInProgress) {
+    return [
+      {
+        type: "activity-group",
+        key: `activity-${orderedParts[0]?.id ?? "running"}`,
+        parts: orderedParts,
+      },
+    ];
+  }
+
+  const lastActionIndex = findLastActionPartIndex(orderedParts);
+  if (lastActionIndex < 0) {
+    return orderedParts.map((part, index) => ({
+      type: "part",
+      key: part?.id ?? `part-${index}`,
+      part,
+      index,
+    }));
+  }
+
+  const activityParts = orderedParts.slice(0, lastActionIndex + 1);
+  const answerParts = orderedParts.slice(lastActionIndex + 1);
+
+  return [
+    {
+      type: "activity-group",
+      key: `activity-${activityParts[0]?.id ?? "completed"}`,
+      parts: activityParts,
+    },
+    ...answerParts.map((part, index) => ({
+      type: "part" as const,
+      key: part?.id ?? `part-${lastActionIndex + 1 + index}`,
+      part,
+      index: lastActionIndex + 1 + index,
+    })),
+  ];
+}
+
+function isActionPart(part: any): boolean {
+  return part?.type === "reasoning" || part?.type === "tool";
+}
+
+function findLastActionPartIndex(parts: any[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (isActionPart(parts[index])) return index;
+  }
+  return -1;
+}
+
+function isCheckCommand(part: any): boolean {
+  const command = extractToolCommand(part);
+  return Boolean(
+    command &&
+    /\b(test|vitest|typecheck|tsc|lint|eslint|build|validate|check)\b/i.test(
+      command,
+    ),
+  );
+}
+
+function buildActivityGroupLabel(
+  parts: any[],
+  isWorking: boolean,
+  workedLabel?: string,
+): ReactNode {
+  const summary = summarizeActivityGroup(parts);
+  const latest = isWorking ? getLatestActivityLabel(parts) : null;
+  const label = isWorking ? (
+    <LoadingStateLabel
+      prefix={<span className="font-semibold">Working</span>}
+    />
+  ) : (
+    (workedLabel ?? "Worked")
+  );
+
+  const details = [latest, summary].filter(Boolean).join(" · ");
+  if (!details) return label;
+
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+      <span className="shrink-0">{label}</span>
+      <span aria-hidden="true" className="shrink-0 text-muted-foreground/45">
+        ·
+      </span>
+      <span className="min-w-0 truncate font-normal text-muted-foreground/75">
+        {details}
+      </span>
+    </span>
+  );
+}
+
+function summarizeActivityGroup(parts: any[]): string {
+  let thoughts = 0;
+  let reads = 0;
+  let searches = 0;
+  let lists = 0;
+  let edits = 0;
+  let checks = 0;
+  let otherTools = 0;
+  let failed = 0;
+
+  for (const part of parts) {
+    if (part?.type === "reasoning") {
+      thoughts += 1;
+      continue;
+    }
+
+    if (part?.type !== "tool") continue;
+
+    const toolName = String(part.tool ?? "")
+      .trim()
+      .toLowerCase();
+    const toolStatus = normalizeToolStatus(part) ?? "completed";
+    if (toolStatus === "error") {
+      failed += 1;
+    }
+
+    if (toolName === "read") {
+      reads += 1;
+    } else if (toolName === "grep" || toolName === "glob") {
+      searches += 1;
+    } else if (toolName === "list" || isListCommand(part)) {
+      lists += 1;
+    } else if (GROUPABLE_EDIT_TOOL_NAMES.has(toolName)) {
+      edits += 1;
+    } else if (toolName === "bash" && isCheckCommand(part)) {
+      checks += 1;
+    } else {
+      otherTools += 1;
+    }
+  }
+
+  return [
+    formatActivityCount(reads, "Read 1 file", `Read ${reads} files`),
+    formatActivityCount(
+      searches,
+      "Searched the project",
+      `Searched ${searches} times`,
+    ),
+    formatActivityCount(lists, "Listed 1 folder", `Listed ${lists} folders`),
+    formatActivityCount(edits, "Edited 1 file", `Edited ${edits} files`),
+    formatActivityCount(checks, "Ran checks", `Ran ${checks} checks`),
+    formatActivityCount(otherTools, "Ran 1 tool", `Ran ${otherTools} tools`),
+    formatActivityCount(failed, "1 failed", `${failed} failed`),
+    formatActivityCount(
+      thoughts,
+      "Thought through the change",
+      "Thought through the change",
+    ),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatActivityCount(
+  count: number,
+  singular: string,
+  plural: string,
+): string | null {
+  if (count <= 0) return null;
+  return count === 1 ? singular : plural;
+}
+
+function getLatestActivityLabel(parts: any[]): string | null {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (part?.type === "text") {
+      const text = normalizeActivityText(part.text);
+      if (text) return text;
+      continue;
+    }
+
+    if (part?.type === "reasoning") {
+      const text = normalizeActivityText(part.text);
+      return text ?? "Thinking through the change";
+    }
+
+    if (part?.type === "tool") {
+      return getReadableToolActivityLabel(part);
+    }
+  }
+
+  return null;
+}
+
+function normalizeActivityText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = sanitizeToolText(value)
+    .replace(/[#*_`>]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  return normalized.length > 96
+    ? `${normalized.slice(0, 96).trim()}...`
+    : normalized;
+}
+
+function getReadableToolActivityLabel(part: any): string {
+  const toolStatus = normalizeToolStatus(part) ?? "completed";
+  const labelParts = getToolActivityLabelParts(part);
+  const action = stripTrailingDots(labelParts.action);
+  const target = stripTrailingDots(labelParts.target);
+  const label = [action, target].filter(Boolean).join(" ").trim();
+
+  if (label) return label;
+  if (toolStatus === "running") return "Running tool";
+  if (toolStatus === "error") return "Tool failed";
+  return "Ran tool";
+}
+
+function isListCommand(part: any): boolean {
+  const command = extractToolCommand(part);
+  if (!command) return false;
+  return /^\s*(?:ls|find|tree|pwd)\b/i.test(command);
+}
+
 function WorkedSessionSection({
   label,
   children,
   isOpen,
   onToggle,
 }: {
-  label: string;
+  label: ReactNode;
   children: ReactNode;
   isOpen: boolean;
   onToggle: () => void;
 }) {
   return (
-    <div className="w-full">
-      <SessionDivider
-        label={label}
+    <div className="w-full max-w-full">
+      <button
+        type="button"
         onClick={onToggle}
-        icon={
-          isOpen ? (
+        aria-expanded={isOpen}
+        className="group flex max-w-full items-center gap-1.5 px-1 py-0.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <span className="min-w-0 truncate">{label}</span>
+        <span className="inline-flex shrink-0 items-center text-muted-foreground/70 transition-colors group-hover:text-foreground">
+          {isOpen ? (
             <ChevronDown className="w-3 h-3" />
           ) : (
             <ChevronRight className="w-3 h-3" />
-          )
-        }
-        className="text-muted-foreground/80 hover:text-muted-foreground"
-      />
+          )}
+        </span>
+      </button>
       <div
+        aria-hidden={!isOpen}
         className={`overflow-hidden transition-all duration-300 ease-out ${
           isOpen ? "max-h-[30rem] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="max-h-[28rem] overflow-y-auto py-1.5 pr-1">
-          <div className="flex flex-col gap-0.5">{children}</div>
-        </div>
+        {isOpen ? (
+          <div className="ml-1 max-h-[28rem] overflow-y-auto border-l border-border/60 py-1.5 pl-2 pr-1">
+            <div className="flex flex-col gap-0.5">{children}</div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -182,8 +451,8 @@ export function SessionDivider({
   const content = (
     <>
       <span className="h-px flex-1 bg-border/70" />
-      <span className="inline-flex items-center gap-1 shrink-0">
-        <span>{label}</span>
+      <span className="inline-flex min-w-0 max-w-[82%] shrink items-center gap-1">
+        <span className="min-w-0 truncate">{label}</span>
         {icon}
       </span>
       <span className="h-px flex-1 bg-border/70" />
@@ -207,6 +476,34 @@ export function SessionDivider({
       className={`w-full flex items-center gap-3 my-4 py-1 text-sm text-muted-foreground ${className}`}
     >
       {content}
+    </div>
+  );
+}
+
+function ActivityGroupDetailPart({
+  part,
+  isLast = false,
+}: {
+  part: any;
+  isLast?: boolean;
+}) {
+  if (part?.type !== "text") {
+    return (
+      <MessagePartBubble part={part} isStreaming={false} isLast={isLast} />
+    );
+  }
+
+  const text = typeof part.text === "string" ? part.text.trim() : "";
+  if (!text) return null;
+
+  return (
+    <div className="max-w-md px-1 py-0.5 text-sm leading-5 text-muted-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={getChatMarkdownComponents({ compactParagraphs: true })}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -240,7 +537,9 @@ function MessagePartBubble({
           )
         }
         tone="muted"
-        renderContent={(isOpen) => <ThoughtContent text={thoughtText} isOpen={isOpen} />}
+        renderContent={(isOpen) => (
+          <ThoughtContent text={thoughtText} isOpen={isOpen} />
+        )}
       />
     );
   }
@@ -248,10 +547,15 @@ function MessagePartBubble({
   if (part.type === "tool") {
     const toolStatus = normalizeToolStatus(part) ?? "completed";
     const toolLabelParts = getToolActivityLabelParts(part);
-    const isBashTool = String(part.tool ?? "").trim().toLowerCase() === "bash";
+    const isBashTool =
+      String(part.tool ?? "")
+        .trim()
+        .toLowerCase() === "bash";
     const rawToolInput = part.input ?? part.state?.input;
     const toolOutput = summarizeToolOutput(part);
-    const toolTranscript = isBashTool ? summarizeBashTranscript(part, toolOutput) : null;
+    const toolTranscript = isBashTool
+      ? summarizeBashTranscript(part, toolOutput)
+      : null;
     const toolInput = summarizeToolInput(rawToolInput, {
       omitKeys: toolTranscript ? ["command", "description"] : ["description"],
     });
@@ -270,7 +574,10 @@ function MessagePartBubble({
     const targetText = isRunning
       ? stripTrailingDots(toolLabelParts.target)
       : toolLabelParts.target;
-    const toolLabelText = [actionText, targetText].filter(Boolean).join(" ").trim();
+    const toolLabelText = [actionText, targetText]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     const showInlineDescription =
       !isBashTool && toolDescription && toolDescription !== toolLabelText;
     const toolActionLabel = (
@@ -303,7 +610,8 @@ function MessagePartBubble({
       >
         <div className="space-y-1">
           <div className="text-xs text-muted-foreground/90">
-            Tool: <span className="font-mono">{String(part.tool ?? "unknown")}</span>
+            Tool:{" "}
+            <span className="font-mono">{String(part.tool ?? "unknown")}</span>
           </div>
           {toolTitle && (
             <div className="text-xs text-muted-foreground/90 whitespace-pre-wrap break-words">
@@ -317,7 +625,10 @@ function MessagePartBubble({
             />
           )}
           {!toolTranscript && toolInput && (
-            <ToolCodeBlock text={toolInput} className="text-xs text-foreground/90" />
+            <ToolCodeBlock
+              text={toolInput}
+              className="text-xs text-foreground/90"
+            />
           )}
           {!toolTranscript && toolOutput && (
             <ToolCodeBlock
@@ -337,7 +648,10 @@ function MessagePartBubble({
 
   if (part.type === "text") {
     return (
-      <AgentMarkdownBlock text={part.text ?? ""} isStreaming={isStreaming && isLast} />
+      <AgentMarkdownBlock
+        text={part.text ?? ""}
+        isStreaming={isStreaming && isLast}
+      />
     );
   }
 
@@ -370,11 +684,14 @@ function AgentMarkdownBlock({
 
   return (
     <div
-      className={`rounded-lg px-3 py-1.5 w-full min-w-0 text-base leading-relaxed max-w-none break-words overflow-x-hidden ${
+      className={`rounded-lg px-1 py-1.5 w-full min-w-0 text-base leading-relaxed max-w-none break-words overflow-x-hidden ${
         animateChunk ? "chat-stream-chunk-fade" : ""
       }`}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={getChatMarkdownComponents()}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={getChatMarkdownComponents()}
+      >
         {text}
       </ReactMarkdown>
     </div>
@@ -398,7 +715,10 @@ function ThoughtContent({ text, isOpen }: { text: string; isOpen: boolean }) {
   }, [text, isOpen]);
 
   return (
-    <div ref={scrollRef} className="max-h-32 overflow-y-auto whitespace-pre-wrap pr-1">
+    <div
+      ref={scrollRef}
+      className="max-h-32 overflow-y-auto whitespace-pre-wrap pr-1"
+    >
       {text}
     </div>
   );
@@ -560,7 +880,10 @@ function summarizeToolOutput(part: any): string | null {
   return null;
 }
 
-function summarizeBashTranscript(part: any, output: string | null): string | null {
+function summarizeBashTranscript(
+  part: any,
+  output: string | null,
+): string | null {
   const command = extractToolCommand(part);
   const lines = [command ? `$ ${command}` : null, output].filter(
     (value): value is string => Boolean(value),
@@ -619,7 +942,8 @@ function AgentStateRow({
   label: ReactNode;
   tone?: "muted" | "destructive";
 }) {
-  const toneClass = tone === "destructive" ? "text-destructive" : "text-muted-foreground";
+  const toneClass =
+    tone === "destructive" ? "text-destructive" : "text-muted-foreground";
 
   return (
     <div className="w-full max-w-md">
@@ -649,7 +973,8 @@ function AgentActivityRow({
     setIsOpen(defaultOpen);
   }, [defaultOpen]);
 
-  const toneClass = tone === "destructive" ? "text-destructive" : "text-muted-foreground";
+  const toneClass =
+    tone === "destructive" ? "text-destructive" : "text-muted-foreground";
 
   return (
     <div className="w-full max-w-md">
@@ -657,7 +982,9 @@ function AgentActivityRow({
         onClick={() => setIsOpen(!isOpen)}
         className="group w-full text-left hover:text-foreground transition-colors text-sm font-medium py-0.5 px-1"
       >
-        <span className={`inline-flex max-w-full items-center gap-1 ${toneClass}`}>
+        <span
+          className={`inline-flex max-w-full items-center gap-1 ${toneClass}`}
+        >
           <span className="min-w-0">{label}</span>
           <span className="inline-flex shrink-0 items-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150">
             {isOpen ? (

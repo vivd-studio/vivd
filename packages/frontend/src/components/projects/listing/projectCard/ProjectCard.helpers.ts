@@ -141,6 +141,10 @@ export function getProjectStatusPresentation(status: string): {
       label = "Importing ZIP";
       color = "info";
       break;
+    case "duplicating_project":
+      label = "Duplicating";
+      color = "info";
+      break;
     case "capturing_references":
       label = "Capturing References";
       color = "info";

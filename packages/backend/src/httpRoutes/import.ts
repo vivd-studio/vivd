@@ -279,7 +279,21 @@ async function syncImportedArtifacts(options: {
 }): Promise<void> {
   const projectConfig = detectProjectType(options.versionDir);
   const commitHash = await gitService.getCurrentCommit(options.versionDir);
-  const completedAt = new Date().toISOString();
+
+  const uploadSource = async () => {
+    await uploadProjectSourceToBucket({
+      organizationId: options.organizationId,
+      versionDir: options.versionDir,
+      slug: options.slug,
+      version: options.version,
+      meta: {
+        status: "ready",
+        framework: projectConfig.framework,
+        commitHash: commitHash ?? undefined,
+        completedAt: new Date().toISOString(),
+      },
+    });
+  };
 
   if (projectConfig.framework === "astro") {
     const toolkitRepair = await ensureReferencedAstroCmsToolkit(options.versionDir);
@@ -290,18 +304,7 @@ async function syncImportedArtifacts(options: {
     }
   }
 
-  await uploadProjectSourceToBucket({
-    organizationId: options.organizationId,
-    versionDir: options.versionDir,
-    slug: options.slug,
-    version: options.version,
-    meta: {
-      status: "ready",
-      framework: projectConfig.framework,
-      commitHash: commitHash ?? undefined,
-      completedAt,
-    },
-  });
+  await uploadSource();
 
   if (projectConfig.framework !== "astro") return;
 
@@ -309,6 +312,10 @@ async function syncImportedArtifacts(options: {
   const previewDir = fs.existsSync(path.join(existingDistDir, "index.html"))
     ? existingDistDir
     : await buildService.buildSync(options.versionDir, "dist");
+
+  // The Astro build can repair npm lockfiles/native optional dependencies.
+  // Persist the post-build source so Studio hydrates the same dependency graph.
+  await uploadSource();
 
   await uploadProjectPreviewToBucket({
     organizationId: options.organizationId,
@@ -397,8 +404,10 @@ export function createImportRouter(deps: {
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      if (!access.isSuperAdmin && access.organizationRole === "client_editor") {
-        return res.status(403).json({ error: "Forbidden" });
+      if (!access.isSuperAdmin) {
+        return res.status(403).json({
+          error: "ZIP import is restricted to superadmins",
+        });
       }
 
       const file = req.file as Express.Multer.File | undefined;

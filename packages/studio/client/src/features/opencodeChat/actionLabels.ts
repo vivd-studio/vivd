@@ -131,6 +131,12 @@ const GENERIC_TOOL_LABEL_BUILDERS = {
     errorAction: "Failed exploring",
     fallbackTarget: "files",
   }),
+  list: createTargetedToolLabelBuilder({
+    runningAction: "Listing",
+    completedAction: "Listed",
+    errorAction: "Failed listing",
+    fallbackTarget: "folder",
+  }),
   vivd_image_ai: createActionOnlyToolLabelBuilder({
     runningAction: "Generating image (this can take a while)",
     completedAction: "Generated image",

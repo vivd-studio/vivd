@@ -1,8 +1,9 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
+import { StatusPill, Tooltip, TooltipContent, TooltipTrigger } from "@vivd/ui";
 
 import { Check, Image as ImageIcon } from "lucide-react";
 import type { AssetItem } from "./types";
 import { FallbackImage } from "./FallbackImage";
+import { getAssetScopeLabel } from "./utils";
 
 interface ImageThumbnailProps {
   item: AssetItem;
@@ -29,6 +30,7 @@ export function ImageThumbnail({
 }: ImageThumbnailProps) {
   const hasResolution = item.width && item.height;
   const resolutionText = hasResolution ? `${item.width}×${item.height}` : null;
+  const scopeLabel = getAssetScopeLabel(item.path);
   const tooltipContent = (
     <div className="space-y-1">
       <p className="font-medium">{item.name}</p>
@@ -109,6 +111,14 @@ export function ImageThumbnail({
       {showSelection && selected && (
         <div className="absolute top-1 right-1 bg-primary text-primary-foreground rounded-full p-0.5">
           <Check className="h-3 w-3" />
+        </div>
+      )}
+
+      {scopeLabel && (
+        <div className="absolute left-1 top-1 max-w-[calc(100%-0.5rem)]">
+          <StatusPill tone="neutral" className="max-w-full truncate bg-surface-raised/95">
+            {scopeLabel}
+          </StatusPill>
         </div>
       )}
 

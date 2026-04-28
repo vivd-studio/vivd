@@ -2,6 +2,10 @@ import { useEffect, useCallback, type RefObject } from "react";
 import { toast } from "sonner";
 import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 import { getPreviewImageBaselineSource } from "./imageDropHeuristics";
+import type {
+  ImageDropChoiceKind,
+  ImageDropPlan,
+} from "./imageDropPlan";
 
 interface UseImageDropZoneOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -11,12 +15,19 @@ interface UseImageDropZoneOptions {
   getDropSupport?: (
     targetImg: HTMLImageElement,
     assetPath?: string | null,
-  ) => { canDrop: boolean; reason?: string };
+  ) => { canDrop: boolean; reason?: string; plan?: ImageDropPlan };
+  requestDropChoice?: (
+    plan: ImageDropPlan,
+  ) => Promise<ImageDropChoiceKind | null>;
   onImageDropped?: (
     imagePath: string,
     targetImg: HTMLImageElement,
-    previousSrcAttr: string | null
-  ) => void;
+    previousSrcAttr: string | null,
+    options?: {
+      plan?: ImageDropPlan;
+      choice?: ImageDropChoiceKind | null;
+    },
+  ) => void | boolean | Promise<void | boolean>;
 }
 
 // CSS styles for drop zone highlighting
@@ -29,6 +40,11 @@ const DROP_ZONE_STYLES = `
   @keyframes dropzone-ready-border {
     0%, 100% { border-color: #f59e0b; }
     50% { border-color: #fbbf24; }
+  }
+
+  @keyframes dropzone-blocked-border {
+    0%, 100% { border-color: #ef4444; }
+    50% { border-color: #f87171; }
   }
   
   /* During drag mode, disable pointer-events on overlay elements */
@@ -52,6 +68,16 @@ const DROP_ZONE_STYLES = `
     z-index: 9999 !important;
     cursor: copy !important;
   }
+
+  [data-drop-target="blocked"] {
+    border: 4px solid #ef4444 !important;
+    box-sizing: border-box !important;
+    animation: dropzone-blocked-border 1s ease-in-out infinite !important;
+    filter: brightness(0.92) !important;
+    position: relative;
+    z-index: 9999 !important;
+    cursor: not-allowed !important;
+  }
   
   /* Hover state: About to drop */
   [data-drop-target="active"] {
@@ -62,7 +88,100 @@ const DROP_ZONE_STYLES = `
     cursor: copy !important;
     z-index: 10000 !important;
   }
+
+  .vivd-image-drop-hint {
+    position: fixed;
+    z-index: 2147483647;
+    max-width: min(340px, calc(100vw - 24px));
+    pointer-events: none;
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #0f172a;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+    padding: 8px 10px;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.3;
+  }
+
+  .vivd-image-drop-hint[data-tone="blocked"] {
+    border-color: rgba(220, 38, 38, 0.32);
+  }
+
+  .vivd-image-drop-hint-title {
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .vivd-image-drop-hint-detail {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #475569;
+    overflow-wrap: anywhere;
+  }
 `;
+
+function getDropHintElement(doc: Document): HTMLDivElement {
+  const existing = doc.getElementById("vivd-image-drop-hint");
+  if (existing instanceof HTMLDivElement) {
+    return existing;
+  }
+
+  const hint = doc.createElement("div");
+  hint.id = "vivd-image-drop-hint";
+  hint.className = "vivd-image-drop-hint";
+  hint.hidden = true;
+  hint.innerHTML = `
+    <div class="vivd-image-drop-hint-title"></div>
+    <div class="vivd-image-drop-hint-detail"></div>
+  `;
+  doc.body.appendChild(hint);
+  return hint;
+}
+
+function positionDropHint(hint: HTMLDivElement, img: HTMLImageElement) {
+  const rect = img.getBoundingClientRect();
+  const viewportWidth = img.ownerDocument.defaultView?.innerWidth ?? 0;
+  const left = Math.min(
+    Math.max(rect.left + 8, 8),
+    Math.max(viewportWidth - 348, 8),
+  );
+  const top = Math.max(rect.top + 8, 8);
+  hint.style.left = `${left}px`;
+  hint.style.top = `${top}px`;
+}
+
+function showDropHint(
+  doc: Document,
+  img: HTMLImageElement,
+  support: { canDrop: boolean; reason?: string; plan?: ImageDropPlan },
+) {
+  const hint = getDropHintElement(doc);
+  const title = hint.querySelector<HTMLDivElement>(".vivd-image-drop-hint-title");
+  const detail = hint.querySelector<HTMLDivElement>(".vivd-image-drop-hint-detail");
+  hint.dataset.tone = support.canDrop ? "ready" : "blocked";
+  if (title) {
+    title.textContent = support.plan?.label ?? "Drop image here";
+  }
+  if (detail) {
+    detail.textContent =
+      support.plan?.detail ??
+      support.reason ??
+      "Release to preview this replacement.";
+  }
+  positionDropHint(hint, img);
+  hint.hidden = false;
+}
+
+function hideDropHint(doc: Document) {
+  const hint = doc.getElementById("vivd-image-drop-hint");
+  if (hint instanceof HTMLDivElement) {
+    hint.hidden = true;
+  }
+}
 
 /**
  * Hook that enables drag-and-drop of images onto <img> elements inside an iframe.
@@ -74,6 +193,7 @@ export function useImageDropZone({
   version,
   enabled = true,
   getDropSupport,
+  requestDropChoice,
   onImageDropped,
 }: UseImageDropZoneOptions) {
   // Build the image URL for preview display
@@ -109,12 +229,12 @@ export function useImageDropZone({
         const dropSupport = getDropSupport?.(img, draggedAssetPath) ?? {
           canDrop: true,
         };
-        if (!dropSupport.canDrop) {
-          return;
-        }
 
         // Mark as drop target
-        img.setAttribute("data-drop-target", "true");
+        img.setAttribute(
+          "data-drop-target",
+          dropSupport.canDrop ? "true" : "blocked",
+        );
         // Store original src for potential revert
         if (!img.hasAttribute("data-original-src")) {
           img.setAttribute("data-original-src", img.src);
@@ -133,21 +253,37 @@ export function useImageDropZone({
         const handleDragOver = (e: DragEvent) => {
           e.preventDefault();
           e.stopPropagation();
+          const currentDropSupport = getDropSupport?.(img, draggedAssetPath) ?? {
+            canDrop: true,
+          };
           if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = "copy";
+            e.dataTransfer.dropEffect = currentDropSupport.canDrop
+              ? "copy"
+              : "none";
           }
-          img.setAttribute("data-drop-target", "active");
+          img.setAttribute(
+            "data-drop-target",
+            currentDropSupport.canDrop ? "active" : "blocked",
+          );
+          showDropHint(doc, img, currentDropSupport);
         };
 
         const handleDragLeave = (e: DragEvent) => {
           e.preventDefault();
-          img.setAttribute("data-drop-target", "true");
+          const currentDropSupport = getDropSupport?.(img, draggedAssetPath) ?? {
+            canDrop: true,
+          };
+          img.setAttribute(
+            "data-drop-target",
+            currentDropSupport.canDrop ? "true" : "blocked",
+          );
+          hideDropHint(doc);
         };
 
-        const handleDrop = (e: DragEvent) => {
+        const handleDrop = async (e: DragEvent) => {
           e.preventDefault();
           e.stopPropagation();
-          img.setAttribute("data-drop-target", "true");
+          hideDropHint(doc);
 
           const assetPath = e.dataTransfer?.getData("application/x-asset-path");
 
@@ -155,12 +291,31 @@ export function useImageDropZone({
             const currentDropSupport = getDropSupport?.(img, assetPath) ?? {
               canDrop: true,
             };
+            img.setAttribute(
+              "data-drop-target",
+              currentDropSupport.canDrop ? "true" : "blocked",
+            );
             if (!currentDropSupport.canDrop) {
               toast.error(
                 currentDropSupport.reason ??
                   "Vivd can't save this preview image drop safely yet.",
               );
               return;
+            }
+
+            let choice: ImageDropChoiceKind | null | undefined;
+            if (currentDropSupport.plan?.requiresChoice) {
+              if (!requestDropChoice) {
+                toast.error(
+                  "Vivd needs a media choice before this image can be dropped.",
+                );
+                return;
+              }
+              choice = await requestDropChoice(currentDropSupport.plan);
+              if (!choice) {
+                toast.info("Image drop canceled");
+                return;
+              }
             }
 
             // Update the image source to the new asset for preview display
@@ -185,12 +340,26 @@ export function useImageDropZone({
               });
             }
 
-            toast.success(`Image replaced with ${assetPath.split("/").pop()}`);
-
             if (onImageDropped) {
               // Pass the asset path (not the preview URL) to store in patches
-              onImageDropped(assetPath, img, previousSrcAttr);
+              const accepted = await onImageDropped(
+                assetPath,
+                img,
+                previousSrcAttr,
+                {
+                  plan: currentDropSupport.plan,
+                  choice,
+                },
+              );
+              if (accepted === false) {
+                return;
+              }
             }
+
+            toast.success(
+              currentDropSupport.plan?.label ??
+                `Image replaced with ${assetPath.split("/").pop()}`,
+            );
           }
         };
 
@@ -206,13 +375,15 @@ export function useImageDropZone({
         img.addEventListener("drop", handleDrop);
       });
     },
-    [buildImagePreviewUrl, getDropSupport, onImageDropped],
+    [buildImagePreviewUrl, getDropSupport, onImageDropped, requestDropChoice],
   );
 
   // Remove drop zones from all images
   const disableDropZones = useCallback((doc: Document) => {
     const style = doc.getElementById("image-drop-zone-styles");
     if (style) style.remove();
+    hideDropHint(doc);
+    doc.getElementById("vivd-image-drop-hint")?.remove();
 
     // Remove drag mode from body
     if (doc.body) {
