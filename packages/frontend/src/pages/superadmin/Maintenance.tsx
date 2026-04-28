@@ -1,16 +1,23 @@
 import { MaintenanceTab } from "@/components/admin";
+import {
+  PageDescription,
+  PageHeader,
+  PageHeaderContent,
+  PageTitle,
+} from "@vivd/ui";
 
 export default function SuperAdminMaintenance() {
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Maintenance</h1>
-        <p className="text-muted-foreground mt-1">
-          System maintenance operations (super-admin only).
-        </p>
-      </div>
+      <PageHeader>
+        <PageHeaderContent>
+          <PageTitle>Maintenance</PageTitle>
+          <PageDescription>
+            System maintenance operations (super-admin only).
+          </PageDescription>
+        </PageHeaderContent>
+      </PageHeader>
       <MaintenanceTab />
     </div>
   );
 }
-

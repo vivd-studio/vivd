@@ -1,16 +1,23 @@
 import { UsageStatsCard } from "@/components/admin";
+import {
+  PageDescription,
+  PageHeader,
+  PageHeaderContent,
+  PageTitle,
+} from "@vivd/ui";
 
 export default function SuperAdminUsage() {
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Usage</h1>
-        <p className="text-muted-foreground mt-1">
-          Usage is shown for your currently active organization.
-        </p>
-      </div>
+      <PageHeader>
+        <PageHeaderContent>
+          <PageTitle>Usage</PageTitle>
+          <PageDescription>
+            Usage is shown for your currently active organization.
+          </PageDescription>
+        </PageHeaderContent>
+      </PageHeader>
       <UsageStatsCard />
     </div>
   );
 }
-

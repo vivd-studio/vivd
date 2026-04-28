@@ -555,7 +555,7 @@ describe("AppSidebar search", () => {
 
     renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=instance` });
 
-    expect(screen.getByRole("link", { name: /^General$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Instance$/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Organization$/i }));
     expect(screen.getByRole("link", { name: /^Members$/i })).toBeInTheDocument();
     expect(
@@ -600,6 +600,17 @@ describe("AppSidebar search", () => {
     renderSidebar();
 
     const dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
+      target: { value: "capabilities" },
+    });
+
+    expect(
+      within(dialog).getByRole("button", { name: /^Instance$/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /^General$/i }),
+    ).not.toBeInTheDocument();
+
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "organization members" },
     });

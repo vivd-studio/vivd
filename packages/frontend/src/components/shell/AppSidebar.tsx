@@ -51,9 +51,6 @@ export function AppSidebar() {
   const [showAllProjects, setShowAllProjects] = React.useState(false);
   const showPlatformAdminSections =
     config.showPlatformAdminSections ?? (config.installProfile === "platform");
-  const instanceSectionLabel =
-    config.instanceSectionLabel ??
-    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
@@ -180,7 +177,7 @@ export function AppSidebar() {
           showSuperAdmin={showSuperAdmin}
           isSuperAdminTabActive={isSuperAdminTabActive}
           instanceAdminLabel={config.instanceAdminLabel}
-          instanceSectionLabel={instanceSectionLabel}
+          instanceSectionLabel="Instance"
           showPlatformOnlyEntries={showPlatformAdminSections}
         />
       </SidebarContent>

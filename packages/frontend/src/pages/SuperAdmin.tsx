@@ -13,7 +13,31 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Button, Field, FieldLabel, Input, Panel, PanelContent, PanelDescription, PanelHeader, PanelTitle, StatusPill, Tabs, TabsList, TabsTrigger, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
+import {
+  Badge,
+  Button,
+  Field,
+  FieldLabel,
+  Input,
+  PageDescription,
+  PageHeader,
+  PageHeaderContent,
+  PageTitle,
+  Panel,
+  PanelContent,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatusPill,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@vivd/ui";
 
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -125,9 +149,6 @@ export default function SuperAdmin() {
   const utils = trpc.useUtils();
   const platformAdminSectionsVisible =
     config.showPlatformAdminSections ?? (config.installProfile === "platform");
-  const instanceSectionLabel =
-    config.instanceSectionLabel ??
-    (config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance");
 
   const { data: orgData, isLoading: orgsLoading } =
     trpc.superadmin.listOrganizations.useQuery();
@@ -243,7 +264,7 @@ export default function SuperAdmin() {
   );
 
   const sectionMeta = SECTION_META[section];
-  const sectionTitle = section === "instance" ? config.instanceAdminLabel : sectionMeta.title;
+  const sectionTitle = sectionMeta.title;
 
   const content = (() => {
     if (section === "instance") {
@@ -427,13 +448,11 @@ export default function SuperAdmin() {
 
   return (
     <div className="w-full space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight">
-            {sectionTitle}
-          </h1>
-          <p className="mt-1 text-muted-foreground">{sectionMeta.description}</p>
-        </div>
+      <PageHeader>
+        <PageHeaderContent>
+          <PageTitle>{sectionTitle}</PageTitle>
+          <PageDescription>{sectionMeta.description}</PageDescription>
+        </PageHeaderContent>
 
         {section === "org" && organizations.length > 0 ? (
           <div className="shrink-0 flex flex-wrap gap-2">
@@ -443,13 +462,13 @@ export default function SuperAdmin() {
             <Badge variant="outline">{activeOrganizationCount} active</Badge>
           </div>
         ) : null}
-      </div>
+      </PageHeader>
 
       <Tabs value={section} onValueChange={handleSectionChange} className="w-full">
         <TabsList className="w-full justify-start">
           <TabsTrigger value="instance" className="gap-2">
             <Shield className="h-4 w-4" />
-            {instanceSectionLabel}
+            Instance
           </TabsTrigger>
           {platformAdminSectionsVisible ? (
             <TabsTrigger value="org" className="gap-2">

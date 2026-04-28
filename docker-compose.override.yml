@@ -170,6 +170,10 @@ services:
           path: ./packages/docs/package.json
         - action: rebuild
           path: ./packages/theme/package.json
+        - action: rebuild
+          path: ./packages/shared/src/config/selfHostDefaults.ts
+        - action: rebuild
+          path: ./scripts/sync-self-host-assets.ts
   postgres:
     ports:
       - "5432:5432"

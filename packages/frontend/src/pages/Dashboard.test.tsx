@@ -11,7 +11,7 @@ describe("Dashboard", () => {
     render(<Dashboard />);
 
     expect(
-      screen.getByRole("heading", { name: "Your Projects" }),
+      screen.getByRole("heading", { name: "Projects" }),
     ).toBeInTheDocument();
 
     const projectsList = screen.getByTestId("projects-list");

@@ -2,7 +2,17 @@ import { lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Users, Activity, Plug, Wrench, SlidersHorizontal } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
-import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@vivd/ui";
+import {
+  Badge,
+  PageDescription,
+  PageHeader,
+  PageHeaderContent,
+  PageTitle,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@vivd/ui";
 
 import { trpc } from "@/lib/trpc";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -35,6 +45,44 @@ const OrganizationPluginsTab = lazy(() =>
   })),
 );
 
+type OrganizationSection =
+  | "members"
+  | "usage"
+  | "maintenance"
+  | "plugins"
+  | "settings";
+
+const ORGANIZATION_SECTION_META: Record<
+  OrganizationSection,
+  { title: string; description: (organizationName: string) => string }
+> = {
+  members: {
+    title: "Members",
+    description: (organizationName) =>
+      `Manage members and project access for ${organizationName}.`,
+  },
+  usage: {
+    title: "Usage",
+    description: (organizationName) =>
+      `Review usage and limits for ${organizationName}.`,
+  },
+  maintenance: {
+    title: "Maintenance",
+    description: (organizationName) =>
+      `Run maintenance actions for ${organizationName}.`,
+  },
+  plugins: {
+    title: "Plugins",
+    description: (organizationName) =>
+      `Manage plugin access for ${organizationName}.`,
+  },
+  settings: {
+    title: "General",
+    description: (organizationName) =>
+      `Update organization settings for ${organizationName}.`,
+  },
+};
+
 function TabLoadingState() {
   return <LoadingSpinner message="Loading..." />;
 }
@@ -44,7 +92,7 @@ export default function Organization() {
   const { organizationRole, isSuperAdmin } = usePermissions();
   const canEditSettings = organizationRole === "owner" || isSuperAdmin;
   const tab = searchParams.get("tab");
-  const currentTab =
+  const currentTab: OrganizationSection =
     tab === "usage" ||
     tab === "maintenance" ||
     tab === "plugins" ||
@@ -64,25 +112,30 @@ export default function Organization() {
     return <LoadingSpinner message="Loading organization..." />;
   }
 
+  const organizationName = org?.name ?? "your organization";
+  const sectionMeta = ORGANIZATION_SECTION_META[currentTab];
+
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight truncate">
-            {org?.name ?? "Organization"}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage members, usage, and maintenance for your organization.
-          </p>
-        </div>
+      <PageHeader className="items-center">
+        <PageHeaderContent>
+          <PageTitle className="truncate">{sectionMeta.title}</PageTitle>
+          <PageDescription>
+            {sectionMeta.description(organizationName)}
+          </PageDescription>
+        </PageHeaderContent>
         {org && (
           <Badge variant={org.status === "active" ? "default" : "secondary"}>
             {org.status}
           </Badge>
         )}
-      </div>
+      </PageHeader>
 
-      <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+      <Tabs
+        value={currentTab}
+        onValueChange={handleTabChange}
+        className="w-full"
+      >
         <TabsList className="w-full justify-start">
           <TabsTrigger value="members" className="gap-2">
             <Users className="h-4 w-4" />

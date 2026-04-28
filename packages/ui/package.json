@@ -22,6 +22,7 @@
     "./input": "./src/input.tsx",
     "./interactive-surface": "./src/interactive-surface.tsx",
     "./label": "./src/label.tsx",
+    "./page-heading": "./src/page-heading.tsx",
     "./panel": "./src/panel.tsx",
     "./password-input": "./src/password-input.tsx",
     "./popover": "./src/popover.tsx",

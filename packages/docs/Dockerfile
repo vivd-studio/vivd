@@ -10,6 +10,10 @@ RUN npm ci -w @vivd/theme -w @vivd/docs --include-workspace-root=false
 FROM deps AS dev
 COPY packages/theme ./packages/theme
 COPY packages/docs ./packages/docs
+COPY packages/shared ./packages/shared
+COPY scripts ./scripts
+
+RUN mkdir -p ./packages/studio
 
 WORKDIR /app/packages/docs
 EXPOSE 4321

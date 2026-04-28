@@ -118,6 +118,12 @@ export {
   PanelTitle,
   panelVariants,
 } from "./panel";
+export {
+  PageDescription,
+  PageHeader,
+  PageHeaderContent,
+  PageTitle,
+} from "./page-heading";
 export { PasswordInput } from "./password-input";
 export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "./popover";
 export { Progress } from "./progress";
