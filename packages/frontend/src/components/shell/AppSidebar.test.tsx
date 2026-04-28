@@ -864,8 +864,12 @@ describe("AppSidebar search", () => {
     );
   });
 
-  it("does not draw the docked rail divider on the projects index", () => {
-    renderSidebar({ path: ROUTES.DASHBOARD, sidebarOpen: false });
+  it.each([
+    ["projects index", ROUTES.DASHBOARD],
+    ["project preview", ROUTES.PROJECT("alpha")],
+    ["new project", ROUTES.NEW_SCRATCH],
+  ])("does not draw the docked rail divider on the %s route", (_label, path) => {
+    renderSidebar({ path, sidebarOpen: false });
 
     const sidebarRail = document.querySelector(
       "[data-state][data-overlay-state] > div:nth-of-type(2)",

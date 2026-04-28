@@ -144,6 +144,10 @@ function parseOptionalBoolean(value: string | undefined): boolean | null {
   return null;
 }
 
+function hasEnvValue(key: string): boolean {
+  return Boolean(process.env[key]?.trim());
+}
+
 function normalizeInstallProfileSelection(
   profile: InstallProfile | null,
 ): InstallProfile | null {
@@ -151,12 +155,40 @@ function normalizeInstallProfileSelection(
   return isExperimentalSoloModeEnabled() ? "solo" : "platform";
 }
 
-function readEnvInstallProfile(): InstallProfile | null {
+function readEnvInstallProfile(): {
+  profile: InstallProfile;
+  persistInitialSelection: boolean;
+} | null {
   const raw = process.env.VIVD_INSTALL_PROFILE?.trim();
   if (!raw) return null;
   const parsed = installProfileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  return normalizeInstallProfileSelection(parsed.data);
+  const normalized = normalizeInstallProfileSelection(parsed.data);
+  if (!normalized) return null;
+  return {
+    profile: normalized,
+    persistInitialSelection: normalized === parsed.data,
+  };
+}
+
+function inferLegacySelfHostInstallProfile(): InstallProfile | null {
+  if (hasEnvValue("VIVD_INSTALL_PROFILE")) return null;
+  if (parseOptionalBoolean(process.env.TENANT_DOMAIN_ROUTING_ENABLED) === true) {
+    return null;
+  }
+  if (hasEnvValue("CONTROL_PLANE_HOST") || hasEnvValue("TENANT_BASE_DOMAIN")) {
+    return null;
+  }
+
+  const hasBundledSelfHostSignal =
+    hasEnvValue("VIVD_SELFHOST_UPDATE_WORKDIR") ||
+    hasEnvValue("VIVD_CADDY_PRIMARY_HOST") ||
+    hasEnvValue("CADDY_ADMIN_URL") ||
+    hasEnvValue("CADDY_SITES_DIR") ||
+    hasEnvValue("CADDY_RUNTIME_ROUTES_DIR") ||
+    process.env.VIVD_BUCKET_MODE?.trim().toLowerCase() === "local";
+
+  return hasBundledSelfHostSignal ? "solo" : null;
 }
 
 function parseEnvJson<T>(raw: string | undefined, schema: z.ZodType<T>): T | null {
@@ -228,16 +260,38 @@ async function readStoredInstallProfile(): Promise<InstallProfile | null> {
   const raw = await getSystemSettingValue(SYSTEM_SETTING_KEYS.installProfile);
   if (!raw) return null;
   const parsed = installProfileSchema.safeParse(raw.trim());
-  return parsed.success ? normalizeInstallProfileSelection(parsed.data) : null;
+  return parsed.success ? parsed.data : null;
+}
+
+async function persistInitialInstallProfile(profile: InstallProfile): Promise<void> {
+  try {
+    await setSystemSettingValue(SYSTEM_SETTING_KEYS.installProfile, profile);
+  } catch (error) {
+    console.warn(
+      `[InstallProfile] Failed to persist initial install profile "${profile}": ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 class InstallProfileService {
   async getInstallProfile(): Promise<InstallProfile> {
-    return (
-      (await readStoredInstallProfile()) ??
-      readEnvInstallProfile() ??
-      "platform"
-    );
+    const storedProfile = await readStoredInstallProfile();
+    if (storedProfile) return storedProfile;
+
+    const envProfile = readEnvInstallProfile();
+    if (envProfile) {
+      if (envProfile.persistInitialSelection) {
+        await persistInitialInstallProfile(envProfile.profile);
+      }
+      return envProfile.profile;
+    }
+
+    const inferredProfile = inferLegacySelfHostInstallProfile();
+    const profile = inferredProfile ?? "platform";
+    await persistInitialInstallProfile(profile);
+    return profile;
   }
 
   async resolvePolicy(): Promise<ResolvedInstallProfilePolicy> {

@@ -20,7 +20,6 @@ import {
 
 type EmbeddedStudioHeaderProps = {
   projectSlug?: string;
-  sidebarOpen: boolean;
   includeProjectActions?: boolean;
   studioStatusLabel?: string;
   showStudioStartupAction: boolean;
@@ -52,7 +51,6 @@ type EmbeddedStudioHeaderProps = {
 
 export function EmbeddedStudioHeader({
   projectSlug,
-  sidebarOpen,
   includeProjectActions = false,
   studioStatusLabel,
   showStudioStartupAction,
@@ -274,11 +272,7 @@ export function EmbeddedStudioHeader({
   return (
     <HostHeader
       leadingAccessory={
-        <SidebarTrigger
-          appearance={sidebarOpen ? "panel" : "brand"}
-          morphOnHover={false}
-          className="rounded-md"
-        />
+        <SidebarTrigger className="rounded-md" />
       }
       leading={
         <>

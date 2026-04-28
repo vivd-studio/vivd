@@ -30,6 +30,15 @@ import { installProfileService } from "../src/services/system/InstallProfileServ
 const ORIGINAL_ENV = new Map<string, string | undefined>([
   ["VIVD_INSTALL_PROFILE", process.env.VIVD_INSTALL_PROFILE],
   ["VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE", process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE],
+  ["VIVD_SELFHOST_UPDATE_WORKDIR", process.env.VIVD_SELFHOST_UPDATE_WORKDIR],
+  ["VIVD_CADDY_PRIMARY_HOST", process.env.VIVD_CADDY_PRIMARY_HOST],
+  ["CADDY_ADMIN_URL", process.env.CADDY_ADMIN_URL],
+  ["CADDY_SITES_DIR", process.env.CADDY_SITES_DIR],
+  ["CADDY_RUNTIME_ROUTES_DIR", process.env.CADDY_RUNTIME_ROUTES_DIR],
+  ["TENANT_DOMAIN_ROUTING_ENABLED", process.env.TENANT_DOMAIN_ROUTING_ENABLED],
+  ["TENANT_BASE_DOMAIN", process.env.TENANT_BASE_DOMAIN],
+  ["CONTROL_PLANE_HOST", process.env.CONTROL_PLANE_HOST],
+  ["VIVD_BUCKET_MODE", process.env.VIVD_BUCKET_MODE],
   ["SINGLE_PROJECT_MODE", process.env.SINGLE_PROJECT_MODE],
   ["VIVD_INSTANCE_CAPABILITY_POLICY", process.env.VIVD_INSTANCE_CAPABILITY_POLICY],
   ["VIVD_INSTANCE_PLUGIN_DEFAULTS", process.env.VIVD_INSTANCE_PLUGIN_DEFAULTS],
@@ -57,6 +66,15 @@ describe("InstallProfileService", () => {
     getSystemSettingJsonValueMock.mockResolvedValue(null);
     delete process.env.VIVD_INSTALL_PROFILE;
     delete process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE;
+    delete process.env.VIVD_SELFHOST_UPDATE_WORKDIR;
+    delete process.env.VIVD_CADDY_PRIMARY_HOST;
+    delete process.env.CADDY_ADMIN_URL;
+    delete process.env.CADDY_SITES_DIR;
+    delete process.env.CADDY_RUNTIME_ROUTES_DIR;
+    delete process.env.TENANT_DOMAIN_ROUTING_ENABLED;
+    delete process.env.TENANT_BASE_DOMAIN;
+    delete process.env.CONTROL_PLANE_HOST;
+    delete process.env.VIVD_BUCKET_MODE;
     delete process.env.SINGLE_PROJECT_MODE;
     delete process.env.VIVD_INSTANCE_CAPABILITY_POLICY;
     delete process.env.VIVD_INSTANCE_PLUGIN_DEFAULTS;
@@ -69,6 +87,10 @@ describe("InstallProfileService", () => {
 
   it("defaults fresh installs to platform when no stored or env profile is set", async () => {
     await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "install_profile",
+      "platform",
+    );
 
     await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
     await expect(installProfileService.resolvePolicy()).resolves.toMatchObject({
@@ -84,6 +106,10 @@ describe("InstallProfileService", () => {
     process.env.VIVD_INSTALL_PROFILE = "platform";
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "install_profile",
+      "platform",
+    );
 
     await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
   });
@@ -92,6 +118,7 @@ describe("InstallProfileService", () => {
     process.env.VIVD_INSTALL_PROFILE = "solo";
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
+    expect(setSystemSettingValueMock).not.toHaveBeenCalled();
   });
 
   it("allows solo env bootstrap when the experimental flag is enabled", async () => {
@@ -99,14 +126,42 @@ describe("InstallProfileService", () => {
     process.env.VIVD_INSTALL_PROFILE = "solo";
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "install_profile",
+      "solo",
+    );
   });
 
   it("prefers the stored profile over the env bootstrap value", async () => {
-    process.env.VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE = "true";
     process.env.VIVD_INSTALL_PROFILE = "platform";
     getSystemSettingValueMock.mockResolvedValueOnce("solo");
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+    expect(setSystemSettingValueMock).not.toHaveBeenCalled();
+  });
+
+  it("infers legacy bundled self-host installs as sticky solo", async () => {
+    process.env.VIVD_SELFHOST_UPDATE_WORKDIR = "/srv/selfhost";
+    process.env.CADDY_RUNTIME_ROUTES_DIR = "/etc/caddy/runtime.d";
+    process.env.TENANT_DOMAIN_ROUTING_ENABLED = "false";
+
+    await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "install_profile",
+      "solo",
+    );
+  });
+
+  it("does not infer solo when tenant-domain routing is explicitly enabled", async () => {
+    process.env.VIVD_SELFHOST_UPDATE_WORKDIR = "/srv/selfhost";
+    process.env.CADDY_RUNTIME_ROUTES_DIR = "/etc/caddy/runtime.d";
+    process.env.TENANT_DOMAIN_ROUTING_ENABLED = "true";
+
+    await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "install_profile",
+      "platform",
+    );
   });
 
   it("keeps the platform-only capability subset disabled on solo", async () => {

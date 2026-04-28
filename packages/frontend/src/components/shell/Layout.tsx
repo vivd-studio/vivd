@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -13,9 +13,10 @@ import { HeaderBreadcrumbTextLink, HostHeader } from "./HostHeader";
 import { getPageInfo } from "./pageInfo";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import {
-  ShellSidebarModeProvider,
+  ShellSidebarModeContext,
   type ShellSidebarDesktopMode,
-} from "./ShellSidebarModeContext";
+  type ShellSidebarModeContextValue,
+} from "./shellSidebarMode";
 
 export function Layout() {
   const { isPending } = authClient.useSession();
@@ -62,6 +63,11 @@ export function Layout() {
     },
     [routeKey],
   );
+  const shellSidebarModeContextValue =
+    useMemo<ShellSidebarModeContextValue>(
+      () => ({ setDesktopMode: setRouteContentSidebarMode }),
+      [setRouteContentSidebarMode],
+    );
 
   useEffect(() => {
     const mainElement = mainRef.current;
@@ -203,11 +209,11 @@ export function Layout() {
                     : "overflow-auto px-6 py-4"
             }`}
           >
-            <ShellSidebarModeProvider
-              setDesktopMode={setRouteContentSidebarMode}
+            <ShellSidebarModeContext.Provider
+              value={shellSidebarModeContextValue}
             >
               <Outlet />
-            </ShellSidebarModeProvider>
+            </ShellSidebarModeContext.Provider>
           </main>
         </div>
       </NavigationSearchProvider>

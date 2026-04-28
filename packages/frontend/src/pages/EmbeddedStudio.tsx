@@ -27,10 +27,8 @@ import { createStudioRuntimeSession } from "@/lib/studioRuntimeSession";
 import { EmbeddedStudioHeader } from "./embeddedStudio/EmbeddedStudioHeader";
 import { EmbeddedStudioLiveSurface } from "./embeddedStudio/EmbeddedStudioLiveSurface";
 import { EmbeddedStudioProjectDialogs } from "./embeddedStudio/EmbeddedStudioProjectDialogs";
-import { useShellSidebarDesktopMode } from "@/components/shell/ShellSidebarModeContext";
+import { useShellSidebarDesktopMode } from "@/components/shell/shellSidebarMode";
 import { toast } from "sonner";
-
-const EMBEDDED_PROJECT_HEADER_INSET_CLASS = "pl-2 pr-3 md:pl-2.5 md:pr-4";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -715,7 +713,6 @@ export default function EmbeddedStudio() {
   }) => (
     <EmbeddedStudioHeader
       projectSlug={projectSlug}
-      sidebarOpen={sidebarOpen}
       includeProjectActions={includeProjectActions}
       studioStatusLabel={studioStatusLabel}
       showStudioStartupAction={showStudioStartupAction}
@@ -775,7 +772,6 @@ export default function EmbeddedStudio() {
         header={renderEmbeddedHeader({
           studioStatusLabel: "Starting studio...",
         })}
-        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
           <StudioStartupLoading className="h-full min-h-0" />
@@ -797,7 +793,6 @@ export default function EmbeddedStudio() {
       <FramedHostShell
         className="h-full"
         header={renderEmbeddedHeader({})}
-        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex items-center justify-center">
@@ -815,7 +810,6 @@ export default function EmbeddedStudio() {
       <FramedHostShell
         className="h-full"
         header={renderEmbeddedHeader({})}
-        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex flex-col items-center justify-center gap-3">
@@ -864,13 +858,11 @@ export default function EmbeddedStudio() {
             includeProjectActions: true,
             studioStatusLabel: studioStartupStatusLabel,
           })}
-          startupHeaderClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
         />
       ) : (
         <FramedHostShell
           className="h-full"
           header={renderEmbeddedHeader({ includeProjectActions: true })}
-          headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
         >
           <div className={HOST_VIEWPORT_INSET_CLASS}>
             <FramedViewport>

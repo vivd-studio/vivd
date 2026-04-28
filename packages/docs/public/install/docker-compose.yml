@@ -28,6 +28,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vivd}
       - PORT=3000
+      - VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE=true
+      - VIVD_INSTALL_PROFILE=solo
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}

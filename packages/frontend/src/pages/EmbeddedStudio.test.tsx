@@ -413,7 +413,7 @@ describe("EmbeddedStudio", () => {
     expect(screen.getByTestId("host-header")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
       "data-appearance",
-      "brand",
+      "panel",
     );
     expect(screen.getByTitle("Preview - site-1")).toHaveAttribute(
       "src",
@@ -422,12 +422,12 @@ describe("EmbeddedStudio", () => {
     expectNoPreviewSurfaceControls();
   });
 
-  it("uses the brand-style sidebar trigger in the embedded studio header", () => {
+  it("uses the standard sidebar trigger in the embedded studio header", () => {
     renderEmbeddedStudio();
 
     expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
       "data-appearance",
-      "brand",
+      "panel",
     );
     expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
       "data-reveal-on-hover",
@@ -435,7 +435,7 @@ describe("EmbeddedStudio", () => {
     );
   });
 
-  it("uses the standard sidebar trigger in the embedded studio header when the sidebar is open", () => {
+  it("keeps the standard sidebar trigger in the embedded studio header when the sidebar is open", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: true,

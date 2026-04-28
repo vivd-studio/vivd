@@ -43,7 +43,10 @@ export function AppSidebar() {
   const { openSearch } = useNavigationSearch();
 
   const isCollapsed = state === "collapsed";
-  const isProjectsIndex = location.pathname === ROUTES.DASHBOARD;
+  const isFramedViewportRoute =
+    location.pathname === ROUTES.DASHBOARD ||
+    location.pathname === ROUTES.NEW_SCRATCH ||
+    /^\/vivd-studio\/projects\/[^/]+$/.test(location.pathname);
   const showImmersiveSidebarToggle = isCollapsed && isImmersiveDesktop;
   const [showAllProjects, setShowAllProjects] = React.useState(false);
   const showPlatformAdminSections =
@@ -130,7 +133,7 @@ export function AppSidebar() {
     <Sidebar
       collapsible="icon"
       className={
-        isProjectsIndex
+        isFramedViewportRoute
           ? "group-data-[side=left]:border-r-0 group-data-[side=right]:border-l-0"
           : undefined
       }

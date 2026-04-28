@@ -31,6 +31,8 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vivd
+      VIVD_ENABLE_EXPERIMENTAL_SOLO_MODE: true
+      VIVD_INSTALL_PROFILE: solo
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENCODE_MODEL_STANDARD: openrouter/google/gemini-3-flash-preview
