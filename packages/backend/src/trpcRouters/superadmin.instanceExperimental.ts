@@ -46,13 +46,6 @@ export const experimentalInstanceSuperAdminProcedures = {
     }),
 
   startSelfHostManagedUpdate: superAdminProcedure.mutation(async () => {
-    if (!isSelfHostAdminFeaturesEnabled()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: SELF_HOST_ADMIN_FEATURES_MESSAGE,
-      });
-    }
-
     const policy = await installProfileService.resolvePolicy();
     if (!policy.selfHostCompatibility.enabled) {
       throw new TRPCError({

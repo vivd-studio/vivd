@@ -413,7 +413,7 @@ export function InstanceSettingsTab() {
     software?.latestVersion || software?.latestTag || "Unknown";
   const shortRevision = software?.currentRevision?.slice(0, 12) || null;
   const canTriggerManagedUpdate =
-    selfHostAdminFeaturesVisible &&
+    selfHostCompatibilityEnabled &&
     !!software?.managedUpdate.enabled &&
     !!software.latestTag &&
     software.releaseStatus !== "current";

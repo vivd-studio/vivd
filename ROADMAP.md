@@ -45,6 +45,7 @@
 - [ ] Implement `plans/studio-chat-agent-ux-plan.md`: reduce agent response padding, improve user-message contrast, group tool calls into compact activity rows, rewrite Studio agent instructions for non-technical users, and audit CMS guidance against the implementation.
 - [ ] Reintroduce the HTML-only new-project proposal flow: generate standalone HTML with the standard model, show it to the user, allow regeneration, and only create the real project after the user chooses to commit.
 - [ ] Define the paid conversion path from approved HTML proposal to real project: start from the existing Astro starter template, provide the generated HTML as source context, and prompt the Studio agent to turn it into an Astro project using Vivd CMS primitives.
+- [ ] Fix intermittent stale Studio preview after inline text patching: CMS-owned, i18n-owned, and page-owned preview text edits should become visible immediately after save/patch without requiring a manual refresh. Investigate ownership/write-path handling plus devserver/HMR or iframe refresh behavior.
 - [ ] Prove the scratch-to-Studio attach/build handoff end to end with repeatable smoke coverage.
 - [ ] Define the next lightweight GitHub integration slice so linked personal accounts and user-chosen repository URLs share one repo-binding model.
 - [ ] Decide the next follow-up after the current preview architecture work lands for preview artifact exposure and Studio URL policy.

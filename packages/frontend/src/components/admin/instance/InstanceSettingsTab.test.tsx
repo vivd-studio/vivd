@@ -298,7 +298,7 @@ describe("InstanceSettingsTab", () => {
 
     expect(screen.getByText("Internal compatibility profile")).toBeInTheDocument();
     expect(screen.getByText("1.1.33")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Apply latest release" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply latest release" })).toBeInTheDocument();
     expect(screen.queryByText("Network")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
     expect(screen.queryByText("Capabilities")).not.toBeInTheDocument();

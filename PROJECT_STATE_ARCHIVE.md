@@ -14,6 +14,7 @@ This section captures the active-file compaction that moved durable roadmap mate
 
 ## 2026-04-28 Entries Moved From PROJECT_STATE
 
+- 2026-04-28: Added `plans/plugin-license-allocation-plan.md` and linked it from the roadmap for organization-owned plugin license pools, project assignment/reassignment, self-serve license purchase, and superadmin override controls. Validation: doc-only, `git diff --check` pass.
 - 2026-04-28: Added `plans/credits-auth-template-commerce-plan.md` and linked it from the roadmap for Google auth, dollar-scale credits with a margin factor, 3 signup credits, easy credit-pack purchases, superadmin billing controls, and HTML template generation/purchase charging. Validation: doc-only, `git diff --check` pass.
 - 2026-04-28: Added `plans/studio-chat-agent-ux-plan.md` and linked it from the roadmap for Studio chat polish, compact tool activity, non-technical agent voice, proactive planning behavior, and CMS instruction accuracy audit. Validation: doc-only, `git diff --check` pass.
 - 2026-04-28: Added roadmap entries for Reddit launch preparation and moving published customer sites onto an external provider layer, preferably Cloudflare, to decouple live sites from platform/control-plane outages. Validation: doc-only, `git diff --check` pass.
