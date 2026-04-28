@@ -10,6 +10,10 @@ describe("Dashboard", () => {
   it("uses the framed viewport without owning sidebar state", () => {
     render(<Dashboard />);
 
+    expect(
+      screen.getByRole("heading", { name: "Your Projects" }),
+    ).toBeInTheDocument();
+
     const projectsList = screen.getByTestId("projects-list");
     expect(projectsList).toBeInTheDocument();
     expect(projectsList.parentElement).toHaveClass(
