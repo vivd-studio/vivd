@@ -6,9 +6,10 @@ Vivd is an AI-powered website builder: generate a site, preview/edit it in Studi
 
 ## Project State & Roadmap
 
-- See `PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
-- When plans change or work is completed, update `PROJECT_STATE.md` in the same change.
-- If `PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `PROJECT_STATE_ARCHIVE.md`.
+- See `ROADMAP.md` for active roadmap, priorities, and near-term backlog.
+- See `PROJECT_STATE.md` for the current handoff and latest progress.
+- When plans change, update `ROADMAP.md`; when work is completed or current handoff context changes, update `PROJECT_STATE.md` in the same change.
+- Keep `PROJECT_STATE.md` compact, with only the latest two progress entries. Move older material into `PROJECT_STATE_ARCHIVE.md`.
 
 ## Repo Shape
 

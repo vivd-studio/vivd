@@ -2,6 +2,25 @@
 
 ## Progress Log Archive
 
+## 2026-04-28 Compaction Summary
+
+This section captures the active-file compaction that moved durable roadmap material into `ROADMAP.md` and reduced `PROJECT_STATE.md` to a compact handoff with only two latest progress entries. Use this archive plus git history when exact per-change validation detail is needed.
+
+- Roadmap direction moved out of `PROJECT_STATE.md`: hosted `platform` remains the default SaaS lane; `solo` remains public, one-host, and intentionally narrower; preview/publish still run through the Studio/local build path while the preview/runtime split and Studio lifecycle hardening continue.
+- Active priorities moved to `ROADMAP.md`: platform-first cleanup, preview/runtime split, OpenCode-aligned Studio runtime gaps, Fly/Docker Studio lifecycle hardening, and generic plugin extraction behind host contracts.
+- Near-term backlog moved to `ROADMAP.md`: shared UI primitive follow-ups, reversible project archiving, superadmin project transfer, post-login tenant redirect, scratch-to-Studio attach/build smoke coverage, GitHub repo-binding work, preview artifact/URL policy follow-up, and the next Table Booking live operator view.
+- Recent progress trimmed from the active file covered docs Docker dev-image repair, public `solo` install/profile cleanup, app heading and sidebar shell polish, project-list/card treatments, embedded Studio handoff and startup behavior, Studio chat typography/layout changes, shared theme sizing, Studio startup contract work, surface primitive rollout, Astro/CMS fixes, plugin extraction slices, Table Booking and Newsletter plugin slices, and release-smoke/Fly validation hardening.
+- Going forward, `PROJECT_STATE.md` should stay as a current handoff with only the latest two progress entries; older closed-out detail belongs here or in focused plans/skills.
+
+## 2026-04-28 Entries Moved From PROJECT_STATE
+
+- 2026-04-28: Added `plans/credits-auth-template-commerce-plan.md` and linked it from the roadmap for Google auth, dollar-scale credits with a margin factor, 3 signup credits, easy credit-pack purchases, superadmin billing controls, and HTML template generation/purchase charging. Validation: doc-only, `git diff --check` pass.
+- 2026-04-28: Added `plans/studio-chat-agent-ux-plan.md` and linked it from the roadmap for Studio chat polish, compact tool activity, non-technical agent voice, proactive planning behavior, and CMS instruction accuracy audit. Validation: doc-only, `git diff --check` pass.
+- 2026-04-28: Added roadmap entries for Reddit launch preparation and moving published customer sites onto an external provider layer, preferably Cloudflare, to decouple live sites from platform/control-plane outages. Validation: doc-only, `git diff --check` pass.
+- 2026-04-28: Added roadmap direction and backlog entries for clearer tenant-core/platform separation, superadmin-controllable payment integration, and an HTML-only pre-project generation and paid conversion flow using the standard model. Validation: doc-only, `git diff --check` pass.
+- 2026-04-28: Fixed the local docs Docker dev image so `predev` can run the self-host asset sync script by including its repo-level script/shared inputs and watching them for rebuilds. Validation: `docker compose config --quiet`, `docker compose up -d --build docs`, `curl -I http://docs.localhost/`, `curl http://docs.localhost/health`, and targeted `git diff --check` pass.
+- 2026-04-28: Centralized app page headings in `@vivd/ui`, reduced their visual weight while keeping them slightly larger than `text-2xl`, and aligned Projects/Organization/Super Admin headings with their active sections. Validation: focused frontend heading/sidebar tests, `npm run typecheck -w @vivd/ui`, `npm run typecheck -w @vivd/frontend`, and targeted `git diff --check` pass.
+
 ## 2026-04-17 Compaction Summary
 
 This section captures the main themes removed from `PROJECT_STATE.md` when the active file was shortened. Detailed wording from older active-state entries is no longer kept in the main doc; use this archive plus git history when deeper context is needed.
