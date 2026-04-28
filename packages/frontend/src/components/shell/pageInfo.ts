@@ -21,8 +21,15 @@ function formatPluginPageTitle(pluginId: string) {
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function normalizePathname(pathname: string) {
+  if (pathname.length <= 1) return pathname;
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
 export function getPageInfo(pathname: string): PageInfo {
-  if (pathname === "/vivd-studio/projects/new/scratch") {
+  const normalizedPathname = normalizePathname(pathname);
+
+  if (normalizedPathname === "/vivd-studio/projects/new/scratch") {
     return {
       title: "New project",
       isProjectPage: false,
@@ -30,7 +37,7 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  const projectPluginMatch = pathname.match(
+  const projectPluginMatch = normalizedPathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/plugins\/([^/]+)(?:\/.*)?$/,
   );
   if (projectPluginMatch) {
@@ -44,7 +51,7 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  const projectPluginsMatch = pathname.match(
+  const projectPluginsMatch = normalizedPathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/plugins$/,
   );
   if (projectPluginsMatch) {
@@ -56,7 +63,9 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  const projectMatch = pathname.match(/^\/vivd-studio\/projects\/([^/]+)$/);
+  const projectMatch = normalizedPathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)$/,
+  );
   if (projectMatch) {
     return {
       title: "Projects",
@@ -65,23 +74,23 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  if (pathname === "/vivd-studio" || pathname === "/vivd-studio/") {
+  if (normalizedPathname === "/vivd-studio") {
     return {
       title: "Projects",
       isProjectPage: false,
       isProjectsIndexPage: true,
     };
   }
-  if (pathname.startsWith("/vivd-studio/superadmin")) {
+  if (normalizedPathname.startsWith("/vivd-studio/superadmin")) {
     return { title: "Super Admin", isProjectPage: false };
   }
-  if (pathname.startsWith("/vivd-studio/org")) {
+  if (normalizedPathname.startsWith("/vivd-studio/org")) {
     return { title: "Organization", isProjectPage: false };
   }
-  if (pathname.startsWith("/vivd-studio/settings")) {
+  if (normalizedPathname.startsWith("/vivd-studio/settings")) {
     return { title: "Settings", isProjectPage: false };
   }
-  if (pathname.startsWith("/vivd-studio/no-project")) {
+  if (normalizedPathname.startsWith("/vivd-studio/no-project")) {
     return { title: "No Project", isProjectPage: false };
   }
   return {

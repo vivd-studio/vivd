@@ -22,6 +22,13 @@ describe("getPageInfo", () => {
       isProjectPluginsPage: true,
     });
 
+    expect(getPageInfo("/vivd-studio/projects/demo/plugins/")).toMatchObject({
+      title: "Plugins",
+      isProjectPage: false,
+      projectSlug: "demo",
+      isProjectPluginsPage: true,
+    });
+
     expect(getPageInfo("/vivd-studio/projects/demo/plugins/analytics")).toMatchObject({
       title: "Analytics",
       isProjectPage: false,
@@ -32,7 +39,7 @@ describe("getPageInfo", () => {
   });
 
   it("treats the scratch route as a non-project page with its own content shell", () => {
-    const pageInfo = getPageInfo("/vivd-studio/projects/new/scratch");
+    const pageInfo = getPageInfo("/vivd-studio/projects/new/scratch/");
 
     expect(pageInfo).toMatchObject({
       title: "New project",
@@ -43,7 +50,7 @@ describe("getPageInfo", () => {
   });
 
   it("keeps project overview routes as project pages without route-owned sidebar mode", () => {
-    const pageInfo = getPageInfo("/vivd-studio/projects/demo");
+    const pageInfo = getPageInfo("/vivd-studio/projects/demo/");
 
     expect(pageInfo).toMatchObject({
       title: "Projects",

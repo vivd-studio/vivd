@@ -85,6 +85,47 @@ export function isDevDomain(domain: string): boolean {
   );
 }
 
+export function getProjectFailurePresentation(errorMessage?: string | null): {
+  title: string;
+  summary: string;
+  details?: string;
+} {
+  const details = errorMessage?.trim();
+  if (!details) {
+    return {
+      title: "Project setup failed",
+      summary:
+        "The project did not finish successfully. Open Studio if source files are available, or inspect the status before continuing.",
+    };
+  }
+
+  if (details.includes("Cannot find module @rollup/rollup-")) {
+    return {
+      title: "Project setup failed",
+      summary:
+        "The project files were imported, but the Astro preview build failed because Rollup's Linux native package was missing after dependency install.",
+      details,
+    };
+  }
+
+  if (details.includes("Astro build failed")) {
+    return {
+      title: "Project setup failed",
+      summary:
+        "The project files were imported, but the Astro preview build failed.",
+      details,
+    };
+  }
+
+  const firstLine = details.split("\n")[0]?.trim() || "The project failed.";
+  return {
+    title: "Project setup failed",
+    summary:
+      firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine,
+    details,
+  };
+}
+
 export function getProjectStatusPresentation(status: string): {
   label: string;
   color: ProjectStatusBadgeVariant;
@@ -95,6 +136,10 @@ export function getProjectStatusPresentation(status: string): {
   switch (status) {
     case "pending":
       label = "Pending";
+      break;
+    case "importing_zip":
+      label = "Importing ZIP";
+      color = "info";
       break;
     case "capturing_references":
       label = "Capturing References";

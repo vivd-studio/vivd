@@ -7,6 +7,95 @@ import { gitService } from "../integrations/GitService";
 import { thumbnailService } from "./ThumbnailService";
 import { uploadProjectPreviewToBucket } from "./ProjectArtifactsService";
 
+type ProjectTypeConfig = ReturnType<typeof detectProjectType>;
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getInstallCommand(config: ProjectTypeConfig): string {
+  if (config.packageManager === "pnpm") return "pnpm install";
+  if (config.packageManager === "yarn") return "yarn install";
+  return "npm install --include=optional";
+}
+
+function installDependencies(
+  versionDir: string,
+  config: ProjectTypeConfig,
+): void {
+  console.log(`[Build] Installing dependencies in ${versionDir}`);
+
+  try {
+    execSync(getInstallCommand(config), {
+      cwd: versionDir,
+      stdio: "pipe",
+      encoding: "utf-8",
+      timeout: 5 * 60 * 1000,
+    });
+  } catch (err) {
+    throw new Error(`Failed to install dependencies: ${getErrorMessage(err)}`);
+  }
+}
+
+function runAstroBuild(versionDir: string, outputDir: string): void {
+  const astroBin = path.join(versionDir, "node_modules", ".bin", "astro");
+  execSync(`"${astroBin}" build --outDir "${outputDir}"`, {
+    cwd: versionDir,
+    stdio: "pipe",
+    encoding: "utf-8",
+    timeout: 5 * 60 * 1000,
+  });
+}
+
+function isMissingRollupNativeDependency(message: string): boolean {
+  return (
+    message.includes("Cannot find module @rollup/rollup-") ||
+    (message.includes("@rollup/rollup-") &&
+      message.includes("MODULE_NOT_FOUND"))
+  );
+}
+
+function resetNpmInstallArtifacts(versionDir: string): void {
+  fs.rmSync(path.join(versionDir, "node_modules"), {
+    recursive: true,
+    force: true,
+  });
+  fs.rmSync(path.join(versionDir, "package-lock.json"), { force: true });
+}
+
+function buildAstroWithNativeRetry(
+  versionDir: string,
+  outputDir: string,
+  config: ProjectTypeConfig,
+): void {
+  try {
+    runAstroBuild(versionDir, outputDir);
+    return;
+  } catch (err) {
+    const message = getErrorMessage(err);
+    if (
+      config.packageManager !== "npm" ||
+      !isMissingRollupNativeDependency(message)
+    ) {
+      throw new Error(`Astro build failed: ${message}`);
+    }
+
+    console.warn(
+      `[Build] Missing Rollup native optional dependency in ${versionDir}; reinstalling npm dependencies without the existing lockfile.`,
+    );
+    resetNpmInstallArtifacts(versionDir);
+    installDependencies(versionDir, config);
+
+    try {
+      runAstroBuild(versionDir, outputDir);
+    } catch (retryErr) {
+      throw new Error(
+        `Astro build failed after reinstalling dependencies: ${getErrorMessage(retryErr)}`,
+      );
+    }
+  }
+}
+
 /**
  * Parse slug and version from a version directory path.
  * Path formats:
@@ -136,48 +225,17 @@ class BuildService {
       );
     }
 
-    // Install dependencies if needed
     if (!hasNodeModules(versionDir)) {
-      console.log(`[Build] Installing dependencies in ${versionDir}`);
-
-      const installCmd =
-        config.packageManager === "pnpm"
-          ? "pnpm install"
-          : config.packageManager === "yarn"
-            ? "yarn install"
-            : "npm install";
-
-      try {
-        execSync(installCmd, {
-          cwd: versionDir,
-          stdio: "pipe",
-          encoding: "utf-8",
-          timeout: 5 * 60 * 1000, // 5 minute timeout for install
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`Failed to install dependencies: ${msg}`);
-      }
+      installDependencies(versionDir, config);
     }
 
     // Run astro build with custom output directory
     console.log(
       `[Build] Building Astro project in ${versionDir} to ${outputDir}`
     );
-    const astroBin = path.join(versionDir, "node_modules", ".bin", "astro");
     const outputPath = path.join(versionDir, outputDir);
 
-    try {
-      execSync(`"${astroBin}" build --outDir "${outputDir}"`, {
-        cwd: versionDir,
-        stdio: "pipe",
-        encoding: "utf-8",
-        timeout: 5 * 60 * 1000, // 5 minute timeout for build
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Astro build failed: ${msg}`);
-    }
+    buildAstroWithNativeRetry(versionDir, outputDir, config);
 
     if (!fs.existsSync(outputPath)) {
       throw new Error("Astro build completed but output folder not found");
@@ -215,36 +273,14 @@ class BuildService {
         }
       }
 
-      // Install dependencies if needed
       if (!hasNodeModules(versionDir)) {
-        console.log(`[Build] Installing dependencies in ${versionDir}`);
-
-        const installCmd =
-          config.packageManager === "pnpm"
-            ? "pnpm install"
-            : config.packageManager === "yarn"
-              ? "yarn install"
-              : "npm install";
-
-        execSync(installCmd, {
-          cwd: versionDir,
-          stdio: "pipe",
-          encoding: "utf-8",
-          timeout: 5 * 60 * 1000,
-        });
+        installDependencies(versionDir, config);
       }
 
       // Run astro build
       console.log(`[Build] Building Astro project in ${versionDir}`);
-      const astroBin = path.join(versionDir, "node_modules", ".bin", "astro");
       const outputDir = path.basename(outputPath);
-
-      execSync(`"${astroBin}" build --outDir "${outputDir}"`, {
-        cwd: versionDir,
-        stdio: "pipe",
-        encoding: "utf-8",
-        timeout: 5 * 60 * 1000,
-      });
+      buildAstroWithNativeRetry(versionDir, outputDir, config);
 
       if (!fs.existsSync(outputPath)) {
         throw new Error("Astro build completed but output folder not found");

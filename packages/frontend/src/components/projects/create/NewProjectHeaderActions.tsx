@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
 import {
+  getImportErrorToastDescription,
   importProjectZip,
   ZIP_IMPORT_MAX_FILE_SIZE_MB,
 } from "@/lib/import-utils";
@@ -42,6 +43,7 @@ export function NewProjectHeaderActions() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
+  const utils = trpc.useUtils();
 
   const form = useForm<UrlFormValues>({
     resolver: zodResolver(urlFormSchema),
@@ -51,17 +53,19 @@ export function NewProjectHeaderActions() {
     },
   });
 
-  const resetTransientState = () => {
+  const resetTransientState = (options?: { preserveImporting?: boolean }) => {
     setPendingUrl(null);
     setExistsData(null);
     setImportFile(null);
-    setIsImporting(false);
+    if (!options?.preserveImporting) {
+      setIsImporting(false);
+    }
     form.reset();
   };
 
   const closeDialog = () => {
     setMode(null);
-    resetTransientState();
+    resetTransientState({ preserveImporting: isImporting });
   };
 
   const generateMutation = trpc.project.generate.useMutation({
@@ -139,17 +143,34 @@ export function NewProjectHeaderActions() {
   const handleImport = async () => {
     if (!importFile) return;
     setIsImporting(true);
+    const toastId = toast.loading("Importing project", {
+      description:
+        "You can close this dialog. The project list will keep updating.",
+    });
+    const refreshTimer = window.setInterval(() => {
+      void utils.project.list.invalidate();
+    }, 2000);
+    void utils.project.list.invalidate();
+
     try {
       const result = await importProjectZip(importFile, {
         organizationId: membership?.organizationId,
       });
       closeDialog();
       navigate(buildProjectTarget(result.slug, result.version));
-      toast.success("Project imported");
+      toast.success("Project imported", {
+        id: toastId,
+        description: "Opening the imported project.",
+      });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Import failed");
+      toast.error("Import failed", {
+        id: toastId,
+        description: getImportErrorToastDescription(error),
+      });
     } finally {
+      window.clearInterval(refreshTimer);
       setIsImporting(false);
+      void utils.project.list.invalidate();
     }
   };
 

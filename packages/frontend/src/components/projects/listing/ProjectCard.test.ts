@@ -4,6 +4,10 @@ import {
   getManualProjectStatusOptions,
   isStudioAccessibleProjectStatus,
 } from "./ProjectCard";
+import {
+  getProjectFailurePresentation,
+  getProjectStatusPresentation,
+} from "./projectCard/ProjectCard.helpers";
 
 describe("isStudioAccessibleProjectStatus", () => {
   it("keeps interrupted scratch/studio states openable in Studio", () => {
@@ -52,5 +56,28 @@ describe("getDefaultManualProjectStatus", () => {
     expect(getDefaultManualProjectStatus("initial_generation_paused", "url")).toBe(
       "failed",
     );
+  });
+});
+
+describe("getProjectStatusPresentation", () => {
+  it("labels active ZIP imports as in-progress work", () => {
+    expect(getProjectStatusPresentation("importing_zip")).toEqual({
+      label: "Importing ZIP",
+      color: "info",
+    });
+  });
+});
+
+describe("getProjectFailurePresentation", () => {
+  it("summarizes Rollup optional dependency failures without using the raw stack as the summary", () => {
+    const details =
+      "Astro build failed: Error: Cannot find module @rollup/rollup-linux-x64-gnu\n    at native.js:83:9";
+
+    expect(getProjectFailurePresentation(details)).toEqual({
+      title: "Project setup failed",
+      summary:
+        "The project files were imported, but the Astro preview build failed because Rollup's Linux native package was missing after dependency install.",
+      details,
+    });
   });
 });

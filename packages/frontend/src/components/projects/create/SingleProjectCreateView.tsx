@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
 import {
+  getImportErrorToastDescription,
   importProjectZip,
   ZIP_IMPORT_MAX_FILE_SIZE_MB,
 } from "@/lib/import-utils";
@@ -29,6 +30,7 @@ export function SingleProjectCreateView() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
+  const utils = trpc.useUtils();
 
   const form = useForm<UrlFormValues>({
     resolver: zodResolver(urlFormSchema),
@@ -75,17 +77,34 @@ export function SingleProjectCreateView() {
   const handleImport = async () => {
     if (!importFile) return;
     setIsImporting(true);
+    const toastId = toast.loading("Importing project", {
+      description:
+        "You can stay on this screen. The project list will keep updating.",
+    });
+    const refreshTimer = window.setInterval(() => {
+      void utils.project.list.invalidate();
+    }, 2000);
+    void utils.project.list.invalidate();
+
     try {
       const result = await importProjectZip(importFile, {
         organizationId: membership?.organizationId,
       });
       // Navigate to fullscreen view in single project mode
       navigate(`/vivd-studio/projects/${result.slug}/fullscreen`);
-      toast.success("Project imported");
+      toast.success("Project imported", {
+        id: toastId,
+        description: "Opening the imported project.",
+      });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import failed");
+      toast.error("Import failed", {
+        id: toastId,
+        description: getImportErrorToastDescription(e),
+      });
     } finally {
+      window.clearInterval(refreshTimer);
       setIsImporting(false);
+      void utils.project.list.invalidate();
     }
   };
 

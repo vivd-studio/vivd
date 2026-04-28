@@ -877,16 +877,42 @@ describe("AppSidebar search", () => {
 
   it.each([
     ["projects index", ROUTES.DASHBOARD],
-    ["project preview", ROUTES.PROJECT("alpha")],
+    ["projects index with trailing slash", `${ROUTES.DASHBOARD}/`],
+    ["project overview", ROUTES.PROJECT("alpha")],
+    [
+      "project overview with selected version",
+      `${ROUTES.PROJECT("alpha")}?version=2`,
+    ],
+    ["project overview with trailing slash", `${ROUTES.PROJECT("alpha")}/`],
     ["new project", ROUTES.NEW_SCRATCH],
   ])("does not draw the docked rail divider on the %s route", (_label, path) => {
     renderSidebar({ path, sidebarOpen: false });
 
-    const sidebarRail = document.querySelector(
+    const dockedSidebar = document.querySelector(
       "[data-state][data-overlay-state] > div:nth-of-type(2)",
     ) as HTMLElement | null;
+    const sidebarRail = document.querySelector(
+      '[data-sidebar="rail"]',
+    ) as HTMLButtonElement | null;
 
-    expect(sidebarRail).toHaveClass("group-data-[side=left]:border-r-0");
+    expect(dockedSidebar).toHaveClass("group-data-[side=left]:border-r-0");
+    expect(sidebarRail).toHaveClass("hover:after:bg-transparent");
+  });
+
+  it("keeps the docked rail divider on regular shell routes", () => {
+    renderSidebar({ path: ROUTES.SETTINGS, sidebarOpen: false });
+
+    const dockedSidebar = document.querySelector(
+      "[data-state][data-overlay-state] > div:nth-of-type(2)",
+    ) as HTMLElement | null;
+    const sidebarRail = document.querySelector(
+      '[data-sidebar="rail"]',
+    ) as HTMLButtonElement | null;
+
+    expect(dockedSidebar).toHaveClass("group-data-[side=left]:border-r");
+    expect(dockedSidebar).not.toHaveClass("group-data-[side=left]:border-r-0");
+    expect(sidebarRail).toHaveClass("hover:after:bg-sidebar-border");
+    expect(sidebarRail).not.toHaveClass("hover:after:bg-transparent");
   });
 
   it("shows a persistent docs link derived from the current host", () => {

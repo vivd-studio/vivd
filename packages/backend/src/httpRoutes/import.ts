@@ -263,6 +263,14 @@ function promoteDistToRoot(versionDir: string): boolean {
   return true;
 }
 
+const IMPORTED_RUNTIME_ARTIFACT_DIRS = ["node_modules", ".git", ".astro"];
+
+function removeImportedRuntimeArtifacts(versionDir: string): void {
+  for (const dirName of IMPORTED_RUNTIME_ARTIFACT_DIRS) {
+    fs.rmSync(path.join(versionDir, dirName), { recursive: true, force: true });
+  }
+}
+
 async function syncImportedArtifacts(options: {
   organizationId: string;
   slug: string;
@@ -449,10 +457,6 @@ export function createImportRouter(deps: {
       const createdAt = Number.isFinite(Date.parse(createdAtRaw))
         ? createdAtRaw
         : new Date().toISOString();
-      const status =
-        typeof rawProjectData.status === "string"
-          ? rawProjectData.status
-          : "completed";
 
       const requestedSlug =
         req.query.slug !== undefined ? (normalizeSlug(req.query.slug) ?? "") : "";
@@ -493,6 +497,7 @@ export function createImportRouter(deps: {
       fs.mkdirSync(projectDir, { recursive: true });
       createdProjectDir = projectDir;
       fs.cpSync(rootDir, versionDir, { recursive: true });
+      removeImportedRuntimeArtifacts(versionDir);
 
       // DB is the source of truth for project metadata.
       // Remove any imported metadata files to avoid confusion.
@@ -527,7 +532,7 @@ export function createImportRouter(deps: {
         url,
         title,
         description,
-        status,
+        status: "importing_zip",
         createdAt: new Date(createdAt),
       });
       createdProjectVersion = { organizationId, slug, version };
@@ -543,6 +548,13 @@ export function createImportRouter(deps: {
         slug,
         version,
         versionDir,
+      });
+
+      await projectMetaService.updateVersionStatus({
+        organizationId,
+        slug,
+        version,
+        status: "completed",
       });
 
       return res.json({

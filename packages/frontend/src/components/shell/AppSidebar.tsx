@@ -33,6 +33,11 @@ import {
   SidebarSearchButton,
   SuperAdminNavSection,
 } from "./appSidebar/navSections";
+import { getPageInfo } from "./pageInfo";
+
+const FRAMED_VIEWPORT_SIDEBAR_EDGE_CLASS =
+  "group-data-[side=left]:border-r-0 group-data-[side=right]:border-l-0";
+const FRAMED_VIEWPORT_SIDEBAR_RAIL_CLASS = "hover:after:bg-transparent";
 
 export function AppSidebar() {
   const { data: session } = authClient.useSession();
@@ -43,10 +48,11 @@ export function AppSidebar() {
   const { openSearch } = useNavigationSearch();
 
   const isCollapsed = state === "collapsed";
+  const pageInfo = getPageInfo(location.pathname);
   const isFramedViewportRoute =
-    location.pathname === ROUTES.DASHBOARD ||
-    location.pathname === ROUTES.NEW_SCRATCH ||
-    /^\/vivd-studio\/projects\/[^/]+$/.test(location.pathname);
+    pageInfo.isProjectsIndexPage ||
+    pageInfo.isScratchWizardPage ||
+    pageInfo.isProjectPage;
   const showImmersiveSidebarToggle = isCollapsed && isImmersiveDesktop;
   const [showAllProjects, setShowAllProjects] = React.useState(false);
   const showPlatformAdminSections =
@@ -130,9 +136,7 @@ export function AppSidebar() {
     <Sidebar
       collapsible="icon"
       className={
-        isFramedViewportRoute
-          ? "group-data-[side=left]:border-r-0 group-data-[side=right]:border-l-0"
-          : undefined
+        isFramedViewportRoute ? FRAMED_VIEWPORT_SIDEBAR_EDGE_CLASS : undefined
       }
     >
       <SidebarHeader>
@@ -187,7 +191,11 @@ export function AppSidebar() {
         {session && <UserMenu session={session} onLogout={handleLogout} />}
       </SidebarFooter>
 
-      <SidebarRail />
+      <SidebarRail
+        className={
+          isFramedViewportRoute ? FRAMED_VIEWPORT_SIDEBAR_RAIL_CLASS : undefined
+        }
+      />
     </Sidebar>
   );
 }

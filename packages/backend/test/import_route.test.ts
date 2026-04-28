@@ -339,7 +339,14 @@ describe("import route safety checks", () => {
       slug: "site",
       version: 1,
     });
-    expect(createProjectVersionMock).toHaveBeenCalledOnce();
+    expect(createProjectVersionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        slug: "site",
+        version: 1,
+        status: "importing_zip",
+      }),
+    );
     expect(updateVersionStatusMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       slug: "site",
@@ -348,6 +355,46 @@ describe("import route safety checks", () => {
       errorMessage: "bucket write failed",
     });
     expect(deleteProjectVersionMock).not.toHaveBeenCalled();
+  });
+
+  it("drops imported runtime artifacts before saving source files", async () => {
+    extractZipMock.mockImplementationOnce(
+      async (_zipPath: string, options: { dir: string }) => {
+        const siteDir = path.join(options.dir, "site");
+        fs.mkdirSync(path.join(siteDir, "node_modules", "left-pad"), {
+          recursive: true,
+        });
+        fs.mkdirSync(path.join(siteDir, ".git", "objects"), { recursive: true });
+        fs.mkdirSync(path.join(siteDir, ".astro"), { recursive: true });
+        fs.writeFileSync(path.join(siteDir, "index.html"), "<html></html>", "utf-8");
+      },
+    );
+
+    const handler = getImportHandler();
+    const req = {
+      query: {},
+      body: {},
+      headers: {},
+      file: {
+        originalname: "site.zip",
+        buffer: Buffer.from("fake-zip"),
+      },
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    const versionDir = "/tmp/vivd-import-test/org-1/site/v1";
+    expect(res.statusCode).toBe(200);
+    expect(fs.existsSync(path.join(versionDir, "node_modules"))).toBe(false);
+    expect(fs.existsSync(path.join(versionDir, ".git"))).toBe(false);
+    expect(fs.existsSync(path.join(versionDir, ".astro"))).toBe(false);
+    expect(updateVersionStatusMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site",
+      version: 1,
+      status: "completed",
+    });
   });
 
   it("repairs referenced Astro CMS helpers before uploading imported Astro source", async () => {
@@ -401,5 +448,11 @@ describe("import route safety checks", () => {
     expect(
       ensureReferencedAstroCmsToolkitMock.mock.invocationCallOrder[0],
     ).toBeLessThan(uploadProjectSourceToBucketMock.mock.invocationCallOrder[0]!);
+    expect(updateVersionStatusMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site",
+      version: 1,
+      status: "completed",
+    });
   });
 });

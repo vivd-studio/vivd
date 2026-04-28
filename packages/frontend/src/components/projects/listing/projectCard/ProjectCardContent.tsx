@@ -10,10 +10,14 @@ import {
 
 import { getProjectPluginPresentation } from "@/plugins/presentation";
 import type { VersionInfo } from "../ProjectCard.types";
+import { getProjectFailurePresentation } from "./ProjectCard.helpers";
 
 type ProjectPluginPresentation = ReturnType<
   typeof getProjectPluginPresentation
 >;
+
+const FAILURE_DETAILS_CLASS_NAME =
+  "mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed";
 
 interface ProjectCardContentProps {
   projectSlug: string;
@@ -56,6 +60,10 @@ export function ProjectCardContent({
   onOpenProjectStudio,
   onOpenStatusDialog,
 }: ProjectCardContentProps) {
+  const failurePresentation = getProjectFailurePresentation(
+    selectedVersionInfo?.errorMessage,
+  );
+  const failureDetails = failurePresentation.details;
   const pluginActions = (
     <div className="absolute right-2 bottom-2 flex items-center gap-1">
       <TooltipProvider delayDuration={100}>
@@ -200,13 +208,22 @@ export function ProjectCardContent({
     return (
       <Panel
         tone="sunken"
-        className="mx-3 mt-1 flex grow flex-col items-center justify-center space-y-1 p-4 text-center text-sm text-destructive"
+        className="mx-3 mt-1 flex grow flex-col items-center justify-center gap-2 p-4 text-center text-sm text-destructive"
       >
-        <div className="font-medium">Generation failed</div>
-        {selectedVersionInfo?.errorMessage ? (
-          <div className="text-xs text-muted-foreground">
-            {selectedVersionInfo.errorMessage}
-          </div>
+        <div className="font-medium">{failurePresentation.title}</div>
+        <div className="max-w-[24rem] text-xs text-muted-foreground">
+          {failurePresentation.summary}
+        </div>
+        {failureDetails ? (
+          <details
+            className="w-full max-w-[24rem] text-left text-xs text-muted-foreground"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <summary className="mx-auto w-fit cursor-pointer text-center font-medium hover:text-foreground">
+              Details
+            </summary>
+            <pre className={FAILURE_DETAILS_CLASS_NAME}>{failureDetails}</pre>
+          </details>
         ) : null}
         {canOpenStudio ? (
           <Button

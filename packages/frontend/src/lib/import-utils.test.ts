@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getImportErrorToastDescription,
   importProjectZip,
   ZIP_IMPORT_MAX_FILE_SIZE_BYTES,
 } from "./import-utils";
@@ -74,5 +75,19 @@ describe("importProjectZip", () => {
       "ZIP file is too large. Maximum size is 250MB.",
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getImportErrorToastDescription", () => {
+  it("maps post-create import failures to a user-facing project-card hint", () => {
+    expect(
+      getImportErrorToastDescription(
+        new Error(
+          "Import failed after the project was created. The project was kept with failed status.",
+        ),
+      ),
+    ).toBe(
+      "The project was created, but setup failed. Check the project card for details.",
+    );
   });
 });

@@ -19,6 +19,18 @@ export interface ImportProjectZipOptions {
   organizationId?: string;
 }
 
+export function getImportErrorToastDescription(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Import failed";
+  if (
+    message.includes(
+      "Import failed after the project was created. The project was kept with failed status.",
+    )
+  ) {
+    return "The project was created, but setup failed. Check the project card for details.";
+  }
+  return message;
+}
+
 /**
  * Import a project from a ZIP file.
  * @param file - The ZIP file to import

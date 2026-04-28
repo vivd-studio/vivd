@@ -10,8 +10,8 @@
 
 ## Latest Progress
 
-- 2026-04-28: Hardened ZIP project import failure handling after a production `atco` import exposed an orphaned project row and empty Studio startup path. ZIP imports now default to 250MB, reject oversize files client-side before upload, preserve backend JSON 413 errors, keep post-create import failures as durable failed versions instead of deleting the source, hide invalid no-version manifests, delete project metadata when the last version is removed, and prevent Studio start/restart for missing project versions. Validation: focused backend import/Studio tests, focused frontend import utility tests, backend/frontend/docs typechecks, targeted frontend ESLint for touched files, and `git diff --check` pass.
-- 2026-04-28: Made solo install profiles sticky for public self-hosting and decoupled managed self-host software updates from the broader parked self-host admin feature flag. Validation: focused backend/frontend update tests, backend/frontend/docs typechecks, and `git diff --check` pass.
+- 2026-04-28: Closed the remaining ZIP import handling gap after the ATCO production import surfaced hidden background work and a noisy Astro/Rollup failure. Accepted imports now show as `importing_zip`, project lists refresh while upload/import is in flight, failed cards show a short summary with expandable details, imported runtime artifacts are discarded, and npm Astro builds retry after stale lockfile/native optional dependency misses. Validation: focused backend import tests, focused frontend import/project-card tests, backend/frontend typechecks, targeted frontend ESLint for touched files, and `git diff --check` pass.
+- 2026-04-28: Fixed the intermittent sidebar edge/rail divider on framed Projects, scratch, and project overview pages by deriving framed-route state from shared page info, normalizing trailing slashes, and suppressing the hover rail divider alongside the docked sidebar border. Validation: focused frontend shell tests, frontend typecheck, and `git diff --check` pass.
 
 ## Archive
 
