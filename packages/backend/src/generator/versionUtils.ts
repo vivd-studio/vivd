@@ -160,6 +160,14 @@ export async function getManifest(
   if (!project) return null;
 
   const versions = await projectMetaService.listProjectVersions(organizationId, slug);
+  if (
+    project.currentVersion <= 0 ||
+    versions.length === 0 ||
+    !versions.some((version) => version.version === project.currentVersion)
+  ) {
+    return null;
+  }
+
   const tags = Array.isArray(project.tags)
     ? project.tags.filter((tag): tag is string => typeof tag === "string")
     : [];

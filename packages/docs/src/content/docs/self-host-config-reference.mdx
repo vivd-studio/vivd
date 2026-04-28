@@ -186,6 +186,15 @@ R2_ACCESS_KEY=...
 R2_SECRET_KEY=...
 ```
 
+## Upload limits
+
+ZIP project imports default to 250MB. Override this only when your deployment has
+enough request-body, memory, and disk headroom for larger imports:
+
+```env
+ZIP_IMPORT_MAX_FILE_SIZE_MB=250
+```
+
 ## Integrations and optional services
 
 Cloudflare Turnstile automation:

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import {
   projectMemberProcedure,
@@ -12,6 +13,7 @@ import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
 import { resolveStableStudioMachineEnv } from "../../services/studioMachines/stableRuntimeEnv";
 import { installProfileService } from "../../services/system/InstallProfileService";
 import { resolveStudioBrowserUrl } from "../../services/studioMachines/runtimeAccessResolver";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
 
 const studioRuntimeResolvedContractSchema = z.object({
   url: z.string(),
@@ -156,6 +158,25 @@ function createStudioRuntimeUserActionToken(options: {
   });
 }
 
+async function assertStudioProjectVersionExists(options: {
+  organizationId: string;
+  slug: string;
+  version: number;
+}): Promise<void> {
+  const version = await projectMetaService.getProjectVersion(
+    options.organizationId,
+    options.slug,
+    options.version,
+  );
+
+  if (!version) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `Project version not found: ${options.slug}/v${options.version}`,
+    });
+  }
+}
+
 /**
  * Studio-related TRPC procedures.
  * These handle starting and managing studio instances for editing projects.
@@ -169,12 +190,18 @@ export const studioProcedures = {
     .input(
       z.object({
         slug: z.string(),
-        version: z.number(),
+        version: z.number().int().positive(),
       })
     )
     .output(studioRuntimeStatusSchema)
     .query(async ({ ctx, input }): Promise<StudioRuntimeStatusContract> => {
       const organizationId = ctx.organizationId!;
+      await assertStudioProjectVersionExists({
+        organizationId,
+        slug: input.slug,
+        version: input.version,
+      });
+
       // Check if studio is already running
       const existing = await studioMachineProvider.getUrl(
         organizationId,
@@ -227,12 +254,18 @@ export const studioProcedures = {
     .input(
       z.object({
         slug: z.string(),
-        version: z.number(),
+        version: z.number().int().positive(),
       })
     )
     .output(studioRuntimeStartSchema)
     .mutation(async ({ input, ctx }): Promise<StudioRuntimeStartContract> => {
       const organizationId = ctx.organizationId!;
+      await assertStudioProjectVersionExists({
+        organizationId,
+        slug: input.slug,
+        version: input.version,
+      });
+
       const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
         organizationId,
@@ -323,12 +356,18 @@ export const studioProcedures = {
     .input(
       z.object({
         slug: z.string(),
-        version: z.number(),
+        version: z.number().int().positive(),
       })
     )
     .output(studioRuntimeStartSchema)
     .mutation(async ({ input, ctx }): Promise<StudioRuntimeStartContract> => {
       const organizationId = ctx.organizationId!;
+      await assertStudioProjectVersionExists({
+        organizationId,
+        slug: input.slug,
+        version: input.version,
+      });
+
       const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
         organizationId,

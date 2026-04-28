@@ -278,6 +278,18 @@ class ProjectMetaService {
       });
 
       const max = maxVersion ?? 0;
+      if (maxVersion === null) {
+        await tx
+          .delete(projectMeta)
+          .where(
+            and(
+              eq(projectMeta.organizationId, options.organizationId),
+              eq(projectMeta.slug, options.slug),
+            ),
+          );
+        return;
+      }
+
       const current = project?.currentVersion ?? 0;
       const shouldAdjustCurrent = current === options.version || current > max;
       const nextCurrent = shouldAdjustCurrent ? max : current;

@@ -8,10 +8,10 @@ const {
   getProjectMock,
   createProjectVersionMock,
   deleteProjectVersionMock,
+  updateVersionStatusMock,
   initializeGitRepositoryMock,
   uploadProjectSourceToBucketMock,
   uploadProjectPreviewToBucketMock,
-  deleteProjectVersionArtifactsFromBucketMock,
   detectProjectTypeMock,
   buildSyncMock,
   getCurrentCommitMock,
@@ -24,10 +24,10 @@ const {
   getProjectMock: vi.fn(),
   createProjectVersionMock: vi.fn(),
   deleteProjectVersionMock: vi.fn(),
+  updateVersionStatusMock: vi.fn(),
   initializeGitRepositoryMock: vi.fn(),
   uploadProjectSourceToBucketMock: vi.fn(),
   uploadProjectPreviewToBucketMock: vi.fn(),
-  deleteProjectVersionArtifactsFromBucketMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
   buildSyncMock: vi.fn(),
   getCurrentCommitMock: vi.fn(),
@@ -49,6 +49,7 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
     getProject: getProjectMock,
     createProjectVersion: createProjectVersionMock,
     deleteProjectVersion: deleteProjectVersionMock,
+    updateVersionStatus: updateVersionStatusMock,
   },
 }));
 
@@ -70,8 +71,6 @@ vi.mock("../src/generator/vivdPaths", () => ({
 vi.mock("../src/services/project/ProjectArtifactsService", () => ({
   uploadProjectSourceToBucket: uploadProjectSourceToBucketMock,
   uploadProjectPreviewToBucket: uploadProjectPreviewToBucketMock,
-  deleteProjectVersionArtifactsFromBucket:
-    deleteProjectVersionArtifactsFromBucketMock,
 }));
 
 vi.mock("../src/devserver/projectType", () => ({
@@ -148,15 +147,17 @@ function getImportHandler(options?: { uploadError?: unknown; maxFileSizeMb?: num
 
 describe("import route safety checks", () => {
   beforeEach(() => {
+    fs.rmSync("/tmp/vivd-import-test", { recursive: true, force: true });
+
     createContextMock.mockReset();
     checkOrganizationAccessMock.mockReset();
     getProjectMock.mockReset();
     createProjectVersionMock.mockReset();
     deleteProjectVersionMock.mockReset();
+    updateVersionStatusMock.mockReset();
     initializeGitRepositoryMock.mockReset();
     uploadProjectSourceToBucketMock.mockReset();
     uploadProjectPreviewToBucketMock.mockReset();
-    deleteProjectVersionArtifactsFromBucketMock.mockReset();
     detectProjectTypeMock.mockReset();
     buildSyncMock.mockReset();
     getCurrentCommitMock.mockReset();
@@ -188,13 +189,11 @@ describe("import route safety checks", () => {
     getCurrentCommitMock.mockResolvedValue("commit-1");
     extractZipMock.mockResolvedValue(undefined);
     deleteProjectVersionMock.mockResolvedValue(undefined);
-    deleteProjectVersionArtifactsFromBucketMock.mockResolvedValue({
-      deleted: false,
-      objectsDeleted: 0,
-    });
+    updateVersionStatusMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    fs.rmSync("/tmp/vivd-import-test", { recursive: true, force: true });
     delete process.env.VIVD_S3_BUCKET;
   });
 
@@ -291,7 +290,7 @@ describe("import route safety checks", () => {
   it("returns a clear error when the ZIP exceeds the configured upload limit", async () => {
     const handler = getImportHandler({
       uploadError: { code: "LIMIT_FILE_SIZE" },
-      maxFileSizeMb: 100,
+      maxFileSizeMb: 250,
     });
     const req = {
       query: {},
@@ -304,12 +303,12 @@ describe("import route safety checks", () => {
 
     expect(res.statusCode).toBe(413);
     expect(res.body).toEqual({
-      error: "ZIP file is too large. Maximum size is 100MB.",
+      error: "ZIP file is too large. Maximum size is 250MB.",
     });
     expect(createContextMock).not.toHaveBeenCalled();
   });
 
-  it("rolls back project metadata when artifact sync fails after the project row was created", async () => {
+  it("marks the project version failed when artifact sync fails after the project row was created", async () => {
     extractZipMock.mockImplementationOnce(
       async (_zipPath: string, options: { dir: string }) => {
         const siteDir = path.join(options.dir, "site");
@@ -334,18 +333,21 @@ describe("import route safety checks", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(500);
-    expect(res.body).toEqual({ error: "Import failed" });
+    expect(res.body).toEqual({
+      error:
+        "Import failed after the project was created. The project was kept with failed status.",
+      slug: "site",
+      version: 1,
+    });
     expect(createProjectVersionMock).toHaveBeenCalledOnce();
-    expect(deleteProjectVersionMock).toHaveBeenCalledWith({
+    expect(updateVersionStatusMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       slug: "site",
       version: 1,
+      status: "failed",
+      errorMessage: "bucket write failed",
     });
-    expect(deleteProjectVersionArtifactsFromBucketMock).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      slug: "site",
-      version: 1,
-    });
+    expect(deleteProjectVersionMock).not.toHaveBeenCalled();
   });
 
   it("repairs referenced Astro CMS helpers before uploading imported Astro source", async () => {

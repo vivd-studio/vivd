@@ -30,7 +30,7 @@ import { classifyAuthRateLimitAction } from "./services/system/AuthRateLimitPoli
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 100;
+const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 250;
 const parsedZipImportMaxFileSizeMb = Number.parseInt(
   process.env.ZIP_IMPORT_MAX_FILE_SIZE_MB || "",
   10,

@@ -7,7 +7,10 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
-import { importProjectZip } from "@/lib/import-utils";
+import {
+  importProjectZip,
+  ZIP_IMPORT_MAX_FILE_SIZE_MB,
+} from "@/lib/import-utils";
 import { ROUTES } from "@/app/router";
 import { Button, Input, Form, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@vivd/ui";
 
@@ -231,7 +234,8 @@ export function NewProjectHeaderActions() {
                 disabled={isImporting}
               />
               <div className="text-xs text-muted-foreground">
-                Max 100MB. The imported project will be created as a new project.
+                Max {ZIP_IMPORT_MAX_FILE_SIZE_MB}MB. The imported project will
+                be created as a new project.
               </div>
             </div>
 

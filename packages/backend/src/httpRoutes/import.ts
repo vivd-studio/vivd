@@ -13,7 +13,6 @@ import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
 import { buildService } from "../services/project/BuildService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import {
-  deleteProjectVersionArtifactsFromBucket,
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
 } from "../services/project/ProjectArtifactsService";
@@ -559,25 +558,25 @@ export function createImportRouter(deps: {
 
       console.error("Import error:", error);
       if (createdProjectVersion) {
+        const message = error instanceof Error ? error.message : String(error);
         try {
-          await projectMetaService.deleteProjectVersion({
+          await projectMetaService.updateVersionStatus({
             organizationId: createdProjectVersion.organizationId,
             slug: createdProjectVersion.slug,
             version: createdProjectVersion.version,
+            status: "failed",
+            errorMessage: message || "Import failed.",
           });
         } catch (cleanupError) {
-          console.warn("[Import] Failed to rollback project metadata:", cleanupError);
+          console.warn("[Import] Failed to mark imported project as failed:", cleanupError);
         }
 
-        try {
-          await deleteProjectVersionArtifactsFromBucket({
-            organizationId: createdProjectVersion.organizationId,
-            slug: createdProjectVersion.slug,
-            version: createdProjectVersion.version,
-          });
-        } catch (cleanupError) {
-          console.warn("[Import] Failed to rollback project artifacts:", cleanupError);
-        }
+        return res.status(500).json({
+          error:
+            "Import failed after the project was created. The project was kept with failed status.",
+          slug: createdProjectVersion.slug,
+          version: createdProjectVersion.version,
+        });
       }
       if (createdProjectDir && fs.existsSync(createdProjectDir)) {
         try {

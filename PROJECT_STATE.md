@@ -10,8 +10,8 @@
 
 ## Latest Progress
 
+- 2026-04-28: Hardened ZIP project import failure handling after a production `atco` import exposed an orphaned project row and empty Studio startup path. ZIP imports now default to 250MB, reject oversize files client-side before upload, preserve backend JSON 413 errors, keep post-create import failures as durable failed versions instead of deleting the source, hide invalid no-version manifests, delete project metadata when the last version is removed, and prevent Studio start/restart for missing project versions. Validation: focused backend import/Studio tests, focused frontend import utility tests, backend/frontend/docs typechecks, targeted frontend ESLint for touched files, and `git diff --check` pass.
 - 2026-04-28: Added `plans/plugin-license-allocation-plan.md` and linked it from the roadmap for organization-owned plugin license pools, project assignment/reassignment, self-serve license purchase, and superadmin override controls. Validation: doc-only, `git diff --check` pass.
-- 2026-04-28: Expanded the credits/auth/template-commerce plan with a structured payment operating model covering agency-managed invoicing, pure self-serve SaaS checkout, and a hybrid monthly credit pool plus top-up approach. Validation: doc-only, `git diff --check` pass.
 
 ## Archive
 

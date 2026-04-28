@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { importProjectZip } from "./import-utils";
+import {
+  importProjectZip,
+  ZIP_IMPORT_MAX_FILE_SIZE_BYTES,
+} from "./import-utils";
 
 describe("importProjectZip", () => {
   afterEach(() => {
@@ -36,6 +39,40 @@ describe("importProjectZip", () => {
 
     await expect(
       importProjectZip(new File(["zip"], "site.zip", { type: "application/zip" })),
-    ).rejects.toThrow("ZIP file is too large. Maximum size is 100MB.");
+    ).rejects.toThrow("ZIP file is too large. Maximum size is 250MB.");
+  });
+
+  it("surfaces backend JSON errors for 413 responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "ZIP file is too large. Maximum size is 250MB." }),
+        {
+          status: 413,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      importProjectZip(new File(["zip"], "site.zip", { type: "application/zip" })),
+    ).rejects.toThrow("ZIP file is too large. Maximum size is 250MB.");
+  });
+
+  it("rejects oversized ZIPs before starting the upload", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const largeFile = {
+      name: "site.zip",
+      size: ZIP_IMPORT_MAX_FILE_SIZE_BYTES + 1,
+    } as File;
+
+    await expect(importProjectZip(largeFile)).rejects.toThrow(
+      "ZIP file is too large. Maximum size is 250MB.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

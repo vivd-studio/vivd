@@ -5,7 +5,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { trpc } from "@/lib/trpc";
 import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
 import type { UrlFormValues } from "@/lib/form-schemas";
-import { importProjectZip } from "@/lib/import-utils";
+import {
+  importProjectZip,
+  ZIP_IMPORT_MAX_FILE_SIZE_MB,
+} from "@/lib/import-utils";
 import { Button, Input, Form, InteractiveSurfaceButton } from "@vivd/ui";
 
 import { UrlFormFields } from "./UrlFormFields";
@@ -251,7 +254,8 @@ export function SingleProjectCreateView() {
                 className="h-12"
               />
               <div className="text-xs text-muted-foreground">
-                Max 100MB. The imported project will be created as your project.
+                Max {ZIP_IMPORT_MAX_FILE_SIZE_MB}MB. The imported project will
+                be created as your project.
               </div>
             </div>
 

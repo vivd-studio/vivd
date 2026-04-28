@@ -8,6 +8,7 @@ const {
   projectPluginFindManyMock,
   organizationFindFirstMock,
   resolvePolicyMock,
+  getProjectVersionMock,
   dbSelectMock,
   dbSelectFromMock,
   dbSelectWhereMock,
@@ -19,6 +20,7 @@ const {
   const projectPluginFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
   const resolvePolicyMock = vi.fn();
+  const getProjectVersionMock = vi.fn();
   const dbSelectWhereMock = vi.fn().mockResolvedValue([]);
   const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
   const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
@@ -31,6 +33,7 @@ const {
     projectPluginFindManyMock,
     organizationFindFirstMock,
     resolvePolicyMock,
+    getProjectVersionMock,
     dbSelectMock,
     dbSelectFromMock,
     dbSelectWhereMock,
@@ -56,6 +59,12 @@ vi.mock("../src/services/studioMachines/visitStore", () => ({
 vi.mock("../src/services/system/InstallProfileService", () => ({
   installProfileService: {
     resolvePolicy: resolvePolicyMock,
+  },
+}));
+
+vi.mock("../src/services/project/ProjectMetaService", () => ({
+  projectMetaService: {
+    getProjectVersion: getProjectVersionMock,
   },
 }));
 
@@ -139,6 +148,7 @@ describe("project studio callback URL wiring", () => {
     projectPluginFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
     resolvePolicyMock.mockReset();
+    getProjectVersionMock.mockReset();
     dbSelectMock.mockClear();
     dbSelectFromMock.mockClear();
     dbSelectWhereMock.mockClear();
@@ -150,6 +160,13 @@ describe("project studio callback URL wiring", () => {
     process.env.PORT = "3000";
 
     projectPluginFindManyMock.mockResolvedValue([]);
+    getProjectVersionMock.mockResolvedValue({
+      organizationId: "org-felix",
+      projectSlug: "site-1",
+      version: 1,
+      source: "scratch",
+      status: "completed",
+    });
     getResolvedBrandingMock.mockResolvedValue({ supportEmail: null });
     organizationFindFirstMock.mockResolvedValue({ githubRepoPrefix: null });
     resolvePolicyMock.mockResolvedValue({
@@ -202,6 +219,19 @@ describe("project studio callback URL wiring", () => {
         }),
       }),
     );
+  });
+
+  it("does not start Studio when the requested project version is missing", async () => {
+    getProjectVersionMock.mockResolvedValueOnce(null);
+    const caller = studioRouter.createCaller(makeContext());
+
+    await expect(
+      caller.startStudio({ slug: "site-1", version: 1 }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "Project version not found: site-1/v1",
+    });
+    expect(ensureRunningMock).not.toHaveBeenCalled();
   });
 
   it("hardRestartStudio uses canonical callback URL for fly machines", async () => {
