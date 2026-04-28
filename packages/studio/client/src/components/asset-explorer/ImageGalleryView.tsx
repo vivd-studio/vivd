@@ -1,11 +1,10 @@
 import { useCallback } from "react";
 import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 
 import type { AssetItem } from "./types";
 import { AssetItemCard } from "./AssetItemCard";
-import { buildImageUrl, isTextFile } from "./utils";
+import { buildImageUrl } from "./utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 
@@ -13,14 +12,11 @@ interface ImageGalleryViewProps {
   projectSlug: string;
   version: number;
   currentPath: string;
-  uploadTargetPath: string;
   itemsOverride?: AssetItem[];
   isLoadingOverride?: boolean;
   emptyLabel?: string;
-  onNavigate: (path: string) => void;
   onAiEdit?: (item: AssetItem) => void;
   onDelete: (item: AssetItem) => void;
-  onTextEdit: (path: string) => void;
   onAddToChat?: (item: AssetItem) => void;
   isDragging: boolean;
   onDragOver: (e: React.DragEvent) => void;
@@ -32,14 +28,11 @@ export function ImageGalleryView({
   projectSlug,
   version,
   currentPath,
-  uploadTargetPath,
   itemsOverride,
   isLoadingOverride,
-  emptyLabel = "No files yet",
-  onNavigate,
+  emptyLabel = "No images yet",
   onAiEdit,
   onDelete,
-  onTextEdit,
   onAddToChat,
   isDragging,
   onDragOver,
@@ -47,12 +40,7 @@ export function ImageGalleryView({
   onDrop,
 }: ImageGalleryViewProps) {
   const { canUseAiImages } = usePermissions();
-  const {
-    setEditingTextFile,
-    setViewingImagePath,
-    viewingImagePath,
-    setViewingPdfPath,
-  } = usePreview();
+  const { setViewingImagePath, viewingImagePath } = usePreview();
 
   const { data, isLoading } = trpc.assets.listAssets.useQuery(
     {
@@ -65,42 +53,18 @@ export function ImageGalleryView({
       enabled: !itemsOverride,
     },
   );
-  const items = itemsOverride ?? data?.items ?? [];
+  const items = (itemsOverride ?? data?.items ?? []).filter(
+    (item) => item.type === "file" && item.isImage,
+  );
   const loading = isLoadingOverride ?? isLoading;
 
   const handleItemClick = useCallback(
     (item: AssetItem) => {
-      if (item.type === "folder") {
-        onNavigate(item.path);
-      } else if (item.isImage) {
+      if (item.isImage) {
         setViewingImagePath(item.path);
-      } else if (item.mimeType?.includes("pdf") || item.name.toLowerCase().endsWith(".pdf")) {
-        setViewingPdfPath(item.path);
-      } else if (item.type === "file" && isTextFile(item.name)) {
-        onTextEdit(item.path);
-      } else if (item.type === "file") {
-        const url = buildImageUrl(projectSlug, version, item.path);
-        const opened = window.open(url, "_blank", "noopener,noreferrer");
-        if (!opened) {
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = item.name;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
-        toast.info("Opened file in a new tab", { description: item.name });
       }
     },
-    [
-      onNavigate,
-      onTextEdit,
-      projectSlug,
-      setEditingTextFile,
-      setViewingImagePath,
-      setViewingPdfPath,
-      version,
-    ]
+    [setViewingImagePath],
   );
 
   const handleDownload = useCallback(
@@ -120,7 +84,7 @@ export function ImageGalleryView({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <LoadingSpinner message="Loading files..." />
+        <LoadingSpinner message="Loading images..." />
       </div>
     );
   }
@@ -136,12 +100,8 @@ export function ImageGalleryView({
         onDrop={onDrop}
       >
         <p>{emptyLabel}</p>
-        <p className="text-sm">
-          Drop files here to upload to {uploadTargetPath}
-        </p>
-        <p className="text-xs">
-          Use Upload to save files to {uploadTargetPath}
-        </p>
+        <p className="text-sm">Drop images here to add them to the library.</p>
+        <p className="text-xs">Other file types are available in Files.</p>
       </div>
     );
   }

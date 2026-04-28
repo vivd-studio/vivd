@@ -2,18 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   getDefaultManualProjectStatus,
   getManualProjectStatusOptions,
-  isStudioAccessibleProjectStatus,
-} from "./ProjectCard";
-import {
+  getProjectCardPendingActionLabel,
   getProjectFailurePresentation,
   getProjectStatusPresentation,
+  isStudioAccessibleProjectStatus,
 } from "./projectCard/ProjectCard.helpers";
 
 describe("isStudioAccessibleProjectStatus", () => {
   it("keeps interrupted scratch/studio states openable in Studio", () => {
     expect(isStudioAccessibleProjectStatus("starting_studio")).toBe(true);
-    expect(isStudioAccessibleProjectStatus("generating_initial_site")).toBe(true);
-    expect(isStudioAccessibleProjectStatus("initial_generation_paused")).toBe(true);
+    expect(isStudioAccessibleProjectStatus("generating_initial_site")).toBe(
+      true,
+    );
+    expect(isStudioAccessibleProjectStatus("initial_generation_paused")).toBe(
+      true,
+    );
     expect(isStudioAccessibleProjectStatus("failed")).toBe(true);
     expect(isStudioAccessibleProjectStatus("completed")).toBe(true);
   });
@@ -28,34 +31,33 @@ describe("isStudioAccessibleProjectStatus", () => {
 
 describe("getManualProjectStatusOptions", () => {
   it("offers paused only for scratch projects", () => {
-    expect(getManualProjectStatusOptions("scratch").map((option) => option.value)).toEqual([
-      "completed",
-      "failed",
-      "initial_generation_paused",
-    ]);
-    expect(getManualProjectStatusOptions("url").map((option) => option.value)).toEqual([
-      "completed",
-      "failed",
-    ]);
+    expect(
+      getManualProjectStatusOptions("scratch").map((option) => option.value),
+    ).toEqual(["completed", "failed", "initial_generation_paused"]);
+    expect(
+      getManualProjectStatusOptions("url").map((option) => option.value),
+    ).toEqual(["completed", "failed"]);
   });
 });
 
 describe("getDefaultManualProjectStatus", () => {
   it("preserves current overrideable statuses when they are valid for the project", () => {
     expect(getDefaultManualProjectStatus("failed", "url")).toBe("failed");
-    expect(getDefaultManualProjectStatus("completed", "scratch")).toBe("completed");
-    expect(getDefaultManualProjectStatus("initial_generation_paused", "scratch")).toBe(
-      "initial_generation_paused",
+    expect(getDefaultManualProjectStatus("completed", "scratch")).toBe(
+      "completed",
     );
+    expect(
+      getDefaultManualProjectStatus("initial_generation_paused", "scratch"),
+    ).toBe("initial_generation_paused");
   });
 
   it("falls back to the safest default for non-overrideable statuses", () => {
     expect(getDefaultManualProjectStatus("processing", "scratch")).toBe(
       "initial_generation_paused",
     );
-    expect(getDefaultManualProjectStatus("initial_generation_paused", "url")).toBe(
-      "failed",
-    );
+    expect(
+      getDefaultManualProjectStatus("initial_generation_paused", "url"),
+    ).toBe("failed");
   });
 });
 
@@ -72,6 +74,24 @@ describe("getProjectStatusPresentation", () => {
       label: "Duplicating",
       color: "info",
     });
+  });
+});
+
+describe("getProjectCardPendingActionLabel", () => {
+  it("uses one label map for long-running card actions", () => {
+    expect(getProjectCardPendingActionLabel("delete")).toBe(
+      "Deleting project...",
+    );
+    expect(getProjectCardPendingActionLabel("duplicate")).toBe(
+      "Duplicating as new project...",
+    );
+    expect(getProjectCardPendingActionLabel("regenerate")).toBe(
+      "Preparing regeneration...",
+    );
+    expect(getProjectCardPendingActionLabel("thumbnail")).toBe(
+      "Regenerating thumbnail...",
+    );
+    expect(getProjectCardPendingActionLabel(null)).toBeNull();
   });
 });
 

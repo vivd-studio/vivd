@@ -32,4 +32,5 @@ export interface ProjectCardProps {
   onRegenerate: (slug: string, version?: number) => void;
   onDelete: (slug: string) => void;
   isRegenerating: boolean;
+  isDeleting?: boolean;
 }

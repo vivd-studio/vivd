@@ -63,7 +63,7 @@ export type ImageDropWrite =
     }
   | {
       type: "astro-source";
-      mode: "content-import" | "public-runtime";
+      mode: "content-import" | "copy-to-managed-import" | "public-runtime";
       sourceFile: string;
       sourceLoc: string | null;
       assetPath: string;
@@ -163,6 +163,14 @@ export function classifyImageAssetPath(
     return "shared";
   }
 
+  const mediaRelativePath = isAstroManagedMediaPath(normalized)
+    ? normalized.slice(ASTRO_CONTENT_MEDIA_PATH.length).replace(/^\/+/, "")
+    : "";
+  const [mediaTopLevelSegment] = mediaRelativePath.split("/").filter(Boolean);
+  if (mediaTopLevelSegment && /\.[a-z0-9]+$/i.test(mediaTopLevelSegment)) {
+    return "shared";
+  }
+
   if (cmsBinding) {
     const entryMediaPath = getCmsEntryMediaPath(cmsBinding);
     if (
@@ -195,6 +203,11 @@ export function classifyImageAssetPath(
 function formatCmsTarget(cmsBinding: CmsPreviewBinding): string {
   const fieldName = cmsBinding.fieldPath.map((segment) => String(segment)).join(" / ");
   return `${titleize(cmsBinding.modelKey)} / ${titleize(cmsBinding.entryKey)} / ${titleize(fieldName)}`;
+}
+
+function formatCmsFieldName(cmsBinding: CmsPreviewBinding): string {
+  const fieldName = cmsBinding.fieldPath.map((segment) => String(segment)).join(" / ");
+  return titleize(fieldName);
 }
 
 function formatAssetScope(scope: ImageAssetScope | null): string {
@@ -241,8 +254,8 @@ function blockedPlan(
 function copyToEntryChoice(): ImageDropChoice {
   return {
     kind: "copy-to-entry",
-    label: "Copy to this entry",
-    detail: "Vivd will place a copy in this CMS entry's media folder, then update the field.",
+    label: "Make a copy for this entry",
+    detail: "Only this CMS entry will use the copied image.",
     primary: true,
   };
 }
@@ -250,12 +263,37 @@ function copyToEntryChoice(): ImageDropChoice {
 function useExistingChoice(scope: ImageAssetScope): ImageDropChoice {
   return {
     kind: "use-existing",
-    label: scope === "shared" ? "Use shared asset" : "Use existing asset",
+    label: scope === "shared" ? "Use library image" : "Use existing image",
     detail:
       scope === "shared"
-        ? "The CMS field will reference the shared media file directly."
-        : "The CMS field will reference the existing managed media file directly.",
+        ? "This entry will point to the shared library image."
+        : "This entry will point to the image where it lives now.",
   };
+}
+
+function isLikelyEntryOwnedManagedMedia(
+  assetPath: string,
+  cmsBinding: CmsPreviewBinding,
+): boolean {
+  const normalized = normalizeAssetPath(assetPath);
+  if (!isAstroManagedMediaPath(normalized)) {
+    return false;
+  }
+
+  const mediaRelativePath = normalized
+    .slice(ASTRO_CONTENT_MEDIA_PATH.length)
+    .replace(/^\/+/, "");
+  const segments = mediaRelativePath.split("/").filter(Boolean);
+  if (segments.length < 3) {
+    return false;
+  }
+
+  const [collection, entry] = segments;
+  if (collection === "shared") {
+    return false;
+  }
+
+  return collection !== cmsBinding.modelKey || entry !== cmsBinding.entryKey;
 }
 
 function cmsReferencePlan(
@@ -264,7 +302,7 @@ function cmsReferencePlan(
   assetScope: ImageAssetScope,
   options?: { requiresChoice?: boolean },
 ): ImageDropPlan {
-  const targetLabel = formatCmsTarget(target.cmsBinding);
+  const fieldName = formatCmsFieldName(target.cmsBinding);
   const choices = options?.requiresChoice
     ? [copyToEntryChoice(), useExistingChoice(assetScope)]
     : [];
@@ -275,11 +313,14 @@ function cmsReferencePlan(
     assetPath,
     assetScope,
     target,
-    label: `Set ${targetLabel}`,
-    detail: `${formatAssetScope(assetScope)}: ${assetPath}`,
+    label: `Use this image for ${fieldName}`,
+    detail:
+      choices.length > 0
+        ? "This image may belong to another entry. Choose whether to reuse it or make a copy."
+        : "This entry will use the selected library image.",
     warnings:
-      assetScope === "shared"
-        ? ["This will keep the CMS field linked to shared media unless you choose to copy it."]
+      choices.length > 0
+        ? ["Making a copy keeps future edits to this entry separate."]
         : [],
     requiresChoice: choices.length > 0,
     choices,
@@ -302,7 +343,7 @@ function cmsCopyPlan(
   assetScope: ImageAssetScope,
   kind: "copy-to-cms-entry" | "import-working-asset" = "copy-to-cms-entry",
 ): ImageDropPlan {
-  const targetLabel = formatCmsTarget(target.cmsBinding);
+  const fieldName = formatCmsFieldName(target.cmsBinding);
 
   return {
     kind,
@@ -310,14 +351,11 @@ function cmsCopyPlan(
     assetPath,
     assetScope,
     target,
-    label: `Copy into ${targetLabel}`,
-    detail: `${formatAssetScope(assetScope)} will be copied into this CMS entry's media folder.`,
-    warnings:
-      assetScope === "public"
-        ? ["Public files are served directly today; copying makes this CMS field use managed media."]
-        : [],
-    requiresChoice: true,
-    choices: [copyToEntryChoice()],
+    label: `Use this image for ${fieldName}`,
+    detail: `${formatAssetScope(assetScope)} will be copied into this entry before the field is updated.`,
+    warnings: [],
+    requiresChoice: false,
+    choices: [],
     writes: [
       {
         type: "cms-field",
@@ -399,8 +437,17 @@ export function computeImageDropPlan(options: {
     }
 
     if (assetScope === "shared" || assetScope === "managed") {
+      if (
+        assetScope === "managed" &&
+        isLikelyEntryOwnedManagedMedia(assetPath, target.cmsBinding)
+      ) {
+        return cmsReferencePlan(target, assetPath, assetScope, {
+          requiresChoice: true,
+        });
+      }
+
       return cmsReferencePlan(target, assetPath, assetScope, {
-        requiresChoice: true,
+        requiresChoice: false,
       });
     }
 
@@ -445,24 +492,7 @@ export function computeImageDropPlan(options: {
       };
     }
 
-    if (assetScope === "public") {
-      if (!target.baselineSrc) {
-        return blockedPlan(
-          target,
-          assetPath,
-          assetScope,
-          "This Astro image does not expose a stable src value, so Vivd cannot rewrite it safely from preview.",
-        );
-      }
-      if (target.hasResponsiveMarkup) {
-        return blockedPlan(
-          target,
-          assetPath,
-          assetScope,
-          "Responsive Astro images can only be preview-dropped with local src/content/media assets right now.",
-        );
-      }
-
+    if (assetScope === "public" || assetScope === "legacy-static") {
       return {
         kind: "set-astro-source-image",
         canDrop: true,
@@ -470,14 +500,14 @@ export function computeImageDropPlan(options: {
         assetScope,
         target,
         label: `Replace source image with ${basename(assetPath)}`,
-        detail: "Vivd will patch the Astro source to use this public file URL.",
+        detail: `${formatAssetScope(assetScope)} will be copied into Shared media before the Astro source is updated.`,
         warnings: [],
         requiresChoice: false,
         choices: [],
         writes: [
           {
             type: "astro-source",
-            mode: "public-runtime",
+            mode: "copy-to-managed-import",
             sourceFile: target.astroSourceFile,
             sourceLoc: target.astroSourceLoc,
             assetPath,
@@ -490,7 +520,7 @@ export function computeImageDropPlan(options: {
       target,
       assetPath,
       assetScope,
-      "Astro preview drops only support local image assets under src/content/media/** or files under public/.",
+      "Astro preview drops only support local image assets under src/content/media/**, public/**, images/**, or assets/**.",
     );
   }
 

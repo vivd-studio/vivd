@@ -11,7 +11,7 @@ describe("Dashboard", () => {
     render(<Dashboard />);
 
     expect(
-      screen.getByRole("heading", { name: "Projects" }),
+      screen.getByRole("heading", { name: "Your Projects" }),
     ).toBeInTheDocument();
 
     const projectsList = screen.getByTestId("projects-list");
@@ -23,7 +23,9 @@ describe("Dashboard", () => {
     );
     expect(projectsList.parentElement?.parentElement).toHaveClass(
       "rounded-[10px]",
-      "border",
+      "border-0",
+      "shadow-none",
+      "dark:shadow-none",
     );
   });
 });

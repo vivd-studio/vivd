@@ -5,7 +5,7 @@ import {
   sanitizeThoughtText,
 } from "../chatStreamUtils";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getChatMarkdownComponents } from "./chatMarkdown";
@@ -89,25 +89,39 @@ export function AgentMessageRow({
 
       {displayItems.map((displayItem, index) => {
         if (displayItem.type === "activity-group") {
+          const liveTextPart = item.runInProgress
+            ? getLatestTextPart(displayItem.parts)
+            : null;
+
           return (
-            <WorkedSessionSection
-              key={displayItem.key}
-              label={buildActivityGroupLabel(
-                displayItem.parts,
-                item.runInProgress,
-                item.workedLabel,
-              )}
-              isOpen={workedOpen}
-              onToggle={onToggleWorked}
-            >
-              {displayItem.parts.map((part, groupPartIndex) => (
-                <ActivityGroupDetailPart
-                  key={part?.id ?? `${displayItem.key}-part-${groupPartIndex}`}
-                  part={part}
-                  isLast={groupPartIndex === displayItem.parts.length - 1}
+            <Fragment key={displayItem.key}>
+              <WorkedSessionSection
+                className={item.runInProgress ? undefined : "mb-2"}
+                label={buildActivityGroupLabel(
+                  displayItem.parts,
+                  item.runInProgress,
+                  item.workedLabel,
+                )}
+                isOpen={workedOpen}
+                onToggle={onToggleWorked}
+              >
+                {displayItem.parts.map((part, groupPartIndex) => (
+                  <ActivityGroupDetailPart
+                    key={
+                      part?.id ?? `${displayItem.key}-part-${groupPartIndex}`
+                    }
+                    part={part}
+                    isLast={groupPartIndex === displayItem.parts.length - 1}
+                  />
+                ))}
+              </WorkedSessionSection>
+              {liveTextPart ? (
+                <AgentMarkdownBlock
+                  text={liveTextPart.text ?? ""}
+                  isStreaming={item.runInProgress}
                 />
-              ))}
-            </WorkedSessionSection>
+              ) : null}
+            </Fragment>
           );
         }
 
@@ -242,18 +256,16 @@ function buildActivityGroupLabel(
   isWorking: boolean,
   workedLabel?: string,
 ): ReactNode {
-  const summary = summarizeActivityGroup(parts);
-  const latest = isWorking ? getLatestActivityLabel(parts) : null;
-  const label = isWorking ? (
-    <LoadingStateLabel
-      prefix={<span className="font-semibold">Working</span>}
-    />
-  ) : (
-    (workedLabel ?? "Worked")
-  );
+  const activityParts = isWorking ? parts.filter(isActionPart) : parts;
+  const summary = summarizeActivityGroup(activityParts);
+  const latest = isWorking ? getLatestActivityLabel(activityParts) : null;
+  if (isWorking) {
+    return <ActiveActivityGroupLabel latest={latest} summary={summary} />;
+  }
 
-  const details = [latest, summary].filter(Boolean).join(" · ");
-  if (!details) return label;
+  const label = workedLabel ?? "Worked";
+
+  if (!summary) return label;
 
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
@@ -262,8 +274,50 @@ function buildActivityGroupLabel(
         ·
       </span>
       <span className="min-w-0 truncate font-normal text-muted-foreground/75">
-        {details}
+        {summary}
       </span>
+    </span>
+  );
+}
+
+function ActiveActivityGroupLabel({
+  latest,
+  summary,
+}: {
+  latest: string | null;
+  summary: string;
+}): ReactNode {
+  const primary = latest ?? "Working";
+  const details = latest ? summary : "";
+
+  return (
+    <span className="block min-w-0 max-w-full truncate">
+      <span className="font-semibold chat-loading-wave">{primary}</span>
+      <WorkingDots />
+      {details ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="px-1.5 text-muted-foreground/45"
+          >
+            ·
+          </span>
+          <span className="font-normal text-muted-foreground/75">{details}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function WorkingDots() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex w-5 items-center justify-center gap-0.5 text-muted-foreground align-middle"
+    >
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
     </span>
   );
 }
@@ -343,15 +397,8 @@ function formatActivityCount(
 function getLatestActivityLabel(parts: any[]): string | null {
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index];
-    if (part?.type === "text") {
-      const text = normalizeActivityText(part.text);
-      if (text) return text;
-      continue;
-    }
-
     if (part?.type === "reasoning") {
-      const text = normalizeActivityText(part.text);
-      return text ?? "Thinking through the change";
+      return "Thinking through the change";
     }
 
     if (part?.type === "tool") {
@@ -362,16 +409,14 @@ function getLatestActivityLabel(parts: any[]): string | null {
   return null;
 }
 
-function normalizeActivityText(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = sanitizeToolText(value)
-    .replace(/[#*_`>]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return null;
-  return normalized.length > 96
-    ? `${normalized.slice(0, 96).trim()}...`
-    : normalized;
+function getLatestTextPart(parts: any[]): any | null {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (part?.type !== "text") continue;
+    if (typeof part.text !== "string" || !part.text.trim()) continue;
+    return part;
+  }
+  return null;
 }
 
 function getReadableToolActivityLabel(part: any): string {
@@ -394,18 +439,20 @@ function isListCommand(part: any): boolean {
 }
 
 function WorkedSessionSection({
+  className = "",
   label,
   children,
   isOpen,
   onToggle,
 }: {
+  className?: string;
   label: ReactNode;
   children: ReactNode;
   isOpen: boolean;
   onToggle: () => void;
 }) {
   return (
-    <div className="w-full max-w-full">
+    <div className={`w-full max-w-full ${className}`}>
       <button
         type="button"
         onClick={onToggle}

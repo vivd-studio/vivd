@@ -35,6 +35,23 @@ interface AssetExplorerProps {
   onClose?: () => void;
 }
 
+const MEDIA_LIBRARY_ROOTS = {
+  managed: ASTRO_CONTENT_MEDIA_PATH,
+  public: "public",
+  images: "images",
+  assets: "assets",
+} as const;
+
+const IMAGE_UPLOAD_EXTENSIONS = new Set([
+  ".avif",
+  ".gif",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".svg",
+  ".webp",
+]);
+
 function flattenAssetTree(nodes: FileTreeNode[]): AssetItem[] {
   const files: AssetItem[] = [];
   for (const node of nodes) {
@@ -52,6 +69,35 @@ function flattenAssetTree(nodes: FileTreeNode[]): AssetItem[] {
     }
   }
   return files;
+}
+
+function flattenImageAssets(nodes?: FileTreeNode[]): AssetItem[] {
+  return flattenAssetTree(nodes ?? []).filter(
+    (item) => item.type === "file" && item.isImage,
+  );
+}
+
+function mergeAssetItems(groups: AssetItem[][]): AssetItem[] {
+  const byPath = new Map<string, AssetItem>();
+  for (const group of groups) {
+    for (const item of group) {
+      if (!byPath.has(item.path)) {
+        byPath.set(item.path, item);
+      }
+    }
+  }
+  return Array.from(byPath.values());
+}
+
+function isImageUploadFile(file: File): boolean {
+  if (file.type.startsWith("image/")) {
+    return true;
+  }
+
+  const extension = file.name
+    .slice(file.name.lastIndexOf("."))
+    .toLowerCase();
+  return IMAGE_UPLOAD_EXTENSIONS.has(extension);
 }
 
 export function AssetExplorer({
@@ -73,12 +119,9 @@ export function AssetExplorer({
     localStorage.setItem("asset-explorer-view-mode", mode);
   };
 
-  // Navigation state (for gallery mode) - will be initialized based on folder detection
+  // Default asset location for uploads/generation; Files owns direct folder browsing.
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [initialPathDetected, setInitialPathDetected] = useState(false);
-  const [astroGalleryScope, setAstroGalleryScope] = useState<
-    "browse" | "shared" | "all" | "public"
-  >("browse");
 
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -106,19 +149,18 @@ export function AssetExplorer({
     AssetItem | FileTreeNode | null
   >(null);
 
-  // Shared Asset Actions state from PreviewContext
-  const {
-    currentPreviewPath,
-    setEditingTextFile,
-    setEditingAsset,
-    setPendingDeleteAsset,
-  } = usePreview();
-
   const [isCreateImageOpen, setIsCreateImageOpen] = useState(false);
   const [createImagePrompt, setCreateImagePrompt] = useState("");
   const [selectedReferenceImages, setSelectedReferenceImages] = useState<
     string[]
   >([]);
+
+  // Shared Asset Actions state from PreviewContext
+  const {
+    currentPreviewPath,
+    setEditingAsset,
+    setPendingDeleteAsset,
+  } = usePreview();
 
   // Use optional chat context for "Add to chat" feature
   const chatContext = useOptionalChatContext();
@@ -150,17 +192,12 @@ export function AssetExplorer({
     { slug: projectSlug, version, relativePath: "images" },
     { enabled: !initialPathDetected, staleTime: 0 },
   );
-  const uploadsCheck = trpc.assets.listAssets.useQuery(
-    { slug: projectSlug, version, relativePath: STUDIO_UPLOADS_PATH },
-    { enabled: !initialPathDetected, staleTime: 0 },
-  );
   const isAstroProject = previewInfoQuery.data?.mode === "devserver";
-  const uploadsHasItems = !!uploadsCheck.data?.items?.length;
   const publicImagesHasItems = !!publicImagesCheck.data?.items?.length;
   const imagesHasItems = !!imagesCheck.data?.items?.length;
   const fallbackGalleryPath = pickInitialAssetExplorerPath({
     isAstroProject: Boolean(isAstroProject),
-    uploadsHasItems,
+    uploadsHasItems: false,
     publicImagesHasItems,
     imagesHasItems,
   });
@@ -169,12 +206,15 @@ export function AssetExplorer({
     currentPath,
     fallbackGalleryPath,
   });
-  const scopedAssetCreationTargetPath =
-    isAstroProject && astroGalleryScope === "public"
-      ? currentPath?.startsWith("public")
-        ? currentPath
-        : "public"
+  const mediaLibraryCreationTargetPath = isAstroProject
+    ? ASTRO_SHARED_MEDIA_PATH
+    : assetCreationTargetPath;
+  const activeAssetCreationTargetPath =
+    viewMode === "gallery"
+      ? mediaLibraryCreationTargetPath
       : assetCreationTargetPath;
+  const activeAssetCreationTargetLabel =
+    viewMode === "gallery" ? "media library" : activeAssetCreationTargetPath;
 
   // Detect initial path
   useEffect(() => {
@@ -186,9 +226,7 @@ export function AssetExplorer({
 
     if (
       !isAstroProject &&
-      (!publicImagesCheck.isFetched ||
-        !imagesCheck.isFetched ||
-        !uploadsCheck.isFetched)
+      (!publicImagesCheck.isFetched || !imagesCheck.isFetched)
     ) {
       return;
     }
@@ -200,39 +238,55 @@ export function AssetExplorer({
     isAstroProject,
     publicImagesCheck.isFetched,
     imagesCheck.isFetched,
-    uploadsCheck.isFetched,
     fallbackGalleryPath,
     initialPathDetected,
   ]);
 
-  // Query for gallery mode list
-  const galleryQuery = trpc.assets.listAssets.useQuery(
+  const shouldLoadMediaLibrary =
+    initialPathDetected && (viewMode === "gallery" || isCreateImageOpen);
+  const managedMediaQuery = trpc.assets.listAllAssets.useQuery(
     {
       slug: projectSlug,
       version,
-      relativePath: currentPath ?? fallbackGalleryPath,
-    },
-    { enabled: viewMode === "gallery" && currentPath !== null, staleTime: 0 },
-  );
-  const allManagedMediaQuery = trpc.assets.listAllAssets.useQuery(
-    {
-      slug: projectSlug,
-      version,
-      rootPath: ASTRO_CONTENT_MEDIA_PATH,
+      rootPath: MEDIA_LIBRARY_ROOTS.managed,
     },
     {
-      enabled:
-        viewMode === "gallery" &&
-        Boolean(isAstroProject) &&
-        astroGalleryScope === "all",
+      enabled: shouldLoadMediaLibrary,
       staleTime: 0,
     },
   );
-
-  // Query for create image dialog from the same folder new generated images will use.
-  const allImagesQuery = trpc.assets.listAssets.useQuery(
-    { slug: projectSlug, version, relativePath: scopedAssetCreationTargetPath },
-    { enabled: isCreateImageOpen && currentPath !== null, staleTime: 0 },
+  const publicMediaQuery = trpc.assets.listAllAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      rootPath: MEDIA_LIBRARY_ROOTS.public,
+    },
+    {
+      enabled: shouldLoadMediaLibrary,
+      staleTime: 0,
+    },
+  );
+  const legacyImagesQuery = trpc.assets.listAllAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      rootPath: MEDIA_LIBRARY_ROOTS.images,
+    },
+    {
+      enabled: shouldLoadMediaLibrary,
+      staleTime: 0,
+    },
+  );
+  const legacyAssetsQuery = trpc.assets.listAllAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      rootPath: MEDIA_LIBRARY_ROOTS.assets,
+    },
+    {
+      enabled: shouldLoadMediaLibrary,
+      staleTime: 0,
+    },
   );
 
   const lastPreviewPathRef = useRef(currentPreviewPath);
@@ -246,17 +300,24 @@ export function AssetExplorer({
     void utils.assets.invalidate();
   }, [currentPreviewPath, utils.assets]);
 
-  const availableImages =
-    allImagesQuery.data?.items?.filter(
-      (item) => item.type === "file" && item.isImage,
-    ) || [];
-
-  const allManagedMediaItems =
-    allManagedMediaQuery.data?.tree
-      ? flattenAssetTree(allManagedMediaQuery.data.tree).filter(
-          (item) => item.isImage,
-        )
-      : [];
+  const mediaLibraryItems = mergeAssetItems([
+    flattenImageAssets(managedMediaQuery.data?.tree),
+    flattenImageAssets(publicMediaQuery.data?.tree),
+    flattenImageAssets(legacyImagesQuery.data?.tree),
+    flattenImageAssets(legacyAssetsQuery.data?.tree),
+  ]);
+  const isMediaLibraryLoading =
+    managedMediaQuery.isLoading ||
+    publicMediaQuery.isLoading ||
+    legacyImagesQuery.isLoading ||
+    legacyAssetsQuery.isLoading;
+  const refetchMediaLibrary = () => {
+    void managedMediaQuery.refetch();
+    void publicMediaQuery.refetch();
+    void legacyImagesQuery.refetch();
+    void legacyAssetsQuery.refetch();
+  };
+  const availableImages = mediaLibraryItems;
 
   // Mutations
   const createFolderMutation = trpc.assets.createFolder.useMutation({
@@ -282,7 +343,7 @@ export function AssetExplorer({
       setCurrentPath(generatedDir);
       setFileTreeRevealPath(data.path);
       setFileTreeHighlightedPath(data.path);
-      galleryQuery.refetch();
+      refetchMediaLibrary();
       utils.assets.invalidate();
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.path));
       toast.success("Image generated successfully");
@@ -293,14 +354,25 @@ export function AssetExplorer({
   });
 
   const handleUpload = async (
-    files: FileList,
+    files: FileList | File[],
     targetPath: string = STUDIO_UPLOADS_PATH,
+    options: { imagesOnly?: boolean } = {},
   ) => {
     if (!files.length) return;
+    const uploadFiles = options.imagesOnly
+      ? Array.from(files).filter(isImageUploadFile)
+      : Array.from(files);
+
+    if (!uploadFiles.length) {
+      toast.error("Gallery only accepts images", {
+        description: "Use Files for PDFs, code, and other project files.",
+      });
+      return;
+    }
 
     setUploadTargetPath(targetPath);
     setUploadStatus(
-      shouldShowWorkingImageOptimization(files, targetPath)
+      shouldShowWorkingImageOptimization(uploadFiles, targetPath)
         ? "optimizing"
         : "uploading",
     );
@@ -310,18 +382,25 @@ export function AssetExplorer({
         projectSlug,
         version,
         targetPath,
-        files,
+        files: uploadFiles,
       });
       const firstUploadedPath = uploadedPaths[0] ?? null;
 
       setCurrentPath(targetPath);
       setFileTreeRevealPath(firstUploadedPath ?? targetPath);
       setFileTreeHighlightedPath(firstUploadedPath);
-      galleryQuery.refetch();
+      refetchMediaLibrary();
       utils.assets.invalidate();
       toast.success("Upload successful", {
-        description: `Saved to ${targetPath}`,
+        description: `Saved to ${
+          options.imagesOnly ? "media library" : targetPath
+        }`,
       });
+      if (options.imagesOnly && uploadFiles.length < files.length) {
+        toast.info("Skipped non-image files", {
+          description: "Use Files to upload non-image assets.",
+        });
+      }
     } catch (error) {
       toast.error("Upload failed", { description: (error as Error).message });
     } finally {
@@ -358,7 +437,9 @@ export function AssetExplorer({
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUpload(e.dataTransfer.files, scopedAssetCreationTargetPath);
+      handleUpload(e.dataTransfer.files, activeAssetCreationTargetPath, {
+        imagesOnly: viewMode === "gallery",
+      });
     }
   };
 
@@ -385,7 +466,7 @@ export function AssetExplorer({
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
-      targetPath: scopedAssetCreationTargetPath,
+      targetPath: activeAssetCreationTargetPath,
     });
   };
 
@@ -395,11 +476,6 @@ export function AssetExplorer({
     );
   };
 
-  const handleNavigate = (path: string) => {
-    setAstroGalleryScope("browse");
-    setCurrentPath(path);
-  };
-
   const handleDelete = (item: AssetItem | FileTreeNode) => {
     setPendingDeleteAsset(item);
   };
@@ -407,6 +483,11 @@ export function AssetExplorer({
   const handleAiEdit = (item: AssetItem | FileTreeNode) => {
     setEditingAsset(item);
   };
+
+  const uploadStatusTargetLabel =
+    viewMode === "gallery" && uploadTargetPath === activeAssetCreationTargetPath
+      ? activeAssetCreationTargetLabel
+      : (uploadTargetPath ?? "");
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -430,59 +511,29 @@ export function AssetExplorer({
       </div>
 
       <AssetToolbar
-        currentPath={currentPath ?? ""}
-        uploadTargetPath={scopedAssetCreationTargetPath}
-        onFilesSelected={(files) => handleUpload(files, scopedAssetCreationTargetPath)}
+        currentPath={viewMode === "files" ? (currentPath ?? "") : undefined}
+        uploadTargetPath={activeAssetCreationTargetPath}
+        uploadTargetLabel={activeAssetCreationTargetLabel}
+        fileInputAccept={viewMode === "gallery" ? "image/*" : undefined}
+        onFilesSelected={(files) =>
+          handleUpload(files, activeAssetCreationTargetPath, {
+            imagesOnly: viewMode === "gallery",
+          })
+        }
         onRefresh={() => {
-          galleryQuery.refetch();
+          refetchMediaLibrary();
           utils.assets.invalidate();
         }}
-        onBack={
-          currentPath &&
-          currentPath !== "images" &&
-          currentPath !== "public/images" &&
-          currentPath !== ASTRO_CONTENT_MEDIA_PATH
-            ? () => {
-                const parts = currentPath.split("/");
-                parts.pop();
-                setAstroGalleryScope("browse");
-                setCurrentPath(parts.join("/"));
-              }
+        onCreateFolder={
+          viewMode === "files"
+            ? () => handleCreateFolder(currentPath ?? fallbackGalleryPath)
             : undefined
-        }
-        onCreateFolder={() =>
-          handleCreateFolder(currentPath ?? fallbackGalleryPath)
         }
         onCreateImage={
           canUseAiImages ? () => setIsCreateImageOpen(true) : undefined
         }
         uploadStatus={uploadStatus}
       />
-
-      {isAstroProject && viewMode === "gallery" && (
-        <div className="flex gap-1 overflow-x-auto border-b px-3 py-2">
-          {[
-            { key: "browse", label: "Browse", path: ASTRO_CONTENT_MEDIA_PATH },
-            { key: "shared", label: "Shared", path: ASTRO_SHARED_MEDIA_PATH },
-            { key: "all", label: "All Media", path: ASTRO_CONTENT_MEDIA_PATH },
-            { key: "public", label: "Public", path: "public" },
-          ].map((scope) => (
-            <Button
-              key={scope.key}
-              type="button"
-              variant={astroGalleryScope === scope.key ? "secondary" : "ghost"}
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                setAstroGalleryScope(scope.key as typeof astroGalleryScope);
-                setCurrentPath(scope.path);
-              }}
-            >
-              {scope.label}
-            </Button>
-          ))}
-        </div>
-      )}
 
       {uploadStatus !== "idle" && uploadTargetPath && (
         <div className="flex items-center gap-3 border-b bg-primary/5 px-4 py-2">
@@ -495,8 +546,8 @@ export function AssetExplorer({
             </p>
             <p className="truncate text-xs text-muted-foreground">
               {uploadStatus === "optimizing"
-                ? `Saving to ${uploadTargetPath} as WebP working assets when possible`
-                : `Saving to ${uploadTargetPath}`}
+                ? `Saving to ${uploadStatusTargetLabel} as WebP working assets when possible`
+                : `Saving to ${uploadStatusTargetLabel}`}
             </p>
           </div>
         </div>
@@ -532,7 +583,7 @@ export function AssetExplorer({
             onCreateFolder={handleCreateFolder}
             onFilesUpload={handleUpload}
             onRefetch={() => {
-              galleryQuery.refetch();
+              refetchMediaLibrary();
               utils.assets.invalidate();
             }}
           />
@@ -541,30 +592,15 @@ export function AssetExplorer({
             projectSlug={projectSlug}
             version={version}
             currentPath={currentPath ?? ""}
-            uploadTargetPath={scopedAssetCreationTargetPath}
-            itemsOverride={
-              isAstroProject && astroGalleryScope === "all"
-                ? allManagedMediaItems
-                : undefined
-            }
-            isLoadingOverride={
-              isAstroProject && astroGalleryScope === "all"
-                ? allManagedMediaQuery.isLoading
-                : undefined
-            }
-            emptyLabel={
-              isAstroProject && astroGalleryScope === "all"
-                ? "No managed images yet"
-                : undefined
-            }
-            onNavigate={handleNavigate}
+            itemsOverride={mediaLibraryItems}
+            isLoadingOverride={isMediaLibraryLoading}
+            emptyLabel="No images yet"
             onAiEdit={
               canUseAiImages
                 ? (handleAiEdit as (item: AssetItem) => void)
                 : undefined
             }
             onDelete={handleDelete as (item: AssetItem) => void}
-            onTextEdit={(path) => setEditingTextFile(path)}
             onAddToChat={handleAddToChat as (item: AssetItem) => void}
             isDragging={isDragging}
             onDragOver={handleDragOver}
@@ -635,7 +671,7 @@ export function AssetExplorer({
         selectedReferenceImages={selectedReferenceImages}
         onToggleReferenceImage={toggleReferenceImage}
         availableImages={availableImages}
-        isLoadingImages={allImagesQuery.isLoading}
+        isLoadingImages={isMediaLibraryLoading}
         onClose={() => {
           setIsCreateImageOpen(false);
           setCreateImagePrompt("");

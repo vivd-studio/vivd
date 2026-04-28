@@ -312,13 +312,13 @@ export function StudioToolbar() {
     !shouldCollapseRightSideLabels && assetsOpen;
   const shouldExpandCmsLabel = !shouldCollapseRightSideLabels && cmsOpen;
   const newSessionReservedWidth = newSessionControlWidth;
-  const sessionControlWidth = shouldExpandSessionLabel
+  const reservedSessionControlWidth = chatOpen
     ? sessionExpandedWidth
     : compactControlWidth;
   const sessionGroupWidth =
     newSessionReservedWidth +
     newSessionControlGap +
-    sessionControlWidth;
+    reservedSessionControlWidth;
   const explorerControlWidth = shouldExpandExplorerLabel
     ? explorerExpandedWidth
     : compactControlWidth;
@@ -395,7 +395,8 @@ export function StudioToolbar() {
     <div ref={workspaceControlsRef} className="flex items-center gap-1">
       {canUseAgent ? (
         <div
-          className="flex justify-end transition-[width] duration-200 ease-out"
+          data-testid="session-toolbar-group"
+          className="flex justify-end"
           style={{ width: sessionGroupWidth }}
         >
           <div className="flex items-center justify-end gap-1">

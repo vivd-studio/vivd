@@ -10,12 +10,12 @@
 
 ## Latest Progress
 
-- 2026-04-28: Added the first first-class project-copy workflow from `plans/project-import-duplicate-build-safety-plan.md`. Backend now has a build-free `ProjectCopyService`, version-level artifact prefix copying, and `project.duplicateProject`; frontend project cards expose only "duplicate selected version as a new project" and immediately insert an optimistic "Duplicating" card while the backend copy runs. Copy-version internals remain parked, but public API/UI exposure is disabled for now. Validation: focused backend copy/build/import tests, backend/frontend typechecks, targeted frontend ESLint, focused project-card status test, and `git diff --check` pass.
-- 2026-04-28: Implemented the core Studio media-drop UX plan. Preview image drops now run through a pure planner with asset scopes and target ownership, show target-local hover copy, block unsupported drops with explicit reasons, and ask before ambiguous CMS media ownership changes. CMS preview saves can copy a dropped image into `src/content/media/<collection>/<entry>/` with collision-safe filenames before storing the normalized entry reference, while shared-media references remain explicit. The Astro asset gallery now has Browse, Shared, All Media, and Public scopes plus scope badges on image cards. Validation: focused Studio asset/preview/CMS router tests, Studio typecheck, `npm run studio:dev:refresh`, and targeted `git diff --check` pass.
+- 2026-04-29: Finished the next Studio media-drop polish slice. Gallery cards now tag `src/content/media/shared/**` and direct `src/content/media/*` images as `Shared`, while the drop planner treats direct base-media files as shared library media. Public and legacy static image drops onto source-backed Astro images now copy into `src/content/media/shared/` before the Astro source is patched to import the managed copy. Validation: focused Studio asset/preview/CMS/Astro patch tests, Studio typecheck, `npm run studio:dev:refresh`, and targeted `git diff --check` pass.
+- 2026-04-29: Made the live Studio chat activity state clearer in light mode by adding fixed-width animated dots after the current action text while keeping the summary separator stable, preserving the newest live assistant text artifact below the summary, and adding a little bottom spacing between completed activity summaries and the final response. Validation: focused `AgentMessageRow` test, Studio client typecheck, targeted surface/diff checks, and `npm run studio:dev:refresh` pass.
 
 ## Archive
 
 - Older progress entries, compaction summaries, and trimmed validation detail live in `PROJECT_STATE_ARCHIVE.md`.
 - Superseded or historical plans live under `plans/old/`.
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29

@@ -156,6 +156,11 @@ describe("AgentMessageRow tool details", () => {
         status: "running",
         input: { path: "/workspace/src" },
       },
+      {
+        id: "status-2",
+        type: "text",
+        text: "I found the chat grouping path and am applying the UI update.",
+      },
     ];
 
     render(
@@ -169,12 +174,23 @@ describe("AgentMessageRow tool details", () => {
 
     expect(
       screen.getByRole("button", {
-        name: /Working.*Listing src.*Read 1 file.*Listed 1 folder.*Thought through the change/i,
+        name: /Listing src.*Read 1 file.*Listed 1 folder.*Thought through the change/i,
       }),
     ).toBeInTheDocument();
     expect(
+      screen.queryByRole("button", { name: /Working.*Listing src/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /I found the chat grouping path/i }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByText("Checking project structure and Vivd status."),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "I found the chat grouping path and am applying the UI update.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /readpackage\.json/i }),
     ).not.toBeInTheDocument();

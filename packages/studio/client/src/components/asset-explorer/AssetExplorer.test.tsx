@@ -136,12 +136,14 @@ vi.mock("./ImageGalleryView", () => ({
   ImageGalleryView: ({
     currentPath,
     itemsOverride,
+    emptyLabel,
     onDragOver,
     onDragLeave,
     onDrop,
   }: {
     currentPath: string;
     itemsOverride?: Array<{ path: string }>;
+    emptyLabel?: string;
     onDragOver: (e: React.DragEvent) => void;
     onDragLeave: (e: React.DragEvent) => void;
     onDrop: (e: React.DragEvent) => void;
@@ -150,6 +152,8 @@ vi.mock("./ImageGalleryView", () => ({
       data-testid="image-gallery-view"
       data-path={currentPath}
       data-items-count={itemsOverride?.length ?? -1}
+      data-item-paths={itemsOverride?.map((item) => item.path).join("|") ?? ""}
+      data-empty-label={emptyLabel}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -223,6 +227,7 @@ describe("AssetExplorer", () => {
     listAllAssetsUseQueryMock.mockReturnValue({
       data: { tree: [] },
       isLoading: false,
+      refetch: refetchMock,
     });
 
     createFolderUseMutationMock.mockReturnValue({
@@ -281,6 +286,30 @@ describe("AssetExplorer", () => {
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain(
       "path=.vivd%2Fuploads",
     );
+  });
+
+  it("does not upload non-image files through the gallery", async () => {
+    render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+        "data-path",
+        "public/images",
+      );
+    });
+
+    const file = new File(["demo"], "brief.pdf", { type: "application/pdf" });
+    const files = createFileList([file]);
+    const dataTransfer = {
+      types: ["Files"],
+      files,
+    };
+
+    fireEvent.drop(screen.getByTestId("image-gallery-view"), {
+      dataTransfer,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses src/content/media as the Astro gallery root and shared media as the default upload target", async () => {
@@ -366,7 +395,7 @@ describe("AssetExplorer", () => {
     });
   });
 
-  it("shows a recursive All Media scope for Astro managed images", async () => {
+  it("shows one unified Astro image library without scope tabs", async () => {
     getPreviewInfoUseQueryMock.mockReturnValue({
       data: {
         mode: "devserver",
@@ -376,37 +405,104 @@ describe("AssetExplorer", () => {
       isFetched: true,
       isLoading: false,
     });
-    listAllAssetsUseQueryMock.mockReturnValue({
-      data: {
-        tree: [
-          {
-            name: "shared",
-            type: "folder",
-            path: "src/content/media/shared",
-            children: [
-              {
-                name: "hero.webp",
-                type: "file",
-                path: "src/content/media/shared/hero.webp",
-                isImage: true,
-              },
-            ],
-          },
-        ],
+    listAllAssetsUseQueryMock.mockImplementation(
+      ({ rootPath }: { rootPath: string }) => {
+        const trees: Record<string, unknown[]> = {
+          [ASTRO_CONTENT_MEDIA_PATH]: [
+            {
+              name: "shared",
+              type: "folder",
+              path: "src/content/media/shared",
+              children: [
+                {
+                  name: "hero.webp",
+                  type: "file",
+                  path: "src/content/media/shared/hero.webp",
+                  isImage: true,
+                },
+              ],
+            },
+            {
+              name: "blog",
+              type: "folder",
+              path: "src/content/media/blog",
+              children: [
+                {
+                  name: "welcome",
+                  type: "folder",
+                  path: "src/content/media/blog/welcome",
+                  children: [
+                    {
+                      name: "inline.png",
+                      type: "file",
+                      path: "src/content/media/blog/welcome/inline.png",
+                      isImage: true,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          public: [
+            {
+              name: "logo.svg",
+              type: "file",
+              path: "public/logo.svg",
+              isImage: true,
+            },
+            {
+              name: "robots.txt",
+              type: "file",
+              path: "public/robots.txt",
+              isImage: false,
+            },
+          ],
+          images: [
+            {
+              name: "legacy.jpg",
+              type: "file",
+              path: "images/legacy.jpg",
+              isImage: true,
+            },
+          ],
+          assets: [
+            {
+              name: "readme.txt",
+              type: "file",
+              path: "assets/readme.txt",
+              isImage: false,
+            },
+          ],
+        };
+
+        return {
+          data: { tree: trees[rootPath] ?? [] },
+          isLoading: false,
+          refetch: refetchMock,
+        };
       },
-      isLoading: false,
-    });
+    );
 
     render(<AssetExplorer projectSlug="demo" version={1} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "All Media" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
         "data-items-count",
-        "1",
+        "4",
       );
     });
+    expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+      "data-item-paths",
+      [
+        "src/content/media/shared/hero.webp",
+        "src/content/media/blog/welcome/inline.png",
+        "public/logo.svg",
+        "images/legacy.jpg",
+      ].join("|"),
+    );
+    expect(screen.queryByRole("button", { name: "All Media" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Shared" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
   });
 
   it("revalidates asset queries when the preview route changes", async () => {
@@ -437,6 +533,11 @@ describe("AssetExplorer", () => {
         const input = call[0] as { relativePath?: string } | undefined;
         return input?.relativePath === relativePath;
       })?.[1];
+    const findRecursiveQueryOptionsForRoot = (rootPath: string) =>
+      listAllAssetsUseQueryMock.mock.calls.find((call) => {
+        const input = call[0] as { rootPath?: string } | undefined;
+        return input?.rootPath === rootPath;
+      })?.[1];
 
     expect(findQueryOptionsForPath("public/images")).toMatchObject({
       staleTime: 0,
@@ -444,7 +545,10 @@ describe("AssetExplorer", () => {
     expect(findQueryOptionsForPath("images")).toMatchObject({
       staleTime: 0,
     });
-    expect(findQueryOptionsForPath(".vivd/uploads")).toMatchObject({
+    expect(findRecursiveQueryOptionsForRoot(ASTRO_CONTENT_MEDIA_PATH)).toMatchObject({
+      staleTime: 0,
+    });
+    expect(findRecursiveQueryOptionsForRoot("public")).toMatchObject({
       staleTime: 0,
     });
   });

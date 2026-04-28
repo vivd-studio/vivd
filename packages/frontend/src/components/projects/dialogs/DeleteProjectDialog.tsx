@@ -1,7 +1,17 @@
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Button, Input, Label } from "@vivd/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Button,
+  Input,
+  Label,
+} from "@vivd/ui";
 
-import { AlertTriangle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 interface DeleteProjectDialogProps {
   open: boolean;
@@ -20,24 +30,26 @@ export function DeleteProjectDialog({
 }: DeleteProjectDialogProps) {
   const [confirmationText, setConfirmationText] = useState("");
 
-  // Reset confirmation text when dialog closes
-  useEffect(() => {
-    if (!open) {
+  const isConfirmationValid = confirmationText === projectName;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (isDeleting) return;
+    if (!nextOpen) {
       setConfirmationText("");
     }
-  }, [open]);
-
-  const isConfirmationValid = confirmationText === projectName;
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isConfirmationValid && !isDeleting) {
+      setConfirmationText("");
       onConfirmDelete(confirmationText);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -88,7 +100,7 @@ export function DeleteProjectDialog({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isDeleting}
             >
               Cancel
@@ -98,7 +110,14 @@ export function DeleteProjectDialog({
               variant="destructive"
               disabled={!isConfirmationValid || isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete this project"}
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete this project"
+              )}
             </Button>
           </DialogFooter>
         </form>

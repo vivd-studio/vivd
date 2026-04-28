@@ -25,19 +25,16 @@ import { ProjectCardHeader } from "./projectCard/ProjectCardHeader";
 import {
   getDefaultManualProjectStatus,
   getManualProjectStatusOptions,
+  getProjectCardPendingActionLabel,
   getProjectStatusPresentation,
   isDevDomain,
   isStudioAccessibleProjectStatus,
+  type ProjectCardPendingAction,
 } from "./projectCard/ProjectCard.helpers";
 import { useProjectCardMutations } from "./projectCard/ProjectCard.mutations";
 import type { ProjectCardProps } from "./ProjectCard.types";
 
 export type { Project, VersionInfo } from "./ProjectCard.types";
-export {
-  getDefaultManualProjectStatus,
-  getManualProjectStatusOptions,
-  isStudioAccessibleProjectStatus,
-} from "./projectCard/ProjectCard.helpers";
 
 function slugifyProjectInput(input: string): string {
   return (
@@ -58,6 +55,7 @@ export function ProjectCard({
   onRegenerate,
   onDelete,
   isRegenerating,
+  isDeleting = false,
 }: ProjectCardProps) {
   const navigate = useNavigate();
   const { config } = useAppConfig();
@@ -166,8 +164,9 @@ export function ProjectCard({
     !isFailed &&
     !isInitialGenerationPaused &&
     selectedVersionStatus !== "unknown";
-  const { label: statusLabel } =
-    getProjectStatusPresentation(selectedVersionStatus);
+  const { label: statusLabel } = getProjectStatusPresentation(
+    selectedVersionStatus,
+  );
   const activeTagsPopoverAnchorRef: RefObject<Measurable> =
     (tagsPopoverAnchor === "actions"
       ? actionsMenuItemAnchorRef
@@ -181,12 +180,27 @@ export function ProjectCard({
     enabledPluginIds: project.enabledPlugins ?? [],
     projectSlug: project.slug,
   });
+  const pendingAction: ProjectCardPendingAction | null = isDeleting
+    ? "delete"
+    : isRenamePending
+      ? "rename"
+      : isTitleUpdatePending
+        ? "title"
+        : isProjectCopyPending
+          ? "duplicate"
+          : regenerateThumbnailMutation.isPending
+            ? "thumbnail"
+            : isRegenerating
+              ? "regenerate"
+              : null;
+  const pendingActionLabel = getProjectCardPendingActionLabel(pendingAction);
+  const isProjectActionPending = pendingAction !== null;
 
   useEffect(() => {
     if (project.currentVersion && project.currentVersion !== selectedVersion) {
       setSelectedVersion(project.currentVersion);
     }
-  }, [project.currentVersion]);
+  }, [project.currentVersion, selectedVersion]);
 
   useEffect(() => {
     setRenameSlugInput(project.slug);
@@ -272,7 +286,7 @@ export function ProjectCard({
   };
 
   const startInlineTitleEdit = () => {
-    if (!canRenameProject || isRenamePending || isTitleUpdatePending) return;
+    if (!canRenameProject || isProjectActionPending) return;
     setInlineTitleInput(displayTitle);
     setIsInlineTitleEditing(true);
   };
@@ -305,8 +319,9 @@ export function ProjectCard({
         className={`group relative flex h-full min-h-[160px] flex-col overflow-visible border-transparent bg-transparent shadow-none transition-[box-shadow,background-color] dark:bg-transparent ${
           isProcessing ? "ring-1 ring-primary/15" : ""
         } ${canOpenStudio ? "cursor-pointer" : ""}`}
+        aria-busy={isProjectActionPending}
         onClick={() => {
-          if (canOpenStudio && !isRenamePending && !isProjectCopyPending) {
+          if (canOpenStudio && !isProjectActionPending) {
             openProjectStudio();
           }
         }}
@@ -329,8 +344,9 @@ export function ProjectCard({
           isCompleted={isCompleted}
           isProcessing={isProcessing}
           isDuplicateProjectPending={duplicateProjectMutation.isPending}
+          isProjectActionPending={isProjectActionPending}
           isRegenerating={isRegenerating}
-          isRenamePending={isRenamePending || isProjectCopyPending}
+          isRenamePending={isRenamePending}
           isTitleUpdatePending={isTitleUpdatePending}
           isRegenerateThumbnailPending={regenerateThumbnailMutation.isPending}
           isSetPublicPreviewEnabledPending={
@@ -393,7 +409,7 @@ export function ProjectCard({
           isSetStatusPending={setStatusMutation.isPending}
           publishedDomain={project.publishedDomain}
           enabledPluginEntries={enabledPluginEntries}
-          isRenamePending={isRenamePending}
+          isRenamePending={isRenamePending || isProjectActionPending}
           onOpenPlugins={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
           onOpenPlugin={(path) => navigate(path)}
           onOpenProjectStudio={openProjectStudio}
@@ -414,7 +430,7 @@ export function ProjectCard({
           projectTags={projectTags}
           canManageTags={canManageTags}
           canRenameProject={canRenameProject}
-          isRenamePending={isRenamePending}
+          isRenamePending={isRenamePending || isProjectActionPending}
           isTitleUpdatePending={isTitleUpdatePending}
           isInlineTitleEditing={isInlineTitleEditing}
           inlineTitleInput={inlineTitleInput}
@@ -465,16 +481,17 @@ export function ProjectCard({
           }}
         />
 
-        {isRenamePending || isProjectCopyPending ? (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface-page/80 backdrop-blur-sm">
+        {pendingActionLabel ? (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-surface-page/80 backdrop-blur-sm"
+            aria-live="polite"
+          >
             <Panel
               tone="sunken"
               className="flex items-center gap-2 p-3 text-sm font-medium shadow-sm"
             >
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              {isRenamePending
-                ? "Renaming project slug..."
-                : "Duplicating as new project..."}
+              {pendingActionLabel}
             </Panel>
           </div>
         ) : null}
@@ -535,6 +552,7 @@ export function ProjectCard({
         }}
         onDuplicateSlugInputChange={setDuplicateSlugInput}
         onConfirm={() => {
+          setShowDuplicateDialog(false);
           duplicateProjectMutation.mutate({
             sourceSlug: project.slug,
             sourceVersion: selectedVersion,

@@ -8,11 +8,11 @@ import { PageHeader, PageHeaderContent, PageTitle } from "@vivd/ui";
 export default function Dashboard() {
   return (
     <div className={HOST_VIEWPORT_INSET_CLASS}>
-      <FramedViewport>
+      <FramedViewport className="border-0 shadow-none dark:shadow-none">
         <div className="h-full min-h-0 flex-1 overflow-auto px-4 py-3 md:px-4">
           <PageHeader className="mb-5 py-2">
             <PageHeaderContent>
-              <PageTitle>Projects</PageTitle>
+              <PageTitle>Your Projects</PageTitle>
             </PageHeaderContent>
           </PageHeader>
           <ProjectsList />

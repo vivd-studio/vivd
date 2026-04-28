@@ -19,7 +19,14 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@vivd/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@vivd/ui";
 
 import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import type { Project } from "../ProjectCard.types";
@@ -46,6 +53,7 @@ interface ProjectCardActionsMenuProps {
   isCompleted: boolean;
   isProcessing: boolean;
   isDuplicateProjectPending: boolean;
+  isProjectActionPending: boolean;
   isRegenerating: boolean;
   isRenamePending: boolean;
   isTitleUpdatePending: boolean;
@@ -90,6 +98,7 @@ export function ProjectCardActionsMenu({
   isCompleted,
   isProcessing,
   isDuplicateProjectPending,
+  isProjectActionPending,
   isRegenerating,
   isRenamePending,
   isTitleUpdatePending,
@@ -129,7 +138,7 @@ export function ProjectCardActionsMenu({
               : "text-muted-foreground/60 hover:text-foreground"
           }`}
           onClick={(event) => event.stopPropagation()}
-          disabled={isRenamePending}
+          disabled={isProjectActionPending}
         >
           <MoreVertical className="w-3.5 h-3.5" />
         </Button>
@@ -233,7 +242,11 @@ export function ProjectCardActionsMenu({
         {canDuplicateProject ? (
           <DropdownMenuItem
             onClick={onOpenDuplicateDialog}
-            disabled={!isCompleted || isDuplicateProjectPending}
+            disabled={
+              !isCompleted ||
+              isDuplicateProjectPending ||
+              isProjectActionPending
+            }
           >
             {isDuplicateProjectPending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -247,7 +260,11 @@ export function ProjectCardActionsMenu({
         ) : null}
         <DropdownMenuItem
           onClick={onRegenerateThumbnail}
-          disabled={!isCompleted || isRegenerateThumbnailPending}
+          disabled={
+            !isCompleted ||
+            isRegenerateThumbnailPending ||
+            isProjectActionPending
+          }
         >
           {isRegenerateThumbnailPending ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -263,7 +280,7 @@ export function ProjectCardActionsMenu({
 
         <DropdownMenuItem
           onClick={onRegenerate}
-          disabled={isProcessing || isRegenerating}
+          disabled={isProcessing || isRegenerating || isProjectActionPending}
         >
           {isRegenerating ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -283,7 +300,9 @@ export function ProjectCardActionsMenu({
         {canRenameProject ? (
           <DropdownMenuItem
             onClick={onOpenEditTitleDialog}
-            disabled={isTitleUpdatePending || isRenamePending}
+            disabled={
+              isTitleUpdatePending || isRenamePending || isProjectActionPending
+            }
           >
             <Type className="w-4 h-4 mr-2" />
             Edit project title
@@ -292,7 +311,9 @@ export function ProjectCardActionsMenu({
         {canRenameProject ? (
           <DropdownMenuItem
             onClick={onOpenRenameDialog}
-            disabled={isRenamePending || isTitleUpdatePending}
+            disabled={
+              isRenamePending || isTitleUpdatePending || isProjectActionPending
+            }
           >
             <Pencil className="w-4 h-4 mr-2" />
             Rename project slug
@@ -301,7 +322,7 @@ export function ProjectCardActionsMenu({
         {canOverrideProjectStatus ? (
           <DropdownMenuItem
             onClick={onOpenStatusDialog}
-            disabled={isSetStatusPending}
+            disabled={isSetStatusPending || isProjectActionPending}
           >
             <Pencil className="w-4 h-4 mr-2" />
             Set project status
@@ -313,6 +334,7 @@ export function ProjectCardActionsMenu({
         {canDeleteProject ? (
           <DropdownMenuItem
             onClick={onDelete}
+            disabled={isProjectActionPending}
             className="text-destructive focus:text-destructive focus:bg-destructive/10"
           >
             <Trash2 className="w-4 h-4 mr-2" />

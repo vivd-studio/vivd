@@ -2,7 +2,6 @@ import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 
 type DuplicateProjectResult = RouterOutputs["project"]["duplicateProject"];
-type ProjectListResult = RouterOutputs["project"]["list"];
 
 interface UseProjectCardMutationsArgs {
   projectSlug: string;
@@ -21,6 +20,9 @@ export function useProjectCardMutations({
 }: UseProjectCardMutationsArgs) {
   const utils = trpc.useUtils();
   const duplicateProjectToastId = `duplicate-project-${projectSlug}`;
+
+  const thumbnailToastId = (slug: string, version: number) =>
+    `regenerate-thumbnail-${slug}-v${version}`;
 
   const setStatusMutation = trpc.project.setStatus.useMutation({
     onSuccess: (data, variables) => {
@@ -53,14 +55,22 @@ export function useProjectCardMutations({
 
   const regenerateThumbnailMutation =
     trpc.project.regenerateThumbnail.useMutation({
+      onMutate: (variables) => {
+        toast.loading("Regenerating thumbnail", {
+          id: thumbnailToastId(variables.slug, variables.version),
+          description: `${variables.slug} v${variables.version}`,
+        });
+      },
       onSuccess: (_data, variables) => {
         toast.success("Thumbnail regenerated", {
+          id: thumbnailToastId(variables.slug, variables.version),
           description: `${variables.slug} v${variables.version}`,
         });
         utils.project.list.invalidate();
       },
-      onError: (error) => {
+      onError: (error, variables) => {
         toast.error("Failed to regenerate thumbnail", {
+          id: thumbnailToastId(variables.slug, variables.version),
           description: error.message,
         });
       },
@@ -144,54 +154,11 @@ export function useProjectCardMutations({
   });
 
   const duplicateProjectMutation = trpc.project.duplicateProject.useMutation({
-    onMutate: async (variables) => {
-      await utils.project.list.cancel();
-      const previousList = utils.project.list.getData();
-      const createdAt = new Date().toISOString();
-      const targetSlug =
-        variables.slug?.trim() || `${variables.sourceSlug.trim()}-copy`;
-      const targetTitle = variables.title?.trim() || targetSlug;
-
-      utils.project.list.setData(undefined, (current): ProjectListResult | undefined => {
-        if (!current) return current;
-        return {
-          ...current,
-          projects: [
-            {
-              slug: targetSlug,
-              url: "",
-              source: "scratch",
-              title: targetTitle,
-              tags: [],
-              status: "duplicating_project",
-              createdAt,
-              updatedAt: createdAt,
-              currentVersion: 1,
-              totalVersions: 1,
-              versions: [
-                {
-                  version: 1,
-                  createdAt,
-                  status: "duplicating_project",
-                },
-              ],
-              publishedDomain: null,
-              publishedVersion: null,
-              thumbnailUrl: null,
-              publicPreviewEnabled: false,
-              enabledPlugins: [],
-            },
-            ...current.projects.filter((project) => project.slug !== targetSlug),
-          ],
-        };
-      });
-
+    onMutate: (variables) => {
       toast.loading("Duplicating project", {
         id: duplicateProjectToastId,
         description: `Copying ${variables.sourceSlug} v${variables.sourceVersion ?? selectedVersion} as a new project...`,
       });
-
-      return { previousList };
     },
     onSuccess: async (data) => {
       toast.success("Project duplicated", {
@@ -206,10 +173,7 @@ export function useProjectCardMutations({
       });
       onDuplicateProjectSuccess(data);
     },
-    onError: (error, _variables, context) => {
-      if (context?.previousList) {
-        utils.project.list.setData(undefined, context.previousList);
-      }
+    onError: (error) => {
       toast.error("Failed to duplicate project", {
         id: duplicateProjectToastId,
         description: error.message,

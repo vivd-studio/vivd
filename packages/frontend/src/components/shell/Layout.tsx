@@ -4,7 +4,13 @@ import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@vivd/ui";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@vivd/ui";
 
 import { ProjectWizard } from "@/components/projects";
 import { CenteredLoading } from "@/components/common";
@@ -31,8 +37,6 @@ export function Layout() {
   const isEmbeddedProjectPanel =
     new URLSearchParams(location.search).get("embedded") === "1" &&
     (pageInfo.isProjectPluginsPage || pageInfo.isProjectPluginPage);
-  const showNewProjectButton =
-    pageTitle === "Projects" && !pageInfo.isProjectPage;
 
   const mainRef = useRef<HTMLElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -63,15 +67,15 @@ export function Layout() {
     },
     [routeKey],
   );
-  const shellSidebarModeContextValue =
-    useMemo<ShellSidebarModeContextValue>(
-      () => ({ setDesktopMode: setRouteContentSidebarMode }),
-      [setRouteContentSidebarMode],
-    );
+  const shellSidebarModeContextValue = useMemo<ShellSidebarModeContextValue>(
+    () => ({ setDesktopMode: setRouteContentSidebarMode }),
+    [setRouteContentSidebarMode],
+  );
 
   useEffect(() => {
     const mainElement = mainRef.current;
-    if (!mainElement || pageInfo.isProjectPage || isEmbeddedProjectPanel) return;
+    if (!mainElement || pageInfo.isProjectPage || isEmbeddedProjectPanel)
+      return;
 
     const handleScroll = () => {
       setIsScrolled(mainElement.scrollTop > 0);
@@ -89,15 +93,14 @@ export function Layout() {
     setIsScrolled(false);
   }, [location.pathname, location.search]);
 
-  if (isPending)
-    return <CenteredLoading fullScreen />;
+  if (isPending) return <CenteredLoading fullScreen />;
 
   return (
     <SidebarProvider
       desktopMode={desktopMode}
       immersiveKey={
         desktopMode === "immersive"
-          ? pageInfo.projectSlug ?? location.pathname
+          ? (pageInfo.projectSlug ?? location.pathname)
           : undefined
       }
     >
@@ -108,14 +111,17 @@ export function Layout() {
           {!pageInfo.isProjectPage && !isEmbeddedProjectPanel && (
             <header
               className="sticky top-0 z-10 h-[var(--vivd-shell-header-height)] shrink-0 border-b bg-background px-3 transition-[border-color] duration-150 md:px-4"
-              style={{ borderColor: isScrolled ? "hsl(var(--border))" : "transparent" }}
+              style={{
+                borderColor: isScrolled ? "hsl(var(--border))" : "transparent",
+              }}
             >
               <HostHeader
                 leadingAccessory={<SidebarTrigger className="rounded-md" />}
                 leading={
                   <Breadcrumb>
                     <BreadcrumbList>
-                      {pageInfo.isProjectPluginsPage && pageInfo.projectSlug ? (
+                      {pageInfo.isProjectPluginsPage &&
+                      pageInfo.projectSlug ? (
                         <>
                           <BreadcrumbItem>
                             <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
@@ -135,7 +141,8 @@ export function Layout() {
                             <BreadcrumbPage>Plugins</BreadcrumbPage>
                           </BreadcrumbItem>
                         </>
-                      ) : pageInfo.isProjectPluginPage && pageInfo.projectSlug ? (
+                      ) : pageInfo.isProjectPluginPage &&
+                        pageInfo.projectSlug ? (
                         <>
                           <BreadcrumbItem>
                             <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
@@ -180,7 +187,7 @@ export function Layout() {
                           <BreadcrumbItem>
                             <BreadcrumbPage>{pageTitle}</BreadcrumbPage>
                           </BreadcrumbItem>
-                          {showNewProjectButton ? (
+                          {pageInfo.isProjectsIndexPage ? (
                             <>
                               <BreadcrumbSeparator />
                               <BreadcrumbItem>

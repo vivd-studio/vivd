@@ -40,7 +40,7 @@ describe("ProjectWizard", () => {
       expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("true");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "New Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     await waitFor(() => {
       expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("true");

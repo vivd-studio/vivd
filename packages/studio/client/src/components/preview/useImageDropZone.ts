@@ -183,6 +183,54 @@ function hideDropHint(doc: Document) {
   }
 }
 
+type DropZoneImage = HTMLImageElement & {
+  _vivdImageDropHandlers?: {
+    dragover: (event: DragEvent) => void;
+    dragleave: (event: DragEvent) => void;
+    drop: (event: DragEvent) => void;
+  };
+};
+
+type DropZoneDocument = Document & {
+  _vivdImageDropDocumentHandlers?: {
+    dragend: (event: DragEvent) => void;
+    drop: (event: DragEvent) => void;
+  };
+};
+
+function removeImageDropHandlers(img: HTMLImageElement) {
+  const dropImage = img as DropZoneImage;
+  const handlers = dropImage._vivdImageDropHandlers;
+  if (!handlers) {
+    return;
+  }
+
+  img.removeEventListener("dragover", handlers.dragover);
+  img.removeEventListener("dragleave", handlers.dragleave);
+  img.removeEventListener("drop", handlers.drop);
+  delete dropImage._vivdImageDropHandlers;
+}
+
+function cleanupDropZoneDocument(doc: Document) {
+  doc.getElementById("image-drop-zone-styles")?.remove();
+  hideDropHint(doc);
+  doc.getElementById("vivd-image-drop-hint")?.remove();
+  doc.body?.classList.remove("drag-mode-active");
+
+  const dropDoc = doc as DropZoneDocument;
+  const documentHandlers = dropDoc._vivdImageDropDocumentHandlers;
+  if (documentHandlers) {
+    doc.removeEventListener("dragend", documentHandlers.dragend);
+    doc.removeEventListener("drop", documentHandlers.drop);
+    delete dropDoc._vivdImageDropDocumentHandlers;
+  }
+
+  doc.querySelectorAll("img").forEach((img) => {
+    img.removeAttribute("data-drop-target");
+    removeImageDropHandlers(img);
+  });
+}
+
 /**
  * Hook that enables drag-and-drop of images onto <img> elements inside an iframe.
  * Automatically activates drop zones when a drag operation starts.
@@ -213,6 +261,8 @@ export function useImageDropZone({
   // Set up drop zones on all images in the iframe
   const enableDropZones = useCallback(
     (doc: Document, draggedAssetPath?: string | null) => {
+      cleanupDropZoneDocument(doc);
+
       // Add drop zone styles if not already present
       if (!doc.getElementById("image-drop-zone-styles")) {
         const style = doc.createElement("style");
@@ -223,6 +273,17 @@ export function useImageDropZone({
 
       // Enable drag mode on body to disable overlay pointer events
       doc.body.classList.add("drag-mode-active");
+
+      const handleDocumentCleanup = (event: DragEvent) => {
+        event.preventDefault();
+        cleanupDropZoneDocument(doc);
+      };
+      (doc as DropZoneDocument)._vivdImageDropDocumentHandlers = {
+        dragend: handleDocumentCleanup,
+        drop: handleDocumentCleanup,
+      };
+      doc.addEventListener("dragend", handleDocumentCleanup);
+      doc.addEventListener("drop", handleDocumentCleanup);
 
       const images = doc.querySelectorAll("img");
       images.forEach((img) => {
@@ -283,18 +344,14 @@ export function useImageDropZone({
         const handleDrop = async (e: DragEvent) => {
           e.preventDefault();
           e.stopPropagation();
-          hideDropHint(doc);
 
           const assetPath = e.dataTransfer?.getData("application/x-asset-path");
+          const currentDropSupport = assetPath
+            ? getDropSupport?.(img, assetPath) ?? { canDrop: true }
+            : null;
+          cleanupDropZoneDocument(doc);
 
-          if (assetPath) {
-            const currentDropSupport = getDropSupport?.(img, assetPath) ?? {
-              canDrop: true,
-            };
-            img.setAttribute(
-              "data-drop-target",
-              currentDropSupport.canDrop ? "true" : "blocked",
-            );
+          if (assetPath && currentDropSupport) {
             if (!currentDropSupport.canDrop) {
               toast.error(
                 currentDropSupport.reason ??
@@ -364,7 +421,7 @@ export function useImageDropZone({
         };
 
         // Store handlers for cleanup
-        (img as any)._dropHandlers = {
+        (img as DropZoneImage)._vivdImageDropHandlers = {
           dragover: handleDragOver,
           dragleave: handleDragLeave,
           drop: handleDrop,
@@ -380,29 +437,7 @@ export function useImageDropZone({
 
   // Remove drop zones from all images
   const disableDropZones = useCallback((doc: Document) => {
-    const style = doc.getElementById("image-drop-zone-styles");
-    if (style) style.remove();
-    hideDropHint(doc);
-    doc.getElementById("vivd-image-drop-hint")?.remove();
-
-    // Remove drag mode from body
-    if (doc.body) {
-      doc.body.classList.remove("drag-mode-active");
-    }
-
-    const images = doc.querySelectorAll("img[data-drop-target]");
-    images.forEach((img) => {
-      img.removeAttribute("data-drop-target");
-
-      // Remove event listeners
-      const handlers = (img as any)._dropHandlers;
-      if (handlers) {
-        img.removeEventListener("dragover", handlers.dragover);
-        img.removeEventListener("dragleave", handlers.dragleave);
-        img.removeEventListener("drop", handlers.drop);
-        delete (img as any)._dropHandlers;
-      }
-    });
+    cleanupDropZoneDocument(doc);
   }, []);
 
   // Main effect: Listen for drag events on the document to toggle drop zones

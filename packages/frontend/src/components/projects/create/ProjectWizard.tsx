@@ -13,10 +13,10 @@ export function ProjectWizard() {
     <button
       type="button"
       onClick={handleNewProjectClick}
-      className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+      className="flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-4"
     >
       <Plus className="h-4 w-4" />
-      New Project
+      New
     </button>
   );
 }

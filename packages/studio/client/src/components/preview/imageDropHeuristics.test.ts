@@ -85,7 +85,7 @@ describe("getPreviewImageDropSupport", () => {
     });
   });
 
-  it("rejects non-public Astro asset paths for raw runtime rewrites", () => {
+  it("allows legacy static assets by importing them into managed media", () => {
     const image = createImage(
       `
         <section data-astro-source-file="/repo/src/pages/index.astro" data-astro-source-loc="12:4">
@@ -101,12 +101,12 @@ describe("getPreviewImageDropSupport", () => {
         assetPath: "images/manual.png",
       }),
     ).toMatchObject({
-      canDrop: false,
-      strategy: null,
+      canDrop: true,
+      strategy: "astro-import",
     });
   });
 
-  it("rejects responsive Astro markup for public-asset fallback drops", () => {
+  it("allows responsive Astro markup for public assets by importing them into managed media", () => {
     const image = createImage(
       `
         <section data-astro-source-file="/repo/src/pages/index.astro" data-astro-source-loc="12:4">
@@ -125,8 +125,8 @@ describe("getPreviewImageDropSupport", () => {
         assetPath: "public/images/replacement.webp",
       }),
     ).toMatchObject({
-      canDrop: false,
-      strategy: null,
+      canDrop: true,
+      strategy: "astro-import",
     });
   });
 

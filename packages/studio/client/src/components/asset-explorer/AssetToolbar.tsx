@@ -13,9 +13,11 @@ import {
 interface AssetToolbarProps {
   currentPath?: string;
   uploadTargetPath: string;
+  uploadTargetLabel?: string;
+  fileInputAccept?: string;
   uploadStatus: "idle" | "uploading" | "optimizing";
   onBack?: () => void;
-  onCreateFolder: () => void;
+  onCreateFolder?: () => void;
   onCreateImage?: () => void;
   onFilesSelected: (files: FileList) => void;
   onRefresh?: () => void;
@@ -24,6 +26,8 @@ interface AssetToolbarProps {
 export function AssetToolbar({
   currentPath,
   uploadTargetPath,
+  uploadTargetLabel,
+  fileInputAccept,
   uploadStatus,
   onBack,
   onCreateFolder,
@@ -78,15 +82,17 @@ export function AssetToolbar({
             <ImagePlus className="h-4 w-4" />
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onCreateFolder}
-          title="New Folder"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button>
+        {onCreateFolder && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onCreateFolder}
+            title="New Folder"
+          >
+            <FolderPlus className="h-4 w-4" />
+          </Button>
+        )}
         {onRefresh && (
           <Button
             variant="outline"
@@ -105,7 +111,9 @@ export function AssetToolbar({
           onClick={() => fileInputRef.current?.click()}
           disabled={isProcessing}
           title={
-            isProcessing ? "Processing..." : `Upload files to ${uploadTargetPath}`
+            isProcessing
+              ? "Processing..."
+              : `Upload files to ${uploadTargetLabel ?? uploadTargetPath}`
           }
         >
           {isProcessing ? (
@@ -126,6 +134,7 @@ export function AssetToolbar({
         ref={fileInputRef}
         type="file"
         multiple
+        accept={fileInputAccept}
         className="hidden"
         onChange={handleFileSelect}
       />

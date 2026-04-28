@@ -364,7 +364,7 @@ export function SuperAdminNavSection({
   if (!showSuperAdmin) return null;
 
   return (
-    <SidebarGroup className="mt-auto border-t border-dashed border-sidebar-border pt-2 opacity-70 transition-opacity hover:opacity-100">
+    <SidebarGroup className="mt-auto pt-2 opacity-70 transition-opacity hover:opacity-100">
       <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
         <Shield className="mr-1 size-3" />
         {instanceAdminLabel}

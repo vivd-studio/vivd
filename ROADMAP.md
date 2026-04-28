@@ -31,7 +31,7 @@
 8. Execute `plans/credits-auth-template-commerce-plan.md` for Google auth, credit packs, signup credits, template charges, and superadmin billing controls.
 9. Execute `plans/plugin-license-allocation-plan.md` so organizations can buy, assign, unassign, and reassign plugin licenses across projects without routine superadmin work.
 10. Execute `plans/studio-chat-agent-ux-plan.md` so Studio chat and agent behavior fit non-technical website owners.
-11. Finish the remaining follow-ups in `plans/studio-media-drop-ux-plan.md`, especially context-aware `This Entry` media scope and browser QA for the preview drop overlay.
+11. Finish the remaining follow-ups in `plans/studio-media-drop-ux-plan.md`, especially entry-aware media-library behavior and browser QA for the preview drop overlay.
 12. Keep plugin extraction moving behind generic host contracts without leaking host policy into plugin contracts.
 13. Execute `plans/project-import-duplicate-build-safety-plan.md` so users can duplicate projects and copy versions without unsafe ZIP workflows.
 14. Execute `plans/async-preview-builder-plan.md` so preview artifact builds run in isolated builder jobs instead of the backend request path.
@@ -48,7 +48,7 @@
 - [ ] Prepare the Reddit launch: sharpen the launch post, target communities, onboarding path, demo projects, docs/support coverage, pricing/payment explanation, and rollback/support response plan.
 - [ ] Plan the published-site hosting provider split, with Cloudflare preferred and AWS/comparable providers as fallback, so published customer sites are served outside the core Vivd platform/control-plane runtime.
 - [ ] Implement `plans/studio-chat-agent-ux-plan.md`: reduce agent response padding, improve user-message contrast, group tool calls into compact activity rows, rewrite Studio agent instructions for non-technical users, and audit CMS guidance against the implementation.
-- [ ] Finish `plans/studio-media-drop-ux-plan.md`: add context-aware `This Entry` media scope and browser QA on top of the implemented planner, hover explanations, CMS copy/reference choices, and Astro media scopes.
+- [ ] Finish `plans/studio-media-drop-ux-plan.md`: add entry-aware media-library behavior and browser QA on top of the implemented planner, hover explanations, safe automatic CMS copy/reference behavior, public/static Astro-source imports, rare ownership-choice dialog, and unified image library.
 - [ ] Implement `plans/project-import-duplicate-build-safety-plan.md`: restrict arbitrary ZIP import to superadmins, add duplicate-project/copy-version workflows, and share dependency repair behavior across builder and Studio.
 - [ ] Implement `plans/async-preview-builder-plan.md`: add backend build jobs, one-shot Docker/Fly builder providers, preview readiness state, and production-shaped proof that long builds do not block unrelated tenants.
 - [ ] Reintroduce the HTML-only new-project proposal flow: generate standalone HTML with the standard model, show it to the user, allow regeneration, and only create the real project after the user chooses to commit.
@@ -65,4 +65,4 @@
 - Keep `PROJECT_STATE.md` as a compact current handoff with only the latest two progress entries.
 - Move closed-out detail, validation history, and compaction summaries into `PROJECT_STATE_ARCHIVE.md`.
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29

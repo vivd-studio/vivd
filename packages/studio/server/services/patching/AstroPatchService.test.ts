@@ -190,4 +190,50 @@ const heroImage = "/images/hero-horse.webp";
       '<img src={vivdImageHero.src} alt="Legacy hero" />',
     );
   });
+
+  it("copies public image drops into shared managed media before importing them", async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-astro-patch-"));
+    tempDirs.push(projectDir);
+    const filePath = path.join(projectDir, "src", "pages", "index.astro");
+    const publicImagePath = path.join(projectDir, "public", "images", "replacement hero.PNG");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.mkdir(path.dirname(publicImagePath), { recursive: true });
+    await fs.writeFile(publicImagePath, "fake image bytes", "utf8");
+    await fs.writeFile(
+      filePath,
+      `---
+import { Image } from "astro:assets";
+---
+<section>
+  <Image src="/images/old.webp" alt="Hero" width={1200} height={800} />
+</section>
+`,
+      "utf8",
+    );
+
+    const result = applyAstroPatches(projectDir, [
+      {
+        type: "setAstroImage",
+        sourceFile: "src/pages/index.astro",
+        sourceLoc: "5:4",
+        assetPath: "public/images/replacement hero.PNG",
+        oldValue: "/images/old.webp",
+      },
+    ]);
+
+    expect(result.applied).toBe(1);
+    expect(result.errors).toEqual([]);
+    await expect(
+      fs.readFile(
+        path.join(projectDir, "src", "content", "media", "shared", "replacement-hero.png"),
+        "utf8",
+      ),
+    ).resolves.toBe("fake image bytes");
+    await expect(fs.readFile(filePath, "utf8")).resolves.toContain(
+      'import vivdImageReplacementHero from "../content/media/shared/replacement-hero.png";',
+    );
+    await expect(fs.readFile(filePath, "utf8")).resolves.toContain(
+      '<Image src={vivdImageReplacementHero} alt="Hero" width={1200} height={800} />',
+    );
+  });
 });

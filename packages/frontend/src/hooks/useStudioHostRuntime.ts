@@ -136,6 +136,48 @@ export function selectBootstrapStatusStudioBaseUrl(
   ]);
 }
 
+function normalizeRuntimeComparisonUrl(value: string | null): string | null {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+
+  try {
+    return new URL(normalized, window.location.href)
+      .toString()
+      .replace(/\/+$/, "");
+  } catch {
+    return normalized.replace(/\/+$/, "");
+  }
+}
+
+function selectRuntimeIdentityUrl(runtime: StudioRuntimeSession): string | null {
+  return pickFirstDefinedUrl([
+    runtime.runtimeUrl,
+    runtime.url,
+    runtime.browserUrl,
+    runtime.compatibilityUrl,
+  ]);
+}
+
+export function shouldReloadRecoveredStudioRuntime(
+  current: StudioRuntimeSession | null,
+  recovered: StudioRuntimeSession,
+): boolean {
+  if (!current) return true;
+
+  const currentUrl = normalizeRuntimeComparisonUrl(
+    selectRuntimeIdentityUrl(current),
+  );
+  const recoveredUrl = normalizeRuntimeComparisonUrl(
+    selectRuntimeIdentityUrl(recovered),
+  );
+
+  if (!currentUrl || !recoveredUrl || currentUrl !== recoveredUrl) {
+    return true;
+  }
+
+  return false;
+}
+
 export function useStudioHostRuntime({
   resetKey,
   runtime,
@@ -191,18 +233,20 @@ export function useStudioHostRuntime({
     setReloadNonce((nonce) => nonce + 1);
   }, [refreshRuntime]);
 
-  const handleStudioRecovered = useCallback(
-    (nextRuntime: StudioRuntimeSession) => {
-      replaceRuntime(nextRuntime, { reload: true });
-      void invalidateRuntime?.();
-    },
-    [invalidateRuntime, replaceRuntime],
-  );
-
   const studioBaseUrl = selectBrowserStudioBaseUrl(studioRuntime);
   const studioHostProbeBaseUrl = selectHostProbeStudioBaseUrl(studioRuntime);
   const studioBootstrapStatusBaseUrl =
     selectBootstrapStatusStudioBaseUrl(studioRuntime);
+
+  const handleStudioRecovered = useCallback(
+    (nextRuntime: StudioRuntimeSession) => {
+      replaceRuntime(nextRuntime, {
+        reload: shouldReloadRecoveredStudioRuntime(studioRuntime, nextRuntime),
+      });
+      void invalidateRuntime?.();
+    },
+    [invalidateRuntime, replaceRuntime, studioRuntime],
+  );
 
   const { isRecovering: isStudioRecovering, requestRecoveryCheck } =
     useStudioRuntimeGuard({

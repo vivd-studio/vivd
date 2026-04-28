@@ -1,7 +1,11 @@
 import { trpc } from "@/lib/trpc";
+import type { RouterInputs } from "@/lib/trpc";
 import { getProjectLastModified } from "@/lib/project-utils";
+import { useMutationState } from "@tanstack/react-query";
+import { getMutationKey } from "@trpc/react-query";
 import { useState, useMemo, useEffect } from "react";
 import { ProjectCard } from "./ProjectCard";
+import type { Project } from "./ProjectCard.types";
 import { VersionDialog } from "../versioning/VersionDialog";
 import { DeleteProjectDialog } from "../dialogs/DeleteProjectDialog";
 import { toast } from "sonner";
@@ -40,6 +44,52 @@ interface VersionDialogData {
   totalVersions: number;
 }
 
+type DuplicateProjectInput = RouterInputs["project"]["duplicateProject"];
+
+interface PendingDuplicateProjectMutation {
+  variables: DuplicateProjectInput;
+  submittedAt: number;
+}
+
+function createPendingDuplicateProject(
+  pending: PendingDuplicateProjectMutation,
+  sourceProject?: Project,
+): Project {
+  const createdAt = pending.submittedAt
+    ? new Date(pending.submittedAt).toISOString()
+    : new Date().toISOString();
+  const targetSlug =
+    pending.variables.slug?.trim() ||
+    `${pending.variables.sourceSlug.trim()}-copy`;
+  const targetTitle =
+    pending.variables.title?.trim() ||
+    `${sourceProject?.title?.trim() || sourceProject?.slug || pending.variables.sourceSlug} copy`;
+
+  return {
+    slug: targetSlug,
+    url: sourceProject?.url ?? "",
+    source: sourceProject?.source ?? "scratch",
+    title: targetTitle,
+    tags: sourceProject?.tags ?? [],
+    status: "duplicating_project",
+    createdAt,
+    currentVersion: 1,
+    totalVersions: 1,
+    versions: [
+      {
+        version: 1,
+        createdAt,
+        status: "duplicating_project",
+      },
+    ],
+    publishedDomain: null,
+    publishedVersion: null,
+    thumbnailUrl: null,
+    publicPreviewEnabled: false,
+    enabledPlugins: sourceProject?.enabledPlugins ?? [],
+  };
+}
+
 export function ProjectsList() {
   const {
     data: projectsData,
@@ -60,25 +110,52 @@ export function ProjectsList() {
         : false;
     },
   });
+  const utils = trpc.useUtils();
   const { data: tagCatalogData } = trpc.project.listTags.useQuery();
+  const pendingDuplicateProjects =
+    useMutationState<PendingDuplicateProjectMutation>({
+      filters: {
+        mutationKey: getMutationKey(trpc.project.duplicateProject),
+        status: "pending",
+      },
+      select: (mutation) => ({
+        variables: mutation.state.variables as DuplicateProjectInput,
+        submittedAt: mutation.state.submittedAt,
+      }),
+    });
   const { mutateAsync: regenerateProject } =
     trpc.project.regenerate.useMutation();
   const { mutateAsync: generateProject } = trpc.project.generate.useMutation();
+  const [regeneratingSlug, setRegeneratingSlug] = useState<string | null>(null);
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
   const deleteProjectMutation = trpc.project.delete.useMutation({
-    onSuccess: (data) => {
+    onMutate: (variables) => {
+      setDeletingSlug(variables.slug);
+      toast.loading("Deleting project", {
+        id: `delete-project-${variables.slug}`,
+        description: variables.slug,
+      });
+    },
+    onSuccess: async (data, variables) => {
       toast.success("Project Deleted", {
+        id: `delete-project-${variables.slug}`,
         description: data.message,
       });
-      utils.project.list.invalidate();
+      await utils.project.list.invalidate();
+      await utils.project.list.refetch();
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       toast.error("Delete Failed", {
+        id: `delete-project-${variables.slug}`,
         description: error.message,
       });
     },
+    onSettled: (_data, _error, variables) => {
+      setDeletingSlug((current) =>
+        current === variables.slug ? null : current,
+      );
+    },
   });
-  const utils = trpc.useUtils();
-  const [regeneratingSlug, setRegeneratingSlug] = useState<string | null>(null);
   const [versionDialogData, setVersionDialogData] =
     useState<VersionDialogData | null>(null);
   const [deleteDialogSlug, setDeleteDialogSlug] = useState<string | null>(null);
@@ -99,13 +176,38 @@ export function ProjectsList() {
     localStorage.setItem(STORAGE_KEY, sortOption);
   }, [sortOption]);
 
+  const projectsWithPendingDuplicates = useMemo(() => {
+    const projects = projectsData?.projects ?? [];
+    if (pendingDuplicateProjects.length === 0) return projects;
+
+    const projectsBySlug = new Map(
+      projects.map((project) => [project.slug, project]),
+    );
+    const seenSlugs = new Set(projects.map((project) => project.slug));
+    const pendingProjects = pendingDuplicateProjects
+      .map((pending) =>
+        createPendingDuplicateProject(
+          pending,
+          projectsBySlug.get(pending.variables.sourceSlug),
+        ),
+      )
+      .filter((project) => {
+        if (seenSlugs.has(project.slug)) return false;
+        seenSlugs.add(project.slug);
+        return true;
+      });
+
+    return [...pendingProjects, ...projects];
+  }, [pendingDuplicateProjects, projectsData?.projects]);
+
   // Filter and sort projects
   const availableTags = useMemo(() => {
-    if (!projectsData?.projects) return [];
     return Array.from(
-      new Set(projectsData.projects.flatMap((project) => project.tags ?? [])),
+      new Set(
+        projectsWithPendingDuplicates.flatMap((project) => project.tags ?? []),
+      ),
     ).sort((a, b) => a.localeCompare(b));
-  }, [projectsData?.projects]);
+  }, [projectsWithPendingDuplicates]);
 
   const tagColorMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -124,9 +226,7 @@ export function ProjectsList() {
   }, [availableTags]);
 
   const filteredAndSortedProjects = useMemo(() => {
-    if (!projectsData?.projects) return [];
-
-    let projects = [...projectsData.projects];
+    let projects = [...projectsWithPendingDuplicates];
 
     // Filter by selected tag
     if (selectedTag) {
@@ -173,11 +273,11 @@ export function ProjectsList() {
     });
 
     return projects;
-  }, [projectsData?.projects, searchQuery, selectedTag, sortOption]);
+  }, [projectsWithPendingDuplicates, searchQuery, selectedTag, sortOption]);
 
   const handleCreateNewClick = (slug: string, version?: number) => {
     // Find the project to get its URL and version info
-    const project = projectsData?.projects.find((p) => p.slug === slug);
+    const project = projectsWithPendingDuplicates.find((p) => p.slug === slug);
     if (project) {
       setVersionDialogData({
         slug: project.slug,
@@ -256,7 +356,7 @@ export function ProjectsList() {
     );
   }
 
-  const hasProjects = (projectsData?.projects?.length ?? 0) > 0;
+  const hasProjects = projectsWithPendingDuplicates.length > 0;
 
   return (
     <div>
@@ -362,6 +462,7 @@ export function ProjectsList() {
               onRegenerate={handleCreateNewClick}
               onDelete={handleDeleteClick}
               isRegenerating={regeneratingSlug === project.slug}
+              isDeleting={deletingSlug === project.slug}
             />
           ))}
         </div>

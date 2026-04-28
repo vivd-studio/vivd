@@ -19,7 +19,7 @@ import { TABLET_PRESET } from "./types";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2 } from "lucide-react";
 import { isTextFile } from "../asset-explorer/utils";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@vivd/ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, InteractiveSurfaceButton } from "@vivd/ui";
 
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -353,6 +353,9 @@ export function PreviewContent() {
     imageDropChoiceRequest?.plan.choices.filter(
       (choice) => choice.kind !== primaryImageDropChoice?.kind,
     ) ?? [];
+  const imageDropChoices = primaryImageDropChoice
+    ? [primaryImageDropChoice, ...secondaryImageDropChoices]
+    : secondaryImageDropChoices;
 
   const framedViewport = viewportMode !== "desktop";
   const activeFrame = viewportMode === "tablet" ? TABLET_PRESET : selectedDevice;
@@ -632,7 +635,7 @@ export function PreviewContent() {
           >
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Choose where this image lives</AlertDialogTitle>
+                <AlertDialogTitle>Use this image here?</AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2">
                     <p>
@@ -655,28 +658,26 @@ export function PreviewContent() {
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              <div className="grid gap-2">
+                {imageDropChoices.map((choice) => (
+                  <InteractiveSurfaceButton
+                    key={choice.kind}
+                    className="block w-full p-3 text-left"
+                    onClick={() => resolveImageDropChoice(choice.kind)}
+                  >
+                    <span className="block text-sm font-medium text-foreground">
+                      {choice.label}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {choice.detail}
+                    </span>
+                  </InteractiveSurfaceButton>
+                ))}
+              </div>
               <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => resolveImageDropChoice(null)}>
                   Cancel
                 </AlertDialogCancel>
-                {secondaryImageDropChoices.map((choice) => (
-                  <AlertDialogAction
-                    key={choice.kind}
-                    variant="outline"
-                    onClick={() => resolveImageDropChoice(choice.kind)}
-                  >
-                    {choice.label}
-                  </AlertDialogAction>
-                ))}
-                {primaryImageDropChoice ? (
-                  <AlertDialogAction
-                    onClick={() =>
-                      resolveImageDropChoice(primaryImageDropChoice.kind)
-                    }
-                  >
-                    {primaryImageDropChoice.label}
-                  </AlertDialogAction>
-                ) : null}
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

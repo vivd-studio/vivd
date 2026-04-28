@@ -3,6 +3,7 @@ import {
   selectBootstrapStatusStudioBaseUrl,
   selectBrowserStudioBaseUrl,
   selectHostProbeStudioBaseUrl,
+  shouldReloadRecoveredStudioRuntime,
   type StudioRuntimeSession,
 } from "./useStudioHostRuntime";
 
@@ -167,5 +168,62 @@ describe("selectBootstrapStatusStudioBaseUrl", () => {
         }),
       ),
     ).toBe("http://localhost:4100");
+  });
+});
+
+describe("shouldReloadRecoveredStudioRuntime", () => {
+  it("does not reload when recovery returns the same runtime identity", () => {
+    const current = makeRuntime({
+      url: "http://localhost:4100",
+      browserUrl: "http://localhost:4100",
+      runtimeUrl: "http://localhost:4100",
+      compatibilityUrl: null,
+      bootstrapToken: "token-1",
+      userActionToken: "action-1",
+    });
+
+    expect(
+      shouldReloadRecoveredStudioRuntime(current, {
+        ...current,
+        url: "http://localhost:4100/",
+        browserUrl: "http://localhost:4100/",
+        bootstrapToken: "token-2",
+        userActionToken: "action-2",
+      }),
+    ).toBe(false);
+  });
+
+  it("reloads when recovery switches to a different runtime URL", () => {
+    expect(
+      shouldReloadRecoveredStudioRuntime(
+        makeRuntime({
+          url: "http://localhost:4100",
+          runtimeUrl: "http://localhost:4100",
+        }),
+        makeRuntime({
+          url: "http://localhost:4101",
+          runtimeUrl: "http://localhost:4101",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("reloads when recovery changes the direct runtime behind a stable compatibility route", () => {
+    expect(
+      shouldReloadRecoveredStudioRuntime(
+        makeRuntime({
+          url: "/_studio/runtime-1",
+          browserUrl: "/_studio/runtime-1",
+          runtimeUrl: "http://localhost:4100",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
+        makeRuntime({
+          url: "/_studio/runtime-1",
+          browserUrl: "/_studio/runtime-1",
+          runtimeUrl: "http://localhost:4101",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
+      ),
+    ).toBe(true);
   });
 });

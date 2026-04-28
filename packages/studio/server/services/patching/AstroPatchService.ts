@@ -145,6 +145,151 @@ function toPosixPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+const ASTRO_CONTENT_MEDIA_PATH = "src/content/media";
+const ASTRO_SHARED_MEDIA_PATH = `${ASTRO_CONTENT_MEDIA_PATH}/shared`;
+const ASTRO_SOURCE_COPYABLE_IMAGE_REGEX = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
+
+function normalizeWorkspaceRelativePath(value: string): string {
+  return toPosixPath(value).replace(/^\/+/, "").replace(/\/+$/, "").trim();
+}
+
+function hasDotSegment(relativePath: string): boolean {
+  return relativePath
+    .split("/")
+    .some((segment) => segment === "." || segment === "..");
+}
+
+function isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
+  const relative = path.relative(rootPath, candidatePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function isAstroManagedMediaPath(assetPath: string): boolean {
+  const normalized = normalizeWorkspaceRelativePath(assetPath);
+  return (
+    normalized === ASTRO_CONTENT_MEDIA_PATH ||
+    normalized.startsWith(`${ASTRO_CONTENT_MEDIA_PATH}/`)
+  );
+}
+
+function isAstroContentAssetPath(assetPath: string): boolean {
+  const normalized = normalizeWorkspaceRelativePath(assetPath);
+  return normalized.startsWith("src/content/");
+}
+
+function shouldCopyAstroSourceAssetToManagedMedia(assetPath: string): boolean {
+  const normalized = normalizeWorkspaceRelativePath(assetPath);
+  return (
+    normalized.startsWith("public/") ||
+    normalized.startsWith("images/") ||
+    normalized.startsWith("assets/")
+  );
+}
+
+function sanitizeFilename(filename: string): string {
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext).replace(/[^a-zA-Z0-9_-]+/g, "-");
+  const safeBase = base.replace(/^-+|-+$/g, "") || "asset";
+  return `${safeBase}${ext.toLowerCase()}`;
+}
+
+function getUniqueDestinationFilename(
+  destinationDir: string,
+  requestedFilename: string,
+): string {
+  const safeFilename = sanitizeFilename(requestedFilename);
+  const ext = path.extname(safeFilename);
+  const base = path.basename(safeFilename, ext);
+
+  let index = 1;
+  while (true) {
+    const candidate = index === 1 ? safeFilename : `${base}-${index}${ext}`;
+    if (!fs.existsSync(path.join(destinationDir, candidate))) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
+function prepareAstroImageAssetPath(
+  projectDir: string,
+  assetPath: string,
+  copiedAssetPaths: Map<string, string>,
+): { assetPath: string; reason?: string } {
+  const normalized = normalizeWorkspaceRelativePath(assetPath);
+  if (!normalized || path.isAbsolute(normalized) || hasDotSegment(normalized)) {
+    return { assetPath: normalized, reason: "Invalid image asset path" };
+  }
+
+  if (
+    isAstroManagedMediaPath(normalized) ||
+    (isAstroContentAssetPath(normalized) &&
+      ASTRO_SOURCE_COPYABLE_IMAGE_REGEX.test(normalized))
+  ) {
+    return { assetPath: normalized };
+  }
+
+  if (!shouldCopyAstroSourceAssetToManagedMedia(normalized)) {
+    return {
+      assetPath: normalized,
+      reason:
+        "Astro source image drops need a managed media file or a copyable public/static image",
+    };
+  }
+
+  const existingCopy = copiedAssetPaths.get(normalized);
+  if (existingCopy) {
+    return { assetPath: existingCopy };
+  }
+
+  if (!ASTRO_SOURCE_COPYABLE_IMAGE_REGEX.test(normalized)) {
+    return {
+      assetPath: normalized,
+      reason: "Only local image assets can be copied into managed media",
+    };
+  }
+
+  try {
+    const sourceAbsolutePath = path.join(projectDir, normalized);
+    const realProjectDir = fs.realpathSync(projectDir);
+    const realSourcePath = fs.realpathSync(sourceAbsolutePath);
+    if (!isPathInsideRoot(realProjectDir, realSourcePath)) {
+      return { assetPath: normalized, reason: "Invalid image asset path" };
+    }
+
+    const sourceStats = fs.statSync(realSourcePath);
+    if (!sourceStats.isFile()) {
+      return { assetPath: normalized, reason: "Image asset path is not a file" };
+    }
+
+    const destinationDir = path.join(projectDir, ASTRO_SHARED_MEDIA_PATH);
+    fs.ensureDirSync(destinationDir);
+    const realDestinationDir = fs.realpathSync(destinationDir);
+    if (!isPathInsideRoot(realProjectDir, realDestinationDir)) {
+      return { assetPath: normalized, reason: "Invalid managed media destination" };
+    }
+
+    const destinationFilename = getUniqueDestinationFilename(
+      destinationDir,
+      path.basename(normalized),
+    );
+    const destinationRelativePath = path.posix.join(
+      ASTRO_SHARED_MEDIA_PATH,
+      destinationFilename,
+    );
+    fs.copyFileSync(realSourcePath, path.join(projectDir, destinationRelativePath));
+    copiedAssetPaths.set(normalized, destinationRelativePath);
+    return { assetPath: destinationRelativePath };
+  } catch (error) {
+    return {
+      assetPath: normalized,
+      reason: `Failed to copy image into managed media: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -429,8 +574,10 @@ function findSrcValueRange(tagText: string): { start: number; end: number } | nu
 }
 
 function applyAstroImagePatch(
+  projectDir: string,
   content: string,
   patch: AstroImagePatch,
+  copiedAssetPaths: Map<string, string>,
 ): { applied: boolean; content: string; reason?: string } {
   const tagMatch = findTargetImageTag(content, patch.sourceLoc, patch.oldValue);
   if (tagMatch.kind !== "match") {
@@ -451,10 +598,23 @@ function applyAstroImagePatch(
     };
   }
 
+  const preparedAsset = prepareAstroImageAssetPath(
+    projectDir,
+    patch.assetPath,
+    copiedAssetPaths,
+  );
+  if (preparedAsset.reason) {
+    return {
+      applied: false,
+      content,
+      reason: preparedAsset.reason,
+    };
+  }
+
   const { content: withImport, importName } = ensureAstroImageImport(
     content,
     patch.sourceFile,
-    patch.assetPath,
+    preparedAsset.assetPath,
   );
   const contentLengthDelta = withImport.length - content.length;
   const shiftedTagStart = originalTag.start + contentLengthDelta;
@@ -523,6 +683,7 @@ export function applyAstroPatches(
 
   for (const [relativeFile, filePatches] of patchesByFile.entries()) {
     const absolutePath = path.join(projectDir, relativeFile);
+    const copiedAssetPaths = new Map<string, string>();
 
     if (!fs.existsSync(absolutePath)) {
       result.skipped += filePatches.length;
@@ -553,7 +714,12 @@ export function applyAstroPatches(
 
     for (const patch of filePatches) {
       if (patch.type === "setAstroImage") {
-        const imageResult = applyAstroImagePatch(modified, patch);
+        const imageResult = applyAstroImagePatch(
+          projectDir,
+          modified,
+          patch,
+          copiedAssetPaths,
+        );
         if (imageResult.applied) {
           modified = imageResult.content;
           fileApplied++;

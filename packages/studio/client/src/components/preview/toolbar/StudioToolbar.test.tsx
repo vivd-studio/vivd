@@ -247,6 +247,23 @@ describe("StudioToolbar", () => {
     expect(explorerLabel).toHaveClass("opacity-0");
   });
 
+  it("reserves the expanded session slot while chat is open", () => {
+    renderToolbar();
+
+    const sessionGroup = screen.getByTestId("session-toolbar-group");
+    const sessionsButton = screen.getByRole("button", { name: "Show sessions" });
+    const sessionsLabel = sessionsButton.querySelector(
+      'span[aria-hidden="true"]',
+    );
+
+    expect(sessionGroup).toHaveStyle({ width: "130px" });
+    expect(sessionGroup.className).not.toContain("transition-[width]");
+    expect(sessionsButton.className).not.toContain(
+      "w-[var(--toolbar-expanded-width)]",
+    );
+    expect(sessionsLabel).toHaveClass("opacity-0");
+  });
+
   it("expands workspace controls when their panel is active", () => {
     mockUseToolbarState.mockReturnValue({
       ...createToolbarState(),

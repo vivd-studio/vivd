@@ -70,6 +70,9 @@ vi.mock("@/lib/trpc", () => ({
       setPublicPreviewEnabled: {
         useMutation: () => ({ mutate: mutateMock, isPending: false }),
       },
+      duplicateProject: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
     },
   },
 }));

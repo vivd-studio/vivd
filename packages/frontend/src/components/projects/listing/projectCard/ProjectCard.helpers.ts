@@ -17,6 +17,26 @@ export interface ManualProjectStatusOption {
   description: string;
 }
 
+export type ProjectCardPendingAction =
+  | "delete"
+  | "duplicate"
+  | "regenerate"
+  | "rename"
+  | "thumbnail"
+  | "title";
+
+const PROJECT_CARD_PENDING_ACTION_LABELS: Record<
+  ProjectCardPendingAction,
+  string
+> = {
+  delete: "Deleting project...",
+  duplicate: "Duplicating as new project...",
+  regenerate: "Preparing regeneration...",
+  rename: "Renaming project slug...",
+  thumbnail: "Regenerating thumbnail...",
+  title: "Saving project title...",
+};
+
 const MANUAL_PROJECT_STATUS_LABELS: Record<ProjectVersionManualStatus, string> =
   {
     completed: "Completed",
@@ -46,6 +66,12 @@ export function isStudioAccessibleProjectStatus(
     status === "starting_studio" ||
     status === "generating_initial_site"
   );
+}
+
+export function getProjectCardPendingActionLabel(
+  action: ProjectCardPendingAction | null | undefined,
+): string | null {
+  return action ? PROJECT_CARD_PENDING_ACTION_LABELS[action] : null;
 }
 
 export function getManualProjectStatusOptions(

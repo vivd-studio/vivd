@@ -2,7 +2,7 @@
 
 Date: 2026-04-28  
 Owner: Studio / Astro CMS / product UX  
-Status: core slices implemented, follow-ups remain
+Status: safe CMS drop behavior, unified gallery, and public/static Astro-source imports implemented; entry-aware/browser QA follow-ups remain
 
 ## Goal
 
@@ -16,22 +16,38 @@ Implemented on 2026-04-28:
 
 - Added a pure image drop planner and asset-scope classifier at `packages/studio/client/src/components/preview/imageDropPlan.ts`.
 - Preview image drop zones now show target-local hover copy derived from the planner, including blocked reasons.
-- Ambiguous CMS image drops now open an explicit choice dialog before the preview accepts the drop.
-- Choosing `Copy to this entry` saves through a server-side copy-to-entry action that writes into `src/content/media/<collection>/<entry>/`, handles filename collisions, and stores the normalized CMS entry reference.
-- Choosing `Use shared asset` keeps the CMS field referencing existing managed media.
-- Astro gallery mode now exposes `Browse`, `Shared`, `All Media`, and `Public` scopes, and image cards show scope badges such as `shared`, `blog/welcome`, `public`, and `working`.
+- Ambiguous CMS image drops can open an explicit choice dialog before the preview accepts the drop.
+- Choosing `Make a copy for this entry` saves through a server-side copy-to-entry action that writes into `src/content/media/<collection>/<entry>/`, handles filename collisions, and stores the normalized CMS entry reference.
+- Choosing `Use existing image` keeps the CMS field referencing existing managed media.
+
+Implemented on 2026-04-29:
+
+- Gallery is now a single image-only library instead of a folder/scope switcher.
+- The library recursively indexes the known usable image roots: `src/content/media/**`, `public/**`, `images/**`, and `assets/**`.
+- Location is shown as a quiet card tag, for example `shared`, `blog/welcome`, or `public`; folders remain available in Files for advanced work.
+- Gallery uploads and Generate Image use the product-level `media library` target label; Astro projects still write new generated/uploaded images to `src/content/media/shared/` by default.
+- Non-image uploads are rejected from Gallery with guidance to use Files.
+
+Implemented in the follow-up pass:
+
+- Safe CMS drops no longer open a dialog. Shared/library images are referenced directly; public, static, and working images are copied into the CMS entry automatically.
+- The choice dialog is reserved for likely cross-entry ownership, where reusing the existing image versus making an entry-specific copy is a real product decision.
+- The rare choice dialog uses user-facing option copy: `Make a copy for this entry` and `Use existing image`.
+- Preview drop hover cleanup is now idempotent. A new drag session clears stale listeners/hints first, iframe drops clean up immediately, and repeated hover/drop cycles cannot stack handlers.
+- Gallery tags now treat `src/content/media/shared/**` and direct `src/content/media/*` files as `Shared` media instead of showing the folder or filename as the primary tag.
+- Public and legacy static image drops onto source-backed Astro images now copy into `src/content/media/shared/` first, then patch the Astro source to import the managed copy.
 
 Remaining follow-ups:
 
-- Add a context-aware `This Entry` media scope when the asset explorer is opened from a specific CMS entry.
-- Do browser screenshot/interaction QA for the iframe hover overlay and confirmation dialog across light/dark themes and framed viewports.
+- Add entry-aware library behavior when the asset explorer is opened from a specific CMS entry, without exposing it as a primary folder tab. Good candidates are a suggested tag/filter, better default copy target, or a subtle "used by this entry" grouping.
+- Do browser screenshot/interaction QA for the iframe hover overlay and rare ownership-choice dialog across light/dark themes and framed viewports.
 - Consider extending the same planner shape to non-image file assets later; catalog/PDF UX remains tracked in [`plans/astro-cms-catalog-asset-ux-plan.md`](./astro-cms-catalog-asset-ux-plan.md).
 
 ## Original Behavior Snapshot
 
 - General Studio image creation now has an Astro default of `src/content/media/shared/`.
 - AI image edits are expected to write beside the source image unless a caller explicitly chooses another target.
-- The generic asset gallery is still mostly folder-oriented, so it can make Astro media feel like "the shared folder" rather than a managed media library.
+- Before the 2026-04-29 pass, the generic asset gallery was still mostly folder-oriented, so it could make Astro media feel like "the shared folder" rather than a managed media library.
 - Dropping a managed shared image onto a CMS image field can validly store a reference to that shared asset, but the user is not told whether Studio is referencing shared media, copying into entry media, or patching source.
 - Preview image targets are not all the same:
   - CMS-bound images should update a CMS field.
@@ -45,15 +61,15 @@ Remaining follow-ups:
 - CMS-owned targets write CMS fields. Page/source-owned targets patch source. Static HTML targets patch HTML.
 - Astro managed media means `src/content/media/**`. `public/**` remains passthrough/static, not the default managed asset home.
 - Studio should never silently move an image to a new folder during drop.
-- Copying an image into entry-owned media is useful, but it should be an explicit choice or a clear confirmation, not a hidden side effect.
-- Shared media is a real product concept. It should be visible in the UI instead of implied by paths.
+- Copying an image into entry-owned media is useful. If it is the only safe action, Studio can do it automatically; if ownership is genuinely ambiguous, Studio should ask.
+- Shared media is a real product concept, but it should appear as metadata on images instead of as a required navigation choice for non-technical users.
 - Working assets under `.vivd/**` should be treated as temporary references until imported into managed media.
 
 ## Asset Scopes
 
 Use a shared classifier for image paths:
 
-- `shared`: `src/content/media/shared/**`
+- `shared`: `src/content/media/shared/**` and direct files under `src/content/media/*`
 - `entry`: `src/content/media/<collection>/<entry>/**`
 - `managed`: other files under `src/content/media/**`
 - `public`: files under `public/**`
@@ -127,25 +143,21 @@ Hover copy should include the target owner, not just the file path.
 
 ### Confirmation And Choice
 
-Do not confirm every drop. Confirm only when the result is ambiguous, scope-changing, or likely to surprise the user.
+Do not confirm every drop. Confirm only when the result is ambiguous or likely to surprise the user.
 
 Cases that should ask:
 
-- Dropping a shared managed image onto a CMS entry image:
-  - primary choice: `Copy to this entry`
-  - secondary choice: `Use shared asset`
-- Dropping a public or working asset onto a CMS target:
-  - primary choice: `Import into managed media`
-  - secondary choice: cancel
 - Dropping an entry-owned asset from one entry onto another entry:
-  - primary choice: `Copy to this entry`
-  - secondary choice: `Use existing asset`
+  - primary choice: `Make a copy for this entry`
+  - secondary choice: `Use existing image`
 
 Cases that can proceed directly:
 
+- Dropping a shared or general library image onto a CMS entry field.
+- Dropping a public, static, or working image onto a CMS target when Studio can copy/import it into that entry first.
 - Dropping an entry-owned asset onto a field in the same entry.
 - Dropping a shared asset onto a source-backed Astro image where the planner will only patch source.
-- Static HTML to static HTML path replacement in legacy/static projects.
+- Dropping a static asset onto an HTML/static image where Studio can update the `src` directly.
 
 ### Messaging
 
@@ -160,23 +172,23 @@ Avoid exposing relative-path math as the primary message. Show exact paths in a 
 
 ## Media Library UX
 
-Evolve the Astro gallery from a raw folder view into a managed media library view.
+Evolve the gallery from a raw folder view into a managed image library view.
 
-Recommended scopes:
+Primary UX:
 
-- `Shared`: `src/content/media/shared/**`
-- `This Entry`: visible when Studio has CMS context, backed by `src/content/media/<collection>/<entry>/**`
-- `All Media`: recursive view of `src/content/media/**`
-- `Public`: files under `public/**` for passthrough/static use
+- Show one Gallery surface containing only images.
+- Recursively include the known image roots Studio understands: `src/content/media/**`, `public/**`, `images/**`, and `assets/**`.
+- Treat storage location as a tag/filter dimension, not as the main navigation model.
+- Keep Files as the exact filesystem view for folders, PDFs, code, and advanced moves.
 
 Card treatment:
 
 - Show a scope badge such as `shared`, `blog/welcome`, `media`, or `public`.
 - Show a compact path detail below the asset name.
 - Keep existing file-tree navigation available for exact filesystem work.
-- Make upload and Generate Image target labels explicit, for example `Uploads go to Shared media`.
+- Make upload and Generate Image target labels product-level, for example `media library`; exact paths can stay in technical details or Files.
 
-This makes `shared` the default, not the whole mental model.
+This makes `shared` the default storage decision, not the user's main mental model.
 
 ## Server Execution
 
@@ -239,15 +251,15 @@ Acceptance criteria:
 
 ### Phase 4: Managed Media Library
 
-- Add scoped Astro media tabs or segmented controls.
-- Add recursive `All Media` discovery for `src/content/media/**`.
-- Add scope badges and clearer upload/generation target copy.
+- Replace scoped Astro media tabs with one image-only media library.
+- Add recursive discovery for managed media and known static/public image roots.
+- Add scope badges and product-level upload/generation target copy.
 - Preserve the file tree for exact path operations.
 
 Acceptance criteria:
 
 - A user can find shared media and entry-owned media without understanding the folder tree first.
-- Generate Image, upload, and gallery drops clearly state their target scope.
+- Generate Image, upload, and gallery drops clearly state their product-level destination while keeping path details available when useful.
 - Existing static/HTML project behavior remains understandable and backwards-compatible.
 
 ### Phase 5: Polish And Validation

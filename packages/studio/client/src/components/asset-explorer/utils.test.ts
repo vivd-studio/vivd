@@ -180,7 +180,10 @@ describe("asset explorer path helpers", () => {
 
   it("labels managed asset scopes for gallery cards", () => {
     expect(getAssetScopeLabel("src/content/media/shared/logo.png")).toBe(
-      "shared",
+      "Shared",
+    );
+    expect(getAssetScopeLabel("src/content/media/logo.png")).toBe(
+      "Shared",
     );
     expect(getAssetScopeLabel("src/content/media/products/apollo/logo.png")).toBe(
       "products/apollo",
@@ -188,7 +191,8 @@ describe("asset explorer path helpers", () => {
     expect(getAssetScopeLabel("src/content/media/products/logo.png")).toBe("products");
     expect(getAssetScopeLabel("public/images/logo.png")).toBe("public");
     expect(getAssetScopeLabel(".vivd/uploads/logo.png")).toBe("working");
-    expect(getAssetScopeLabel("images/logo.png")).toBeNull();
+    expect(getAssetScopeLabel("images/logo.png")).toBe("images");
+    expect(getAssetScopeLabel("assets/logo.png")).toBe("assets");
   });
 
   it("keeps static asset creation in the visible project asset folder", () => {

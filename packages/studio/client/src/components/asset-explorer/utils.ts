@@ -212,13 +212,16 @@ export function getAssetScopeLabel(assetPath: string): string | null {
     normalized === ASTRO_SHARED_MEDIA_PATH ||
     normalized.startsWith(`${ASTRO_SHARED_MEDIA_PATH}/`)
   ) {
-    return "shared";
+    return "Shared";
   }
   if (isAstroManagedMediaPath(normalized)) {
     const mediaRelativePath = normalized
       .slice(ASTRO_CONTENT_MEDIA_PATH.length)
       .replace(/^\/+/, "");
     const [collection, entry] = mediaRelativePath.split("/").filter(Boolean);
+    if (collection && /\.[a-z0-9]+$/i.test(collection)) {
+      return "Shared";
+    }
     if (collection && entry && !/\.[a-z0-9]+$/i.test(entry)) {
       return `${collection}/${entry}`;
     }
@@ -230,6 +233,12 @@ export function getAssetScopeLabel(assetPath: string): string | null {
   }
   if (isVivdInternalAssetPath(normalized)) {
     return "working";
+  }
+  if (normalized === "images" || normalized.startsWith("images/")) {
+    return "images";
+  }
+  if (normalized === "assets" || normalized.startsWith("assets/")) {
+    return "assets";
   }
   return null;
 }
