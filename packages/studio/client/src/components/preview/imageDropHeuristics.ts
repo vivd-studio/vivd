@@ -11,7 +11,7 @@ import {
   type ImageDropTargetContext,
 } from "./imageDropPlan";
 
-const ASTRO_SOURCE_SELECTOR = "[data-astro-source-file]";
+const PROJECT_ASTRO_SOURCE_REGEX = /(?:^|\/)(src\/.*\.astro)$/i;
 
 export type PreviewImageDropStrategy =
   | "cms"
@@ -80,14 +80,21 @@ function readAstroSourceMeta(targetImg: HTMLImageElement): {
   astroSourceFile: string | null;
   astroSourceLoc: string | null;
 } {
-  const astroSourceEl = targetImg.closest(ASTRO_SOURCE_SELECTOR) as
-    | HTMLElement
-    | null;
+  let current: Element | null = targetImg;
+  while (current) {
+    const sourceFile = current.getAttribute?.("data-astro-source-file");
+    if (sourceFile && PROJECT_ASTRO_SOURCE_REGEX.test(sourceFile.replace(/\\/g, "/"))) {
+      return {
+        astroSourceFile: sourceFile,
+        astroSourceLoc: current.getAttribute("data-astro-source-loc"),
+      };
+    }
+    current = current.parentElement;
+  }
+
   return {
-    astroSourceFile:
-      astroSourceEl?.getAttribute("data-astro-source-file") ?? null,
-    astroSourceLoc:
-      astroSourceEl?.getAttribute("data-astro-source-loc") ?? null,
+    astroSourceFile: null,
+    astroSourceLoc: null,
   };
 }
 

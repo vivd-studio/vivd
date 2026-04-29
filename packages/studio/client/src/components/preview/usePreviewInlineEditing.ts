@@ -678,6 +678,7 @@ export function usePreviewInlineEditing({
       cleanupEditModeListeners();
       beginIframeLoading();
       refreshPreview();
+      void utils.assets.invalidate();
       void utils.project.gitHasChanges.invalidate();
       void utils.cms.status.invalidate();
     };
@@ -813,6 +814,7 @@ export function usePreviewInlineEditing({
     projectSlug,
     refreshPreview,
     selectedVersion,
+    utils.assets,
     utils.cms.status,
     utils.project.gitHasChanges,
   ]);

@@ -64,6 +64,52 @@ describe("getPreviewImageDropSupport", () => {
     });
   });
 
+  it("uses the nearest project Astro source metadata instead of internal Astro Image metadata", () => {
+    const image = createImage(
+      `
+        <section data-astro-source-file="/repo/src/pages/index.astro" data-astro-source-loc="21:7">
+          <picture data-astro-source-file="/app/node_modules/astro/components/Image.astro" data-astro-source-loc="10:1">
+            <img src="/_image?href=%2Fsrc%2Fcontent%2Fmedia%2Fhero.webp" />
+          </picture>
+        </section>
+      `,
+    );
+
+    expect(
+      getPreviewImageDropSupport({
+        targetImg: image,
+        previewMode: "devserver",
+        assetPath: "public/favicon.webp",
+      }),
+    ).toMatchObject({
+      canDrop: true,
+      strategy: "astro-import",
+      astroSourceFile: "/repo/src/pages/index.astro",
+      astroSourceLoc: "21:7",
+    });
+  });
+
+  it("rejects internal-only Astro Image metadata", () => {
+    const image = createImage(
+      `
+        <picture data-astro-source-file="/app/node_modules/astro/components/Image.astro" data-astro-source-loc="10:1">
+          <img src="/_image?href=%2Fsrc%2Fcontent%2Fmedia%2Fhero.webp" />
+        </picture>
+      `,
+    );
+
+    expect(
+      getPreviewImageDropSupport({
+        targetImg: image,
+        previewMode: "devserver",
+        assetPath: "public/favicon.webp",
+      }),
+    ).toMatchObject({
+      canDrop: false,
+      strategy: null,
+    });
+  });
+
   it("rejects non-media src/content assets for source-backed Astro drops", () => {
     const image = createImage(
       `

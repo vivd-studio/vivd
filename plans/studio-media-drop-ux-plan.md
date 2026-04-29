@@ -24,7 +24,7 @@ Implemented on 2026-04-29:
 
 - Gallery is now a single image-only library instead of a folder/scope switcher.
 - The library recursively indexes the known usable image roots: `src/content/media/**`, `public/**`, `images/**`, and `assets/**`.
-- Location is shown as a quiet card tag, for example `shared`, `blog/welcome`, or `public`; folders remain available in Files for advanced work.
+- Entry-owned media can show a quiet card tag such as `blog/welcome`; generic storage tags such as `shared`, `public`, `images`, and `assets` stay hidden because they are implementation details. Folders remain available in Files for advanced work.
 - Gallery uploads and Generate Image use the product-level `media library` target label; Astro projects still write new generated/uploaded images to `src/content/media/shared/` by default.
 - Non-image uploads are rejected from Gallery with guidance to use Files.
 
@@ -34,8 +34,9 @@ Implemented in the follow-up pass:
 - The choice dialog is reserved for likely cross-entry ownership, where reusing the existing image versus making an entry-specific copy is a real product decision.
 - The rare choice dialog uses user-facing option copy: `Make a copy for this entry` and `Use existing image`.
 - Preview drop hover cleanup is now idempotent. A new drag session clears stale listeners/hints first, iframe drops clean up immediately, and repeated hover/drop cycles cannot stack handlers.
-- Gallery tags now treat `src/content/media/shared/**` and direct `src/content/media/*` files as `Shared` media instead of showing the folder or filename as the primary tag.
+- Gallery cards no longer show generic storage tags such as `Shared`, `Public`, `images`, `assets`, or `working`; only entry-owned managed media keeps an ownership tag.
 - Public and legacy static image drops onto source-backed Astro images now copy into `src/content/media/shared/` first, then patch the Astro source to import the managed copy.
+- Source-backed Astro image drops now ignore internal Astro component source metadata and target the nearest real project `src/**/*.astro` source annotation instead.
 
 Remaining follow-ups:
 
@@ -178,12 +179,12 @@ Primary UX:
 
 - Show one Gallery surface containing only images.
 - Recursively include the known image roots Studio understands: `src/content/media/**`, `public/**`, `images/**`, and `assets/**`.
-- Treat storage location as a tag/filter dimension, not as the main navigation model.
+- Treat storage location as internal metadata, not as the main navigation model.
 - Keep Files as the exact filesystem view for folders, PDFs, code, and advanced moves.
 
 Card treatment:
 
-- Show a scope badge such as `shared`, `blog/welcome`, `media`, or `public`.
+- Show an ownership badge only for entry-owned managed media, for example `blog/welcome`.
 - Show a compact path detail below the asset name.
 - Keep existing file-tree navigation available for exact filesystem work.
 - Make upload and Generate Image target labels product-level, for example `media library`; exact paths can stay in technical details or Files.
@@ -253,7 +254,7 @@ Acceptance criteria:
 
 - Replace scoped Astro media tabs with one image-only media library.
 - Add recursive discovery for managed media and known static/public image roots.
-- Add scope badges and product-level upload/generation target copy.
+- Add entry ownership badges and product-level upload/generation target copy.
 - Preserve the file tree for exact path operations.
 
 Acceptance criteria:

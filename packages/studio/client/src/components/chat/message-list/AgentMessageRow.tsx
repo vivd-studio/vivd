@@ -313,11 +313,11 @@ function WorkingDots() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex w-5 items-center justify-center gap-0.5 text-muted-foreground align-middle"
+      className="inline-flex w-5 items-baseline justify-center gap-px align-baseline text-muted-foreground"
     >
-      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
-      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
-      <span className="chat-working-dot h-1 w-1 rounded-full bg-current" />
+      <span className="chat-working-dot leading-none">.</span>
+      <span className="chat-working-dot leading-none">.</span>
+      <span className="chat-working-dot leading-none">.</span>
     </span>
   );
 }

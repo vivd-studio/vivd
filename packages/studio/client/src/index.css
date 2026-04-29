@@ -37,12 +37,10 @@
   0%,
   72%,
   100% {
-    opacity: 0.34;
-    transform: translateY(0) scale(0.82);
+    opacity: 0.26;
   }
   24% {
     opacity: 0.95;
-    transform: translateY(-1px) scale(1);
   }
 }
 

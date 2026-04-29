@@ -178,21 +178,21 @@ describe("asset explorer path helpers", () => {
     ).toBe(ASTRO_SHARED_MEDIA_PATH);
   });
 
-  it("labels managed asset scopes for gallery cards", () => {
+  it("labels only entry-owned managed media for gallery cards", () => {
     expect(getAssetScopeLabel("src/content/media/shared/logo.png")).toBe(
-      "Shared",
+      null,
     );
     expect(getAssetScopeLabel("src/content/media/logo.png")).toBe(
-      "Shared",
+      null,
     );
     expect(getAssetScopeLabel("src/content/media/products/apollo/logo.png")).toBe(
       "products/apollo",
     );
-    expect(getAssetScopeLabel("src/content/media/products/logo.png")).toBe("products");
-    expect(getAssetScopeLabel("public/images/logo.png")).toBe("public");
-    expect(getAssetScopeLabel(".vivd/uploads/logo.png")).toBe("working");
-    expect(getAssetScopeLabel("images/logo.png")).toBe("images");
-    expect(getAssetScopeLabel("assets/logo.png")).toBe("assets");
+    expect(getAssetScopeLabel("src/content/media/products/logo.png")).toBe(null);
+    expect(getAssetScopeLabel("public/images/logo.png")).toBe(null);
+    expect(getAssetScopeLabel(".vivd/uploads/logo.png")).toBe(null);
+    expect(getAssetScopeLabel("images/logo.png")).toBe(null);
+    expect(getAssetScopeLabel("assets/logo.png")).toBe(null);
   });
 
   it("keeps static asset creation in the visible project asset folder", () => {
